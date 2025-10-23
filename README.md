@@ -1,38 +1,30 @@
-# Welcome to your Lovable project
+# ESIC Patient Mapper
 
 ## Project info
 
-**URL**: https://lovable.dev/projects/ee6a96fc-255d-4b5d-b34a-1529835aad3e
+A comprehensive hospital management system for patient registration, admission, and billing.
 
 ## How can I edit this code?
 
-There are several ways of editing your application.
-
-**Use Lovable**
-
-Simply visit the [Lovable Project](https://lovable.dev/projects/ee6a96fc-255d-4b5d-b34a-1529835aad3e) and start prompting.
-
-Changes made via Lovable will be committed automatically to this repo.
-
 **Use your preferred IDE**
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+Clone this repo and push changes to the repository.
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+Requirements: Node.js & npm - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
 
 Follow these steps:
 
 ```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+# Step 1: Clone the repository
+git clone https://github.com/chatgptnotes/adamrit.com.git
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+# Step 2: Navigate to the project directory
+cd adamrit.com
 
-# Step 3: Install the necessary dependencies.
+# Step 3: Install the necessary dependencies
 npm i
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
+# Step 4: Start the development server
 npm run dev
 ```
 
@@ -59,17 +51,15 @@ This project is built with:
 - React
 - shadcn-ui
 - Tailwind CSS
+- Supabase
 
 ## How can I deploy this project?
 
-Simply open [Lovable](https://lovable.dev/projects/ee6a96fc-255d-4b5d-b34a-1529835aad3e) and click on Share -> Publish.
+Deploy using Vercel:
 
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/tips-tricks/custom-domain#step-by-step-guide)
+1. Push your code to GitHub
+2. Import the project in Vercel
+3. Configure environment variables
+4. Deploy
 
 # Resyncing repo
