@@ -125,6 +125,12 @@ const SimpleLabResultsForm: React.FC<SimpleLabResultsFormProps> = ({
     setSubTests(updatedSubTests);
   };
 
+  const handleNormalRangeChange = (index: number, normalRange: string) => {
+    const updatedSubTests = [...subTests];
+    updatedSubTests[index].normalRange = normalRange;
+    setSubTests(updatedSubTests);
+  };
+
   const handleFileChange = (index: number, file: File | undefined) => {
     const updatedSubTests = [...subTests];
     updatedSubTests[index].file = file;
@@ -276,9 +282,13 @@ const SimpleLabResultsForm: React.FC<SimpleLabResultsFormProps> = ({
                       </div>
                     </div>
                     <div>
-                      <div className="text-blue-600 font-medium mb-2 bg-blue-50 px-3 py-2 rounded border">
-                        {subTest.normalRange}
-                      </div>
+                      <Input
+                        type="text"
+                        placeholder="Enter normal range"
+                        value={subTest.normalRange}
+                        onChange={(e) => handleNormalRangeChange(index, e.target.value)}
+                        className="w-full"
+                      />
                     </div>
                   </div>
 

@@ -37,7 +37,11 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { format } from 'date-fns';
 import { RadiologyResultDialog } from './RadiologyResultDialog';
 
-const EnhancedRadiologyOrders: React.FC = () => {
+interface EnhancedRadiologyOrdersProps {
+  onBack?: () => void;
+}
+
+const EnhancedRadiologyOrders: React.FC<EnhancedRadiologyOrdersProps> = ({ onBack }) => {
   const [searchTerm, setSearchTerm] = useState('');
   // Set default dates to current month range
   const [fromDate, setFromDate] = useState<Date | undefined>(() => {
@@ -245,10 +249,11 @@ const EnhancedRadiologyOrders: React.FC = () => {
             Enterprise-level radiology operations and imaging management
           </p>
         </div>
-        <Button onClick={() => refetch()}>
-          <RefreshCw className="h-4 w-4 mr-2" />
-          Refresh
-        </Button>
+        {onBack && (
+          <Button variant="outline" onClick={onBack}>
+            Back
+          </Button>
+        )}
       </div>
 
       {/* Loading State */}
