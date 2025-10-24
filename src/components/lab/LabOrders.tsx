@@ -3853,8 +3853,14 @@ const LabOrders = () => {
                                 );
                               })()}
                             </div>
-                            <div className="p-2 text-center text-sm text-gray-500">
-                              {calculatedRanges[testRow.id] || 'N/A'}
+                            <div className="p-2 text-center">
+                              <input
+                                type="text"
+                                className="w-full px-2 py-1 border rounded text-center text-sm border-gray-300"
+                                placeholder="Enter normal range"
+                                value={mainTestFormData.reference_range || calculatedRanges[testRow.id] || ''}
+                                onChange={(e) => handleLabResultChange(mainTestKey, 'reference_range', e.target.value)}
+                              />
                             </div>
                           </div>
                         </div>
@@ -3954,7 +3960,13 @@ const LabOrders = () => {
                               )}
                             </div>
                             <div className="p-2 flex items-center justify-center">
-                              <span className="text-sm text-gray-700">{subTest.range || 'Consult reference values'}</span>
+                              <input
+                                type="text"
+                                className="w-full px-2 py-1 border rounded text-center text-sm border-gray-300"
+                                placeholder="Enter normal range"
+                                value={subTestFormData.reference_range || subTest.range || ''}
+                                onChange={(e) => handleLabResultChange(subTestKey, 'reference_range', e.target.value)}
+                              />
                             </div>
                           </div>
                         </div>
