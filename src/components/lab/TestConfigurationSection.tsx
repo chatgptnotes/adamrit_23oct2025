@@ -3,6 +3,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Textarea } from '@/components/ui/textarea';
 import { Plus, FlaskConical, X } from 'lucide-react';
 
 export interface SubTest {
@@ -47,6 +49,10 @@ const TestConfigurationSection: React.FC<TestConfigurationSectionProps> = ({
   isLoading = false
 }) => {
   const [nextSubTestId, setNextSubTestId] = useState(1);
+  const [isFormulaDialogOpen, setIsFormulaDialogOpen] = useState(false);
+  const [currentSubTestId, setCurrentSubTestId] = useState<string>('');
+  const [selectedTest, setSelectedTest] = useState('');
+  const [formula, setFormula] = useState('');
 
   const addNewSubTest = () => {
     const newSubTest: SubTest = {
@@ -386,6 +392,59 @@ const TestConfigurationSection: React.FC<TestConfigurationSectionProps> = ({
     onSubTestsChange(updateNested(subTests));
   };
 
+  // Formula helper functions
+  const appendToFormula = (value: string) => {
+    setFormula(prev => prev + value);
+  };
+
+  const clearFormula = () => {
+    setFormula('');
+  };
+
+  const deleteLastChar = () => {
+    setFormula(prev => prev.slice(0, -1));
+  };
+
+  const openFormulaDialog = (subTestId: string) => {
+    setCurrentSubTestId(subTestId);
+    setSelectedTest('none');
+    setFormula('');
+    setIsFormulaDialogOpen(true);
+  };
+
+  // Standard test options for formula builder
+  const standardTestOptions = [
+    'Total Leukocyte Count',
+    'Eosinophils',
+    'Monocyte',
+    'Polymorphs',
+    'Lymphocyte',
+    'Red Cell Count',
+    'Packed Cell Volume',
+    'Mean Cell Volume',
+    'Mean Cell Haemoglobin',
+    'Mean Cell He Concentration',
+    'Platelet Count',
+    'E.S.R. (Wintrobe)'
+  ];
+
+  // Get nested sub-tests for the current sub-test
+  const getCurrentSubTestNestedTests = () => {
+    const findSubTest = (tests: SubTest[], id: string): SubTest | null => {
+      for (const test of tests) {
+        if (test.id === id) return test;
+        if (test.subTests && test.subTests.length > 0) {
+          const found = findSubTest(test.subTests, id);
+          if (found) return found;
+        }
+      }
+      return null;
+    };
+
+    const currentSubTest = findSubTest(subTests, currentSubTestId);
+    return currentSubTest?.subTests || [];
+  };
+
   return (
     <div className="space-y-6 border rounded-lg p-6 bg-gray-50">
       {/* Sub-Test Configuration Header */}
@@ -545,15 +604,25 @@ const TestConfigurationSection: React.FC<TestConfigurationSectionProps> = ({
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <Label className="text-sm font-semibold text-gray-800">Normal Ranges</Label>
-              <Button
-                type="button"
-                onClick={() => addNormalRange(subTest.id)}
-                className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1 h-7"
-                size="sm"
-              >
-                <Plus className="h-3 w-3 mr-1" />
-                Add Normal Range
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  onClick={() => addNormalRange(subTest.id)}
+                  className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1 h-7"
+                  size="sm"
+                >
+                  <Plus className="h-3 w-3 mr-1" />
+                  Add Normal Range
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => openFormulaDialog(subTest.id)}
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 h-7"
+                  size="sm"
+                >
+                  Formula
+                </Button>
+              </div>
             </div>
 
             {/* Normal Range Headers */}
@@ -761,15 +830,25 @@ const TestConfigurationSection: React.FC<TestConfigurationSectionProps> = ({
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <Label className="text-xs font-semibold text-gray-700">Normal Ranges</Label>
-                      <Button
-                        type="button"
-                        onClick={() => addNestedNormalRange(subTest.id, nestedSubTest.id)}
-                        className="bg-purple-600 hover:bg-purple-700 text-white px-2 py-1 h-6 text-xs"
-                        size="sm"
-                      >
-                        <Plus className="h-2 w-2 mr-1" />
-                        Add Normal Range
-                      </Button>
+                      <div className="flex gap-2">
+                        <Button
+                          type="button"
+                          onClick={() => addNestedNormalRange(subTest.id, nestedSubTest.id)}
+                          className="bg-purple-600 hover:bg-purple-700 text-white px-2 py-1 h-6 text-xs"
+                          size="sm"
+                        >
+                          <Plus className="h-2 w-2 mr-1" />
+                          Add Normal Range
+                        </Button>
+                        <Button
+                          type="button"
+                          onClick={() => openFormulaDialog(nestedSubTest.id)}
+                          className="bg-blue-600 hover:bg-blue-700 text-white px-2 py-1 h-6 text-xs"
+                          size="sm"
+                        >
+                          Formula
+                        </Button>
+                      </div>
                     </div>
 
                     {nestedSubTest.normalRanges.map((normalRange) => (
@@ -866,6 +945,189 @@ const TestConfigurationSection: React.FC<TestConfigurationSectionProps> = ({
           </div>
         </div>
       ))}
+
+      {/* Formula Dialog */}
+      <Dialog open={isFormulaDialogOpen} onOpenChange={setIsFormulaDialogOpen}>
+        <DialogContent className="max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>Formula Builder</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {/* Select Test Dropdown */}
+            <div className="flex items-center gap-4">
+              <Label className="w-24">Select Test:</Label>
+              <Select
+                value={selectedTest}
+                onValueChange={(value) => {
+                  setSelectedTest(value);
+                  if (value !== 'none') {
+                    // Add selected test to formula
+                    setFormula(prev => prev + value);
+                    // Reset selection to "Please Select"
+                    setTimeout(() => setSelectedTest('none'), 100);
+                  }
+                }}
+              >
+                <SelectTrigger className="w-64">
+                  <SelectValue placeholder="Please Select" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Please Select</SelectItem>
+                  {standardTestOptions.map((testName, index) => (
+                    <SelectItem key={index} value={testName}>
+                      {testName}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Formula Input */}
+            <div className="space-y-2">
+              <Label>Formula:</Label>
+              <Textarea
+                value={formula}
+                onChange={(e) => setFormula(e.target.value)}
+                placeholder="Enter or build your formula"
+                className="min-h-[80px] text-lg font-mono"
+              />
+            </div>
+
+            {/* Calculator Buttons */}
+            <div className="grid grid-cols-11 gap-2">
+              {/* Number Buttons 1-9 */}
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
+                <Button
+                  key={num}
+                  type="button"
+                  onClick={() => appendToFormula(num.toString())}
+                  className="bg-blue-500 hover:bg-blue-600 text-white h-10"
+                >
+                  {num}
+                </Button>
+              ))}
+
+              {/* 0 Button */}
+              <Button
+                type="button"
+                onClick={() => appendToFormula('0')}
+                className="bg-blue-500 hover:bg-blue-600 text-white h-10"
+              >
+                0
+              </Button>
+
+              {/* Operator Buttons */}
+              <Button
+                type="button"
+                onClick={() => appendToFormula('.')}
+                className="bg-blue-500 hover:bg-blue-600 text-white h-10"
+              >
+                .
+              </Button>
+            </div>
+
+            {/* Second Row of Buttons */}
+            <div className="grid grid-cols-8 gap-2">
+              <Button
+                type="button"
+                onClick={() => appendToFormula('+')}
+                className="bg-blue-500 hover:bg-blue-600 text-white h-10"
+              >
+                +
+              </Button>
+              <Button
+                type="button"
+                onClick={() => appendToFormula('-')}
+                className="bg-blue-500 hover:bg-blue-600 text-white h-10"
+              >
+                -
+              </Button>
+              <Button
+                type="button"
+                onClick={() => appendToFormula('*')}
+                className="bg-blue-500 hover:bg-blue-600 text-white h-10"
+              >
+                *
+              </Button>
+              <Button
+                type="button"
+                onClick={() => appendToFormula('/')}
+                className="bg-blue-500 hover:bg-blue-600 text-white h-10"
+              >
+                /
+              </Button>
+              <Button
+                type="button"
+                onClick={() => appendToFormula('(')}
+                className="bg-blue-500 hover:bg-blue-600 text-white h-10"
+              >
+                (
+              </Button>
+              <Button
+                type="button"
+                onClick={() => appendToFormula(')')}
+                className="bg-blue-500 hover:bg-blue-600 text-white h-10"
+              >
+                )
+              </Button>
+              <Button
+                type="button"
+                onClick={() => appendToFormula('^2')}
+                className="bg-blue-500 hover:bg-blue-600 text-white h-10"
+              >
+                x²
+              </Button>
+              <Button
+                type="button"
+                onClick={() => appendToFormula('^3')}
+                className="bg-blue-500 hover:bg-blue-600 text-white h-10"
+              >
+                x³
+              </Button>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex justify-between pt-4">
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  onClick={deleteLastChar}
+                  variant="destructive"
+                >
+                  DEL
+                </Button>
+                <Button
+                  type="button"
+                  onClick={clearFormula}
+                  variant="outline"
+                >
+                  Clear
+                </Button>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  onClick={() => setIsFormulaDialogOpen(false)}
+                  variant="outline"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => {
+                    // Save formula logic here
+                    console.log('Formula saved:', formula, 'for subtest:', currentSubTestId);
+                    setIsFormulaDialogOpen(false);
+                  }}
+                >
+                  Save Formula
+                </Button>
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
