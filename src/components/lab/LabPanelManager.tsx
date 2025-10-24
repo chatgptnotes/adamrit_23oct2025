@@ -1717,17 +1717,11 @@ const AddPanelForm: React.FC<AddPanelFormProps> = ({ onSubmit }) => {
 
           <div>
             <Label>Machine Name</Label>
-            <Select value={formData.machineName} onValueChange={(value) => setFormData({...formData, machineName: value})}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="Please Select">Please Select</SelectItem>
-                <SelectItem value="Sysmex XN-1000">Sysmex XN-1000</SelectItem>
-                <SelectItem value="Roche Cobas 8000">Roche Cobas 8000</SelectItem>
-                <SelectItem value="Abbott Architect">Abbott Architect</SelectItem>
-              </SelectContent>
-            </Select>
+            <Input
+              placeholder="Enter machine name"
+              value={formData.machineName}
+              onChange={(e) => setFormData({...formData, machineName: e.target.value})}
+            />
           </div>
 
           <div>
@@ -1746,10 +1740,41 @@ const AddPanelForm: React.FC<AddPanelFormProps> = ({ onSubmit }) => {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="Please Select">Please Select</SelectItem>
-                <SelectItem value="Whole Blood">Whole Blood</SelectItem>
-                <SelectItem value="Serum">Serum</SelectItem>
-                <SelectItem value="Plasma">Plasma</SelectItem>
-                <SelectItem value="Urine">Urine</SelectItem>
+                <SelectItem value="Campylobacter jejuni">Campylobacter jejuni</SelectItem>
+                <SelectItem value="Blood specimen">Blood specimen</SelectItem>
+                <SelectItem value="Mixed venous blood specimen">Mixed venous blood specimen</SelectItem>
+                <SelectItem value="Sputum specimen">Sputum specimen</SelectItem>
+                <SelectItem value="Stool specimen">Stool specimen</SelectItem>
+                <SelectItem value="Plasma specimen">Plasma specimen</SelectItem>
+                <SelectItem value="Platelet poor plasma specimen">Platelet poor plasma specimen</SelectItem>
+                <SelectItem value="Serum specimen">Serum specimen</SelectItem>
+                <SelectItem value="Tissue specimen">Tissue specimen</SelectItem>
+                <SelectItem value="Arterial blood specimen">Arterial blood specimen</SelectItem>
+                <SelectItem value="Capillary blood specimen">Capillary blood specimen</SelectItem>
+                <SelectItem value="Venous blood specimen">Venous blood specimen</SelectItem>
+                <SelectItem value="Urine specimen">Urine specimen</SelectItem>
+                <SelectItem value="Cervical mucus specimen">Cervical mucus specimen</SelectItem>
+                <SelectItem value="Specimen from lung obtained by biopsy">Specimen from lung obtained by biopsy</SelectItem>
+                <SelectItem value="Throat swab">Throat swab</SelectItem>
+                <SelectItem value="Detected">Detected</SelectItem>
+                <SelectItem value="Negative">Negative</SelectItem>
+                <SelectItem value="Not detected">Not detected</SelectItem>
+                <SelectItem value="Clear">Clear</SelectItem>
+                <SelectItem value="Resistant">Resistant</SelectItem>
+                <SelectItem value="Body fluid sample">Body fluid sample</SelectItem>
+                <SelectItem value="Skin biopsy sample">Skin biopsy sample</SelectItem>
+                <SelectItem value="Yellow color">Yellow color</SelectItem>
+                <SelectItem value="Hyperlipoproteinemia">Hyperlipoproteinemia</SelectItem>
+                <SelectItem value="Salmonella group B phase 1 a-e">Salmonella group B phase 1 a-e</SelectItem>
+                <SelectItem value="Severe diarrhea">Severe diarrhea</SelectItem>
+                <SelectItem value="Specimen from unspecified body site">Specimen from unspecified body site</SelectItem>
+                <SelectItem value="Isolated">Isolated</SelectItem>
+                <SelectItem value="Chronic fatigue syndrome">Chronic fatigue syndrome</SelectItem>
+                <SelectItem value="Pyrexia of unknown origin">Pyrexia of unknown origin</SelectItem>
+                <SelectItem value="Sensitive">Sensitive</SelectItem>
+                <SelectItem value="Shigella">Shigella</SelectItem>
+                <SelectItem value="Screening Assessment">Screening Assessment</SelectItem>
+                <SelectItem value="Nasopharyngeal swab">Nasopharyngeal swab</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -2443,17 +2468,11 @@ const EditPanelForm: React.FC<EditPanelFormProps> = ({ panel, onSubmit }) => {
 
           <div>
             <Label>Machine Name</Label>
-            <Select value={formData.machineName} onValueChange={(value) => setFormData({...formData, machineName: value})}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="Please Select">Please Select</SelectItem>
-                <SelectItem value="Sysmex XN-1000">Sysmex XN-1000</SelectItem>
-                <SelectItem value="Roche Cobas 8000">Roche Cobas 8000</SelectItem>
-                <SelectItem value="Abbott Architect">Abbott Architect</SelectItem>
-              </SelectContent>
-            </Select>
+            <Input
+              placeholder="Enter machine name"
+              value={formData.machineName}
+              onChange={(e) => setFormData({...formData, machineName: e.target.value})}
+            />
           </div>
 
           <div>
@@ -2472,10 +2491,41 @@ const EditPanelForm: React.FC<EditPanelFormProps> = ({ panel, onSubmit }) => {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="Please Select">Please Select</SelectItem>
-                <SelectItem value="Whole Blood">Whole Blood</SelectItem>
-                <SelectItem value="Serum">Serum</SelectItem>
-                <SelectItem value="Plasma">Plasma</SelectItem>
-                <SelectItem value="Urine">Urine</SelectItem>
+                <SelectItem value="Campylobacter jejuni">Campylobacter jejuni</SelectItem>
+                <SelectItem value="Blood specimen">Blood specimen</SelectItem>
+                <SelectItem value="Mixed venous blood specimen">Mixed venous blood specimen</SelectItem>
+                <SelectItem value="Sputum specimen">Sputum specimen</SelectItem>
+                <SelectItem value="Stool specimen">Stool specimen</SelectItem>
+                <SelectItem value="Plasma specimen">Plasma specimen</SelectItem>
+                <SelectItem value="Platelet poor plasma specimen">Platelet poor plasma specimen</SelectItem>
+                <SelectItem value="Serum specimen">Serum specimen</SelectItem>
+                <SelectItem value="Tissue specimen">Tissue specimen</SelectItem>
+                <SelectItem value="Arterial blood specimen">Arterial blood specimen</SelectItem>
+                <SelectItem value="Capillary blood specimen">Capillary blood specimen</SelectItem>
+                <SelectItem value="Venous blood specimen">Venous blood specimen</SelectItem>
+                <SelectItem value="Urine specimen">Urine specimen</SelectItem>
+                <SelectItem value="Cervical mucus specimen">Cervical mucus specimen</SelectItem>
+                <SelectItem value="Specimen from lung obtained by biopsy">Specimen from lung obtained by biopsy</SelectItem>
+                <SelectItem value="Throat swab">Throat swab</SelectItem>
+                <SelectItem value="Detected">Detected</SelectItem>
+                <SelectItem value="Negative">Negative</SelectItem>
+                <SelectItem value="Not detected">Not detected</SelectItem>
+                <SelectItem value="Clear">Clear</SelectItem>
+                <SelectItem value="Resistant">Resistant</SelectItem>
+                <SelectItem value="Body fluid sample">Body fluid sample</SelectItem>
+                <SelectItem value="Skin biopsy sample">Skin biopsy sample</SelectItem>
+                <SelectItem value="Yellow color">Yellow color</SelectItem>
+                <SelectItem value="Hyperlipoproteinemia">Hyperlipoproteinemia</SelectItem>
+                <SelectItem value="Salmonella group B phase 1 a-e">Salmonella group B phase 1 a-e</SelectItem>
+                <SelectItem value="Severe diarrhea">Severe diarrhea</SelectItem>
+                <SelectItem value="Specimen from unspecified body site">Specimen from unspecified body site</SelectItem>
+                <SelectItem value="Isolated">Isolated</SelectItem>
+                <SelectItem value="Chronic fatigue syndrome">Chronic fatigue syndrome</SelectItem>
+                <SelectItem value="Pyrexia of unknown origin">Pyrexia of unknown origin</SelectItem>
+                <SelectItem value="Sensitive">Sensitive</SelectItem>
+                <SelectItem value="Shigella">Shigella</SelectItem>
+                <SelectItem value="Screening Assessment">Screening Assessment</SelectItem>
+                <SelectItem value="Nasopharyngeal swab">Nasopharyngeal swab</SelectItem>
               </SelectContent>
             </Select>
           </div>

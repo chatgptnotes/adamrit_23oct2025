@@ -162,7 +162,7 @@ const SimpleLabResultsForm: React.FC<SimpleLabResultsFormProps> = ({
               <span className="font-medium">Patient Name:</span> {patient.name}
             </div>
             <div>
-              <span className="font-medium">Age/Sex:</span> {patient.age}Y {patient.gender}
+              <span className="font-medium">Age/Sex:</span> {patient.age} / {patient.gender}
             </div>
             <div>
               <span className="font-medium">Type:</span> {patient.type}
@@ -173,7 +173,7 @@ const SimpleLabResultsForm: React.FC<SimpleLabResultsFormProps> = ({
           </div>
           <div className="grid grid-cols-2 gap-4 text-sm mt-2">
             <div>
-              <span className="font-medium">Lab Sample ID:</span> {patient.labSampleId}
+              <span className="font-medium">Visit ID:</span> {patient.labSampleId}
             </div>
             <div>
               <span className="font-medium">Date:</span> {patient.date}

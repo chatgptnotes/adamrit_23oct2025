@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar as CalendarComponent } from '@/components/ui/calendar';
-import { CalendarIcon, Filter, RotateCcw, Plus, Search, Trash2, Edit, Eye, FileText, User, Phone, Clock, Activity } from 'lucide-react';
+import { CalendarIcon, Filter, RotateCcw, Plus, Search, Trash2, Edit, Eye, FileText, User, Phone, Clock, Activity, Loader2 } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
@@ -129,6 +129,17 @@ const LabOrders = () => {
   const [statusFilter, setStatusFilter] = useState('All');
   const [patientStatusFilter, setPatientStatusFilter] = useState('Currently Admitted'); // New filter for patient admission status
 
+  // Laboratory Dashboard Filters
+  const [isDischargedFilter, setIsDischargedFilter] = useState(false);
+  const [categorySearch, setCategorySearch] = useState('');
+  const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
+  const [serviceSearch, setServiceSearch] = useState('');
+  const [reqNoSearch, setReqNoSearch] = useState('');
+  const [consultantFilter, setConsultantFilter] = useState('All');
+  const [visitFilter, setVisitFilter] = useState('All');
+  const [wardSearch, setWardSearch] = useState('');
+  const [barCodeSearch, setBarCodeSearch] = useState('');
+
   // 🏥 EXPLICIT HOSPITAL FILTERING - If-Else Condition
   const getHospitalFilter = useCallback(() => {
     let hospitalFilter = '';
@@ -152,6 +163,7 @@ const LabOrders = () => {
   const [selectedPatientForSampling, setSelectedPatientForSampling] = useState<string | null>(null); // Track which patient is selected for sampling
   const [isEntryModeOpen, setIsEntryModeOpen] = useState(false);
   const [selectedTestsForEntry, setSelectedTestsForEntry] = useState<LabTestRow[]>([]);
+  const [isCheckingSampleStatus, setIsCheckingSampleStatus] = useState(false); // Track sample status checking
   const [testSubTests, setTestSubTests] = useState<Record<string, any[]>>({});
 
   // Helper function to get patient key for a test
@@ -278,6 +290,80 @@ const LabOrders = () => {
       }
     } catch (err) {
       console.error('❌ Exception while adding columns:', err);
+    }
+  };
+
+  // Function to generate visit IDs for visits without visit_id
+  const generateVisitIds = async () => {
+    console.log('🔧 Generating visit IDs for visits table...');
+    toast({
+      title: "Generating Visit IDs",
+      description: "Please wait while we generate visit IDs...",
+    });
+
+    try {
+      // Fetch all visits without visit_id
+      const { data: visits, error: fetchError } = await supabase
+        .from('visits')
+        .select('id, visit_id')
+        .or('visit_id.is.null,visit_id.eq.');
+
+      if (fetchError) {
+        console.error('❌ Error fetching visits:', fetchError);
+        toast({
+          title: "Error",
+          description: "Failed to fetch visits",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      console.log(`📊 Found ${visits?.length || 0} visits without visit_id`);
+
+      if (!visits || visits.length === 0) {
+        toast({
+          title: "Success",
+          description: "All visits already have visit_id!",
+        });
+        return;
+      }
+
+      // Generate visit IDs in format IH25J######
+      let updateCount = 0;
+      for (const visit of visits) {
+        // Generate 6 digit number
+        const randomNum = Math.floor(100000 + Math.random() * 900000);
+        const newVisitId = `IH25J${randomNum}`;
+
+        const { error: updateError } = await supabase
+          .from('visits')
+          .update({ visit_id: newVisitId })
+          .eq('id', visit.id);
+
+        if (updateError) {
+          console.error(`❌ Error updating visit ${visit.id}:`, updateError);
+        } else {
+          updateCount++;
+          console.log(`✅ Generated visit_id: ${newVisitId} for visit ${visit.id}`);
+        }
+      }
+
+      console.log(`✅ Successfully generated ${updateCount} visit IDs`);
+      toast({
+        title: "Success",
+        description: `Generated ${updateCount} visit IDs successfully!`,
+      });
+
+      // Refresh the data
+      queryClient.invalidateQueries({ queryKey: ['visit-lab-orders'] });
+
+    } catch (err) {
+      console.error('❌ Exception while generating visit IDs:', err);
+      toast({
+        title: "Error",
+        description: "An error occurred while generating visit IDs",
+        variant: "destructive"
+      });
     }
   };
   
@@ -1442,8 +1528,52 @@ const LabOrders = () => {
     }
   });
 
+  // Fetch lab sub-specialities for category autocomplete
+  const { data: labSubSpecialities = [] } = useQuery({
+    queryKey: ['lab-sub-specialities'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('lab_sub_speciality')
+        .select('id, name')
+        .order('name');
+
+      if (error) {
+        console.error('Error fetching lab sub-specialities:', error);
+        throw error;
+      }
+
+      return data || [];
+    }
+  });
+
+  // Fetch consultants/doctors based on hospital
+  const { data: consultants = [] } = useQuery({
+    queryKey: ['consultants', getHospitalFilter()],
+    queryFn: async () => {
+      const hospitalFilter = getHospitalFilter();
+      console.log('🔍 Fetching consultants for hospital:', hospitalFilter);
+
+      // Determine which table to use based on hospital
+      const tableName = hospitalFilter === 'ayushman' ? 'ayushman_consultants' : 'hope_consultants';
+      console.log('📋 Using table:', tableName);
+
+      const { data, error } = await supabase
+        .from(tableName)
+        .select('id, name')
+        .order('name');
+
+      if (error) {
+        console.error('❌ Error fetching consultants:', error);
+        throw error;
+      }
+
+      console.log('✅ Fetched consultants:', data);
+      return data || [];
+    }
+  });
+
   // Fetch lab test rows from visit_labs table (JOIN with visits and lab tables)
-  const { data: labTestRows = [], isLoading: testRowsLoading } = useQuery({
+  const { data: labTestRows = [], isLoading: testRowsLoading, isFetching: testRowsFetching } = useQuery({
     queryKey: ['visit-lab-orders', getHospitalFilter(), patientStatusFilter],
     queryFn: async () => {
       console.log('🔍 Fetching lab test data from visit_labs...');
@@ -1516,6 +1646,16 @@ const LabOrders = () => {
 
       console.log('✅ Fetched', data?.length || 0, 'lab entries from visit_labs');
 
+      // Debug: Check visit_id data
+      console.log('🔍 DEBUG - First 3 entries:');
+      data?.slice(0, 3).forEach((entry, idx) => {
+        console.log(`Entry ${idx + 1}:`, {
+          visit_id: entry.visits?.visit_id,
+          visit_table_id: entry.visits?.id,
+          patient_name: entry.visits?.patients?.name
+        });
+      });
+
              // Transform data to match LabTestRow interface
        const testRows: LabTestRow[] = data?.map((entry) => ({
          id: entry.id,
@@ -1534,18 +1674,22 @@ const LabOrders = () => {
          ordering_doctor: entry.visits?.appointment_with || 'Dr. Unknown',
          clinical_history: entry.visits?.reason_for_visit,
          sample_status: entry.collected_date ? 'taken' : 'not_taken' as const,
-         visit_id: entry.visits?.id, // Add the actual visit table ID (not visit_id text)
+         visit_id: entry.visits?.visit_id, // Visit ID text field
          patient_id: entry.visits?.patient_id // Add patient_id from visits table
        })) || [];
 
       return testRows;
-    }
+    },
+    refetchOnMount: true,
+    refetchOnWindowFocus: false,
+    staleTime: 0 // Always consider data stale to show loader
   });
 
   // Load sample taken status and included tests from database when data is loaded
   useEffect(() => {
     if (labTestRows.length > 0) {
       console.log('🔄 Loading sample taken and included status from lab_results table...');
+      setIsCheckingSampleStatus(true); // Start checking
 
       const checkLabResultsForSampleStatus = async () => {
         const statusMap: Record<string, 'not_taken' | 'taken' | 'saved'> = {};
@@ -1704,9 +1848,12 @@ const LabOrders = () => {
           includedTests: includedTestIds.length,
           testsWithSavedData: Object.keys(statusMap).filter(key => statusMap[key] === 'saved')
         });
+        setIsCheckingSampleStatus(false); // Done checking
       };
 
       checkLabResultsForSampleStatus();
+    } else {
+      setIsCheckingSampleStatus(false); // No data to check
     }
   }, [labTestRows]);
 
@@ -1718,6 +1865,7 @@ const LabOrders = () => {
         patient: {
           name: test.patient_name,
           order_number: test.order_number,
+          visit_id: test.visit_id,
           patient_age: test.patient_age,
           patient_gender: test.patient_gender,
           order_date: test.order_date
@@ -1758,7 +1906,7 @@ const LabOrders = () => {
     return orders;
   }, [] as LabOrder[]);
   
-  const ordersLoading = testRowsLoading;
+  const ordersLoading = testRowsLoading || testRowsFetching || isCheckingSampleStatus;
 
   // Check which orders already have samples collected
   const orderHasSample = (orderId: string) => {
@@ -1929,12 +2077,60 @@ const LabOrders = () => {
 
   // Filter test rows for hierarchical display
   const filteredTestRows = labTestRows.filter(testRow => {
+    // Patient search
     const matchesSearch = testRow.patient_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          testRow.order_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          testRow.test_name.toLowerCase().includes(searchTerm.toLowerCase());
+
+    // Status filter
     const matchesStatus = statusFilter === 'All' || testRow.order_status === statusFilter;
-    
-    return matchesSearch && matchesStatus;
+
+    // Date range filter (compare only dates, not time)
+    let matchesDateFrom = true;
+    let matchesDateTo = true;
+
+    if (dateRange.from || dateRange.to) {
+      const testDate = new Date(testRow.order_date);
+      testDate.setHours(0, 0, 0, 0); // Reset time to midnight
+
+      if (dateRange.from) {
+        const fromDate = new Date(dateRange.from);
+        fromDate.setHours(0, 0, 0, 0);
+        matchesDateFrom = testDate >= fromDate;
+      }
+
+      if (dateRange.to) {
+        const toDate = new Date(dateRange.to);
+        toDate.setHours(23, 59, 59, 999); // Set to end of day
+        matchesDateTo = testDate <= toDate;
+      }
+    }
+
+    // Category filter
+    const matchesCategory = !categorySearch || testRow.test_category.toLowerCase().includes(categorySearch.toLowerCase());
+
+    // Service/Test name filter
+    const matchesService = !serviceSearch || testRow.test_name.toLowerCase().includes(serviceSearch.toLowerCase());
+
+    // ReqNo filter
+    const matchesReqNo = !reqNoSearch || (testRow.visit_id && testRow.visit_id.toLowerCase().includes(reqNoSearch.toLowerCase())) ||
+                         testRow.order_number.toLowerCase().includes(reqNoSearch.toLowerCase());
+
+    // Consultant filter
+    const matchesConsultant = consultantFilter === 'All' || testRow.ordering_doctor === consultantFilter;
+
+    // Visit type filter (placeholder - would need visit_type data in testRow)
+    const matchesVisit = visitFilter === 'All' || visitFilter === 'Please Select';
+
+    // Ward filter (placeholder - would need ward data in testRow)
+    const matchesWard = !wardSearch;
+
+    // Bar Code filter (placeholder)
+    const matchesBarCode = !barCodeSearch;
+
+    return matchesSearch && matchesStatus && matchesDateFrom && matchesDateTo &&
+           matchesCategory && matchesService && matchesReqNo && matchesConsultant &&
+           matchesVisit && matchesWard && matchesBarCode;
   });
 
   // Group filtered tests by patient
@@ -2392,17 +2588,43 @@ const LabOrders = () => {
     console.log('🔍 DEBUG: Looking for visit_id in:', {
       visit_id: firstTest?.visit_id,
       order_id: firstTest?.order_id,
-      id: firstTest?.id
+      id: firstTest?.id,
+      patient_id: firstTest?.patient_id
     });
 
-    // Try to get visit ID from multiple sources
-    let visitIdToQuery = firstTest?.visit_id || firstTest?.order_id;
+    // If we have visit_id as text (like "IH25J06001"), use it directly
+    if (firstTest?.visit_id && typeof firstTest.visit_id === 'string' && !firstTest.visit_id.includes('-')) {
+      actualVisitId = firstTest.visit_id;
+      console.log('✅ Got visit_id directly from test data:', actualVisitId);
+    }
 
-    console.log('🔍 DEBUG: Will query with visitId:', visitIdToQuery);
-
-    if (visitIdToQuery) {
+    // If we have patient_id directly from test data, use it
+    if (firstTest?.patient_id) {
+      // Fetch patient details to get patients_id
       try {
-        console.log('🔍 Querying visits table with id:', visitIdToQuery);
+        const { data: patientData, error: patientError } = await supabase
+          .from('patients')
+          .select('patients_id')
+          .eq('id', firstTest.patient_id)
+          .single();
+
+        if (!patientError && patientData) {
+          actualPatientId = patientData.patients_id || 'N/A';
+          console.log('✅ Fetched patient_id from patients table:', actualPatientId);
+        }
+      } catch (err) {
+        console.error('❌ Error fetching patient data:', err);
+      }
+    }
+
+    // Try to get visit UUID for querying visits table if we still need data
+    let visitIdToQuery = firstTest?.order_id;
+
+    console.log('🔍 DEBUG: Will query with visitIdToQuery (UUID):', visitIdToQuery);
+
+    if (visitIdToQuery && (actualPatientId === 'N/A' || actualVisitId === 'N/A')) {
+      try {
+        console.log('🔍 Querying visits table with id (UUID):', visitIdToQuery);
         const { data: visitData, error } = await supabase
           .from('visits')
           .select('visit_id, patient_id, patients(patients_id)')
@@ -2412,8 +2634,12 @@ const LabOrders = () => {
         console.log('🔍 Visit query result:', { visitData, error });
 
         if (!error && visitData) {
-          actualPatientId = visitData.patients?.patients_id || 'N/A';
-          actualVisitId = visitData.visit_id || 'N/A';
+          if (actualPatientId === 'N/A') {
+            actualPatientId = visitData.patients?.patients_id || 'N/A';
+          }
+          if (actualVisitId === 'N/A') {
+            actualVisitId = visitData.visit_id || 'N/A';
+          }
           console.log('✅ Fetched patient_id and visit_id from visits table:', { actualPatientId, actualVisitId });
         } else {
           console.log('⚠️ Visit query failed, trying saved results...');
@@ -2422,7 +2648,7 @@ const LabOrders = () => {
         console.error('❌ Error fetching patient/visit data:', err);
       }
     } else {
-      console.log('⚠️ No visit_id available, checking saved results...');
+      console.log('⚠️ No order_id (UUID) available for querying, checking saved results...');
     }
 
     // Try to get from saved results as fallback
@@ -3009,31 +3235,207 @@ const LabOrders = () => {
 
   return (
     <div className="p-6 space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Lab Orders Management</h1>
-          <p className="text-gray-600">Manage laboratory test orders and results</p>
-        </div>
-        <div className="flex gap-2">
-          <Button onClick={() => setIsCreateOrderOpen(true)}>
-            <Plus className="h-4 w-4 mr-2" />
-            New Lab Order
-          </Button>
-          <Button onClick={checkLabResultsData} variant="outline">
-            Check Lab Results Data
-          </Button>
-          <Button onClick={testMinimalInsert} variant="outline">
-            Test Insert
-          </Button>
-          <Button onClick={addMissingColumns} variant="outline">
-            Add Missing Columns
-          </Button>
-        </div>
+      {/* Laboratory Dashboard Header */}
+      <Card className="border-2 border-gray-300">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-xl text-blue-700">Laboratory Dashboard</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {/* First Row */}
+          <div className="grid grid-cols-12 gap-3 items-end">
+            <div className="col-span-2">
+              <Label className="text-xs font-medium">From:</Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" className="w-full justify-start text-left font-normal h-8 text-xs">
+                    <CalendarIcon className="mr-1 h-3 w-3" />
+                    {dateRange.from ? format(new Date(dateRange.from), 'dd/MM/yyyy') : ''}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0">
+                  <CalendarComponent
+                    mode="single"
+                    selected={dateRange.from ? new Date(dateRange.from) : undefined}
+                    onSelect={(date) => setDateRange(prev => ({ ...prev, from: date ? format(date, 'yyyy-MM-dd') : '' }))}
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+
+            <div className="col-span-2">
+              <Label className="text-xs font-medium">To:</Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" className="w-full justify-start text-left font-normal h-8 text-xs">
+                    <CalendarIcon className="mr-1 h-3 w-3" />
+                    {dateRange.to ? format(new Date(dateRange.to), 'dd/MM/yyyy') : ''}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0">
+                  <CalendarComponent
+                    mode="single"
+                    selected={dateRange.to ? new Date(dateRange.to) : undefined}
+                    onSelect={(date) => setDateRange(prev => ({ ...prev, to: date ? format(date, 'yyyy-MM-dd') : '' }))}
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+
+            <div className="col-span-2">
+              <Label className="text-xs font-medium">Patient:</Label>
+              <Input placeholder="Type To Search" className="h-8 text-xs" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+            </div>
+
+            <div className="col-span-1 flex items-center gap-1">
+              <Checkbox
+                id="discharged"
+                className="h-4 w-4"
+                checked={isDischargedFilter}
+                onCheckedChange={(checked) => setIsDischargedFilter(checked as boolean)}
+              />
+              <Label htmlFor="discharged" className="text-xs font-medium cursor-pointer">Discharged?:</Label>
+            </div>
+
+            <div className="col-span-2 relative">
+              <Label className="text-xs font-medium">Category:</Label>
+              <Input
+                placeholder="Type To Search"
+                className="h-8 text-xs"
+                value={categorySearch}
+                onChange={(e) => {
+                  setCategorySearch(e.target.value);
+                  setShowCategoryDropdown(true);
+                }}
+                onFocus={() => setShowCategoryDropdown(true)}
+                onBlur={() => setTimeout(() => setShowCategoryDropdown(false), 200)}
+              />
+              {showCategoryDropdown && categorySearch && (
+                <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-48 overflow-y-auto">
+                  {labSubSpecialities
+                    .filter(spec => spec.name.toLowerCase().includes(categorySearch.toLowerCase()))
+                    .map(spec => (
+                      <div
+                        key={spec.id}
+                        className="px-3 py-2 text-xs hover:bg-blue-50 cursor-pointer"
+                        onMouseDown={() => {
+                          setCategorySearch(spec.name);
+                          setShowCategoryDropdown(false);
+                        }}
+                      >
+                        {spec.name}
+                      </div>
+                    ))}
+                  {labSubSpecialities.filter(spec => spec.name.toLowerCase().includes(categorySearch.toLowerCase())).length === 0 && (
+                    <div className="px-3 py-2 text-xs text-gray-500">No categories found</div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="col-span-2">
+              <Label className="text-xs font-medium">Service:</Label>
+              <Input
+                placeholder="Type To Search"
+                className="h-8 text-xs"
+                value={serviceSearch}
+                onChange={(e) => setServiceSearch(e.target.value)}
+              />
+            </div>
+
+            <div className="col-span-1 flex gap-1 items-end">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 w-8 p-0"
+                title="Search"
+              >
+                <Search className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 w-8 p-0"
+                onClick={() => {
+                  // Reset all filters
+                  setSearchTerm('');
+                  setDateRange({ from: '', to: '' });
+                  setIsDischargedFilter(false);
+                  setCategorySearch('');
+                  setServiceSearch('');
+                  setStatusFilter('All');
+                  setConsultantFilter('All');
+                  setVisitFilter('All');
+                }}
+                title="Reset Filters"
+              >
+                <RotateCcw className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+
+          {/* Second Row */}
+          <div className="grid grid-cols-12 gap-3 items-end">
+            <div className="col-span-3">
+              <Label className="text-xs font-medium">Status:</Label>
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="h-8 text-xs">
+                  <SelectValue placeholder="Please Select" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="All">All Status</SelectItem>
+                  <SelectItem value="ordered">Ordered</SelectItem>
+                  <SelectItem value="collected">Collected</SelectItem>
+                  <SelectItem value="completed">Completed</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="col-span-3">
+              <Label className="text-xs font-medium">Consultant:</Label>
+              <Select value={consultantFilter} onValueChange={setConsultantFilter}>
+                <SelectTrigger className="h-8 text-xs">
+                  <SelectValue placeholder="Please Select" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="All">All</SelectItem>
+                  {consultants.map((consultant) => (
+                    <SelectItem key={consultant.id} value={consultant.name}>
+                      {consultant.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="col-span-3">
+              <Label className="text-xs font-medium">Visit:</Label>
+              <Select value={visitFilter} onValueChange={setVisitFilter}>
+                <SelectTrigger className="h-8 text-xs">
+                  <SelectValue placeholder="Please Select" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="All">Please Select</SelectItem>
+                  <SelectItem value="IPD">IPD</SelectItem>
+                  <SelectItem value="OPD">OPD</SelectItem>
+                  <SelectItem value="LAB">LAB</SelectItem>
+                  <SelectItem value="EMERGENCY">EMERGENCY</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Action Buttons */}
+      <div className="flex gap-2">
+        <Button onClick={() => setIsCreateOrderOpen(true)} size="sm">
+          <Plus className="h-4 w-4 mr-2" />
+          New Lab Order
+        </Button>
       </div>
 
-      {/* Filters */}
-      <Card>
+      {/* Old Filters - Hidden for now */}
+      <Card className="hidden">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Filter className="h-5 w-5" />
@@ -3139,10 +3541,11 @@ const LabOrders = () => {
               <TableRow>
                 <TableHead className="w-12">#</TableHead>
                 <TableHead>Patient Name</TableHead>
-                <TableHead>Test ID</TableHead>
+                <TableHead>Visit ID</TableHead>
                 <TableHead>Type</TableHead>
                 <TableHead>Test Name</TableHead>
                 <TableHead>Date</TableHead>
+                <TableHead>Req By</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Sample Taken</TableHead>
                 <TableHead>Incl.</TableHead>
@@ -3151,16 +3554,17 @@ const LabOrders = () => {
             <TableBody>
               {(testRowsLoading || ordersLoading) ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center py-8">
-                    <div className="flex items-center justify-center gap-2">
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
-                      Loading patient lab data...
+                  <TableCell colSpan={10} className="text-center py-16">
+                    <div className="flex flex-col items-center justify-center gap-4">
+                      <Loader2 className="h-12 w-12 animate-spin text-blue-600" />
+                      <div className="text-lg font-medium text-gray-700">Loading patient lab data...</div>
+                      <div className="text-sm text-gray-500">Please wait while we fetch the test information</div>
                     </div>
                   </TableCell>
                 </TableRow>
               ) : paginatedPatientGroups.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center py-8 text-gray-500">
+                  <TableCell colSpan={10} className="text-center py-8 text-gray-500">
                     No lab orders found. Create a new lab order to get started.
                   </TableCell>
                 </TableRow>
@@ -3170,17 +3574,17 @@ const LabOrders = () => {
                   {/* Patient Header Row */}
                   <TableRow className="bg-blue-50 hover:bg-blue-100">
                     <TableCell className="font-bold">{startIndex + patientIndex + 1}</TableCell>
-                    <TableCell colSpan={8} className="font-bold text-blue-900">
-                      {patientGroup.patient.name} ({patientGroup.patient.order_number})
+                    <TableCell colSpan={9} className="font-bold text-blue-900">
+                      {patientGroup.patient.name}
                     </TableCell>
                   </TableRow>
-                  
+
                   {/* Individual Test Rows for this Patient */}
                   {patientGroup.tests.map((testRow, testIndex) => (
                     <TableRow key={testRow.id} className="hover:bg-gray-50">
                       <TableCell></TableCell>
                       <TableCell></TableCell>
-                      <TableCell className="font-medium">{testRow.order_number}</TableCell>
+                      <TableCell className="font-medium">{testRow.visit_id || testRow.order_number}</TableCell>
                       <TableCell>
                         <Badge variant="secondary">{testRow.test_category}</Badge>
                       </TableCell>
@@ -3190,6 +3594,9 @@ const LabOrders = () => {
                         </div>
                       </TableCell>
                       <TableCell>{formatDate(testRow.order_date)}</TableCell>
+                      <TableCell className="text-sm text-gray-700">
+                        {testRow.ordering_doctor || 'N/A'}
+                      </TableCell>
                       <TableCell>
                         <Badge className={getStatusColor(testRow.order_status)}>
                           {testRow.order_status}
@@ -3667,10 +4074,10 @@ const LabOrders = () => {
               <div className="bg-blue-50 p-4 rounded-lg">
                 <div className="grid grid-cols-6 gap-4 text-sm">
                   <div><strong>Patient Name:</strong> {selectedTestsForEntry[0]?.patient_name}</div>
-                  <div><strong>Age/Sex:</strong> {selectedTestsForEntry[0]?.patient_age}Y {selectedTestsForEntry[0]?.patient_gender}</div>
+                  <div><strong>Age/Sex:</strong> {selectedTestsForEntry[0]?.patient_age} / {selectedTestsForEntry[0]?.patient_gender}</div>
                   <div><strong>Type:</strong> OPD / BSNL</div>
                   <div><strong>Ref By:</strong> {selectedTestsForEntry[0]?.ordering_doctor}</div>
-                  <div><strong>Lab Sample ID:</strong> {selectedTestsForEntry[0]?.order_number}</div>
+                  <div><strong>Visit ID:</strong> {selectedTestsForEntry[0]?.visit_id || selectedTestsForEntry[0]?.order_number}</div>
                   <div><strong>Date:</strong> {formatDate(selectedTestsForEntry[0]?.order_date || '')}</div>
                 </div>
               </div>
