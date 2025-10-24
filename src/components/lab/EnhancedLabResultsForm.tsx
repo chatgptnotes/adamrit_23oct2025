@@ -128,6 +128,12 @@ const EnhancedLabResultsForm: React.FC<EnhancedLabResultsFormProps> = ({
     setTestResults(updatedResults);
   };
 
+  const handleNormalRangeChange = (index: number, normalRange: string) => {
+    const updatedResults = [...testResults];
+    updatedResults[index].normalRange = normalRange;
+    setTestResults(updatedResults);
+  };
+
   const addMoreTests = () => {
     setSelectedTest('');
     setTestResults([]);
@@ -329,9 +335,13 @@ const EnhancedLabResultsForm: React.FC<EnhancedLabResultsFormProps> = ({
                           </div>
                         </div>
                         <div>
-                          <div className="text-blue-600 font-medium mb-2">
-                            {result.normalRange}
-                          </div>
+                          <Input
+                            type="text"
+                            placeholder="Enter normal range"
+                            value={result.normalRange}
+                            onChange={(e) => handleNormalRangeChange(index, e.target.value)}
+                            className="w-full"
+                          />
                         </div>
                       </div>
 

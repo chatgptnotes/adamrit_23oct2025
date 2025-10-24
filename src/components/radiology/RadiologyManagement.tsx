@@ -164,7 +164,7 @@ interface RadiologyTest {
 
 const RadiologyManagement: React.FC = () => {
   const { hospitalConfig } = useAuth();
-  const [activeView, setActiveView] = useState('overview');
+  const [activeView, setActiveView] = useState('orders');
   const [radiologyTests, setRadiologyTests] = useState<RadiologyTest[]>([]);
   const [loading, setLoading] = useState(false);
   const [editingTest, setEditingTest] = useState<RadiologyTest | null>(null);
@@ -209,18 +209,6 @@ const RadiologyManagement: React.FC = () => {
     setActiveView('orders');
   };
 
-  const handleCollectSample = () => {
-    setActiveView('scheduling');
-  };
-
-  const handleEnterResults = () => {
-    setActiveView('results');
-  };
-
-  const handleGenerateReport = () => {
-    setActiveView('reports');
-  };
-
   const handleImportData = () => {
     setActiveView('importData');
   };
@@ -250,7 +238,7 @@ const RadiologyManagement: React.FC = () => {
   };
 
   const handleBackClick = () => {
-    setActiveView('overview');
+    setActiveView('orders');
   };
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -909,33 +897,47 @@ const RadiologyManagement: React.FC = () => {
               <h1 className="text-3xl font-bold text-primary">Radiology Management</h1>
             </div>
             <div className="flex items-center gap-2">
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 className="bg-blue-600 text-white hover:bg-blue-700"
                 onClick={handleImportData}
               >
                 Import Data
               </Button>
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 className="bg-blue-600 text-white hover:bg-blue-700"
                 onClick={handleSubSpecialityClick}
               >
                 Radiology Sub Speciality
               </Button>
-                             <Button 
+                             <Button
                  className="bg-blue-600 text-white hover:bg-blue-700"
                  onClick={() => setActiveView('addTestForm')}
                >
                  Add Test
                </Button>
-              <Button 
-                variant="outline"
-                onClick={handleBackClick}
-              >
-                Back
-              </Button>
             </div>
+          </div>
+
+          {/* Navigation Tabs */}
+          <div className="flex space-x-1 mb-6 bg-gray-100 p-1 rounded-lg w-fit">
+            <Button
+              variant="ghost"
+              size="sm"
+              className={activeView === 'orders' ? 'bg-white shadow-sm text-black border border-black' : ''}
+              onClick={() => setActiveView('orders')}
+            >
+              Orders
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className={activeView === 'addTest' ? 'bg-white shadow-sm text-black border border-black' : ''}
+              onClick={() => setActiveView('addTest')}
+            >
+              Rad Management
+            </Button>
           </div>
 
           {/* Search Bar */}
@@ -1108,7 +1110,7 @@ const RadiologyManagement: React.FC = () => {
     );
   }
 
-  if (activeView === 'orders' || activeView === 'catalog' || activeView === 'scheduling' || activeView === 'results' || activeView === 'reports' || activeView === 'quality') {
+  if (activeView === 'orders' || activeView === 'addTest') {
     return (
       <div className="min-h-screen bg-background">
         <div className="p-6">
@@ -1117,324 +1119,37 @@ const RadiologyManagement: React.FC = () => {
               <h1 className="text-3xl font-bold text-primary">Radiology Management - {activeView.charAt(0).toUpperCase() + activeView.slice(1)}</h1>
               <p className="text-muted-foreground">Enterprise-level radiology operations and imaging management</p>
             </div>
-            <div className="flex items-center gap-2">
-              <Button 
-                variant="outline" 
-                onClick={() => setActiveView('overview')}
-                className="flex items-center gap-2"
-              >
-                <BarChart3 className="h-4 w-4" />
-                Back to Overview
-              </Button>
-              <Button className="flex items-center gap-2">
-                <RefreshCw className="h-4 w-4" />
-                Refresh
-              </Button>
-            </div>
           </div>
-          
+
           {/* Navigation Tabs */}
           <div className="flex space-x-1 mb-6 bg-gray-100 p-1 rounded-lg w-fit">
-            <Button 
-              variant={'ghost'} 
-              size="sm" 
-              className={''}
-              onClick={() => setActiveView('overview')}
-            >
-              Overview
-            </Button>
-            <Button 
-              variant={activeView === 'catalog' ? 'default' : 'ghost'} 
+            <Button
+              variant="ghost"
               size="sm"
-              className={activeView === 'catalog' ? 'bg-white shadow-sm' : ''}
-              onClick={() => setActiveView('catalog')}
-            >
-              Imaging Catalog
-            </Button>
-            <Button 
-              variant={activeView === 'orders' ? 'default' : 'ghost'} 
-              size="sm"
-              className={activeView === 'orders' ? 'bg-white shadow-sm' : ''}
+              className={activeView === 'orders' ? 'bg-white shadow-sm text-black border border-black' : ''}
               onClick={() => setActiveView('orders')}
             >
               Orders
             </Button>
-            <Button 
-              variant={activeView === 'scheduling' ? 'default' : 'ghost'} 
+            <Button
+              variant="ghost"
               size="sm"
-              className={activeView === 'scheduling' ? 'bg-white shadow-sm' : ''}
-              onClick={() => setActiveView('scheduling')}
+              className={activeView === 'addTest' ? 'bg-white shadow-sm text-black border border-black' : ''}
+              onClick={() => setActiveView('addTest')}
             >
-              Scheduling
-            </Button>
-            <Button 
-              variant={activeView === 'results' ? 'default' : 'ghost'} 
-              size="sm"
-              className={activeView === 'results' ? 'bg-white shadow-sm' : ''}
-              onClick={() => setActiveView('results')}
-            >
-              Results
-            </Button>
-            <Button 
-              variant={activeView === 'reports' ? 'default' : 'ghost'} 
-              size="sm"
-              className={activeView === 'reports' ? 'bg-white shadow-sm' : ''}
-              onClick={() => setActiveView('reports')}
-            >
-              Reports
-            </Button>
-            <Button 
-              variant={activeView === 'quality' ? 'default' : 'ghost'} 
-              size="sm"
-              className={activeView === 'quality' ? 'bg-white shadow-sm' : ''}
-              onClick={() => setActiveView('quality')}
-            >
-              Quality Control
+              Rad Management
             </Button>
           </div>
 
           {activeView === 'orders' && <RadiologyDashboard />}
-          {activeView === 'catalog' && (
-            <div className="text-center py-12">
-              <h2 className="text-2xl font-semibold mb-4">Imaging Catalog</h2>
-              <p className="text-gray-600">Imaging catalog functionality coming soon...</p>
-            </div>
-          )}
-          {activeView === 'scheduling' && (
-            <div className="text-center py-12">
-              <h2 className="text-2xl font-semibold mb-4">Scheduling</h2>
-              <p className="text-gray-600">Scheduling functionality coming soon...</p>
-            </div>
-          )}
-          {activeView === 'results' && (
-            <div className="text-center py-12">
-              <h2 className="text-2xl font-semibold mb-4">Results</h2>
-              <p className="text-gray-600">Results functionality coming soon...</p>
-            </div>
-          )}
-          {activeView === 'reports' && (
-            <div className="text-center py-12">
-              <h2 className="text-2xl font-semibold mb-4">Reports</h2>
-              <p className="text-gray-600">Reports functionality coming soon...</p>
-            </div>
-          )}
-          {activeView === 'quality' && (
-            <div className="text-center py-12">
-              <h2 className="text-2xl font-semibold mb-4">Quality Control</h2>
-              <p className="text-gray-600">Quality control functionality coming soon...</p>
-            </div>
-          )}
         </div>
       </div>
     );
   }
 
+  // Default fallback - redirect to orders view
   return (
     <div className="min-h-screen bg-background">
-      <div className="p-6">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-4">
-            <FileText className="h-8 w-8 text-blue-600" />
-            <div>
-              <h1 className="text-3xl font-bold text-primary">Radiology Orders</h1>
-              <p className="text-muted-foreground">Manage imaging orders and track their progress</p>
-            </div>
-          </div>
-        </div>
-
-        {/* Navigation Tabs */}
-        <div className="flex space-x-6 mb-6 border-b">
-          <Button
-            variant="ghost"
-            className="border-b-2 border-blue-600 text-blue-600 rounded-none pb-3"
-          >
-            <Activity className="h-4 w-4 mr-2" />
-            Overview
-          </Button>
-          <Button variant="ghost" className="pb-3 rounded-none">
-            <Monitor className="h-4 w-4 mr-2" />
-            Modalities
-          </Button>
-          <Button
-            variant="ghost"
-            className="pb-3 rounded-none"
-            onClick={() => setActiveView('orders')}
-          >
-            <FileText className="h-4 w-4 mr-2" />
-            Orders
-            <Badge className="ml-2 bg-blue-100 text-blue-800">23</Badge>
-          </Button>
-          <Button
-            variant="ghost"
-            className="pb-3 rounded-none"
-            onClick={() => setActiveView('addTest')}
-          >
-            <Settings className="h-4 w-4 mr-2" />
-            Rad Management
-          </Button>
-        </div>
-
-        {/* Statistics Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground mb-1">Total Orders</p>
-                  <p className="text-3xl font-bold text-blue-600">89</p>
-                </div>
-                <div className="p-3 bg-blue-50 rounded-lg">
-                  <FileText className="h-6 w-6 text-blue-600" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground mb-1">Pending Orders</p>
-                  <p className="text-3xl font-bold text-orange-600">23</p>
-                </div>
-                <div className="p-3 bg-orange-50 rounded-lg">
-                  <Clock className="h-6 w-6 text-orange-600" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground mb-1">Scheduled</p>
-                  <p className="text-3xl font-bold text-purple-600">34</p>
-                </div>
-                <div className="p-3 bg-purple-50 rounded-lg">
-                  <Calendar className="h-6 w-6 text-purple-600" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground mb-1">Completed Today</p>
-                  <p className="text-3xl font-bold text-green-600">32</p>
-                </div>
-                <div className="p-3 bg-green-50 rounded-lg">
-                  <CheckCircle className="h-6 w-6 text-green-600" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Search and Filters */}
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-2 bg-white border rounded-lg px-3 py-2 shadow-sm w-96">
-            <Search className="h-4 w-4 text-gray-400" />
-            <input 
-              type="text" 
-              placeholder="Search by patient name, order number, or procedure..." 
-              className="border-none outline-none text-sm flex-1"
-            />
-          </div>
-          <Button variant="outline" className="flex items-center gap-2">
-            <Filter className="h-4 w-4" />
-            Filters
-          </Button>
-        </div>
-
-        {/* Order Status Tabs */}
-        <div className="flex space-x-1 mb-6 bg-gray-100 p-1 rounded-lg w-fit">
-          <Button variant="default" size="sm" className="bg-white shadow-sm">
-            All Orders
-          </Button>
-          <Button variant="ghost" size="sm">
-            Ordered
-          </Button>
-          <Button variant="ghost" size="sm">
-            Scheduled
-          </Button>
-          <Button variant="ghost" size="sm">
-            In Progress
-          </Button>
-          <Button variant="ghost" size="sm">
-            Completed
-          </Button>
-        </div>
-
-        {/* Patient Order Card */}
-        <Card className="mb-6">
-          <CardContent className="p-6">
-            <div className="flex items-start justify-between mb-4">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
-                  <Users className="h-6 w-6 text-blue-600" />
-                </div>
-                <div>
-                  <h3 className="text-lg font-semibold">Rajesh Kumar</h3>
-                  <p className="text-sm text-muted-foreground">45Y Male • ID: P001</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <Badge className="bg-orange-100 text-orange-800">URGENT</Badge>
-                <Badge className="bg-yellow-100 text-yellow-800">ORDERED</Badge>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground mb-1">Order Number</p>
-                <p className="font-semibold">RAD2025001</p>
-              </div>
-              <div>
-                <p className="text-sm font-medium text-muted-foreground mb-1">Procedure</p>
-                <p className="font-semibold">CT Brain without contrast</p>
-              </div>
-              <div>
-                <p className="text-sm font-medium text-muted-foreground mb-1">Modality</p>
-                <p className="font-semibold">CT</p>
-              </div>
-              <div>
-                <p className="text-sm font-medium text-muted-foreground mb-1">Estimated Cost</p>
-                <p className="font-semibold text-green-600">₹3,500</p>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mt-4">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground mb-1">Ordering Physician</p>
-                <p className="font-semibold">Dr. Priya Sharma</p>
-              </div>
-              <div>
-                <p className="text-sm font-medium text-muted-foreground mb-1">Department</p>
-                <p className="font-semibold">Emergency</p>
-              </div>
-              <div>
-                <p className="text-sm font-medium text-muted-foreground mb-1">Order Date</p>
-                <p className="font-semibold">13/6/2025, 2:00:00 pm</p>
-              </div>
-              <div>
-                <p className="text-sm font-medium text-muted-foreground mb-1">Requested Date</p>
-                <p className="font-semibold">13/6/2025</p>
-              </div>
-            </div>
-
-            <div className="mt-4">
-              <p className="text-sm font-medium text-muted-foreground mb-1">Clinical Indication</p>
-              <p className="text-sm">Headache with sudden onset, rule out stroke</p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Radiology Sub Speciality Form */}
       <RadiologySubSpecialityForm
         isOpen={showSubSpecialityForm}
         onClose={() => setShowSubSpecialityForm(false)}
