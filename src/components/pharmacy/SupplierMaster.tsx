@@ -405,7 +405,7 @@ const SupplierMaster: React.FC<SupplierMasterProps> = ({ activeTab: propActiveTa
                     <th className="px-4 py-2 border">Supplier Name</th>
                     <th className="px-4 py-2 border">Supplier Code</th>
                     <th className="px-4 py-2 border">DL No.</th>
-                    <th className="px-4 py-2 border">CST No.</th>
+                    <th className="px-4 py-2 border">GST No.</th>
                     <th className="px-4 py-2 border">S.Tax No.</th>
                     <th className="px-4 py-2 border">Phone</th>
                     <th className="px-4 py-2 border">Edit</th>
@@ -634,7 +634,7 @@ const SupplierMaster: React.FC<SupplierMasterProps> = ({ activeTab: propActiveTa
               {/* Right column */}
               <div className="flex flex-col gap-3">
                 <label className="flex items-center gap-2">
-                  <span className="w-32">CST<span className="text-red-500">*</span></span>
+                  <span className="w-32">GST No<span className="text-red-500">*</span></span>
                   <input
                     className="border rounded px-2 py-1 flex-1"
                     value={supplierForm.cst}
