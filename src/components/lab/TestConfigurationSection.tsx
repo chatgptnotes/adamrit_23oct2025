@@ -11,6 +11,8 @@ export interface SubTest {
   id: string;
   name: string;
   unit: string;
+  type?: 'Numeric' | 'Text'; // Type field for numeric or text values
+  textValue?: string; // Text value when type is Text
   ageRanges: AgeRange[];
   normalRanges: NormalRange[];
   subTests?: SubTest[]; // Nested sub-tests
@@ -59,6 +61,8 @@ const TestConfigurationSection: React.FC<TestConfigurationSectionProps> = ({
       id: `subtest_${nextSubTestId}`,
       name: '',
       unit: '',
+      type: 'Numeric', // Default to Numeric
+      textValue: '',
       ageRanges: [],
       normalRanges: [],
       subTests: []
@@ -83,6 +87,8 @@ const TestConfigurationSection: React.FC<TestConfigurationSectionProps> = ({
       id: `subtest_${nextSubTestId}`,
       name: '',
       unit: '',
+      type: 'Numeric', // Default to Numeric
+      textValue: '',
       ageRanges: [],
       normalRanges: [],
       subTests: []
@@ -493,7 +499,7 @@ const TestConfigurationSection: React.FC<TestConfigurationSectionProps> = ({
 
           {/* Sub-Test Header */}
           <div className="flex items-center gap-3">
-            <div className="flex-1 grid grid-cols-2 gap-4">
+            <div className="flex-1 grid grid-cols-3 gap-4">
               <div>
                 <Label className="text-sm font-medium text-gray-700 mb-1 block">Sub Test Name</Label>
                 <Input
@@ -512,23 +518,55 @@ const TestConfigurationSection: React.FC<TestConfigurationSectionProps> = ({
                   className="h-9"
                 />
               </div>
+              <div>
+                <Label className="text-sm font-medium text-gray-700 mb-1 block">Type</Label>
+                <Select
+                  value={subTest.type || 'Numeric'}
+                  onValueChange={(value: 'Numeric' | 'Text') => updateSubTest(subTest.id, { type: value })}
+                >
+                  <SelectTrigger className="h-9">
+                    <SelectValue placeholder="Select type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Numeric">Numeric</SelectItem>
+                    <SelectItem value="Text">Text</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </div>
 
-          {/* Age Ranges Section */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <Label className="text-sm font-semibold text-gray-800">Age Ranges</Label>
-              <Button
-                type="button"
-                onClick={() => addAgeRange(subTest.id)}
-                className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 h-7"
-                size="sm"
-              >
-                <Plus className="h-3 w-3 mr-1" />
-                Add Age Range
-              </Button>
+          {/* Conditional rendering based on type */}
+          {subTest.type === 'Text' ? (
+            /* Text Type - Show only text area */
+            <div className="space-y-3">
+              <div>
+                <Label className="text-sm font-medium text-gray-700 mb-1 block">Text Value</Label>
+                <Textarea
+                  placeholder="Enter text value..."
+                  value={subTest.textValue || ''}
+                  onChange={(e) => updateSubTest(subTest.id, { textValue: e.target.value })}
+                  className="min-h-[100px]"
+                />
+              </div>
             </div>
+          ) : (
+            /* Numeric Type - Show all numeric options */
+            <>
+              {/* Age Ranges Section */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-semibold text-gray-800">Age Ranges</Label>
+                  <Button
+                    type="button"
+                    onClick={() => addAgeRange(subTest.id)}
+                    className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 h-7"
+                    size="sm"
+                  >
+                    <Plus className="h-3 w-3 mr-1" />
+                    Add Age Range
+                  </Button>
+                </div>
 
             {/* Age Range Headers */}
             {subTest.ageRanges.length > 0 && (
@@ -931,18 +969,20 @@ const TestConfigurationSection: React.FC<TestConfigurationSectionProps> = ({
             </div>
           )}
 
-          {/* Add Nested Sub-Test Button */}
-          <div className="flex justify-end mt-3">
-            <Button
-              type="button"
-              onClick={() => addNestedSubTest(subTest.id)}
-              className="flex items-center gap-2 bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 h-7 text-xs"
-              size="sm"
-            >
-              <Plus className="h-3 w-3" />
-              Add Nested Sub-Test
-            </Button>
-          </div>
+              {/* Add Nested Sub-Test Button */}
+              <div className="flex justify-end mt-3">
+                <Button
+                  type="button"
+                  onClick={() => addNestedSubTest(subTest.id)}
+                  className="flex items-center gap-2 bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 h-7 text-xs"
+                  size="sm"
+                >
+                  <Plus className="h-3 w-3" />
+                  Add Nested Sub-Test
+                </Button>
+              </div>
+            </>
+          )}
         </div>
       ))}
 
