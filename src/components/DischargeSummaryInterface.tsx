@@ -246,7 +246,8 @@ Note: URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 763097481
     const actualAge = patient.age ? `${patient.age} Year` : patientAge || '11 Year';
     const actualGender = patient.gender || patientGender || 'female';
     const actualAddress = patient.address || patientAddress || 'N/A';
-    const patientId = patient.patients_id || visitId || 'UHAY25I22001';
+    // Use UH ID from visitDiagnosis if available, otherwise fall back to patient data
+    const patientId = visitDiagnosis?.patientUhId || patient.patients_id || visitId || 'UHAY25I22001';
     const corporate = patient.corporate || 'Private';
 
     // Get appointment details
@@ -376,7 +377,7 @@ Note: URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 763097481
       sex: actualGender,
       age: actualAge,
       tariff: corporate,
-      mobileNo: patient.mobile || 'N/A',
+      mobileNo: visitDiagnosis?.mobileNumber || patient.phone || 'N/A',
       address: actualAddress,
       admissionDate: admissionDate,
       dischargeDate: currentDate,

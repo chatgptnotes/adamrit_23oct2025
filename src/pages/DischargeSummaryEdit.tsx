@@ -1427,7 +1427,7 @@ Test Name                       Result              Reference Range     Status
 
       const summary = `${formatTableField('Name', patientName)} ${formatTableField('Patient ID', patientInfo.patients_id || patient.patients?.patients_id || 'UHAY25I22001')}
 ${formatTableField('Primary Care Provider', doctorName)} ${formatTableField('Registration ID', patient.patients?.registration_id || 'IH25I22001')}
-${formatTableField('Sex / Age', `${patientGender} / ${patientAge} Year`)} ${formatTableField('Mobile No', patient.patients?.phone || 'N/A')}
+${formatTableField('Sex / Age', `${patientGender} / ${patientAge} Year`)} ${formatTableField('Mobile No', patientInfo.phone || patient.patients?.phone || 'N/A')}
 ${formatTableField('Tariff', patient.patients?.tariff || 'Private')} ${formatTableField('Address', patient.patients?.address || 'N/A')}
 ${formatTableField('Admission Date', visitDate)} ${formatTableField('Discharge Date', new Date().toLocaleDateString())}
 ${formatTableField('Discharge Reason', 'Recovered')}
@@ -1842,8 +1842,10 @@ PLEASE CONTACT: 7030974619, 9373111709.
       gender: fullPatientData?.gender || patient.patients?.gender || 'N/A',
       visitId: patient.visit_id || 'N/A',
       patientId: fullPatientData?.patients_id || patient.patients?.patients_id || 'N/A',
+      uhId: fullPatientData?.patients_id || patient.patients?.patients_id || 'N/A',
       registrationId: fullPatientData?.registration_id || patient.patients?.registration_id || 'N/A',
       mobile: fullPatientData?.phone || patient.patients?.phone || 'N/A',
+      mobileNumber: fullPatientData?.phone || patient.patients?.phone || 'N/A',
       address: fullPatientData?.address || patient.patients?.address || 'N/A',
       tariff: fullPatientData?.tariff || patient.patients?.tariff || 'Private',
       admissionDate: patient.admission_date || patient.visit_date || new Date().toLocaleDateString(),
@@ -1906,9 +1908,9 @@ GENERATE THE FOLLOWING COMPLETE DISCHARGE SUMMARY:
 OPD DISCHARGE SUMMARY
 ================================================================================
 
-Name                  : ${(patientData.name || '').padEnd(30)}Patient ID            : ${patientData.patientId || 'UHAY25I22001'}
+Name                  : ${(patientData.name || '').padEnd(30)}Patient ID            : ${patientData.uhId || patientData.patientId || 'UHAY25I22001'}
 Primary Care Provider : ${(patientData.consultant || '').padEnd(30)}Registration ID       : ${patientData.registrationId || 'IH25I22001'}
-Sex / Age             : ${((patientData.gender || '') + ' / ' + (patientData.age || '') + ' Year').padEnd(30)}Mobile No             : ${patientData.mobile || 'N/A'}
+Sex / Age             : ${((patientData.gender || '') + ' / ' + (patientData.age || '') + ' Year').padEnd(30)}Mobile No             : ${patientData.mobileNumber || patientData.mobile || 'N/A'}
 Tariff                : ${(patientData.tariff || '').padEnd(30)}Address               : ${patientData.address || 'N/A'}
 Admission Date        : ${(patientData.admissionDate || '').padEnd(30)}Discharge Date        : ${patientData.dischargeDate || ''}
 Discharge Reason      : Recovered
@@ -2137,9 +2139,9 @@ IMPORTANT: Format everything as plain text, include ALL provided investigations,
         aiGeneratedSummary = `OPD DISCHARGE SUMMARY
 ================================================================================
 
-Name                  : ${(editablePatientData.name || 'Patient Name').padEnd(30)}Patient ID            : ${editablePatientData.patientId || 'UHAY25I22001'}
+Name                  : ${(editablePatientData.name || 'Patient Name').padEnd(30)}Patient ID            : ${editablePatientData.uhId || editablePatientData.patientId || 'UHAY25I22001'}
 Primary Care Provider : ${(editablePatientData.consultant || 'Dr. Unknown').padEnd(30)}Registration ID       : ${editablePatientData.registrationId || 'IH25I22001'}
-Sex / Age             : ${((editablePatientData.gender || 'Gender') + ' / ' + (editablePatientData.age || 'Age') + ' Year').padEnd(30)}Mobile No             : ${editablePatientData.mobile || 'N/A'}
+Sex / Age             : ${((editablePatientData.gender || 'Gender') + ' / ' + (editablePatientData.age || 'Age') + ' Year').padEnd(30)}Mobile No             : ${editablePatientData.mobileNumber || editablePatientData.mobile || 'N/A'}
 Tariff                : ${(editablePatientData.tariff || 'Private').padEnd(30)}Address               : ${editablePatientData.address || 'N/A'}
 Admission Date        : ${(editablePatientData.admissionDate || new Date().toLocaleDateString()).padEnd(30)}Discharge Date        : ${editablePatientData.dischargeDate || new Date().toLocaleDateString()}
 Discharge Reason      : Recovered
