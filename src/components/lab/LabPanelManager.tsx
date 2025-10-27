@@ -721,11 +721,15 @@ const LabPanelManager: React.FC = () => {
         const subTestKey = config.sub_test_name;
 
         if (!subTestsMap.has(subTestKey)) {
-          // Create new sub-test
+          // Create new sub-test with type support
+          const isTextType = config.test_type === 'Text';
+
           const newSubTest: SubTest = {
             id: `subtest_${subTestKey}_${Date.now()}`,
             name: config.sub_test_name,
             unit: config.unit || config.normal_unit || '',
+            type: isTextType ? 'Text' : 'Numeric', // NEW: Load test type
+            textValue: isTextType ? (config.text_value || '') : '', // NEW: Load text value
             ageRanges: [],
             normalRanges: []
           };
@@ -734,40 +738,43 @@ const LabPanelManager: React.FC = () => {
 
         const subTest = subTestsMap.get(subTestKey)!;
 
-        // Create age range string
-        let ageRangeStr = '- Years';
-        if (config.min_age !== undefined && config.max_age !== undefined) {
-          const ageUnit = config.age_unit || 'Years';
-          ageRangeStr = `${config.min_age}-${config.max_age} ${ageUnit}`;
-        }
+        // Only process ranges for Numeric type
+        if (subTest.type !== 'Text') {
+          // Create age range string
+          let ageRangeStr = '- Years';
+          if (config.min_age !== undefined && config.max_age !== undefined) {
+            const ageUnit = config.age_unit || 'Years';
+            ageRangeStr = `${config.min_age}-${config.max_age} ${ageUnit}`;
+          }
 
-        // Check if this age range already exists in ageRanges
-        const existingAgeRange = subTest.ageRanges.find(ar =>
-          `${ar.minAge}-${ar.maxAge} ${ar.unit}` === ageRangeStr
-        );
+          // Check if this age range already exists in ageRanges
+          const existingAgeRange = subTest.ageRanges.find(ar =>
+            `${ar.minAge}-${ar.maxAge} ${ar.unit}` === ageRangeStr
+          );
 
-        if (!existingAgeRange && config.min_age !== undefined && config.max_age !== undefined) {
-          // Add age range if it doesn't exist
-          const ageRange: import('./TestConfigurationSection').AgeRange = {
-            id: `agerange_${config.id || Date.now()}_${subTest.ageRanges.length}`,
-            minAge: config.min_age?.toString() || '0',
-            maxAge: config.max_age?.toString() || '100',
-            unit: (config.age_unit as 'Days' | 'Months' | 'Years') || 'Years',
-            description: config.age_description || config.gender || 'Both'
+          if (!existingAgeRange && config.min_age !== undefined && config.max_age !== undefined) {
+            // Add age range if it doesn't exist
+            const ageRange: import('./TestConfigurationSection').AgeRange = {
+              id: `agerange_${config.id || Date.now()}_${subTest.ageRanges.length}`,
+              minAge: config.min_age?.toString() || '0',
+              maxAge: config.max_age?.toString() || '100',
+              unit: (config.age_unit as 'Days' | 'Months' | 'Years') || 'Years',
+              description: config.age_description || config.gender || 'Both'
+            };
+            subTest.ageRanges.push(ageRange);
+          }
+
+          // Add normal range
+          const normalRange: import('./TestConfigurationSection').NormalRange = {
+            id: `normalrange_${config.id || Date.now()}_${subTest.normalRanges.length}`,
+            ageRange: ageRangeStr,
+            gender: (config.gender as 'Male' | 'Female' | 'Both') || 'Both',
+            minValue: config.min_value?.toString() || '0',
+            maxValue: config.max_value?.toString() || '0',
+            unit: config.normal_unit || config.unit || ''
           };
-          subTest.ageRanges.push(ageRange);
+          subTest.normalRanges.push(normalRange);
         }
-
-        // Add normal range
-        const normalRange: import('./TestConfigurationSection').NormalRange = {
-          id: `normalrange_${config.id || Date.now()}_${subTest.normalRanges.length}`,
-          ageRange: ageRangeStr,
-          gender: (config.gender as 'Male' | 'Female' | 'Both') || 'Both',
-          minValue: config.min_value?.toString() || '0',
-          maxValue: config.max_value?.toString() || '0',
-          unit: config.normal_unit || config.unit || ''
-        };
-        subTest.normalRanges.push(normalRange);
       }
 
       return Array.from(subTestsMap.values());
@@ -884,25 +891,29 @@ const LabPanelManager: React.FC = () => {
           };
         }) || [];
 
-        // Build config data
+        // Build config data based on test type
+        const isTextType = subTest.type === 'Text';
+
         const configData = {
           test_name: testName || 'Unknown Test',
           sub_test_name: subTest.name || 'Unknown SubTest',
           unit: subTest.unit || 'unit',
-          min_age: minAge,
-          max_age: maxAge,
-          age_unit: ageUnit,
-          age_description: firstAgeRange?.description || null,
-          gender: firstNormalRange?.gender || 'Both',
-          min_value: firstNormalRange ? parseFloat(firstNormalRange.minValue) || 0 : 0,
-          max_value: firstNormalRange ? parseFloat(firstNormalRange.maxValue) || 0 : 0,
+          test_type: isTextType ? 'Text' : 'Numeric', // NEW: Save test type
+          text_value: isTextType ? (subTest.textValue || null) : null, // NEW: Save text value for Text type
+          min_age: isTextType ? 0 : minAge, // Skip for Text type
+          max_age: isTextType ? 100 : maxAge, // Skip for Text type
+          age_unit: isTextType ? 'Years' : ageUnit, // Default for Text type
+          age_description: isTextType ? null : (firstAgeRange?.description || null),
+          gender: isTextType ? 'Both' : (firstNormalRange?.gender || 'Both'),
+          min_value: isTextType ? 0 : (firstNormalRange ? parseFloat(firstNormalRange.minValue) || 0 : 0),
+          max_value: isTextType ? 0 : (firstNormalRange ? parseFloat(firstNormalRange.maxValue) || 0 : 0),
           normal_unit: subTest.unit || 'unit',
           test_level: 1,
           display_order: 0,
           is_active: true,
           lab_id: labId,
-          age_ranges: ageRangesData,
-          normal_ranges: normalRangesData,
+          age_ranges: isTextType ? [] : ageRangesData, // Empty array for Text type
+          normal_ranges: isTextType ? [] : normalRangesData, // Empty array for Text type
           nested_sub_tests: nestedSubTestsData
         };
 

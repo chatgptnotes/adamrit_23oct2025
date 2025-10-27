@@ -587,6 +587,7 @@ const LabOrders = () => {
 
       console.log('📊 Raw sub-tests found for', testName, ':', subTestsData);
       console.log('👤 Patient info:', { age: patientAge, gender: patientGender });
+      console.log('🔍 Sub-test types:', subTestsData?.map(st => ({ name: st.sub_test_name, type: st.test_type, textValue: st.text_value })));
 
       // Group by sub_test_name to handle multiple ranges per sub-test
       const groupedSubTests = subTestsData?.reduce((acc, subTest) => {
@@ -618,7 +619,9 @@ const LabOrders = () => {
           minAge: bestMatch.min_age,
           maxAge: bestMatch.max_age,
           allRanges: ranges,
-          isParent: true
+          isParent: true,
+          test_type: bestMatch.test_type || 'Numeric', // NEW: Include test type
+          text_value: bestMatch.text_value || null      // NEW: Include text value for Text type
         };
         processedSubTests.push(parentSubTest);
 
@@ -650,7 +653,9 @@ const LabOrders = () => {
               minAge: nested.age_ranges?.[0]?.min_age || 0,
               maxAge: nested.age_ranges?.[0]?.max_age || 100,
               isNested: true,
-              parentId: bestMatch.id
+              parentId: bestMatch.id,
+              test_type: nested.test_type || 'Numeric', // NEW: Include test type
+              text_value: nested.text_value || null      // NEW: Include text value
             });
           });
         }
@@ -2930,75 +2935,131 @@ const LabOrders = () => {
               console.log('📊 Has sub-test data:', hasSubTestData, 'Has direct data:', hasDirectData);
 
               if (hasSubTestData) {
-                // Display test with sub-tests
-                const subTestRows = subTests.map(subTest => {
-                  const subTestKey = `${testRow.id}_subtest_${subTest.id}`;
-                  console.log('🔑 Looking for sub-test data with key:', subTestKey);
+                // Check if all sub-tests are Text type
+                const allTextType = subTests.every(st => st.test_type === 'Text');
 
-                  // Try multiple approaches to find the data
-                  let subTestFormData = savedLabResults[subTestKey] || labResultsForm[subTestKey];
+                if (allTextType) {
+                  // TEXT TYPE FORMAT - Simple list without table
+                  const textTestRows = subTests.map(subTest => {
+                    const subTestKey = `${testRow.id}_subtest_${subTest.id}`;
+                    let subTestFormData = savedLabResults[subTestKey] || labResultsForm[subTestKey];
 
-                  // If not found, try alternative keys
-                  if (!subTestFormData || !subTestFormData.result_value) {
-                    const alternativeKeys = [
-                      `${testRow.id}_subtest_main`,
-                      `${testRow.id}`,
-                      testRow.id.toString(),
-                      subTest.name,
-                      `${testRow.id}_${subTest.name}`,
-                      `${testRow.test_name}_${subTest.name}`
-                    ];
+                    // Try alternative keys
+                    if (!subTestFormData || !subTestFormData.result_value) {
+                      const alternativeKeys = [
+                        `${testRow.id}_subtest_main`,
+                        `${testRow.id}`,
+                        testRow.id.toString(),
+                        subTest.name,
+                        `${testRow.id}_${subTest.name}`,
+                        `${testRow.test_name}_${subTest.name}`
+                      ];
 
-                    for (const altKey of alternativeKeys) {
-                      const altData = savedLabResults[altKey] || labResultsForm[altKey];
-                      if (altData && altData.result_value) {
-                        subTestFormData = altData;
-                        console.log('✅ Found data with alternative key:', altKey, altData);
-                        break;
+                      for (const altKey of alternativeKeys) {
+                        const altData = savedLabResults[altKey] || labResultsForm[altKey];
+                        if (altData && altData.result_value) {
+                          subTestFormData = altData;
+                          break;
+                        }
                       }
                     }
-                  }
 
-                  // Fallback to empty data
-                  if (!subTestFormData) {
-                    subTestFormData = {
-                      result_value: '',
-                      result_unit: '',
-                      reference_range: '',
-                      comments: '',
-                      is_abnormal: false,
-                      result_status: 'Preliminary'
-                    };
-                  }
+                    const displayValue = subTestFormData?.result_value || subTest.text_value || 'Not Available';
 
-                  console.log('📝 Final sub-test form data:', subTestFormData);
-
-                  const displayValue = subTestFormData.result_value ?
-                    `${subTestFormData.result_value} ${subTest.unit || ''}`.trim() :
-                    'Not Available';
-
-                  const referenceRange = subTest.range || calculatedRanges[subTestKey] || 'Not Specified';
-
-                  // Check if this is a nested sub-test
-                  const isNested = subTest.isNested || (subTest.name && subTest.name.startsWith('  '));
-                  // Sub-tests = bold, Nested sub-tests = faint/light
-                  const nameStyle = isNested ? 'font-weight: 300; color: #666;' : 'font-weight: bold;';
+                    return `
+                      <div style="margin: 15px 0;">
+                        <div style="font-weight: bold; font-size: 14px; margin-bottom: 5px;">
+                          ${subTest.name.trim()}
+                        </div>
+                        <div style="margin-left: 20px; font-size: 14px;">
+                          : ${displayValue}
+                        </div>
+                        ${testRow.test_method ? `
+                          <div style="margin-left: 20px; margin-top: 5px; font-size: 12px;">
+                            <span style="font-weight: bold;">Method</span> ${testRow.test_method}
+                          </div>
+                        ` : ''}
+                      </div>
+                    `;
+                  }).join('');
 
                   return `
-                    <div class="test-row">
-                      <div class="test-name" style="${nameStyle}">${subTest.name.trim()}</div>
-                      <div class="test-value ${subTestFormData.is_abnormal ? 'abnormal' : ''}">${displayValue}</div>
-                      <div class="test-range">${referenceRange}</div>
+                    <div class="main-test-section" style="margin: 20px 0;">
+                      <div class="main-test-header" style="font-size: 16px; font-weight: bold; margin-bottom: 10px;">${testRow.test_name.toUpperCase()}</div>
+                      ${textTestRows}
                     </div>
                   `;
-                }).join('');
+                } else {
+                  // NUMERIC TYPE FORMAT - Table format (existing logic)
+                  const subTestRows = subTests.map(subTest => {
+                    const subTestKey = `${testRow.id}_subtest_${subTest.id}`;
+                    console.log('🔑 Looking for sub-test data with key:', subTestKey);
 
-                return `
-                  <div class="main-test-section">
-                    <div class="main-test-header">${testRow.test_name.toUpperCase()}</div>
-                    ${subTestRows}
-                  </div>
-                `;
+                    // Try multiple approaches to find the data
+                    let subTestFormData = savedLabResults[subTestKey] || labResultsForm[subTestKey];
+
+                    // If not found, try alternative keys
+                    if (!subTestFormData || !subTestFormData.result_value) {
+                      const alternativeKeys = [
+                        `${testRow.id}_subtest_main`,
+                        `${testRow.id}`,
+                        testRow.id.toString(),
+                        subTest.name,
+                        `${testRow.id}_${subTest.name}`,
+                        `${testRow.test_name}_${subTest.name}`
+                      ];
+
+                      for (const altKey of alternativeKeys) {
+                        const altData = savedLabResults[altKey] || labResultsForm[altKey];
+                        if (altData && altData.result_value) {
+                          subTestFormData = altData;
+                          console.log('✅ Found data with alternative key:', altKey, altData);
+                          break;
+                        }
+                      }
+                    }
+
+                    // Fallback to empty data
+                    if (!subTestFormData) {
+                      subTestFormData = {
+                        result_value: '',
+                        result_unit: '',
+                        reference_range: '',
+                        comments: '',
+                        is_abnormal: false,
+                        result_status: 'Preliminary'
+                      };
+                    }
+
+                    console.log('📝 Final sub-test form data:', subTestFormData);
+
+                    const displayValue = subTestFormData.result_value ?
+                      `${subTestFormData.result_value} ${subTest.unit || ''}`.trim() :
+                      'Not Available';
+
+                    const referenceRange = subTest.range || calculatedRanges[subTestKey] || 'Not Specified';
+
+                    // Check if this is a nested sub-test
+                    const isNested = subTest.isNested || (subTest.name && subTest.name.startsWith('  '));
+                    // Sub-tests = bold, Nested sub-tests = faint/light
+                    const nameStyle = isNested ? 'font-weight: 300; color: #666;' : 'font-weight: bold;';
+
+                    return `
+                      <div class="test-row">
+                        <div class="test-name" style="${nameStyle}">${subTest.name.trim()}</div>
+                        <div class="test-value ${subTestFormData.is_abnormal ? 'abnormal' : ''}">${displayValue}</div>
+                        <div class="test-range">${referenceRange}</div>
+                      </div>
+                    `;
+                  }).join('');
+
+                  return `
+                    <div class="main-test-section">
+                      <div class="main-test-header">${testRow.test_name.toUpperCase()}</div>
+                      ${subTestRows}
+                    </div>
+                  `;
+                }
               } else if (hasDirectData) {
                 // Display data from any relevant form keys found
                 const directDataRows = relevantKeys.map(key => {
@@ -4114,17 +4175,12 @@ const LabOrders = () => {
 
               {/* Tabular Entry Form for Multiple Tests */}
               <div className="border border-gray-300 rounded-lg overflow-hidden">
-                {/* Table Header */}
-                <div className="bg-gray-50 border-b border-gray-300">
-                  <div className="grid grid-cols-3 gap-0 font-semibold text-sm text-gray-800">
-                    <div className="p-3 border-r border-gray-300 text-center">INVESTIGATION</div>
-                    <div className="p-3 border-r border-gray-300 text-center">OBSERVED VALUE</div>
-                    <div className="p-3 text-center">NORMAL RANGE</div>
-                  </div>
-                </div>
-
                 {/* Test Rows */}
                 {selectedTestsForEntry.map((testRow, index) => {
+                  // Check if all sub-tests are Text type
+                  const subTestsForCheck = testSubTests[testRow.test_name] || [];
+                  const allTextType = subTestsForCheck.length > 0 && subTestsForCheck.every(st => st.test_type === 'Text');
+                  const hasNumericType = subTestsForCheck.some(st => st.test_type !== 'Text');
                   const formData = labResultsForm[testRow.id] || {
                     result_value: '',
                     result_unit: '',
@@ -4144,22 +4200,45 @@ const LabOrders = () => {
 
                   return (
                     <div key={testRow.id} className="border-b border-gray-200 last:border-b-0">
-                      {/* Main Test Header */}
-                      <div className="bg-white">
-                        <div className="grid grid-cols-3 gap-0">
-                          <div className="p-3 border-r border-gray-300">
-                            <div className="font-bold text-sm text-blue-900">
-                              {testRow.test_name}
+                      {/* Main Test Header - Only show for Numeric type or if showing table header */}
+                      {!allTextType && (
+                        <>
+                          {/* Table Header - Show only once before first Numeric test */}
+                          {index === 0 && hasNumericType && (
+                            <div className="bg-gray-50 border-b border-gray-300">
+                              <div className="grid grid-cols-3 gap-0 font-semibold text-sm text-gray-800">
+                                <div className="p-3 border-r border-gray-300 text-center">INVESTIGATION</div>
+                                <div className="p-3 border-r border-gray-300 text-center">OBSERVED VALUE</div>
+                                <div className="p-3 text-center">NORMAL RANGE</div>
+                              </div>
+                            </div>
+                          )}
+                          <div className="bg-white">
+                            <div className="grid grid-cols-3 gap-0">
+                              <div className="p-3 border-r border-gray-300">
+                                <div className="font-bold text-sm text-blue-900">
+                                  {testRow.test_name}
+                                </div>
+                              </div>
+                              <div className="p-3 border-r border-gray-300 text-center text-gray-500 text-sm font-medium">
+                                {/* Empty for main test header */}
+                              </div>
+                              <div className="p-3 text-center text-gray-500 text-sm font-medium">
+                                {/* Empty for main test header */}
+                              </div>
                             </div>
                           </div>
-                          <div className="p-3 border-r border-gray-300 text-center text-gray-500 text-sm font-medium">
-                            {/* Empty for main test header */}
-                          </div>
-                          <div className="p-3 text-center text-gray-500 text-sm font-medium">
-                            {/* Empty for main test header */}
+                        </>
+                      )}
+
+                      {/* Text Type Test - Show as simple section with heading */}
+                      {allTextType && (
+                        <div className="bg-white p-4">
+                          <div className="font-bold text-sm text-blue-900 mb-3">
+                            {testRow.test_name}
                           </div>
                         </div>
-                      </div>
+                      )}
 
                       {/* Handle main tests without sub-tests */}
                       {subTests.length === 0 && (
@@ -4341,42 +4420,76 @@ const LabOrders = () => {
                         }
 
                         console.log(`🚨 SUB-TEST FINAL RENDER: ${subTest.name} will display value: "${subTestDisplayValue}"`);
+                        console.log(`🎯 SUB-TEST TYPE: ${subTest.name} type: ${subTest.test_type}`);
 
-                        return (
-                        <div key={subTestKey} className="bg-white border-t border-gray-100">
-                          <div className="grid grid-cols-3 gap-0 min-h-[40px]">
-                            <div className="p-2 border-r border-gray-300 flex items-center">
-                              <span className={`text-sm ${isNestedSubTest ? 'ml-8 text-gray-700' : 'ml-4'}`}>
-                                {subTest.name}
-                              </span>
-                            </div>
-                            <div className="p-2 border-r border-gray-300 flex items-center justify-center">
-                              <input
-                                type="text"
-                                className={`w-full max-w-[120px] px-2 py-1 border rounded text-center text-sm border-gray-300`}
-                                placeholder="Enter value"
-                                value={subTestDisplayValue}
-                                onChange={(e) => handleLabResultChange(subTestKey, 'result_value', e.target.value)}
-                              />
-                              <span className="ml-2 text-xs text-gray-600">{subTest.unit}</span>
-                              {isFormSaved && subTestFormData.result_value && (
-                                <span className="ml-2 text-green-600 text-xs">✓</span>
+                        // Check if this is a Text type test
+                        const isTextType = subTest.test_type === 'Text';
+
+                        return isTextType ? (
+                          /* TEXT TYPE FORMAT - Simple text input with test name */
+                          <div key={subTestKey} className="bg-white border-t border-gray-100 p-4">
+                            <div className="space-y-3">
+                              <div className="flex items-center space-x-4">
+                                <span className={`text-sm font-medium ${isNestedSubTest ? 'ml-4 text-gray-700' : 'text-blue-900'}`}>
+                                  {subTest.name}
+                                </span>
+                                <input
+                                  type="text"
+                                  className="flex-1 px-3 py-2 border rounded text-sm border-gray-300"
+                                  placeholder="Enter text value"
+                                  value={subTestDisplayValue || subTest.text_value || ''}
+                                  onChange={(e) => handleLabResultChange(subTestKey, 'result_value', e.target.value)}
+                                  disabled={isFormSaved}
+                                />
+                                {isFormSaved && subTestFormData.result_value && (
+                                  <span className="text-green-600 text-sm">✓</span>
+                                )}
+                              </div>
+                              {testRow.test_method && (
+                                <div className="ml-0 text-xs text-gray-600">
+                                  <span className="font-medium">Method:</span> {testRow.test_method}
+                                </div>
                               )}
-                              {subTestFormData.is_abnormal && (
-                                <span className="ml-2 text-red-500 text-xs">🔴</span>
-                              )}
-                            </div>
-                            <div className="p-2 flex items-center justify-center">
-                              <input
-                                type="text"
-                                className="w-full px-2 py-1 border rounded text-center text-sm border-gray-300"
-                                placeholder="Enter normal range"
-                                value={subTestFormData.reference_range || subTest.range || ''}
-                                onChange={(e) => handleLabResultChange(subTestKey, 'reference_range', e.target.value)}
-                              />
                             </div>
                           </div>
-                        </div>
+                        ) : (
+                          /* NUMERIC TYPE FORMAT - Table with columns */
+                          <div key={subTestKey} className="bg-white border-t border-gray-100">
+                            <div className="grid grid-cols-3 gap-0 min-h-[40px]">
+                              <div className="p-2 border-r border-gray-300 flex items-center">
+                                <span className={`text-sm ${isNestedSubTest ? 'ml-8 text-gray-700' : 'ml-4'}`}>
+                                  {subTest.name}
+                                </span>
+                              </div>
+                              <div className="p-2 border-r border-gray-300 flex items-center justify-center">
+                                <input
+                                  type="text"
+                                  className={`w-full max-w-[120px] px-2 py-1 border rounded text-center text-sm border-gray-300`}
+                                  placeholder="Enter value"
+                                  value={subTestDisplayValue}
+                                  onChange={(e) => handleLabResultChange(subTestKey, 'result_value', e.target.value)}
+                                  disabled={isFormSaved}
+                                />
+                                <span className="ml-2 text-xs text-gray-600">{subTest.unit}</span>
+                                {isFormSaved && subTestFormData.result_value && (
+                                  <span className="ml-2 text-green-600 text-xs">✓</span>
+                                )}
+                                {subTestFormData.is_abnormal && (
+                                  <span className="ml-2 text-red-500 text-xs">🔴</span>
+                                )}
+                              </div>
+                              <div className="p-2 flex items-center justify-center">
+                                <input
+                                  type="text"
+                                  className="w-full px-2 py-1 border rounded text-center text-sm border-gray-300"
+                                  placeholder="Enter normal range"
+                                  value={subTestFormData.reference_range || subTest.range || ''}
+                                  onChange={(e) => handleLabResultChange(subTestKey, 'reference_range', e.target.value)}
+                                  disabled={isFormSaved}
+                                />
+                              </div>
+                            </div>
+                          </div>
                         );
                       })}
 
