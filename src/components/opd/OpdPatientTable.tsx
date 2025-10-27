@@ -1160,10 +1160,9 @@ Verified by: [To be verified by doctor]`;
                   size="sm"
                   className="h-8 w-8 p-0"
                   onClick={() => handleDischargeSummaryClick(patient)}
-                  disabled={!patient.is_discharged}
-                  title={patient.is_discharged ? "View/Add Discharge Summary" : "Complete final payment to enable"}
+                  title="View/Add Discharge Summary"
                 >
-                  <FileTextIcon className={`h-4 w-4 ${patient.is_discharged ? 'text-purple-600' : 'text-gray-400'}`} />
+                  <FileTextIcon className="h-4 w-4 text-purple-600" />
                 </Button>
               </TableCell>
               <TableCell>
