@@ -1624,7 +1624,7 @@ ${surgeryInfo?.description || surgery?.notes || 'Standard surgical procedure per
         console.log('🔍 Fetching patient with ID:', visitData.patient_id);
         const { data: patientData, error: patientError } = await supabase
           .from('patients')
-          .select('patients_id, mobile, phone')
+          .select('patients_id, phone')
           .eq('id', visitData.patient_id)
           .single();
 
@@ -1660,7 +1660,7 @@ ${surgeryInfo?.description || surgery?.notes || 'Standard surgical procedure per
       if (patientDetails) {
         console.log('📝 Adding patient details to summary:', patientDetails);
         summaryData.patient_id = patientDetails.patients_id;
-        summaryData.mobile_no = patientDetails.mobile;
+        summaryData.mobile_no = patientDetails.phone; // Changed from mobile to phone
         console.log('✅ Updated summaryData.patient_id:', summaryData.patient_id);
         console.log('✅ Updated summaryData.mobile_no:', summaryData.mobile_no);
       } else {

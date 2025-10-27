@@ -4,6 +4,8 @@ import { supabase } from '@/integrations/supabase/client';
 export interface VisitDiagnosisData {
   visitId: string;
   patientName: string;
+  patientUhId: string;
+  mobileNumber: string;
   age: string;
   gender: string;
   admissionDate: string;
@@ -52,7 +54,7 @@ export const useVisitDiagnosis = (visitId: string) => {
 
         const { data: patientData, error: patientError } = await supabase
           .from('patients')
-          .select('id, full_name, age, gender, hospital_name')
+          .select('id, name, age, gender, hospital_name, patients_id, phone')
           .eq('id', visitData.patient_id)
           .single();
 
@@ -137,7 +139,9 @@ export const useVisitDiagnosis = (visitId: string) => {
 
         const result: VisitDiagnosisData = {
           visitId: visitData.visit_id,
-          patientName: patientData?.full_name || 'Unknown Patient',
+          patientName: patientData?.name || 'Unknown Patient',
+          patientUhId: patientData?.patients_id || 'N/A',
+          mobileNumber: patientData?.phone || 'N/A',
           age: patientData?.age?.toString() || 'N/A',
           gender: patientData?.gender || 'N/A',
           admissionDate: visitData.admission_date || visitData.visit_date || 'N/A',
