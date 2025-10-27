@@ -32,11 +32,13 @@ import DirectSaleBill from './DirectSaleBill';
 import DirectSaleView from './DirectSaleView';
 import PurchaseOrders from './PurchaseOrders';
 import AddPurchaseOrder from './AddPurchaseOrder';
+import EditPurchaseOrder from './EditPurchaseOrder';
 
 const PharmacyDashboard: React.FC = () => {
   const [selectedTab, setSelectedTab] = useState('overview');
   const [directSaleSubTab, setDirectSaleSubTab] = useState('bill'); // 'bill' or 'view'
-  const [purchaseOrderView, setPurchaseOrderView] = useState<'list' | 'add'>('list');
+  const [purchaseOrderView, setPurchaseOrderView] = useState<'list' | 'add' | 'edit'>('list');
+  const [selectedPurchaseOrderId, setSelectedPurchaseOrderId] = useState<string | null>(null);
 
   // Mock data for dashboard - will be replaced with real data from hooks
   const dashboardData = {
@@ -442,10 +444,25 @@ const PharmacyDashboard: React.FC = () => {
 
             {/* Content based on selected sub-tab */}
             {purchaseOrderView === 'list' && (
-              <PurchaseOrders onAddClick={() => setPurchaseOrderView('add')} />
+              <PurchaseOrders
+                onAddClick={() => setPurchaseOrderView('add')}
+                onEditClick={(orderId) => {
+                  setSelectedPurchaseOrderId(orderId);
+                  setPurchaseOrderView('edit');
+                }}
+              />
             )}
             {purchaseOrderView === 'add' && (
               <AddPurchaseOrder onBack={() => setPurchaseOrderView('list')} />
+            )}
+            {purchaseOrderView === 'edit' && selectedPurchaseOrderId && (
+              <EditPurchaseOrder
+                purchaseOrderId={selectedPurchaseOrderId}
+                onBack={() => {
+                  setPurchaseOrderView('list');
+                  setSelectedPurchaseOrderId(null);
+                }}
+              />
             )}
           </div>
         </TabsContent>

@@ -9,6 +9,7 @@ export interface PurchaseOrder {
   status?: string;
   notes?: string;
   subtotal?: number;
+  discount?: number;
   tax_amount?: number;
   total_amount?: number;
   expected_delivery_date?: string;
@@ -188,6 +189,133 @@ export class PurchaseOrderService {
     }
 
     return data || [];
+  }
+
+  /**
+   * Get purchase order items by purchase order ID
+   */
+  static async getPurchaseOrderItems(purchaseOrderId: string): Promise<any[]> {
+    const { data, error } = await supabaseClient
+      .from('purchase_order_items')
+      .select('*')
+      .eq('purchase_order_id', purchaseOrderId)
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      console.error('Error fetching purchase order items:', error);
+      throw error;
+    }
+
+    return data || [];
+  }
+
+  /**
+   * Update a purchase order item
+   */
+  static async updatePurchaseOrderItem(itemId: string, itemData: any): Promise<any> {
+    const { data, error } = await supabaseClient
+      .from('purchase_order_items')
+      .update(itemData)
+      .eq('id', itemId)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error updating purchase order item:', error);
+      throw error;
+    }
+
+    return data;
+  }
+
+  /**
+   * Update purchase order with items
+   */
+  static async updatePurchaseOrderWithItems(
+    poId: string,
+    poData: Partial<Omit<PurchaseOrder, 'id' | 'created_at' | 'updated_at'>>,
+    items: Array<{
+      id?: string;
+      medicine_id?: string;
+      product_name: string;
+      manufacturer: string;
+      pack: string;
+      batch_no: string;
+      expiry_date?: string;
+      mrp: number;
+      sale_price: number;
+      purchase_price: number;
+      tax_percentage: number;
+      tax_amount: number;
+      order_quantity: number;
+      received_quantity?: number;
+      free_quantity?: number;
+      amount: number;
+      gst?: number;
+      sgst?: number;
+      cgst?: number;
+      gst_amount?: number;
+    }>
+  ): Promise<{ po: PurchaseOrder; items: any[] }> {
+    try {
+      // 1. Update purchase order header
+      const { data: poResult, error: poError } = await supabaseClient
+        .from('purchase_orders')
+        .update({
+          ...poData,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', poId)
+        .select()
+        .single();
+
+      if (poError) {
+        console.error('Error updating purchase order:', poError);
+        throw poError;
+      }
+
+      // 2. Update purchase order items
+      const updatedItems = [];
+      for (const item of items) {
+        if (item.id) {
+          // Update existing item
+          const { data: itemResult, error: itemError } = await supabaseClient
+            .from('purchase_order_items')
+            .update({
+              product_name: item.product_name,
+              manufacturer: item.manufacturer,
+              pack: item.pack,
+              batch_no: item.batch_no,
+              expiry_date: item.expiry_date,
+              mrp: item.mrp,
+              sale_price: item.sale_price,
+              purchase_price: item.purchase_price,
+              tax_percentage: item.tax_percentage,
+              tax_amount: item.tax_amount,
+              order_quantity: item.order_quantity,
+              received_quantity: item.received_quantity,
+              amount: item.amount,
+            })
+            .eq('id', item.id)
+            .select()
+            .single();
+
+          if (itemError) {
+            console.error('Error updating item:', itemError);
+            throw itemError;
+          }
+          updatedItems.push(itemResult);
+        }
+      }
+
+      return {
+        po: poResult,
+        items: updatedItems,
+      };
+    } catch (error) {
+      console.error('Error in updatePurchaseOrderWithItems:', error);
+      throw error;
+    }
   }
 
   /**
