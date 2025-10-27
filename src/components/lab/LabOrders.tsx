@@ -748,6 +748,48 @@ const LabOrders = () => {
     }
   }, [selectedTestsForEntry, calculateReferenceRange, fetchSubTestsForTest]);
 
+  // NEW: Pre-populate labResultsForm with text_value for text type tests
+  useEffect(() => {
+    if (Object.keys(testSubTests).length > 0 && selectedTestsForEntry.length > 0) {
+      console.log('🔄 Pre-populating text values for text type tests...');
+
+      const initialFormData: Record<string, any> = {};
+
+      selectedTestsForEntry.forEach(testRow => {
+        const subTests = testSubTests[testRow.test_name] || [];
+
+        subTests.forEach(subTest => {
+          // Only populate if it's a text type test and has a text_value
+          if (subTest.test_type === 'Text' && subTest.text_value) {
+            const subTestKey = `${testRow.id}_subtest_${subTest.id}`;
+
+            // Only set if not already set in labResultsForm (don't overwrite user input)
+            if (!labResultsForm[subTestKey]?.result_value) {
+              initialFormData[subTestKey] = {
+                result_value: subTest.text_value,
+                result_unit: '',
+                reference_range: '',
+                comments: '',
+                is_abnormal: false,
+                result_status: 'Preliminary'
+              };
+              console.log(`✅ Pre-populated text value for ${subTest.name}:`, subTest.text_value);
+            }
+          }
+        });
+      });
+
+      // Update labResultsForm with initial values
+      if (Object.keys(initialFormData).length > 0) {
+        setLabResultsForm(prev => ({
+          ...prev,
+          ...initialFormData
+        }));
+        console.log('📋 Updated labResultsForm with text values:', initialFormData);
+      }
+    }
+  }, [testSubTests, selectedTestsForEntry]);
+
   // NEW: Reset form saved state when new tests are selected
   useEffect(() => {
     if (selectedTestsForEntry.length > 0) {
@@ -2824,14 +2866,18 @@ const LabOrders = () => {
           .signature-section {
             margin-top: 40px;
             display: flex;
-            justify-content: space-between;
+            justify-content: flex-end;
           }
-          
+
           .signature-box {
-            text-align: center;
-            border-top: 1px solid #000;
-            padding-top: 5px;
-            width: 200px;
+            text-align: right;
+            width: 250px;
+          }
+
+          .signature-image {
+            width: 150px;
+            height: auto;
+            margin-bottom: 5px;
           }
           
           
@@ -2876,13 +2922,27 @@ const LabOrders = () => {
         </div>
         
         <div class="report-title">Report on ${selectedTestsForEntry.map(test => test.test_category).join(', ').toUpperCase()}</div>
-        
+
         <div class="results-content">
-          <div class="header-row">
-            <div class="header-col-1">INVESTIGATION</div>
-            <div class="header-col-2">OBSERVED VALUE</div>
-            <div class="header-col-3">NORMAL RANGE</div>
-          </div>
+          ${(() => {
+            // Check if ALL tests are Text type
+            const allTestsAreTextType = selectedTestsForEntry.every(testRow => {
+              const subTests = testSubTests[testRow.test_name] || [];
+              return subTests.length > 0 && subTests.every(st => st.test_type === 'Text');
+            });
+
+            // Only show header row for Numeric type tests
+            if (!allTestsAreTextType) {
+              return `
+                <div class="header-row">
+                  <div class="header-col-1">INVESTIGATION</div>
+                  <div class="header-col-2">OBSERVED VALUE</div>
+                  <div class="header-col-3">NORMAL RANGE</div>
+                </div>
+              `;
+            }
+            return '';
+          })()}
 
           ${false ? // Force fallback to form data for debugging
             // Parse test results from patient_name JSON field
@@ -3203,17 +3263,12 @@ const LabOrders = () => {
         
         <div class="signature-section">
           <div class="signature-box">
-            <div>Lab Technician</div>
-            <div style="font-size: 10px; margin-top: 20px;">
-              Date: ${reportDate}<br>
-              Time: ${reportTime}
+            <img src="/Arun Agre.jpeg" alt="Signature" class="signature-image" />
+            <div style="font-size: 12px; font-weight: bold;">
+              DR. ARUN AGRE
             </div>
-          </div>
-          <div class="signature-box">
-            <div>Consultant Pathologist</div>
-            <div style="font-size: 10px; margin-top: 20px;">
-              Dr. ${patientInfo?.ordering_doctor || 'N/A'}<br>
-              MD (Pathology)
+            <div style="font-size: 11px; margin-top: 2px;">
+              MD (PATHOLOGY)
             </div>
           </div>
         </div>
