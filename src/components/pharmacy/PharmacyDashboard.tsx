@@ -30,10 +30,13 @@ import TreatmentSheetList from './TreatmentSheetList';
 import MedicineItems from './MedicineItems';
 import DirectSaleBill from './DirectSaleBill';
 import DirectSaleView from './DirectSaleView';
+import PurchaseOrders from './PurchaseOrders';
+import AddPurchaseOrder from './AddPurchaseOrder';
 
 const PharmacyDashboard: React.FC = () => {
   const [selectedTab, setSelectedTab] = useState('overview');
   const [directSaleSubTab, setDirectSaleSubTab] = useState('bill'); // 'bill' or 'view'
+  const [purchaseOrderView, setPurchaseOrderView] = useState<'list' | 'add'>('list');
 
   // Mock data for dashboard - will be replaced with real data from hooks
   const dashboardData = {
@@ -92,7 +95,7 @@ const PharmacyDashboard: React.FC = () => {
       </div>
 
       <Tabs value={selectedTab} onValueChange={setSelectedTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-12 bg-blue-50 rounded-md">
+        <TabsList className="grid w-full grid-cols-10 bg-blue-50 rounded-md">
           <div className="flex flex-row items-center gap-x-4 w-full">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="items">Items</TabsTrigger>
@@ -103,6 +106,7 @@ const PharmacyDashboard: React.FC = () => {
           <TabsTrigger value="treatment-sheet">Treatment Sheet</TabsTrigger>
           <TabsTrigger value="manufacturer">Manufacturer</TabsTrigger>
           <TabsTrigger value="supplier">Supplier</TabsTrigger>
+          <TabsTrigger value="purchase-order">Purchase Order</TabsTrigger>
           </div>
         </TabsList>
 
@@ -414,6 +418,36 @@ const PharmacyDashboard: React.FC = () => {
 
         <TabsContent value="treatment-sheet">
           <TreatmentSheetList />
+        </TabsContent>
+
+        <TabsContent value="purchase-order">
+          <div className="space-y-4">
+            {/* Sub-tabs for Purchase Order */}
+            <div className="flex gap-2 border-b pb-2">
+              <Button
+                variant={purchaseOrderView === 'list' ? 'default' : 'outline'}
+                onClick={() => setPurchaseOrderView('list')}
+                className="px-6"
+              >
+                Purchase Order List
+              </Button>
+              <Button
+                variant={purchaseOrderView === 'add' ? 'default' : 'outline'}
+                onClick={() => setPurchaseOrderView('add')}
+                className="px-6"
+              >
+                Add Purchase Order
+              </Button>
+            </div>
+
+            {/* Content based on selected sub-tab */}
+            {purchaseOrderView === 'list' && (
+              <PurchaseOrders onAddClick={() => setPurchaseOrderView('add')} />
+            )}
+            {purchaseOrderView === 'add' && (
+              <AddPurchaseOrder onBack={() => setPurchaseOrderView('list')} />
+            )}
+          </div>
         </TabsContent>
       </Tabs>
     </div>
