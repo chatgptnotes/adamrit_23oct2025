@@ -2409,10 +2409,9 @@ const TodaysIpdDashboard = () => {
                       size="sm"
                       className="h-8 w-8 p-0 hover:bg-blue-50"
                       onClick={() => navigate(`/ipd-discharge-summary/${visit.visit_id}`)}
-                      title={visit.has_final_payment ? "IPD Discharge Summary" : "Complete final payment to enable"}
-                      disabled={!visit.has_final_payment}
+                      title="IPD Discharge Summary"
                     >
-                      <ClipboardList className={`h-4 w-4 ${visit.has_final_payment ? 'text-blue-600' : 'text-gray-400'}`} />
+                      <ClipboardList className="h-4 w-4 text-blue-600" />
                     </Button>
                   </TableCell>
                   <TableCell>

@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Calendar, CalendarDays } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { format } from 'date-fns';
@@ -1591,6 +1592,12 @@ ${surgeryInfo?.description || surgery?.notes || 'Standard surgical procedure per
   };
 
   const handlePrintPreview = async () => {
+    // Check for final payment
+    if (!patientData?.has_final_payment) {
+      alert('⚠️ Final Payment Required\n\nPlease complete the final payment before printing the discharge summary.');
+      return;
+    }
+
     try {
       toast({
         title: "Generating Print Preview",
@@ -2861,9 +2868,29 @@ DD/MM/YYYY:-Test Category: Test1:Value1 unit, Test2:Value2 unit`);
           </h1>
           <div className="space-x-2">
             <Button onClick={handleSave}>Save</Button>
-            <Button onClick={handlePrintPreview} className="bg-blue-600 hover:bg-blue-700">
-              Print Preview
-            </Button>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span>
+                    <Button
+                      onClick={handlePrintPreview}
+                      className="bg-blue-600 hover:bg-blue-700"
+                      disabled={!patientData?.has_final_payment}
+                    >
+                      Print Preview
+                    </Button>
+                  </span>
+                </TooltipTrigger>
+                {!patientData?.has_final_payment && (
+                  <TooltipContent className="bg-red-600 text-white border-red-700 font-semibold">
+                    <p className="flex items-center gap-2">
+                      <span className="text-lg">⚠️</span>
+                      Please complete final payment
+                    </p>
+                  </TooltipContent>
+                )}
+              </Tooltip>
+            </TooltipProvider>
             <Button
               onClick={() => navigate('/todays-ipd')}
               variant="outline"
@@ -2998,9 +3025,29 @@ DD/MM/YYYY:-Test Category: Test1:Value1 unit, Test2:Value2 unit`);
         </h1>
         <div className="space-x-2">
           <Button onClick={handleSave}>Save</Button>
-          <Button onClick={handlePrintPreview} className="bg-blue-600 hover:bg-blue-700">
-            Print Preview
-          </Button>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span>
+                  <Button
+                    onClick={handlePrintPreview}
+                    className="bg-blue-600 hover:bg-blue-700"
+                    disabled={!patientData?.has_final_payment}
+                  >
+                    Print Preview
+                  </Button>
+                </span>
+              </TooltipTrigger>
+              {!patientData?.has_final_payment && (
+                <TooltipContent className="bg-red-600 text-white border-red-700 font-semibold">
+                  <p className="flex items-center gap-2">
+                    <span className="text-lg">⚠️</span>
+                    Please complete final payment
+                  </p>
+                </TooltipContent>
+              )}
+            </Tooltip>
+          </TooltipProvider>
           <Button
             onClick={handleClearCacheAndRefresh}
             variant="outline"

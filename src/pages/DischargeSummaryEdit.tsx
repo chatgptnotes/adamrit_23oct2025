@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -2957,9 +2958,22 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
     }
   };
 
-  // Handle preview toggle
+  // Handle preview toggle with payment check
   const togglePreview = () => {
+    if (!patient?.has_final_payment) {
+      alert('⚠️ Final Payment Required\n\nPlease complete the final payment before previewing the discharge summary.');
+      return;
+    }
     setShowPreview(!showPreview);
+  };
+
+  // Handle print with payment check
+  const handlePrintWithCheck = () => {
+    if (!patient?.has_final_payment) {
+      alert('⚠️ Final Payment Required\n\nPlease complete the final payment before printing the discharge summary.');
+      return;
+    }
+    handlePrint();
   };
 
   if (isLoading) {
@@ -3102,24 +3116,58 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
                     )}
                     {isGenerating ? 'Generating...' : 'Generate by AI'}
                   </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={togglePreview}
-                    className="flex items-center gap-2"
-                  >
-                    <Eye className="h-4 w-4" />
-                    {showPreview ? 'Edit' : 'Preview'}
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handlePrint}
-                    className="flex items-center gap-2"
-                  >
-                    <Printer className="h-4 w-4" />
-                    Print
-                  </Button>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={togglePreview}
+                            className="flex items-center gap-2"
+                            disabled={!patient?.has_final_payment}
+                          >
+                            <Eye className="h-4 w-4" />
+                            {showPreview ? 'Edit' : 'Preview'}
+                          </Button>
+                        </span>
+                      </TooltipTrigger>
+                      {!patient?.has_final_payment && (
+                        <TooltipContent className="bg-red-600 text-white border-red-700 font-semibold">
+                          <p className="flex items-center gap-2">
+                            <span className="text-lg">⚠️</span>
+                            Please complete final payment
+                          </p>
+                        </TooltipContent>
+                      )}
+                    </Tooltip>
+                  </TooltipProvider>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handlePrintWithCheck}
+                            className="flex items-center gap-2"
+                            disabled={!patient?.has_final_payment}
+                          >
+                            <Printer className="h-4 w-4" />
+                            Print
+                          </Button>
+                        </span>
+                      </TooltipTrigger>
+                      {!patient?.has_final_payment && (
+                        <TooltipContent className="bg-red-600 text-white border-red-700 font-semibold">
+                          <p className="flex items-center gap-2">
+                            <span className="text-lg">⚠️</span>
+                            Please complete final payment
+                          </p>
+                        </TooltipContent>
+                      )}
+                    </Tooltip>
+                  </TooltipProvider>
                   <Button
                     onClick={handleSave}
                     disabled={isSaving}
