@@ -28,6 +28,7 @@ const AdvancedStatementReport = lazy(() => import("../pages/AdvancedStatementRep
 
 // Lazy load heavy feature pages
 const Accounting = lazy(() => import("../pages/Accounting"));
+const CashBook = lazy(() => import("../pages/CashBook"));
 const Pharmacy = lazy(() => import("../pages/Pharmacy"));
 const Lab = lazy(() => import("../pages/Lab"));
 const Radiology = lazy(() => import("../pages/Radiology"));
@@ -150,6 +151,7 @@ export const AppRoutes = () => {
         <Route path="/ayushman-consultants" element={<Suspense fallback={<PageLoader />}><AyushmanConsultants /></Suspense>} />
         <Route path="/ayushman-anaesthetists" element={<Suspense fallback={<PageLoader />}><AyushmanAnaesthetists /></Suspense>} />
         <Route path="/accounting" element={<Suspense fallback={<PageLoader />}><Accounting /></Suspense>} />
+        <Route path="/cash-book" element={<Suspense fallback={<PageLoader />}><CashBook /></Suspense>} />
         <Route path="/bill-management" element={<Suspense fallback={<PageLoader />}><BillManagement /></Suspense>} />
         <Route path="/corporate" element={<Suspense fallback={<PageLoader />}><Corporate /></Suspense>} />
         <Route path="/pharmacy/goods-received-note" element={<Suspense fallback={<PageLoader />}><Pharmacy /></Suspense>} />
