@@ -176,6 +176,91 @@ const LabOrders = () => {
     return firstIncludedTest ? getPatientKey(firstIncludedTest) : null;
   };
 
+  // Calculate header checkbox states for Sample Taken column
+  const getSampleTakenHeaderState = () => {
+    const allTestIds = filteredTestRows.map(t => t.id);
+    const checkedTests = allTestIds.filter(id =>
+      sampleTakenTests.includes(id) || testSampleStatus[id] === 'saved'
+    );
+
+    if (checkedTests.length === 0) {
+      return { checked: false, indeterminate: false };
+    } else if (checkedTests.length === allTestIds.length) {
+      return { checked: true, indeterminate: false };
+    } else {
+      return { checked: false, indeterminate: true };
+    }
+  };
+
+  // Calculate header checkbox states for Incl. column
+  const getIncludedHeaderState = () => {
+    // Only count tests that have 'saved' status (enabled tests)
+    const eligibleTests = filteredTestRows.filter(t => testSampleStatus[t.id] === 'saved');
+    const eligibleTestIds = eligibleTests.map(t => t.id);
+    const checkedTests = eligibleTestIds.filter(id => includedTests.includes(id));
+
+    if (eligibleTestIds.length === 0 || checkedTests.length === 0) {
+      return { checked: false, indeterminate: false };
+    } else if (checkedTests.length === eligibleTestIds.length) {
+      return { checked: true, indeterminate: false };
+    } else {
+      return { checked: false, indeterminate: true };
+    }
+  };
+
+  // Handle Select All for Sample Taken column
+  const handleSelectAllSampleTaken = (checked: boolean | 'indeterminate') => {
+    if (checked === 'indeterminate') return;
+
+    if (checked) {
+      // Select all filtered tests
+      const allTestIds = filteredTestRows.map(t => t.id);
+      setSampleTakenTests(allTestIds);
+
+      // Update test sample status for all
+      const newStatus = { ...testSampleStatus };
+      allTestIds.forEach(id => {
+        if (newStatus[id] !== 'saved') {
+          newStatus[id] = 'taken';
+        }
+      });
+      setTestSampleStatus(newStatus);
+
+      // Clear patient locking when selecting all
+      setSelectedPatientForSampling(null);
+    } else {
+      // Deselect all
+      setSampleTakenTests([]);
+      setIncludedTests([]);
+
+      // Reset status for tests that aren't saved
+      const newStatus = { ...testSampleStatus };
+      Object.keys(newStatus).forEach(id => {
+        if (newStatus[id] !== 'saved') {
+          newStatus[id] = 'not_taken';
+        }
+      });
+      setTestSampleStatus(newStatus);
+
+      setSelectedPatientForSampling(null);
+    }
+  };
+
+  // Handle Select All for Incl. column
+  const handleSelectAllIncluded = (checked: boolean | 'indeterminate') => {
+    if (checked === 'indeterminate') return;
+
+    if (checked) {
+      // Only select tests with 'saved' status
+      const eligibleTests = filteredTestRows.filter(t => testSampleStatus[t.id] === 'saved');
+      const eligibleTestIds = eligibleTests.map(t => t.id);
+      setIncludedTests(eligibleTestIds);
+    } else {
+      // Deselect all
+      setIncludedTests([]);
+    }
+  };
+
   // Handler for entry form close
   const handleEntryFormClose = (open: boolean) => {
     setIsEntryModeOpen(open);
@@ -2199,6 +2284,19 @@ const LabOrders = () => {
     return groups;
   }, {} as Record<string, { patient: any, tests: LabTestRow[] }>);
 
+  // Calculate header checkbox states (must be after filteredTestRows is defined)
+  const sampleTakenHeaderState = React.useMemo(() => getSampleTakenHeaderState(), [
+    filteredTestRows,
+    sampleTakenTests,
+    testSampleStatus
+  ]);
+
+  const includedHeaderState = React.useMemo(() => getIncludedHeaderState(), [
+    filteredTestRows,
+    includedTests,
+    testSampleStatus
+  ]);
+
   // Pagination logic
   const patientGroups = Object.entries(filteredGroupedTests);
   const totalPatients = patientGroups.length;
@@ -3663,8 +3761,26 @@ const LabOrders = () => {
                 <TableHead>Date</TableHead>
                 <TableHead>Req By</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>Sample Taken</TableHead>
-                <TableHead>Incl.</TableHead>
+                <TableHead>
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      checked={sampleTakenHeaderState.checked}
+                      indeterminate={sampleTakenHeaderState.indeterminate}
+                      onCheckedChange={handleSelectAllSampleTaken}
+                    />
+                    <span>Sample Taken</span>
+                  </div>
+                </TableHead>
+                <TableHead>
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      checked={includedHeaderState.checked}
+                      indeterminate={includedHeaderState.indeterminate}
+                      onCheckedChange={handleSelectAllIncluded}
+                    />
+                    <span>Incl.</span>
+                  </div>
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
