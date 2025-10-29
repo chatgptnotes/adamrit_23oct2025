@@ -17,6 +17,7 @@ interface Patient {
   gender?: string;
   phone?: string;
   date_of_birth?: string;
+  corporate?: string;
 }
 
 interface PatientsTableProps {
@@ -74,7 +75,7 @@ export const PatientsTable: React.FC<PatientsTableProps> = ({
             <TableHead className="font-semibold">Name</TableHead>
             <TableHead className="font-semibold">Age/Gender</TableHead>
             <TableHead className="font-semibold">Phone</TableHead>
-            <TableHead className="font-semibold">DOB</TableHead>
+            <TableHead className="font-semibold">Corporate</TableHead>
             <TableHead className="font-semibold">Status</TableHead>
             <TableHead className="font-semibold">Registration</TableHead>
             <TableHead className="font-semibold">Insurance</TableHead>
@@ -105,7 +106,7 @@ export const PatientsTable: React.FC<PatientsTableProps> = ({
                 </TableCell>
                 <TableCell>{getAgeGender(patient.age, patient.gender)}</TableCell>
                 <TableCell>{getPhone(patient.phone)}</TableCell>
-                <TableCell>{formatDate(patient.date_of_birth)}</TableCell>
+                <TableCell>{patient.corporate || '-'}</TableCell>
                 <TableCell>
                   <span className="px-2 py-1 bg-yellow-100 text-yellow-800 rounded-full text-xs">
                     Pending
