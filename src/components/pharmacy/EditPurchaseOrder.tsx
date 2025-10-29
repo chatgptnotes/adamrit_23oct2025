@@ -550,7 +550,7 @@ const EditPurchaseOrder: React.FC<EditPurchaseOrderProps> = ({ purchaseOrderId, 
             disabled={isSaving}
             variant="outline"
             className="border-gray-300 hover:bg-gray-100 px-8 py-3 text-base"
-            onClick={() => fetchPurchaseOrder()}
+            onClick={handleSubmit}
           >
             Update
           </Button>
