@@ -274,6 +274,7 @@ export interface PurchaseOrder {
   
   // Financial
   subtotal: number;
+  discount?: number;
   tax_amount: number;
   total_amount: number;
   
@@ -607,4 +608,268 @@ export interface ScanResult {
   success: boolean;
   data: BarcodeResult;
   timestamp: string;
+}
+
+// =====================================================
+// BATCH INVENTORY SYSTEM TYPES
+// =====================================================
+
+export interface MedicineBatchInventory {
+  id: string;
+
+  // Medicine Reference
+  medicine_id: string;
+
+  // Batch Details
+  batch_number: string;
+  expiry_date: string;
+  manufacturing_date?: string;
+
+  // Stock Quantities
+  received_quantity: number;
+  current_stock: number;
+  sold_quantity: number;
+  reserved_stock: number;
+  free_quantity: number;
+
+  // Pricing (can vary per batch)
+  purchase_price?: number;
+  selling_price?: number;
+  mrp?: number;
+
+  // GST Details
+  gst?: number;
+  sgst?: number;
+  cgst?: number;
+  gst_amount?: number;
+
+  // Purchase Reference
+  purchase_order_id?: string;
+  supplier_id?: number;
+  grn_number?: string;
+  grn_date?: string;
+
+  // Storage Location
+  rack_number?: string;
+  shelf_location?: string;
+
+  // Multi-tenancy
+  hospital_name?: string;
+
+  // Status
+  is_active: boolean;
+  is_expired?: boolean;
+
+  // Audit
+  created_at: string;
+  updated_at: string;
+  created_by?: string;
+
+  // Relations
+  medicine?: Medicine;
+  purchase_order?: PurchaseOrder;
+  supplier?: MedicineManufacturer;
+}
+
+export interface GoodsReceivedNote {
+  id: string;
+
+  // GRN Details
+  grn_number: string;
+  grn_date: string;
+
+  // Purchase Reference
+  purchase_order_id: string;
+  po_number?: string;
+  supplier_id?: number;
+
+  // Invoice Details
+  invoice_number?: string;
+  invoice_date?: string;
+  invoice_amount?: number;
+
+  // Summary
+  total_items: number;
+  total_quantity_ordered: number;
+  total_quantity_received: number;
+  total_amount: number;
+
+  // Status
+  status: 'DRAFT' | 'VERIFIED' | 'POSTED' | 'CANCELLED';
+
+  // Verification
+  verified_by?: string;
+  verified_at?: string;
+
+  // Notes
+  notes?: string;
+  remarks?: string;
+
+  // Multi-tenancy
+  hospital_name?: string;
+
+  // Audit
+  created_at: string;
+  updated_at: string;
+  created_by?: string;
+
+  // Relations
+  purchase_order?: PurchaseOrder;
+  supplier?: MedicineManufacturer;
+  grn_items?: GRNItem[];
+}
+
+export interface GRNItem {
+  id: string;
+
+  // GRN Reference
+  grn_id: string;
+
+  // Purchase Order Reference
+  purchase_order_item_id?: string;
+
+  // Medicine Reference
+  medicine_id: string;
+  product_name: string;
+  manufacturer?: string;
+  pack?: string;
+
+  // Batch Details
+  batch_number: string;
+  expiry_date: string;
+  manufacturing_date?: string;
+
+  // Quantities
+  ordered_quantity: number;
+  received_quantity: number;
+  accepted_quantity?: number;
+  rejected_quantity: number;
+  free_quantity: number;
+
+  // Pricing
+  purchase_price: number;
+  sale_price?: number;
+  mrp?: number;
+
+  // Tax Details
+  gst?: number;
+  sgst?: number;
+  cgst?: number;
+  tax_amount?: number;
+
+  // Amount
+  amount?: number;
+
+  // Storage Location
+  rack_number?: string;
+  shelf_location?: string;
+
+  // Audit
+  created_at: string;
+
+  // Relations
+  grn?: GoodsReceivedNote;
+  purchase_order_item?: PurchaseOrderItem;
+  medicine?: Medicine;
+}
+
+export interface BatchStockMovement {
+  id: string;
+
+  // Batch Reference
+  batch_inventory_id: string;
+  medicine_id: string;
+  batch_number: string;
+
+  // Movement Details
+  movement_type: 'IN' | 'OUT' | 'ADJUSTMENT' | 'TRANSFER' | 'DAMAGE' | 'EXPIRY' | 'RETURN';
+
+  // Reference
+  reference_type?: string; // 'SALE', 'PURCHASE', 'GRN', 'ADJUSTMENT', 'OPENING_STOCK'
+  reference_id?: string;
+  reference_number?: string;
+
+  // Quantities
+  quantity_before: number;
+  quantity_changed: number;
+  quantity_after: number;
+
+  // Details
+  reason?: string;
+  remarks?: string;
+
+  // Audit
+  movement_date: string;
+  performed_by?: string;
+  hospital_name?: string;
+
+  // Relations
+  batch_inventory?: MedicineBatchInventory;
+  medicine?: Medicine;
+}
+
+// View Types
+export interface MedicineCombinedStock {
+  medicine_id: string;
+  hospital_name?: string;
+  total_stock: number;
+  total_received: number;
+  total_sold: number;
+  batch_count: number;
+  nearest_expiry?: string;
+  near_expiry_batches: number;
+
+  // Relations
+  medicine?: Medicine;
+}
+
+export interface BatchStockDetail extends MedicineBatchInventory {
+  expiry_status: 'EXPIRED' | 'EXPIRING_SOON' | 'NEAR_EXPIRY' | 'GOOD';
+  days_to_expiry: number;
+}
+
+// Helper Types
+export interface AvailableBatch {
+  batch_id: string;
+  batch_number: string;
+  expiry_date: string;
+  available_stock: number;
+  mrp: number;
+  selling_price: number;
+  days_to_expiry: number;
+}
+
+// GRN Creation Payload
+export interface CreateGRNPayload {
+  purchase_order_id: string;
+  grn_date: string;
+  invoice_number?: string;
+  invoice_date?: string;
+  invoice_amount?: number;
+  notes?: string;
+  hospital_name?: string;
+  items: CreateGRNItemPayload[];
+}
+
+export interface CreateGRNItemPayload {
+  purchase_order_item_id?: string;
+  medicine_id: string;
+  product_name: string;
+  manufacturer?: string;
+  pack?: string;
+  batch_number: string;
+  expiry_date: string;
+  manufacturing_date?: string;
+  ordered_quantity: number;
+  received_quantity: number;
+  rejected_quantity?: number;
+  free_quantity?: number;
+  purchase_price: number;
+  sale_price?: number;
+  mrp?: number;
+  gst?: number;
+  sgst?: number;
+  cgst?: number;
+  rack_number?: string;
+  shelf_location?: string;
 }
