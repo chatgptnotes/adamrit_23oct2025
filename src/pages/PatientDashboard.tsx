@@ -35,7 +35,7 @@ const PatientDashboard = () => {
       
       let query = supabase
         .from('patients')
-        .select('*, patients_id')
+        .select('*, patients_id, corporate')
         .order('created_at', { ascending: false });
       
       // Only apply filter if hospitalConfig exists and has a name

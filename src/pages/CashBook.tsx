@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Calendar, Loader2 } from 'lucide-react';
-import { useCashBookEntries, useCashBookUsers, useCashBookVoucherTypes } from '@/hooks/useCashBookQueries';
+import { useCashBookEntries, useCashBookUsers, useCashBookVoucherTypes, useAllDailyTransactions, DailyTransaction } from '@/hooks/useCashBookQueries';
+import PatientTransactionModal from '@/components/PatientTransactionModal';
 
 const CashBook: React.FC = () => {
   // Get today's date in YYYY-MM-DD format
@@ -12,71 +13,154 @@ const CashBook: React.FC = () => {
   const [searchAmount, setSearchAmount] = useState('');
   const [selectedType, setSelectedType] = useState('');
   const [selectedUser, setSelectedUser] = useState('');
+  const [selectedPaymentMode, setSelectedPaymentMode] = useState('');
   const [hideNarration, setHideNarration] = useState(false);
 
-  // Fetch cash book data from database
-  const { data: cashBookData, isLoading, error } = useCashBookEntries({
+  // Modal state for patient transaction details
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedPatient, setSelectedPatient] = useState<{
+    patientId?: string;
+    visitId?: string;
+    patientName?: string;
+  } | null>(null);
+
+  // Fetch ALL daily transactions from all billing tables
+  const { data: dailyTransactions, isLoading, error } = useAllDailyTransactions({
     from_date: fromDate,
     to_date: toDate,
     voucher_type: selectedType || undefined,
-    created_by: selectedUser || undefined,
-    search_narration: searchNarration || undefined
+    search_narration: searchNarration || undefined,
+    payment_mode: selectedPaymentMode || undefined
+  });
+
+  // Fetch old voucher data for Opening Balance only
+  const { data: cashBookData } = useCashBookEntries({
+    from_date: fromDate,
+    to_date: toDate
   });
 
   // Fetch users and voucher types for dropdowns
   const { data: users = [] } = useCashBookUsers();
   const { data: voucherTypes = [] } = useCashBookVoucherTypes();
 
-  // Prepare entries with opening balance
-  const displayEntries = useMemo(() => {
-    if (!cashBookData) return [];
+  // Handler to open patient transaction modal
+  const handlePatientClick = (patientId?: string, visitId?: string, patientName?: string) => {
+    setSelectedPatient({ patientId, visitId, patientName });
+    setIsModalOpen(true);
+  };
 
+  // Prepare entries with opening balance and grouped by patient
+  const displayEntries = useMemo(() => {
     const entries = [];
 
     // Add opening balance row
-    if (cashBookData.openingBalance) {
+    if (cashBookData?.openingBalance) {
       entries.push({
+        type: 'opening-balance' as const,
         date: fromDate,
-        time: undefined,
         particulars: 'Opening Balance',
-        enteredBy: undefined,
-        narration: undefined,
-        voucherType: '',
-        voucherNo: '',
         debit: cashBookData.openingBalance.opening_balance_type === 'DR'
           ? cashBookData.openingBalance.opening_balance
           : 0,
         credit: cashBookData.openingBalance.opening_balance_type === 'CR'
           ? cashBookData.openingBalance.opening_balance
           : 0,
+        patientId: undefined,
+        visitId: undefined,
+        patientName: undefined,
       });
     }
 
-    // Add transaction entries
-    cashBookData.entries.forEach(entry => {
-      // Format date to DD/MM/YYYY
-      const date = new Date(entry.voucher_date);
-      const formattedDate = `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}/${date.getFullYear()}`;
+    // Group transactions by patient
+    if (dailyTransactions && dailyTransactions.length > 0) {
+      const patientGroups = new Map<string, {
+        patientId: string | null;
+        patientName: string;
+        visitId: string | null;
+        transactions: DailyTransaction[];
+        paymentModes: Map<string, number>;
+        totalAmount: number;
+        firstDate: string;
+      }>();
 
-      entries.push({
-        date: formattedDate,
-        time: entry.time_only,
-        particulars: entry.particulars,
-        enteredBy: entry.entered_by,
-        narration: entry.entry_narration || entry.voucher_narration,
-        voucherType: entry.voucher_type,
-        voucherNo: entry.voucher_number,
-        debit: entry.debit_amount,
-        credit: entry.credit_amount,
+      // Group transactions by patient
+      dailyTransactions.forEach((txn: DailyTransaction) => {
+        const patientKey = txn.patient_id || txn.patient_name || 'Unknown';
+
+        if (!patientGroups.has(patientKey)) {
+          patientGroups.set(patientKey, {
+            patientId: txn.patient_id,
+            patientName: txn.patient_name || 'Unknown Patient',
+            visitId: txn.visit_id,
+            transactions: [],
+            paymentModes: new Map(),
+            totalAmount: 0,
+            firstDate: txn.transaction_date
+          });
+        }
+
+        const group = patientGroups.get(patientKey)!;
+        group.transactions.push(txn);
+
+        // Aggregate by payment mode
+        const currentModeAmount = group.paymentModes.get(txn.payment_mode) || 0;
+        group.paymentModes.set(txn.payment_mode, currentModeAmount + txn.amount);
+
+        group.totalAmount += txn.amount;
       });
-    });
+
+      // Create patient summary entries
+      patientGroups.forEach((group) => {
+        // Format first transaction date
+        const date = new Date(group.firstDate);
+        const formattedDate = `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}/${date.getFullYear()}`;
+
+        // Build payment mode breakdown string
+        const paymentBreakdown = Array.from(group.paymentModes.entries())
+          .map(([mode, amount]) => `${mode}: Rs ${amount.toLocaleString('en-IN')}`)
+          .join(', ');
+
+        // Build summary line
+        const summary = `${group.transactions.length} transaction${group.transactions.length > 1 ? 's' : ''} | ${paymentBreakdown}`;
+
+        entries.push({
+          type: 'patient-summary' as const,
+          date: formattedDate,
+          particulars: group.patientName,
+          summary: summary,
+          debit: group.totalAmount,
+          credit: 0,
+          patientId: group.patientId,
+          visitId: group.visitId,
+          patientName: group.patientName,
+          transactionCount: group.transactions.length,
+        });
+      });
+    }
 
     return entries;
-  }, [cashBookData, fromDate]);
+  }, [dailyTransactions, cashBookData, fromDate]);
+
+  // Calculate totals for footer
+  const totals = useMemo(() => {
+    const totalDebit = displayEntries.reduce((sum, entry) => sum + (entry.debit || 0), 0);
+    const totalCredit = displayEntries.reduce((sum, entry) => sum + (entry.credit || 0), 0);
+    const closingBalance = totalDebit - totalCredit;
+
+    return {
+      totalDebit,
+      totalCredit,
+      closingBalance
+    };
+  }, [displayEntries]);
 
   const formatCurrency = (amount: number) => {
     if (amount === 0) return '';
     return `Rs ${amount.toLocaleString('en-IN')}`;
+  };
+
+  const formatCurrencyTotal = (amount: number) => {
+    return `Rs ${amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
   const formatDateForInput = (dateStr: string) => {
@@ -171,6 +255,25 @@ const CashBook: React.FC = () => {
             ))}
           </select>
 
+          {/* Select Payment Mode */}
+          <select
+            value={selectedPaymentMode}
+            onChange={(e) => setSelectedPaymentMode(e.target.value)}
+            className="px-3 py-1.5 border border-gray-300 rounded text-sm outline-none focus:border-blue-500 bg-white"
+          >
+            <option value="">All Payment Modes</option>
+            <option value="CASH">Cash</option>
+            <option value="UPI">UPI</option>
+            <option value="CARD">Card</option>
+            <option value="CREDIT">Credit Card</option>
+            <option value="DEBIT">Debit Card</option>
+            <option value="CHEQUE">Cheque</option>
+            <option value="ONLINE">Online Transfer</option>
+            <option value="NEFT">NEFT</option>
+            <option value="RTGS">RTGS</option>
+            <option value="DD">Demand Draft</option>
+          </select>
+
           {/* Hide Narration */}
           <button
             onClick={() => setHideNarration(!hideNarration)}
@@ -216,66 +319,102 @@ const CashBook: React.FC = () => {
           <table className="w-full border-collapse">
             <thead className="sticky top-0 bg-blue-100 z-10">
               <tr>
-                <th className="text-left py-2 px-3 font-semibold text-blue-700 border-b-2 border-gray-300 text-sm">
+                <th className="text-left py-2 px-3 font-semibold text-blue-700 border-b-2 border-gray-300 text-sm w-32">
                   Date
                 </th>
                 <th className="text-left py-2 px-3 font-semibold text-blue-700 border-b-2 border-gray-300 text-sm">
                   Particulars
                 </th>
-                <th className="text-center py-2 px-3 font-semibold text-blue-700 border-b-2 border-gray-300 text-sm">
-                  Voucher Type
-                </th>
-                <th className="text-center py-2 px-3 font-semibold text-blue-700 border-b-2 border-gray-300 text-sm">
-                  Voucher No.
-                </th>
-                <th className="text-right py-2 px-3 font-semibold text-blue-700 border-b-2 border-gray-300 text-sm">
+                <th className="text-right py-2 px-3 font-semibold text-blue-700 border-b-2 border-gray-300 text-sm w-40">
                   Debit
                 </th>
-                <th className="text-right py-2 px-3 font-semibold text-blue-700 border-b-2 border-gray-300 text-sm">
+                <th className="text-right py-2 px-3 font-semibold text-blue-700 border-b-2 border-gray-300 text-sm w-40">
                   Credit
                 </th>
               </tr>
             </thead>
             <tbody>
-              {displayEntries.map((entry, index) => (
-                <tr key={index} className="border-b border-gray-200 hover:bg-gray-50">
-                  <td className="py-2 px-3 align-top text-sm">
-                    <div>{entry.date}</div>
-                    {entry.time && (
-                      <div className="text-xs text-gray-600">{entry.time}</div>
-                    )}
-                  </td>
-                  <td className="py-2 px-3 align-top text-sm">
-                    <div className="font-medium">{entry.particulars}</div>
-                    {entry.enteredBy && (
-                      <div className="text-xs italic text-gray-600 mt-1">
-                        Entered By : {entry.enteredBy}
-                      </div>
-                    )}
-                    {entry.narration && !hideNarration && (
-                      <div className="text-xs italic text-gray-600 mt-1">
-                        Narration : {entry.narration}
-                      </div>
-                    )}
-                  </td>
-                  <td className="py-2 px-3 text-center align-top text-sm">
-                    {entry.voucherType}
-                  </td>
-                  <td className="py-2 px-3 text-center align-top text-sm">
-                    {entry.voucherNo}
-                  </td>
-                  <td className="py-2 px-3 text-right align-top text-sm font-medium">
-                    {formatCurrency(entry.debit)}
-                  </td>
-                  <td className="py-2 px-3 text-right align-top text-sm font-medium">
-                    {formatCurrency(entry.credit)}
-                  </td>
-                </tr>
-              ))}
+              {displayEntries.map((entry, index) => {
+                if (entry.type === 'opening-balance') {
+                  return (
+                    <tr key={index} className="border-b border-gray-200 hover:bg-gray-50">
+                      <td className="py-2 px-3 align-top text-sm">{entry.date}</td>
+                      <td className="py-2 px-3 align-top text-sm">
+                        <div className="font-medium">{entry.particulars}</div>
+                      </td>
+                      <td className="py-2 px-3 text-right align-top text-sm font-medium">
+                        {formatCurrency(entry.debit)}
+                      </td>
+                      <td className="py-2 px-3 text-right align-top text-sm font-medium">
+                        {formatCurrency(entry.credit)}
+                      </td>
+                    </tr>
+                  );
+                }
+
+                if (entry.type === 'patient-summary') {
+                  return (
+                    <React.Fragment key={index}>
+                      <tr className="border-b border-gray-200 hover:bg-blue-50">
+                        <td className="py-2 px-3 align-top text-sm">{entry.date}</td>
+                        <td className="py-2 px-3 align-top text-sm" colSpan={3}>
+                          <div
+                            className="font-bold text-blue-600 hover:text-blue-800 cursor-pointer hover:underline text-base"
+                            onClick={() => {
+                              handlePatientClick(entry.patientId, entry.visitId, entry.patientName);
+                            }}
+                          >
+                            Patient: {entry.particulars}
+                          </div>
+                          <div className="text-xs text-gray-600 mt-1 ml-4">
+                            └─ {entry.summary} | Total: {formatCurrency(entry.debit)}
+                          </div>
+                        </td>
+                      </tr>
+                    </React.Fragment>
+                  );
+                }
+
+                return null;
+              })}
             </tbody>
+            <tfoot className="bg-gray-50 border-t-2 border-gray-400">
+              <tr>
+                <td className="py-3 px-3 text-sm font-bold" colSpan={2}>
+                  Total:
+                </td>
+                <td className="py-3 px-3 text-right text-sm font-bold text-blue-900">
+                  {formatCurrencyTotal(totals.totalDebit)}
+                </td>
+                <td className="py-3 px-3 text-right text-sm font-bold text-blue-900">
+                  {formatCurrencyTotal(totals.totalCredit)}
+                </td>
+              </tr>
+              <tr className="bg-red-50">
+                <td className="py-3 px-3 text-sm font-bold text-red-700" colSpan={2}>
+                  Closing Balance:
+                </td>
+                <td className="py-3 px-3 text-right text-sm font-bold text-red-700" colSpan={2}>
+                  {formatCurrencyTotal(Math.abs(totals.closingBalance))}
+                  <span className="ml-2 text-xs">
+                    {totals.closingBalance >= 0 ? '(DR)' : '(CR)'}
+                  </span>
+                </td>
+              </tr>
+            </tfoot>
           </table>
         )}
       </div>
+
+      {/* Patient Transaction Details Modal */}
+      <PatientTransactionModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        patientId={selectedPatient?.patientId}
+        visitId={selectedPatient?.visitId}
+        patientName={selectedPatient?.patientName}
+        filterDate={today}
+      />
     </div>
   );
 };

@@ -17,6 +17,8 @@ export interface CashBookEntry {
   status: string;
   voucher_id: string;
   entry_id: string;
+  payment_source?: string; // NEW: Payment source for enhanced display
+  service_details?: any; // NEW: Service/medicine details from payment transaction
 }
 
 export interface CashBookFilters {
@@ -25,6 +27,7 @@ export interface CashBookFilters {
   created_by?: string;
   voucher_type?: string;
   search_narration?: string;
+  payment_mode?: string; // NEW: Filter by payment mode
 }
 
 export interface CashAccountBalance {
@@ -103,6 +106,27 @@ export const useCashBookEntries = (filters?: CashBookFilters) => {
         throw error;
       }
 
+      // Fetch payment source details for all vouchers
+      const voucherIds = (data || []).map((entry: any) => entry.voucher?.id).filter(Boolean);
+
+      let paymentSourceMap = new Map<string, any>();
+
+      if (voucherIds.length > 0) {
+        const { data: paymentData, error: paymentError } = await supabase
+          .from('patient_payment_transactions')
+          .select('id, payment_source, service_details')
+          .in('id', voucherIds.map(id => {
+            // Extract payment transaction ID from voucher reference_number
+            return id;
+          }));
+
+        if (!paymentError && paymentData) {
+          paymentData.forEach((payment: any) => {
+            paymentSourceMap.set(payment.id, payment);
+          });
+        }
+      }
+
       // Transform the data to match CashBookEntry interface
       const entries: CashBookEntry[] = (data || [])
         .map((entry: any) => {
@@ -140,6 +164,28 @@ export const useCashBookEntries = (filters?: CashBookFilters) => {
             hour12: false
           });
 
+          // Get payment source details if available
+          const paymentDetails = voucher.reference_number ? paymentSourceMap.get(voucher.reference_number) : null;
+
+          // Build enhanced particulars based on payment source
+          let particulars = voucher.patient?.name || 'Cash Transaction';
+          let paymentSource = undefined;
+
+          if (paymentDetails) {
+            paymentSource = paymentDetails.payment_source;
+            // Enhance particulars with payment source
+            const sourceLabels: Record<string, string> = {
+              'OPD_SERVICE': 'OPD Services',
+              'PHARMACY': 'Pharmacy',
+              'PHYSIOTHERAPY': 'Physiotherapy',
+              'ADVANCE': 'Advance Payment',
+              'FINAL_BILL': 'Final Bill',
+              'DIRECT_SALE': 'Direct Sale'
+            };
+            const sourceLabel = sourceLabels[paymentSource] || paymentSource;
+            particulars = `${voucher.patient?.name || 'Patient'} - ${sourceLabel}`;
+          }
+
           return {
             voucher_date: voucher.voucher_date,
             transaction_time: voucher.created_at,
@@ -150,12 +196,14 @@ export const useCashBookEntries = (filters?: CashBookFilters) => {
             entry_narration: entry.narration || '',
             debit_amount: entry.debit_amount || 0,
             credit_amount: entry.credit_amount || 0,
-            particulars: voucher.patient?.name || 'Cash Transaction',
+            particulars: particulars,
             user_id: voucher.created_by || '',
             entered_by: 'System',
             status: voucher.status,
             voucher_id: voucher.id,
-            entry_id: entry.id
+            entry_id: entry.id,
+            payment_source: paymentSource,
+            service_details: paymentDetails?.service_details
           };
         })
         .filter((entry): entry is CashBookEntry => entry !== null);
@@ -291,7 +339,7 @@ export const useCashBalance = (upToDate?: string) => {
     queryKey: ['cash-balance', upToDate],
     queryFn: async () => {
       // Get Cash account
-      const { data: cashAccount, error: accountError } = await supabase
+      const { data: cashAccount, error: accountError} = await supabase
         .from('chart_of_accounts')
         .select('id, opening_balance, opening_balance_type, is_active')
         .eq('account_name', 'Cash in Hand')
@@ -361,5 +409,78 @@ export const useCashBalance = (upToDate?: string) => {
         balance_type: closingBalance >= 0 ? 'DR' : 'CR'
       };
     }
+  });
+};
+
+/**
+ * Interface for daily transaction entry
+ */
+export interface DailyTransaction {
+  transaction_id: string;
+  transaction_type: string;
+  visit_id: string | null;
+  patient_id: string | null;
+  patient_name: string;
+  transaction_date: string;
+  transaction_time: string;
+  description: string;
+  amount: number;
+  quantity: number;
+  unit_rate: number;
+  rate_type: string;
+  payment_mode: string;
+}
+
+/**
+ * Hook to fetch ALL daily transactions from all billing tables
+ * Includes: OPD, Lab, Radiology, Pharmacy, Physiotherapy, Mandatory Services
+ */
+export const useAllDailyTransactions = (filters?: CashBookFilters) => {
+  return useQuery({
+    queryKey: ['all-daily-transactions', filters],
+    queryFn: async () => {
+      const fromDate = filters?.from_date || new Date().toISOString().split('T')[0];
+      const toDate = filters?.to_date || new Date().toISOString().split('T')[0];
+
+      // Call the database function to get all daily transactions
+      const { data, error } = await supabase
+        .rpc('get_daily_cash_transactions', {
+          p_from_date: fromDate,
+          p_to_date: toDate,
+          p_transaction_type: filters?.voucher_type || null,
+          p_patient_id: null
+        });
+
+      if (error) {
+        console.error('Error fetching daily transactions:', error);
+        throw new Error(`Failed to fetch transactions: ${error.message}`);
+      }
+
+      // Apply additional filters
+      let filteredData = data || [];
+
+      // Filter by narration search
+      if (filters?.search_narration) {
+        const searchLower = filters.search_narration.toLowerCase();
+        filteredData = filteredData.filter((txn: any) => {
+          const description = (txn.description || '').toLowerCase();
+          const patientName = (txn.patient_name || '').toLowerCase();
+          return description.includes(searchLower) || patientName.includes(searchLower);
+        });
+      }
+
+      // Filter by payment mode
+      if (filters?.payment_mode) {
+        const paymentModeLower = filters.payment_mode.toLowerCase();
+        filteredData = filteredData.filter((txn: any) => {
+          const txnPaymentMode = (txn.payment_mode || '').toLowerCase();
+          return txnPaymentMode === paymentModeLower;
+        });
+      }
+
+      return filteredData as DailyTransaction[];
+    },
+    staleTime: 30000, // 30 seconds
+    refetchOnWindowFocus: true
   });
 };
