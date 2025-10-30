@@ -182,13 +182,43 @@ SELECT
   dsb.created_at::TIMESTAMP WITH TIME ZONE as created_at,
   dsb.updated_at::TIMESTAMP WITH TIME ZONE as updated_at
 FROM direct_sale_bills dsb
-WHERE dsb.net_amount > 0;
+WHERE dsb.net_amount > 0
+
+UNION ALL
+
+-- 8. Advance Payments
+SELECT
+  ap.id::TEXT as transaction_id,
+  'ADVANCE_PAYMENT'::TEXT as transaction_type,
+  ap.visit_id::TEXT as visit_id,
+  ap.patient_id,
+  COALESCE(ap.patient_name, p.name, 'Unknown Patient')::TEXT as patient_name,
+  ap.payment_date::DATE as transaction_date,
+  ap.created_at::TIMESTAMP WITH TIME ZONE as transaction_time,
+  CASE
+    WHEN ap.is_refund THEN ('Advance Payment Refund: ' || COALESCE(ap.refund_reason, 'No reason'))::TEXT
+    ELSE ('Advance Payment' || CASE WHEN ap.remarks IS NOT NULL AND ap.remarks != '' THEN (' - ' || ap.remarks) ELSE '' END)::TEXT
+  END as description,
+  CASE
+    WHEN ap.is_refund THEN (ap.advance_amount * -1)::NUMERIC  -- Negative for refunds
+    ELSE ap.advance_amount::NUMERIC
+  END as amount,
+  1::INTEGER as quantity,
+  ap.advance_amount::NUMERIC as unit_rate,
+  'advance'::TEXT as rate_type,
+  UPPER(ap.payment_mode)::TEXT as payment_mode,
+  ap.created_at::TIMESTAMP WITH TIME ZONE as created_at,
+  ap.updated_at::TIMESTAMP WITH TIME ZONE as updated_at
+FROM advance_payment ap
+LEFT JOIN patients p ON ap.patient_id = p.id
+WHERE ap.status = 'ACTIVE'
+  AND ap.advance_amount > 0;
 
 -- ============================================================================
 -- Add comment
 -- ============================================================================
 COMMENT ON VIEW v_cash_book_all_daily_transactions IS
-'Unified view of all daily patient transactions from all billing tables (OPD, Lab, Radiology, Pharmacy, Physiotherapy, Mandatory Services, Direct Sales)';
+'Unified view of all daily patient transactions from all billing tables (OPD, Lab, Radiology, Pharmacy, Physiotherapy, Mandatory Services, Direct Sales, Advance Payments)';
 
 -- ============================================================================
 -- Grant permissions
@@ -263,6 +293,6 @@ GRANT EXECUTE ON FUNCTION get_daily_cash_transactions TO authenticated;
 DO $$
 BEGIN
   RAISE NOTICE 'Cash Book daily transactions view created successfully!';
-  RAISE NOTICE 'View includes: OPD, Lab, Radiology, Pharmacy, Physiotherapy, Mandatory Services, Direct Sales';
+  RAISE NOTICE 'View includes: OPD, Lab, Radiology, Pharmacy, Physiotherapy, Mandatory Services, Direct Sales, Advance Payments';
   RAISE NOTICE 'Use: SELECT * FROM v_cash_book_all_daily_transactions WHERE transaction_date = CURRENT_DATE';
 END $$;
