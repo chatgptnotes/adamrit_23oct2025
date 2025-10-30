@@ -1,11 +1,13 @@
 import React, { useState, useMemo } from 'react';
-import { Calendar, Loader2 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Calendar, Loader2, ArrowLeft } from 'lucide-react';
 import { useCashBookEntries, useCashBookUsers, useCashBookVoucherTypes, useAllDailyTransactions, DailyTransaction } from '@/hooks/useCashBookQueries';
 import PatientTransactionModal from '@/components/PatientTransactionModal';
 
 const CashBook: React.FC = () => {
   // Get today's date in YYYY-MM-DD format
   const today = new Date().toISOString().split('T')[0];
+  const navigate = useNavigate();
 
   const [fromDate, setFromDate] = useState(today);
   const [toDate, setToDate] = useState(today);
@@ -22,6 +24,7 @@ const CashBook: React.FC = () => {
     patientId?: string;
     visitId?: string;
     patientName?: string;
+    transactionDate?: string;
   } | null>(null);
 
   // Fetch ALL daily transactions from all billing tables
@@ -44,9 +47,14 @@ const CashBook: React.FC = () => {
   const { data: voucherTypes = [] } = useCashBookVoucherTypes();
 
   // Handler to open patient transaction modal
-  const handlePatientClick = (patientId?: string, visitId?: string, patientName?: string) => {
-    setSelectedPatient({ patientId, visitId, patientName });
+  const handlePatientClick = (patientId?: string, visitId?: string, patientName?: string, transactionDate?: string) => {
+    setSelectedPatient({ patientId, visitId, patientName, transactionDate });
     setIsModalOpen(true);
+  };
+
+  // Handler to navigate back to Ledger Statement
+  const handleBack = () => {
+    navigate('/ledger-statement');
   };
 
   // Prepare entries with opening balance and grouped by patient
@@ -71,69 +79,70 @@ const CashBook: React.FC = () => {
       });
     }
 
-    // Group transactions by patient
+    // Show only CASH payment transactions (Advance + Final payments)
     if (dailyTransactions && dailyTransactions.length > 0) {
-      const patientGroups = new Map<string, {
+      // Filter to show ONLY payment transactions with CASH payment mode
+      const cashPaymentTransactions = dailyTransactions.filter((txn: DailyTransaction) =>
+        txn.transaction_type === 'ADVANCE_PAYMENT' &&
+        txn.payment_mode === 'CASH'
+      );
+
+      // Group cash payments by patient
+      const paymentGroups = new Map<string, {
         patientId: string | null;
         patientName: string;
-        visitId: string | null;
         transactions: DailyTransaction[];
-        paymentModes: Map<string, number>;
         totalAmount: number;
         firstDate: string;
+        remarks: string[];
       }>();
 
-      // Group transactions by patient
-      dailyTransactions.forEach((txn: DailyTransaction) => {
+      cashPaymentTransactions.forEach((txn: DailyTransaction) => {
         const patientKey = txn.patient_id || txn.patient_name || 'Unknown';
 
-        if (!patientGroups.has(patientKey)) {
-          patientGroups.set(patientKey, {
+        if (!paymentGroups.has(patientKey)) {
+          paymentGroups.set(patientKey, {
             patientId: txn.patient_id,
             patientName: txn.patient_name || 'Unknown Patient',
-            visitId: txn.visit_id,
             transactions: [],
-            paymentModes: new Map(),
             totalAmount: 0,
-            firstDate: txn.transaction_date
+            firstDate: txn.transaction_date,
+            remarks: []
           });
         }
 
-        const group = patientGroups.get(patientKey)!;
+        const group = paymentGroups.get(patientKey)!;
         group.transactions.push(txn);
-
-        // Aggregate by payment mode
-        const currentModeAmount = group.paymentModes.get(txn.payment_mode) || 0;
-        group.paymentModes.set(txn.payment_mode, currentModeAmount + txn.amount);
-
         group.totalAmount += txn.amount;
+
+        // Collect remarks from transaction description
+        if (txn.description && txn.description !== 'Advance Payment') {
+          group.remarks.push(txn.description);
+        }
       });
 
-      // Create patient summary entries
-      patientGroups.forEach((group) => {
+      // Create cash payment entries
+      paymentGroups.forEach((group) => {
         // Format first transaction date
         const date = new Date(group.firstDate);
         const formattedDate = `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}/${date.getFullYear()}`;
 
-        // Build payment mode breakdown string
-        const paymentBreakdown = Array.from(group.paymentModes.entries())
-          .map(([mode, amount]) => `${mode}: Rs ${amount.toLocaleString('en-IN')}`)
-          .join(', ');
-
-        // Build summary line
-        const summary = `${group.transactions.length} transaction${group.transactions.length > 1 ? 's' : ''} | ${paymentBreakdown}`;
+        // Build summary line with remarks included
+        const remarksText = group.remarks.length > 0 ? ` | Remarks: ${group.remarks.join('; ')}` : '';
+        const summary = `${group.transactions.length} payment${group.transactions.length > 1 ? 's' : ''} | CASH: Rs ${group.totalAmount.toLocaleString('en-IN')}${remarksText}`;
 
         entries.push({
           type: 'patient-summary' as const,
           date: formattedDate,
-          particulars: group.patientName,
+          particulars: `${group.patientName} - Cash Payment`,
           summary: summary,
           debit: group.totalAmount,
           credit: 0,
           patientId: group.patientId,
-          visitId: group.visitId,
+          visitId: undefined,
           patientName: group.patientName,
           transactionCount: group.transactions.length,
+          transactionDate: group.firstDate
         });
       });
     }
@@ -173,7 +182,16 @@ const CashBook: React.FC = () => {
     <div className="min-h-screen bg-gray-100 flex flex-col">
       {/* Top Control Bar */}
       <div className="bg-gradient-to-r from-blue-500 to-blue-600 px-4 py-2 flex justify-between items-center">
-        <h1 className="text-white text-xl font-bold">Cash Book</h1>
+        <div className="flex items-center space-x-3">
+          <button
+            onClick={handleBack}
+            className="bg-blue-700 hover:bg-blue-800 text-white px-3 py-1.5 rounded text-sm font-medium flex items-center"
+          >
+            <ArrowLeft className="h-4 w-4 mr-1" />
+            Back
+          </button>
+          <h1 className="text-white text-xl font-bold">Cash Book</h1>
+        </div>
         <div className="flex space-x-2">
           <button className="bg-blue-700 hover:bg-blue-800 text-white px-4 py-1.5 rounded text-sm font-medium">
             Export To Excel
@@ -184,10 +202,10 @@ const CashBook: React.FC = () => {
         </div>
       </div>
 
-      {/* Filter Bar */}
+      {/* Date Picker Filter */}
       <div className="bg-gray-200 px-4 py-3 border-b border-gray-300">
-        <div className="flex items-center space-x-2">
-          {/* Date Picker - From */}
+        <div className="flex items-center space-x-3">
+          {/* From Date Picker */}
           <div className="flex items-center bg-white border border-gray-300 rounded px-2 py-1">
             <Calendar className="h-4 w-4 text-gray-500 mr-1" />
             <input
@@ -198,7 +216,7 @@ const CashBook: React.FC = () => {
             />
           </div>
 
-          {/* Date Picker - To */}
+          {/* To Date Picker */}
           <div className="flex items-center bg-white border border-gray-300 rounded px-2 py-1">
             <Calendar className="h-4 w-4 text-gray-500 mr-1" />
             <input
@@ -209,77 +227,11 @@ const CashBook: React.FC = () => {
             />
           </div>
 
-          {/* Search by Narration */}
-          <input
-            type="text"
-            value={searchNarration}
-            onChange={(e) => setSearchNarration(e.target.value)}
-            placeholder="Search by Narration"
-            className="px-3 py-1.5 border border-gray-300 rounded text-sm outline-none focus:border-blue-500 w-48"
-          />
-
-          {/* Search by Amount */}
-          <input
-            type="text"
-            value={searchAmount}
-            onChange={(e) => setSearchAmount(e.target.value)}
-            placeholder="Search by Amount"
-            className="px-3 py-1.5 border border-gray-300 rounded text-sm outline-none focus:border-blue-500 w-40"
-          />
-
-          {/* Select Type */}
-          <select
-            value={selectedType}
-            onChange={(e) => setSelectedType(e.target.value)}
-            className="px-3 py-1.5 border border-gray-300 rounded text-sm outline-none focus:border-blue-500 bg-white"
-          >
-            <option value="">All Types</option>
-            {voucherTypes.map((type: any) => (
-              <option key={type.id} value={type.voucher_category}>
-                {type.voucher_type_name}
-              </option>
-            ))}
-          </select>
-
-          {/* Select User */}
-          <select
-            value={selectedUser}
-            onChange={(e) => setSelectedUser(e.target.value)}
-            className="px-3 py-1.5 border border-gray-300 rounded text-sm outline-none focus:border-blue-500 bg-white"
-          >
-            <option value="">All Users</option>
-            {users.map((user: any) => (
-              <option key={user.id} value={user.id}>
-                {user.full_name || user.email}
-              </option>
-            ))}
-          </select>
-
-          {/* Select Payment Mode */}
-          <select
-            value={selectedPaymentMode}
-            onChange={(e) => setSelectedPaymentMode(e.target.value)}
-            className="px-3 py-1.5 border border-gray-300 rounded text-sm outline-none focus:border-blue-500 bg-white"
-          >
-            <option value="">All Payment Modes</option>
-            <option value="CASH">Cash</option>
-            <option value="UPI">UPI</option>
-            <option value="CARD">Card</option>
-            <option value="CREDIT">Credit Card</option>
-            <option value="DEBIT">Debit Card</option>
-            <option value="CHEQUE">Cheque</option>
-            <option value="ONLINE">Online Transfer</option>
-            <option value="NEFT">NEFT</option>
-            <option value="RTGS">RTGS</option>
-            <option value="DD">Demand Draft</option>
-          </select>
-
-          {/* Hide Narration */}
+          {/* Search Button */}
           <button
-            onClick={() => setHideNarration(!hideNarration)}
-            className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-1.5 rounded text-sm font-medium"
+            className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-1.5 rounded text-sm font-medium"
           >
-            {hideNarration ? 'Show' : 'Hide'} Narration
+            Search
           </button>
         </div>
       </div>
@@ -355,20 +307,21 @@ const CashBook: React.FC = () => {
                 if (entry.type === 'patient-summary') {
                   return (
                     <React.Fragment key={index}>
-                      <tr className="border-b border-gray-200 hover:bg-blue-50">
+                      <tr className="border-b border-gray-200 hover:bg-gray-50">
                         <td className="py-2 px-3 align-top text-sm">{entry.date}</td>
-                        <td className="py-2 px-3 align-top text-sm" colSpan={3}>
-                          <div
-                            className="font-bold text-blue-600 hover:text-blue-800 cursor-pointer hover:underline text-base"
-                            onClick={() => {
-                              handlePatientClick(entry.patientId, entry.visitId, entry.patientName);
-                            }}
-                          >
-                            Patient: {entry.particulars}
+                        <td className="py-2 px-3 align-top text-sm">
+                          <div className="font-bold text-gray-900 text-base">
+                            {entry.particulars}
                           </div>
                           <div className="text-xs text-gray-600 mt-1 ml-4">
-                            └─ {entry.summary} | Total: {formatCurrency(entry.debit)}
+                            └─ {entry.summary}
                           </div>
+                        </td>
+                        <td className="py-2 px-3 text-right align-top text-sm font-medium">
+                          {formatCurrency(entry.debit)}
+                        </td>
+                        <td className="py-2 px-3 text-right align-top text-sm font-medium">
+                          {formatCurrency(entry.credit)}
                         </td>
                       </tr>
                     </React.Fragment>
@@ -413,7 +366,7 @@ const CashBook: React.FC = () => {
         patientId={selectedPatient?.patientId}
         visitId={selectedPatient?.visitId}
         patientName={selectedPatient?.patientName}
-        filterDate={today}
+        filterDate={selectedPatient?.transactionDate}
       />
     </div>
   );

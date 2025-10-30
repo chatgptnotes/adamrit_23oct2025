@@ -29,6 +29,7 @@ const AdvancedStatementReport = lazy(() => import("../pages/AdvancedStatementRep
 // Lazy load heavy feature pages
 const Accounting = lazy(() => import("../pages/Accounting"));
 const CashBook = lazy(() => import("../pages/CashBook"));
+const LedgerStatement = lazy(() => import("../pages/LedgerStatement"));
 const Pharmacy = lazy(() => import("../pages/Pharmacy"));
 const Lab = lazy(() => import("../pages/Lab"));
 const Radiology = lazy(() => import("../pages/Radiology"));
@@ -85,7 +86,6 @@ const LabResultsEntryDemo = lazy(() => import("../pages/LabResultsEntryDemo"));
 const Invoice = lazy(() => import("../pages/Invoice"));
 const DetailedInvoice = lazy(() => import("../pages/DetailedInvoice"));
 const DischargeInvoice = lazy(() => import("../pages/DischargeInvoice"));
-const BillManagement = lazy(() => import("../pages/BillManagement"));
 const Corporate = lazy(() => import("../pages/Corporate"));
 
 // Loading component
@@ -152,7 +152,7 @@ export const AppRoutes = () => {
         <Route path="/ayushman-anaesthetists" element={<Suspense fallback={<PageLoader />}><AyushmanAnaesthetists /></Suspense>} />
         <Route path="/accounting" element={<Suspense fallback={<PageLoader />}><Accounting /></Suspense>} />
         <Route path="/cash-book" element={<Suspense fallback={<PageLoader />}><CashBook /></Suspense>} />
-        <Route path="/bill-management" element={<Suspense fallback={<PageLoader />}><BillManagement /></Suspense>} />
+        <Route path="/ledger-statement" element={<Suspense fallback={<PageLoader />}><LedgerStatement /></Suspense>} />
         <Route path="/corporate" element={<Suspense fallback={<PageLoader />}><Corporate /></Suspense>} />
         <Route path="/pharmacy/goods-received-note" element={<Suspense fallback={<PageLoader />}><Pharmacy /></Suspense>} />
         <Route path="/pharmacy/purchase-orders/add" element={<Suspense fallback={<PageLoader />}><Pharmacy /></Suspense>} />

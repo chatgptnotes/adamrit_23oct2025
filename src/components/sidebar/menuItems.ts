@@ -163,9 +163,9 @@ export const menuItems = [
     icon: BookOpen,
   },
   {
-    title: "Bill Management",
-    url: "/bill-management",
-    icon: Receipt,
+    title: "Ledger Statement",
+    url: "/ledger-statement",
+    icon: FileText,
   },
   {
     title: "Corporate",
