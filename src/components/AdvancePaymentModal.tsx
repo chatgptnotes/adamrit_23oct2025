@@ -136,7 +136,8 @@ export const AdvancePaymentModal: React.FC<AdvancePaymentModalProps> = ({
     paymentMode: 'CASH',
     billingExecutive: '',
     remarks: '',
-    referenceNumber: ''
+    referenceNumber: '',
+    selectedBank: ''
   });
 
   const [paymentHistory, setPaymentHistory] = useState<PaymentTransaction[]>([]);
@@ -149,6 +150,7 @@ export const AdvancePaymentModal: React.FC<AdvancePaymentModalProps> = ({
     registrationNo: '',
     dateOfAdmission: ''
   });
+  const [bankAccounts, setBankAccounts] = useState<Array<{ id: string; account_name: string }>>([]);
 
   // Generate default narration when modal opens or payment mode changes
   useEffect(() => {
@@ -169,6 +171,63 @@ export const AdvancePaymentModal: React.FC<AdvancePaymentModalProps> = ({
       }));
     }
   }, [isOpen, formData.paymentMode, patientInfo.name, patientInfo.registrationNo, patientData]);
+
+  // Fetch bank accounts when modal opens
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const fetchBankAccounts = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('chart_of_accounts')
+          .select('id, account_name, account_code')
+          .in('account_code', ['1121', '1122', '1123'])
+          .eq('is_active', true)
+          .order('account_name');
+
+        if (error) {
+          console.error('❌ Error fetching bank accounts:', error);
+          // Fallback to hardcoded banks if database query fails
+          const fallbackBanks = [
+            { id: '1', account_name: 'Canara Bank [A/C120023677813)JARIPATHKA]', account_code: '1123' },
+            { id: '2', account_name: 'SARASWAT BANK', account_code: '1122' },
+            { id: '3', account_name: 'STATE BANK OF INDIA (DRM)', account_code: '1121' }
+          ];
+          console.log('⚠️ Using fallback hardcoded banks');
+          setBankAccounts(fallbackBanks);
+          return;
+        }
+
+        console.log('✅ Fetched bank accounts from database:', data);
+        console.log('✅ Number of banks fetched:', data?.length || 0);
+
+        // If no banks found in database, use fallback
+        if (!data || data.length === 0) {
+          const fallbackBanks = [
+            { id: '1', account_name: 'Canara Bank [A/C120023677813)JARIPATHKA]', account_code: '1123' },
+            { id: '2', account_name: 'SARASWAT BANK', account_code: '1122' },
+            { id: '3', account_name: 'STATE BANK OF INDIA (DRM)', account_code: '1121' }
+          ];
+          console.log('⚠️ No banks in database, using fallback hardcoded banks');
+          setBankAccounts(fallbackBanks);
+        } else {
+          setBankAccounts(data);
+        }
+      } catch (error) {
+        console.error('❌ Exception fetching bank accounts:', error);
+        // Fallback to hardcoded banks on exception
+        const fallbackBanks = [
+          { id: '1', account_name: 'Canara Bank [A/C120023677813)JARIPATHKA]', account_code: '1123' },
+          { id: '2', account_name: 'SARASWAT BANK', account_code: '1122' },
+          { id: '3', account_name: 'STATE BANK OF INDIA (DRM)', account_code: '1121' }
+        ];
+        console.log('⚠️ Exception occurred, using fallback hardcoded banks');
+        setBankAccounts(fallbackBanks);
+      }
+    };
+
+    fetchBankAccounts();
+  }, [isOpen]);
 
   // Set patient info and fetch payment history when modal opens
   useEffect(() => {
@@ -447,6 +506,12 @@ export const AdvancePaymentModal: React.FC<AdvancePaymentModalProps> = ({
 
     }
 
+    // Validate bank selection for Online Transfer
+    if (formData.paymentMode === 'ONLINE' && !formData.selectedBank) {
+      toast.error('Please select a bank account for online transfer');
+      return;
+    }
+
     if (!patientId || !isValidUUID(patientId)) {
       toast.error('Invalid patient ID');
       console.error('❌ Invalid patient ID:', patientId);
@@ -483,6 +548,8 @@ export const AdvancePaymentModal: React.FC<AdvancePaymentModalProps> = ({
         billing_executive: formData.billingExecutive && formData.billingExecutive.trim() ? formData.billingExecutive.trim() : null,
         reference_number: formData.referenceNumber && formData.referenceNumber.trim() ? formData.referenceNumber.trim() : null,
         remarks: formData.remarks && formData.remarks.trim() ? formData.remarks.trim() : null,
+        bank_account_id: formData.selectedBank || null,
+        bank_account_name: bankAccounts.find(b => b.id === formData.selectedBank)?.account_name || null,
         created_by: 'current_user' // You can replace this with actual user info
       };
 
@@ -510,7 +577,7 @@ export const AdvancePaymentModal: React.FC<AdvancePaymentModalProps> = ({
 
       console.log('✅ Advance payment saved successfully:', data);
       toast.success('Advance payment saved successfully');
-      
+
       // Reset form
       setFormData({
         advanceAmount: '',
@@ -520,7 +587,8 @@ export const AdvancePaymentModal: React.FC<AdvancePaymentModalProps> = ({
         paymentMode: 'CASH',
         billingExecutive: '',
         remarks: '',
-        referenceNumber: ''
+        referenceNumber: '',
+        selectedBank: ''
       });
 
       // Refresh payment history
@@ -831,9 +899,9 @@ export const AdvancePaymentModal: React.FC<AdvancePaymentModalProps> = ({
               <Label htmlFor="paymentMode" className="text-sm font-medium">
                 Mode Of Payment <span className="text-red-500">*</span>
               </Label>
-              <Select 
-                value={formData.paymentMode} 
-                onValueChange={(value) => setFormData({ ...formData, paymentMode: value })}
+              <Select
+                value={formData.paymentMode}
+                onValueChange={(value) => setFormData({ ...formData, paymentMode: value, selectedBank: '' })}
               >
                 <SelectTrigger className="w-full">
                   <SelectValue />
@@ -847,6 +915,41 @@ export const AdvancePaymentModal: React.FC<AdvancePaymentModalProps> = ({
                 </SelectContent>
               </Select>
             </div>
+
+            {/* Bank Selection - Only show when Online Transfer is selected */}
+            {formData.paymentMode === 'ONLINE' && (
+              <div className="grid grid-cols-2 items-center gap-4">
+                <Label htmlFor="bankAccount" className="text-sm font-medium">
+                  Select Bank Account <span className="text-red-500">*</span>
+                </Label>
+                <Select
+                  value={formData.selectedBank}
+                  onValueChange={(value) => {
+                    const bank = bankAccounts.find(b => b.id === value);
+                    setFormData({
+                      ...formData,
+                      selectedBank: value,
+                      remarks: formData.remarks.includes('Being cash received')
+                        ? formData.remarks.replace(/Being cash received towards .+ from/, `Being cash received towards ${bank?.account_name || 'Online Transfer'} from`)
+                        : formData.remarks
+                          ? `${formData.remarks} - Bank: ${bank?.account_name}`
+                          : `Being cash received towards ${bank?.account_name} from ${patientInfo.name || 'patient'} against R. No.: ${patientInfo.registrationNo}`
+                    });
+                  }}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Select Bank Account" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {bankAccounts.map((bank) => (
+                      <SelectItem key={bank.id} value={bank.id}>
+                        {bank.account_name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
             {/* Billing Executive */}
             <div className="grid grid-cols-2 items-center gap-4">
@@ -891,13 +994,20 @@ export const AdvancePaymentModal: React.FC<AdvancePaymentModalProps> = ({
               <Label htmlFor="remarks" className="text-sm font-medium">
                 Remark
               </Label>
-              <Textarea
-                id="remarks"
-                value={formData.remarks}
-                onChange={(e) => setFormData({ ...formData, remarks: e.target.value })}
-                placeholder="Enter remarks..."
-                className="w-full min-h-[100px]"
-              />
+              <div className="space-y-2">
+                <Textarea
+                  id="remarks"
+                  value={formData.remarks}
+                  onChange={(e) => setFormData({ ...formData, remarks: e.target.value })}
+                  placeholder="Enter additional remarks..."
+                  className="w-full min-h-[100px]"
+                />
+                {formData.paymentMode === 'ONLINE' && formData.selectedBank && (
+                  <div className="text-xs text-green-600 bg-green-50 p-2 rounded border border-green-200">
+                    ✓ Selected bank will be included in the payment receipt
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Save Button */}

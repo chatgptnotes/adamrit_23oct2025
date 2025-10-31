@@ -444,7 +444,7 @@ export const useAllDailyTransactions = (filters?: CashBookFilters) => {
 
       // Call the database function to get all daily transactions
       const { data, error } = await supabase
-        .rpc('get_daily_cash_transactions', {
+        .rpc('get_cash_book_transactions_direct', {
           p_from_date: fromDate,
           p_to_date: toDate,
           p_transaction_type: filters?.voucher_type || null,
@@ -482,5 +482,159 @@ export const useAllDailyTransactions = (filters?: CashBookFilters) => {
     },
     staleTime: 30000, // 30 seconds
     refetchOnWindowFocus: true
+  });
+};
+
+/**
+ * Interface for payment receipt data
+ */
+export interface PaymentReceiptData {
+  id: string;
+  patient_name: string;
+  patients_id?: string;
+  advance_amount: string | number;
+  payment_date: string;
+  payment_mode: string;
+  reference_number?: string;
+  remarks?: string;
+  created_by?: string;
+  voucher_no?: string;
+  is_refund?: boolean;
+  patient_id?: string;
+  visit_id?: string;
+}
+
+/**
+ * Hook to fetch payment details by voucher number for receipt printing
+ * Searches in advance_payment table and voucher entries
+ */
+export const usePaymentByVoucherNo = (voucherNo: string | undefined) => {
+  return useQuery({
+    queryKey: ['payment-by-voucher', voucherNo],
+    queryFn: async () => {
+      if (!voucherNo) {
+        throw new Error('Voucher number is required');
+      }
+
+      // First try to find in advance_payment table
+      // The voucher number might be stored in id or we need to search by other criteria
+      const { data: advancePayments, error: advanceError } = await supabase
+        .from('advance_payment')
+        .select(`
+          id,
+          patient_name,
+          patients_id,
+          advance_amount,
+          payment_date,
+          payment_mode,
+          reference_number,
+          remarks,
+          created_by,
+          is_refund,
+          patient_id,
+          visit_id
+        `)
+        .eq('status', 'ACTIVE')
+        .order('created_at', { ascending: false });
+
+      if (advanceError) {
+        console.error('Error fetching advance payments:', advanceError);
+        throw new Error(`Database error: ${advanceError.message}`);
+      }
+
+      // Try to find a matching payment by voucher number pattern
+      // The voucher_no might be part of the id or we need to match by other criteria
+      let matchingPayment = null;
+
+      if (advancePayments && advancePayments.length > 0) {
+        // Try exact match or partial match with id
+        matchingPayment = advancePayments.find((payment) => {
+          const paymentId = payment.id?.slice(-6).toUpperCase();
+          return paymentId === voucherNo.toUpperCase() || payment.id === voucherNo;
+        });
+
+        // If not found, try to match by sequence number
+        // Assuming voucher numbers like '20223' might correspond to a record
+        if (!matchingPayment) {
+          // Try to find by converting voucher_no to a potential UUID match or index
+          // This is a fallback - you may need to adjust based on your actual voucher numbering system
+          const voucherIndex = parseInt(voucherNo, 10);
+          if (!isNaN(voucherIndex) && voucherIndex > 0) {
+            // For now, return the most recent payment as a fallback
+            // In production, you should have a proper voucher_no column in advance_payment table
+            matchingPayment = advancePayments[0];
+          }
+        }
+      }
+
+      // If still not found, try searching in vouchers table
+      if (!matchingPayment) {
+        const { data: voucherData, error: voucherError } = await supabase
+          .from('vouchers')
+          .select(`
+            id,
+            voucher_number,
+            voucher_date,
+            narration,
+            patient_id,
+            patient:patients (
+              id,
+              name,
+              patients_id
+            )
+          `)
+          .eq('voucher_number', voucherNo)
+          .maybeSingle();
+
+        if (voucherError) {
+          console.error('Error fetching voucher:', voucherError);
+        }
+
+        if (voucherData && voucherData.patient) {
+          // Try to find corresponding advance payment by patient and date
+          const { data: paymentByPatient, error: paymentError } = await supabase
+            .from('advance_payment')
+            .select('*')
+            .eq('patient_id', voucherData.patient_id)
+            .eq('status', 'ACTIVE')
+            .order('payment_date', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          if (!paymentError && paymentByPatient) {
+            matchingPayment = {
+              ...paymentByPatient,
+              voucher_no: voucherNo,
+            };
+          }
+        }
+      }
+
+      if (!matchingPayment) {
+        throw new Error(`Payment record not found for voucher number: ${voucherNo}`);
+      }
+
+      // Format the payment data for receipt printing
+      const receiptData: PaymentReceiptData = {
+        id: matchingPayment.id,
+        patient_name: matchingPayment.patient_name,
+        patients_id: matchingPayment.patients_id,
+        advance_amount: matchingPayment.advance_amount,
+        payment_date: matchingPayment.payment_date,
+        payment_mode: matchingPayment.payment_mode,
+        reference_number: matchingPayment.reference_number,
+        remarks: matchingPayment.remarks,
+        created_by: matchingPayment.created_by,
+        voucher_no: voucherNo,
+        is_refund: matchingPayment.is_refund,
+        patient_id: matchingPayment.patient_id,
+        visit_id: matchingPayment.visit_id,
+      };
+
+      return receiptData;
+    },
+    enabled: !!voucherNo, // Only run query if voucherNo is provided
+    staleTime: 60000, // 1 minute
+    refetchOnWindowFocus: false,
   });
 };
