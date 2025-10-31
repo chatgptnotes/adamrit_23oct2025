@@ -34,33 +34,30 @@ export const usePatientServiceTransactions = (
         return [];
       }
 
-      // Fetch billing transactions (services only, exclude payments)
-      let query = supabase
-        .from('v_cash_book_all_daily_transactions')
-        .select('*')
-        .neq('transaction_type', 'ADVANCE_PAYMENT') // Exclude advance payments
-        .order('transaction_date', { ascending: false })
-        .order('transaction_time', { ascending: false });
-
-      if (patientId) {
-        query = query.eq('patient_id', patientId);
-      } else if (visitId) {
-        query = query.eq('visit_id', visitId);
-      }
-
-      // Apply date filter if provided
-      if (filterDate) {
-        query = query.eq('transaction_date', filterDate);
-      }
-
-      const { data, error } = await query;
+      // Fetch billing transactions using the direct query function
+      const { data, error } = await supabase
+        .rpc('get_cash_book_transactions_direct', {
+          p_from_date: filterDate || null,
+          p_to_date: filterDate || null,
+          p_transaction_type: null,
+          p_patient_id: patientId || null
+        });
 
       if (error) {
         console.error('Error fetching patient service transactions:', error);
         throw new Error(`Failed to fetch service transactions: ${error.message}`);
       }
 
-      return (data || []) as PatientTransactionDetail[];
+      // Filter the results
+      let filteredData = (data || [])
+        .filter((txn: any) => txn.transaction_type !== 'ADVANCE_PAYMENT'); // Exclude advance payments
+
+      // Apply visit_id filter if provided (and no patientId was used)
+      if (visitId && !patientId) {
+        filteredData = filteredData.filter((txn: any) => txn.visit_id === visitId);
+      }
+
+      return filteredData as PatientTransactionDetail[];
     },
     enabled: !!(patientId || visitId),
     staleTime: 30000, // 30 seconds

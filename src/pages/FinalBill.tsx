@@ -556,10 +556,69 @@ const FinalBill = () => {
   const [finalPaymentRemark, setFinalPaymentRemark] = useState('');
   const [isSavingFinalPayment, setIsSavingFinalPayment] = useState(false);
   const [isPatientDischarged, setIsPatientDischarged] = useState(false);
+  const [finalPaymentSelectedBank, setFinalPaymentSelectedBank] = useState('');
+  const [bankAccounts, setBankAccounts] = useState<Array<{ id: string; account_name: string }>>([]);
 
   // Patient Data and Invoice Items State (moved to top to prevent initialization errors)
   const [patientData, setPatientData] = useState<PatientData>(initialPatientData);
   const [invoiceItems, setInvoiceItems] = useState<InvoiceItem[]>(initialInvoiceItems);
+
+  // Fetch bank accounts when final payment modal opens
+  useEffect(() => {
+    if (!isFinalPaymentModalOpen) return;
+
+    const fetchBankAccounts = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('chart_of_accounts')
+          .select('id, account_name, account_code')
+          .in('account_code', ['1121', '1122', '1123'])
+          .eq('is_active', true)
+          .order('account_name');
+
+        if (error) {
+          console.error('❌ Error fetching bank accounts:', error);
+          // Fallback to hardcoded banks if database query fails
+          const fallbackBanks = [
+            { id: '1', account_name: 'Canara Bank [A/C120023677813)JARIPATHKA]', account_code: '1123' },
+            { id: '2', account_name: 'SARASWAT BANK', account_code: '1122' },
+            { id: '3', account_name: 'STATE BANK OF INDIA (DRM)', account_code: '1121' }
+          ];
+          console.log('⚠️ Using fallback hardcoded banks');
+          setBankAccounts(fallbackBanks);
+          return;
+        }
+
+        console.log('✅ Fetched bank accounts from database:', data);
+        console.log('✅ Number of banks fetched:', data?.length || 0);
+
+        // If no banks found in database, use fallback
+        if (!data || data.length === 0) {
+          const fallbackBanks = [
+            { id: '1', account_name: 'Canara Bank [A/C120023677813)JARIPATHKA]', account_code: '1123' },
+            { id: '2', account_name: 'SARASWAT BANK', account_code: '1122' },
+            { id: '3', account_name: 'STATE BANK OF INDIA (DRM)', account_code: '1121' }
+          ];
+          console.log('⚠️ No banks in database, using fallback hardcoded banks');
+          setBankAccounts(fallbackBanks);
+        } else {
+          setBankAccounts(data);
+        }
+      } catch (error) {
+        console.error('❌ Exception fetching bank accounts:', error);
+        // Fallback to hardcoded banks on exception
+        const fallbackBanks = [
+          { id: '1', account_name: 'Canara Bank [A/C120023677813)JARIPATHKA]', account_code: '1123' },
+          { id: '2', account_name: 'SARASWAT BANK', account_code: '1122' },
+          { id: '3', account_name: 'STATE BANK OF INDIA (DRM)', account_code: '1121' }
+        ];
+        console.log('⚠️ Exception occurred, using fallback hardcoded banks');
+        setBankAccounts(fallbackBanks);
+      }
+    };
+
+    fetchBankAccounts();
+  }, [isFinalPaymentModalOpen]);
 
   // Load existing final payment data when modal opens
   useEffect(() => {
@@ -2731,6 +2790,12 @@ const FinalBill = () => {
         return;
       }
 
+      // Validate bank selection for Bank Transfer
+      if (finalPaymentMode === 'Bank Transfer' && !finalPaymentSelectedBank) {
+        toast.error('Please select a bank account for bank transfer');
+        return;
+      }
+
       setIsSavingFinalPayment(true);
 
       // Check if final payment already exists
@@ -2750,6 +2815,8 @@ const FinalBill = () => {
           mode_of_payment: finalPaymentMode,
           reason_of_discharge: finalPaymentReason,
           payment_remark: finalPaymentRemark || `Being cash received towards from pt. ${patientData?.name || billData?.name || 'Patient'} against R. No.:`,
+          bank_account_id: finalPaymentSelectedBank || null,
+          bank_account_name: bankAccounts.find(b => b.id === finalPaymentSelectedBank)?.account_name || null,
           created_by: hospitalConfig?.user_id || 'system'
         }, {
           onConflict: 'visit_id' // Use visit_id as conflict target since it's unique
@@ -2809,6 +2876,7 @@ const FinalBill = () => {
       setFinalPaymentMode('');
       setFinalPaymentReason('');
       setFinalPaymentRemark('');
+      setFinalPaymentSelectedBank('');
       setIsFinalPaymentModalOpen(false);
 
       // Invalidate queries to refresh data without full page reload
@@ -21991,7 +22059,10 @@ Dr. Murali B K
                   </label>
                   <select
                     value={finalPaymentMode}
-                    onChange={(e) => setFinalPaymentMode(e.target.value)}
+                    onChange={(e) => {
+                      setFinalPaymentMode(e.target.value);
+                      setFinalPaymentSelectedBank('');
+                    }}
                     disabled={isPatientDischarged}
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors bg-white disabled:bg-gray-100 disabled:cursor-not-allowed"
                   >
@@ -22004,6 +22075,49 @@ Dr. Murali B K
                     <option value="Credit">Credit</option>
                   </select>
                 </div>
+
+                {/* Bank Selection - Only show when Bank Transfer is selected */}
+                {finalPaymentMode === 'Bank Transfer' && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Select Bank Account <span className="text-red-600">*</span>
+                    </label>
+                    <select
+                      value={finalPaymentSelectedBank}
+                      onChange={(e) => {
+                        const selectedId = e.target.value;
+                        const bank = bankAccounts.find(b => b.id === selectedId);
+                        setFinalPaymentSelectedBank(selectedId);
+
+                        // Auto-populate remark with bank name
+                        if (bank) {
+                          const currentRemark = finalPaymentRemark;
+                          if (currentRemark.includes('Being cash received')) {
+                            setFinalPaymentRemark(currentRemark.replace(/Being cash received towards .+ from/, `Being cash received towards ${bank.account_name} from`));
+                          } else if (currentRemark) {
+                            setFinalPaymentRemark(`${currentRemark} - Bank: ${bank.account_name}`);
+                          } else {
+                            setFinalPaymentRemark(`Being cash received towards ${bank.account_name} from pt. ${patientData?.name || billData?.name || 'Patient'} against R. No.:`);
+                          }
+                        }
+                      }}
+                      disabled={isPatientDischarged}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors bg-white disabled:bg-gray-100 disabled:cursor-not-allowed"
+                    >
+                      <option value="">Please select bank account</option>
+                      {bankAccounts.map((bank) => (
+                        <option key={bank.id} value={bank.id}>
+                          {bank.account_name}
+                        </option>
+                      ))}
+                    </select>
+                    {finalPaymentSelectedBank && (
+                      <p className="mt-2 text-xs text-green-600 bg-green-50 p-2 rounded border border-green-200">
+                        ✓ Selected bank will be included in the payment receipt
+                      </p>
+                    )}
+                  </div>
+                )}
 
                 {/* Reason Of Discharge */}
                 <div>
