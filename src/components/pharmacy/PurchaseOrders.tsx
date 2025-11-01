@@ -4,11 +4,19 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { FileText, Plus, Loader2, Eye, Edit, Trash2, Search, Lock } from 'lucide-react';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog';
+import { FileText, Plus, Loader2, Eye, Edit, Trash2, Search, Lock, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { PurchaseOrderService, PurchaseOrder } from '@/lib/purchase-order-service';
 import { SupplierService, Supplier } from '@/lib/supplier-service';
 import { GRNService } from '@/lib/grn-service';
+import { GoodsReceivedNote } from '@/types/pharmacy';
 import { useToast } from '@/hooks/use-toast';
 
 interface PurchaseOrdersProps {
@@ -18,6 +26,29 @@ interface PurchaseOrdersProps {
 
 interface PurchaseOrderWithSupplier extends PurchaseOrder {
   supplier_name?: string;
+}
+
+interface PurchaseOrderItem {
+  id: string;
+  purchase_order_id: string;
+  medicine_id?: string;
+  product_name: string;
+  manufacturer: string;
+  pack: string;
+  batch_no: string;
+  expiry_date?: string;
+  mrp: number;
+  sale_price: number;
+  purchase_price: number;
+  tax_percentage: number;
+  tax_amount: number;
+  order_quantity: number;
+  received_quantity?: number;
+  amount: number;
+  gst?: number;
+  sgst?: number;
+  cgst?: number;
+  gst_amount?: number;
 }
 
 const PurchaseOrders: React.FC<PurchaseOrdersProps> = ({ onAddClick, onEditClick }) => {
@@ -30,6 +61,13 @@ const PurchaseOrders: React.FC<PurchaseOrdersProps> = ({ onAddClick, onEditClick
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [postedGRNs, setPostedGRNs] = useState<Set<string>>(new Set()); // Track POs with POSTED GRNs
+
+  // View modal state
+  const [viewModalOpen, setViewModalOpen] = useState(false);
+  const [selectedPO, setSelectedPO] = useState<PurchaseOrderWithSupplier | null>(null);
+  const [selectedPOItems, setSelectedPOItems] = useState<PurchaseOrderItem[]>([]);
+  const [selectedGRN, setSelectedGRN] = useState<GoodsReceivedNote | null>(null);
+  const [isLoadingItems, setIsLoadingItems] = useState(false);
 
   // Filter state
   const [supplierSearch, setSupplierSearch] = useState('');
@@ -149,6 +187,42 @@ const PurchaseOrders: React.FC<PurchaseOrdersProps> = ({ onAddClick, onEditClick
     } else {
       navigate(`/pharmacy/purchase-orders/edit/${orderId}`);
     }
+  };
+
+  const handleViewClick = async (order: PurchaseOrderWithSupplier) => {
+    try {
+      setSelectedPO(order);
+      setViewModalOpen(true);
+      setIsLoadingItems(true);
+
+      // Fetch PO items and GRN data in parallel
+      const [items, grnList] = await Promise.all([
+        PurchaseOrderService.getPurchaseOrderItems(order.id),
+        GRNService.listGRNs(),
+      ]);
+
+      setSelectedPOItems(items);
+
+      // Find GRN for this PO (if exists)
+      const grn = grnList.find(g => g.purchase_order_id === order.id);
+      setSelectedGRN(grn || null);
+    } catch (error) {
+      console.error('Error fetching PO items:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to fetch purchase order details',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoadingItems(false);
+    }
+  };
+
+  const handleCloseViewModal = () => {
+    setViewModalOpen(false);
+    setSelectedPO(null);
+    setSelectedPOItems([]);
+    setSelectedGRN(null);
   };
 
   // Pagination logic
@@ -379,6 +453,7 @@ const PurchaseOrders: React.FC<PurchaseOrdersProps> = ({ onAddClick, onEditClick
                           <button
                             title="View"
                             className="p-2 text-blue-600 hover:bg-blue-100 rounded-lg transition-colors"
+                            onClick={() => handleViewClick(order)}
                           >
                             <Eye className="h-4 w-4" />
                           </button>
@@ -472,6 +547,221 @@ const PurchaseOrders: React.FC<PurchaseOrdersProps> = ({ onAddClick, onEditClick
           </div>
         </div>
       )}
+
+      {/* View Purchase Order Modal */}
+      <Dialog open={viewModalOpen} onOpenChange={handleCloseViewModal}>
+        <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-bold text-gray-800">
+              Purchase Order Details
+            </DialogTitle>
+            <DialogDescription>
+              Read-only view of purchase order information
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedPO && (
+            <div className="space-y-6">
+              {/* PO Header Information */}
+              <Card className="shadow-md border-gray-200">
+                <CardContent className="p-6">
+                  <div className="grid grid-cols-2 gap-6">
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-gray-600">PO Number:</span>
+                        <Badge variant="outline" className="font-mono text-blue-600 border-blue-300">
+                          {selectedPO.po_number}
+                        </Badge>
+                      </div>
+                      <div className="text-sm">
+                        <span className="font-medium text-gray-600">Order For:</span>
+                        <span className="ml-2 text-gray-900">{selectedPO.order_for || 'Pharmacy'}</span>
+                      </div>
+                      <div className="text-sm">
+                        <span className="font-medium text-gray-600">Supplier:</span>
+                        <span className="ml-2 text-gray-900">{selectedPO.supplier_name || 'N/A'}</span>
+                      </div>
+                    </div>
+                    <div className="space-y-3">
+                      <div className="text-sm">
+                        <span className="font-medium text-gray-600">Status:</span>
+                        <Badge
+                          variant={
+                            selectedPO.status === 'Completed'
+                              ? 'default'
+                              : selectedPO.status === 'Pending'
+                              ? 'secondary'
+                              : 'destructive'
+                          }
+                          className={`ml-2 ${
+                            selectedPO.status === 'Completed'
+                              ? 'bg-green-100 text-green-800'
+                              : selectedPO.status === 'Pending'
+                              ? 'bg-yellow-100 text-yellow-800'
+                              : 'bg-red-100 text-red-800'
+                          }`}
+                        >
+                          {selectedPO.status}
+                        </Badge>
+                      </div>
+                      <div className="text-sm">
+                        <span className="font-medium text-gray-600">Created:</span>
+                        <span className="ml-2 text-gray-900">
+                          {formatDate(selectedPO.created_at)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Items Table */}
+              <Card className="shadow-md border-gray-200">
+                <CardHeader className="bg-gradient-to-r from-blue-50 to-indigo-50">
+                  <CardTitle className="text-lg font-semibold">Order Items</CardTitle>
+                </CardHeader>
+                <CardContent className="p-0">
+                  {isLoadingItems ? (
+                    <div className="p-12 text-center">
+                      <Loader2 className="h-8 w-8 animate-spin text-blue-600 mx-auto mb-3" />
+                      <span className="text-gray-600">Loading items...</span>
+                    </div>
+                  ) : selectedPOItems.length === 0 ? (
+                    <div className="p-12 text-center">
+                      <FileText className="h-12 w-12 mx-auto mb-3 text-gray-300" />
+                      <p className="text-gray-500">No items found</p>
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full divide-y divide-gray-200 text-xs">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">#</th>
+                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Product</th>
+                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Manufacturer</th>
+                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Pack</th>
+                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Batch No</th>
+                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Expiry</th>
+                            <th className="px-4 py-3 text-right text-xs font-semibold text-gray-700 uppercase">MRP</th>
+                            <th className="px-4 py-3 text-right text-xs font-semibold text-gray-700 uppercase">Pur. Price</th>
+                            <th className="px-4 py-3 text-right text-xs font-semibold text-gray-700 uppercase">Sale Price</th>
+                            <th className="px-4 py-3 text-right text-xs font-semibold text-gray-700 uppercase">GST %</th>
+                            <th className="px-4 py-3 text-right text-xs font-semibold text-gray-700 uppercase">Qty</th>
+                            <th className="px-4 py-3 text-right text-xs font-semibold text-gray-700 uppercase">Amount</th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                          {selectedPOItems.map((item, index) => (
+                            <tr key={item.id} className="hover:bg-gray-50">
+                              <td className="px-4 py-3 text-sm text-gray-700">{index + 1}</td>
+                              <td className="px-4 py-3 text-sm text-gray-900 font-medium">
+                                {item.product_name}
+                              </td>
+                              <td className="px-4 py-3 text-sm text-gray-700">{item.manufacturer}</td>
+                              <td className="px-4 py-3 text-sm text-gray-700">{item.pack}</td>
+                              <td className="px-4 py-3 text-sm text-gray-700">
+                                {item.batch_no || '-'}
+                              </td>
+                              <td className="px-4 py-3 text-sm text-gray-700">
+                                {item.expiry_date
+                                  ? new Date(item.expiry_date).toLocaleDateString()
+                                  : '-'}
+                              </td>
+                              <td className="px-4 py-3 text-sm text-right text-gray-900">
+                                ₹{item.mrp.toFixed(2)}
+                              </td>
+                              <td className="px-4 py-3 text-sm text-right text-gray-900">
+                                ₹{item.purchase_price.toFixed(2)}
+                              </td>
+                              <td className="px-4 py-3 text-sm text-right text-gray-900">
+                                ₹{item.sale_price.toFixed(2)}
+                              </td>
+                              <td className="px-4 py-3 text-sm text-right text-gray-700">
+                                {item.gst || item.tax_percentage || 0}%
+                              </td>
+                              <td className="px-4 py-3 text-sm text-right text-gray-900 font-medium">
+                                {item.order_quantity}
+                              </td>
+                              <td className="px-4 py-3 text-sm text-right text-gray-900 font-semibold">
+                                ₹{item.amount.toFixed(2)}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        <tfoot className="bg-gray-50">
+                          {(() => {
+                            // Calculate financial breakdown
+                            const totalTax = selectedPOItems.reduce(
+                              (sum, item) => sum + (item.tax_amount || 0),
+                              0
+                            );
+                            const subtotalBeforeTax = selectedPOItems.reduce(
+                              (sum, item) => sum + (item.amount - (item.tax_amount || 0)),
+                              0
+                            );
+                            const discount = selectedGRN?.discount || 0;
+                            const grandTotal = subtotalBeforeTax + totalTax - discount;
+
+                            return (
+                              <>
+                                <tr>
+                                  <td colSpan={11} className="px-4 py-2 text-right text-sm text-gray-700">
+                                    Subtotal (Before Tax):
+                                  </td>
+                                  <td className="px-4 py-2 text-right text-sm text-gray-900">
+                                    ₹{subtotalBeforeTax.toFixed(2)}
+                                  </td>
+                                </tr>
+                                <tr>
+                                  <td colSpan={11} className="px-4 py-2 text-right text-sm text-gray-700">
+                                    Tax Amount:
+                                  </td>
+                                  <td className="px-4 py-2 text-right text-sm text-gray-900">
+                                    ₹{totalTax.toFixed(2)}
+                                  </td>
+                                </tr>
+                                {discount > 0 && (
+                                  <tr>
+                                    <td colSpan={11} className="px-4 py-2 text-right text-sm text-gray-700">
+                                      Discount:
+                                    </td>
+                                    <td className="px-4 py-2 text-right text-sm text-red-600">
+                                      -₹{discount.toFixed(2)}
+                                    </td>
+                                  </tr>
+                                )}
+                                <tr className="border-t-2 border-gray-300">
+                                  <td colSpan={11} className="px-4 py-3 text-right text-sm font-bold text-gray-800">
+                                    Grand Total:
+                                  </td>
+                                  <td className="px-4 py-3 text-right text-sm font-bold text-gray-900">
+                                    ₹{grandTotal.toFixed(2)}
+                                  </td>
+                                </tr>
+                              </>
+                            );
+                          })()}
+                        </tfoot>
+                      </table>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Close Button */}
+              <div className="flex justify-end">
+                <Button
+                  variant="outline"
+                  onClick={handleCloseViewModal}
+                  className="border-gray-300 hover:bg-gray-100"
+                >
+                  Close
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
