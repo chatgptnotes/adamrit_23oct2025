@@ -598,7 +598,7 @@ const CghsSurgeryMaster = () => {
                     className="w-full"
                   />
                 </div>
-                <div>
+                <div className="hidden">
                   <Label className="block text-sm font-medium text-gray-700 mb-2">
                     Cost
                   </Label>
@@ -692,7 +692,7 @@ const CghsSurgeryMaster = () => {
                 <label className="block text-sm font-medium text-gray-700">Bhopal Non-NABH Rate</label>
                 <p className="mt-1 text-sm text-gray-900">{viewingSurgery.bhopal_non_nabh_rate || '-'}</p>
               </div>
-              <div>
+              <div className="hidden">
                 <label className="block text-sm font-medium text-gray-700">Cost</label>
                 <p className="mt-1 text-sm text-gray-900">{viewingSurgery.cost || '-'}</p>
               </div>
@@ -851,7 +851,7 @@ const CghsSurgeryMaster = () => {
                     className="w-full"
                   />
                 </div>
-                <div>
+                <div className="hidden">
                   <Label className="block text-sm font-medium text-gray-700 mb-2">
                     Cost
                   </Label>
