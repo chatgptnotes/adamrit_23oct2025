@@ -5,8 +5,9 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { PurchaseOrderService, PurchaseOrder } from '@/lib/purchase-order-service';
 import { SupplierService, Supplier } from '@/lib/supplier-service';
+import { GRNService } from '@/lib/grn-service';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Search, Package } from 'lucide-react';
+import { Loader2, Search, Package, CheckCircle, AlertCircle } from 'lucide-react';
 
 interface EditPurchaseOrderProps {
   purchaseOrderId: string;
@@ -40,6 +41,7 @@ const EditPurchaseOrder: React.FC<EditPurchaseOrderProps> = ({ purchaseOrderId, 
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isPosting, setIsPosting] = useState(false);
 
   // PO Header Data
   const [poData, setPoData] = useState<PurchaseOrder | null>(null);
@@ -47,6 +49,11 @@ const EditPurchaseOrder: React.FC<EditPurchaseOrderProps> = ({ purchaseOrderId, 
 
   // PO Items Data
   const [items, setItems] = useState<PurchaseOrderItem[]>([]);
+
+  // GRN State
+  const [grnId, setGrnId] = useState<string | null>(null);
+  const [grnStatus, setGrnStatus] = useState<'DRAFT' | 'POSTED' | null>(null);
+  const [grnNumber, setGrnNumber] = useState<string | null>(null);
 
   // Form state
   const [partyInvoiceNumber, setPartyInvoiceNumber] = useState('');
@@ -69,11 +76,70 @@ const EditPurchaseOrder: React.FC<EditPurchaseOrderProps> = ({ purchaseOrderId, 
       ]);
 
       setPoData(poHeader);
-      setItems(poItems);
       setSuppliers(suppliersData);
 
-      // Load discount value from database
-      setDiscount(poHeader.discount || 0);
+      // Check if a GRN already exists for this PO (DRAFT or POSTED)
+      const grnList = await GRNService.listGRNs();
+      const existingGRN = grnList.find(
+        grn => grn.purchase_order_id === purchaseOrderId
+      );
+
+      if (existingGRN) {
+        // Load data from existing GRN
+        console.log(`Loading existing GRN (${existingGRN.status}):`, existingGRN.grn_number);
+
+        const grnDetails = await GRNService.getGRNDetails(existingGRN.id);
+
+        // Store GRN details
+        setGrnId(existingGRN.id);
+        setGrnStatus(existingGRN.status as 'DRAFT' | 'POSTED');
+        setGrnNumber(existingGRN.grn_number);
+        setPartyInvoiceNumber(existingGRN.invoice_number || '');
+        setDiscount(existingGRN.discount || 0);
+
+        // Map GRN items to PO item format
+        const grnItemsMapped = grnDetails.grn_items.map(grnItem => ({
+          id: grnItem.purchase_order_item_id || grnItem.id,
+          purchase_order_id: purchaseOrderId,
+          medicine_id: grnItem.medicine_id,
+          product_name: grnItem.product_name,
+          manufacturer: grnItem.manufacturer || '',
+          pack: grnItem.pack || '',
+          batch_no: grnItem.batch_number,
+          expiry_date: grnItem.expiry_date,
+          mrp: grnItem.mrp,
+          sale_price: grnItem.sale_price,
+          purchase_price: grnItem.purchase_price,
+          tax_percentage: grnItem.gst || 0,
+          tax_amount: grnItem.tax_amount || 0,
+          order_quantity: grnItem.ordered_quantity,
+          received_quantity: grnItem.received_quantity,
+          amount: grnItem.amount || 0,
+          gst: grnItem.gst,
+          sgst: grnItem.sgst,
+          cgst: grnItem.cgst,
+          gst_amount: grnItem.gst_amount,
+        }));
+
+        setItems(grnItemsMapped);
+
+        if (existingGRN.status === 'POSTED') {
+          toast({
+            title: 'GRN Already Posted',
+            description: `${existingGRN.grn_number} has been posted to inventory. Editing is locked.`,
+            variant: 'default',
+          });
+        } else {
+          toast({
+            title: 'Draft Loaded',
+            description: `Loaded existing draft: ${existingGRN.grn_number}`,
+          });
+        }
+      } else {
+        // No GRN exists, load fresh PO data
+        setItems(poItems);
+        setDiscount(poHeader.discount || 0);
+      }
 
       // Set current date for goods received date
       const now = new Date();
@@ -124,13 +190,24 @@ const EditPurchaseOrder: React.FC<EditPurchaseOrderProps> = ({ purchaseOrderId, 
     setItems(updatedItems);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  // UPDATE button handler - Creates/Updates GRN draft (NO inventory change)
+  const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!poData) {
       toast({
         title: 'Error',
         description: 'Purchase order data not loaded',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    // Prevent updating if GRN is already POSTED
+    if (grnStatus === 'POSTED') {
+      toast({
+        title: 'Cannot Update',
+        description: 'This GRN has already been posted to inventory and cannot be modified',
         variant: 'destructive',
       });
       return;
@@ -160,52 +237,125 @@ const EditPurchaseOrder: React.FC<EditPurchaseOrderProps> = ({ purchaseOrderId, 
     try {
       setIsSaving(true);
 
-      // Calculate totals
-      const subtotal = items.reduce((sum, item) => sum + (item.purchase_price * (item.received_quantity || item.order_quantity)), 0);
-      const totalSGST = items.reduce((sum, item) => sum + ((item.sgst || 0) * (item.received_quantity || item.order_quantity) * item.purchase_price) / 100, 0);
-      const totalCGST = items.reduce((sum, item) => sum + ((item.cgst || 0) * (item.received_quantity || item.order_quantity) * item.purchase_price) / 100, 0);
-      const totalTax = totalSGST + totalCGST;
-      const totalAmount = subtotal + totalTax;
-      const netAmount = totalAmount - discount;
+      // If an existing DRAFT exists, delete it first to avoid duplicates
+      if (grnId && grnStatus === 'DRAFT') {
+        console.log('Deleting existing draft to update with new data...');
+        const { supabaseClient } = await import('@/utils/supabase-client');
 
-      // Update PO header
-      const updatedPoData = {
-        order_date: poData.order_date,
-        order_for: poData.order_for,
-        supplier_id: poData.supplier_id,
-        status: poData.status,
-        subtotal: subtotal,
-        discount: discount,
-        tax_amount: totalTax,
-        total_amount: netAmount,
+        // Delete GRN header - items will be CASCADE deleted automatically
+        await supabaseClient.from('goods_received_notes').delete().eq('id', grnId);
+      }
+
+      // Prepare GRN items
+      const grnItems = items.map(item => ({
+        purchase_order_item_id: item.id,
+        medicine_id: item.medicine_id || null,
+        product_name: item.product_name,
+        manufacturer: item.manufacturer,
+        pack: item.pack,
+        batch_number: item.batch_no,
+        expiry_date: item.expiry_date || '',
+        manufacturing_date: undefined,
+        ordered_quantity: item.order_quantity,
+        received_quantity: item.received_quantity || item.order_quantity,
+        rejected_quantity: 0,
+        free_quantity: 0,
+        purchase_price: item.purchase_price,
+        sale_price: item.sale_price,
+        mrp: item.mrp,
+        gst: item.gst || item.tax_percentage || 0,
+        sgst: item.sgst || (item.tax_percentage || 0) / 2,
+        cgst: item.cgst || (item.tax_percentage || 0) / 2,
+        rack_number: '',
+        shelf_location: '',
+      }));
+
+      // Create GRN as DRAFT (does NOT add to inventory)
+      const grnPayload = {
+        purchase_order_id: purchaseOrderId,
+        grn_date: new Date().toISOString().split('T')[0],
+        invoice_number: partyInvoiceNumber || undefined,
+        invoice_date: undefined,
+        invoice_amount: undefined,
+        discount: discount || undefined,
+        notes: undefined,
+        hospital_name: 'hope HMIS',
+        items: grnItems,
       };
 
-      await PurchaseOrderService.updatePurchaseOrderWithItems(
-        purchaseOrderId,
-        updatedPoData,
-        items
-      );
+      const result = await GRNService.createGRNFromPO(grnPayload);
+
+      // Save GRN details to state
+      setGrnId(result.grn.id);
+      setGrnStatus('DRAFT');
+      setGrnNumber(result.grn.grn_number);
 
       toast({
-        title: 'Success',
-        description: 'Purchase order updated successfully',
+        title: 'Draft Saved',
+        description: `GRN ${result.grn.grn_number} saved as draft. Click Submit to add inventory.`,
       });
-
-      // Navigate back after short delay
-      setTimeout(() => {
-        if (onBack) {
-          onBack();
-        }
-      }, 1000);
     } catch (error) {
-      console.error('Error updating purchase order:', error);
+      console.error('Error saving GRN draft:', error);
       toast({
         title: 'Error',
-        description: 'Failed to update purchase order',
+        description: 'Failed to save GRN draft',
         variant: 'destructive',
       });
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  // SUBMIT button handler - Posts GRN and adds to inventory
+  const handlePostGRN = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!grnId) {
+      toast({
+        title: 'Error',
+        description: 'Please click UPDATE button first to save draft',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (grnStatus === 'POSTED') {
+      toast({
+        title: 'Already Posted',
+        description: 'This GRN has already been posted to inventory',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    try {
+      setIsPosting(true);
+
+      // Post GRN - this adds to inventory
+      const result = await GRNService.postGRN(grnId, undefined, discount || undefined);
+
+      setGrnStatus('POSTED');
+
+      toast({
+        title: 'Success!',
+        description: `GRN ${result.grn.grn_number} posted successfully. ${result.batch_inventories.length} batches added to inventory.`,
+      });
+
+      // Navigate back after delay
+      setTimeout(() => {
+        if (onBack) {
+          onBack();
+        }
+      }, 2000);
+    } catch (error: any) {
+      console.error('Error posting GRN:', error);
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to post GRN',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsPosting(false);
     }
   };
 
@@ -269,7 +419,7 @@ const EditPurchaseOrder: React.FC<EditPurchaseOrderProps> = ({ purchaseOrderId, 
         </Button>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form className="space-y-6">
         {/* Search Filters Card */}
         <Card className="shadow-md border-gray-200">
           <CardContent className="p-6">
@@ -543,29 +693,75 @@ const EditPurchaseOrder: React.FC<EditPurchaseOrderProps> = ({ purchaseOrderId, 
           </Card>
         </div>
 
+        {/* GRN Status Indicator */}
+        {grnStatus && (
+          <div className={`p-4 rounded-lg border-2 flex items-center justify-between ${
+            grnStatus === 'DRAFT'
+              ? 'bg-blue-50 border-blue-300'
+              : 'bg-green-50 border-green-300'
+          }`}>
+            <div className="flex items-center gap-3">
+              {grnStatus === 'DRAFT' ? (
+                <AlertCircle className="h-6 w-6 text-blue-600" />
+              ) : (
+                <CheckCircle className="h-6 w-6 text-green-600" />
+              )}
+              <div>
+                <p className="text-sm font-semibold text-gray-800">GRN Status</p>
+                <p className={`text-lg font-bold ${
+                  grnStatus === 'DRAFT' ? 'text-blue-600' : 'text-green-600'
+                }`}>
+                  {grnStatus} {grnNumber && `- ${grnNumber}`}
+                </p>
+              </div>
+            </div>
+            {grnStatus === 'DRAFT' && (
+              <p className="text-sm text-blue-700">
+                ⚠️ Draft saved. Click <strong>Submit</strong> to add inventory.
+              </p>
+            )}
+            {grnStatus === 'POSTED' && (
+              <p className="text-sm text-green-700">
+                ✅ Inventory has been updated successfully.
+              </p>
+            )}
+          </div>
+        )}
+
         {/* Action Buttons */}
         <div className="flex justify-end gap-4 mt-6">
           <Button
             type="button"
-            disabled={isSaving}
+            disabled={isSaving || isPosting || grnStatus === 'POSTED'}
             variant="outline"
             className="border-gray-300 hover:bg-gray-100 px-8 py-3 text-base"
-            onClick={handleSubmit}
-          >
-            Update
-          </Button>
-          <Button
-            type="submit"
-            disabled={isSaving}
-            className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white px-10 py-3 text-base shadow-md hover:shadow-lg transition-all"
+            onClick={handleUpdate}
           >
             {isSaving ? (
               <>
                 <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                Saving...
+                Saving Draft...
               </>
             ) : (
-              'Submit'
+              'Update'
+            )}
+          </Button>
+          <Button
+            type="button"
+            disabled={!grnId || isPosting || isSaving || grnStatus === 'POSTED'}
+            onClick={handlePostGRN}
+            className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white px-10 py-3 text-base shadow-md hover:shadow-lg transition-all"
+          >
+            {isPosting ? (
+              <>
+                <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                Posting to Inventory...
+              </>
+            ) : (
+              <>
+                <CheckCircle className="mr-2 h-5 w-5" />
+                Submit & Add to Inventory
+              </>
             )}
           </Button>
         </div>

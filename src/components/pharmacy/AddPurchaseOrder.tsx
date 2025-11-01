@@ -215,10 +215,20 @@ const AddPurchaseOrder: React.FC<AddPurchaseOrderProps> = ({ onBack }) => {
 
   // Handle adding product to line items
   const handleAddProduct = () => {
+    // Validate medicine selection
+    if (!newProduct.medicine_id) {
+      toast({
+        title: 'Medicine Not Selected',
+        description: 'Please search and select a medicine from the master list before adding to order.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     if (!newProduct.product_name || !newProduct.order_qty || newProduct.order_qty <= 0) {
       toast({
         title: 'Validation Error',
-        description: 'Please select a medicine and enter order quantity.',
+        description: 'Please enter order quantity.',
         variant: 'destructive',
       });
       return;
@@ -381,14 +391,22 @@ const AddPurchaseOrder: React.FC<AddPurchaseOrderProps> = ({ onBack }) => {
               <div className="grid grid-cols-2 gap-4 py-4">
                 {/* Medicine Search Combobox */}
                 <div className="col-span-2">
-                  <label className="text-sm font-medium mb-2 block">Product Name *</label>
+                  <label className="text-sm font-medium mb-2 block text-red-600">
+                    Medicine Selection (Required) *
+                  </label>
+                  <p className="text-xs text-gray-500 mb-2">
+                    Search and select medicine from master list. Manual entry not allowed.
+                  </p>
                   <Popover open={openMedicineCombobox} onOpenChange={setOpenMedicineCombobox}>
                     <PopoverTrigger asChild>
                       <Button
                         variant="outline"
                         role="combobox"
                         aria-expanded={openMedicineCombobox}
-                        className="w-full justify-between"
+                        className={cn(
+                          "w-full justify-between",
+                          !selectedMedicine && "border-red-300 focus:ring-red-500"
+                        )}
                       >
                         {selectedMedicine
                           ? selectedMedicine.medicine_name
