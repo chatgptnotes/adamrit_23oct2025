@@ -333,6 +333,10 @@ const AdmissionNotes = () => {
               </p>
             </div>
             <div>
+              <Label className="text-xs font-semibold text-gray-600">Mobile No.</Label>
+              <p className="text-sm font-medium mt-1">{patientData.patients?.phone || 'N/A'}</p>
+            </div>
+            <div>
               <Label className="text-xs font-semibold text-gray-600">Reg. No</Label>
               <p className="text-sm font-medium mt-1">{patientData.patients?.patients_id || 'N/A'}</p>
             </div>
