@@ -181,7 +181,7 @@ export const AdvancePaymentModal: React.FC<AdvancePaymentModalProps> = ({
         const { data, error } = await supabase
           .from('chart_of_accounts')
           .select('id, account_name, account_code')
-          .in('account_code', ['1121', '1122', '1123'])
+          .in('account_name', ['SARASWAT BANK', 'STATE BANK OF INDIA (DRM)', 'Canara Bank [A/C120023677813)JARIPATHKA]'])
           .eq('is_active', true)
           .order('account_name');
 
@@ -548,7 +548,7 @@ export const AdvancePaymentModal: React.FC<AdvancePaymentModalProps> = ({
         billing_executive: formData.billingExecutive && formData.billingExecutive.trim() ? formData.billingExecutive.trim() : null,
         reference_number: formData.referenceNumber && formData.referenceNumber.trim() ? formData.referenceNumber.trim() : null,
         remarks: formData.remarks && formData.remarks.trim() ? formData.remarks.trim() : null,
-        bank_account_id: formData.selectedBank || null,
+        bank_account_id: (formData.selectedBank && isValidUUID(formData.selectedBank)) ? formData.selectedBank : null,
         bank_account_name: bankAccounts.find(b => b.id === formData.selectedBank)?.account_name || null,
         created_by: 'current_user' // You can replace this with actual user info
       };
