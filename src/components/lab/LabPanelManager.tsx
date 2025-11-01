@@ -800,14 +800,16 @@ const LabPanelManager: React.FC = () => {
         .eq('lab_id', labId);
 
       // Save each sub-test with JSONB structure
-      for (const subTest of subTests) {
+      for (let subTestIndex = 0; subTestIndex < subTests.length; subTestIndex++) {
+        const subTest = subTests[subTestIndex];
+
         // Skip sub-tests with empty names
         if (!subTest.name || subTest.name.trim() === '') {
           console.warn('Skipping sub-test with empty name');
           continue;
         }
 
-        console.log(`\n📝 Processing sub-test: ${subTest.name}`);
+        console.log(`\n📝 Processing sub-test [${subTestIndex}]: ${subTest.name}`);
 
         // Get first values for backward compatibility
         const firstAgeRange = subTest.ageRanges?.[0];
@@ -857,12 +859,13 @@ const LabPanelManager: React.FC = () => {
         })) || [];
 
         // Prepare nested_sub_tests JSONB
-        const nestedSubTestsData = subTest.subTests?.map(nst => {
-          console.log(`  🔹 Nested sub-test: ${nst.name}`);
+        const nestedSubTestsData = subTest.subTests?.map((nst, nestedIndex) => {
+          console.log(`  🔹 Nested sub-test [${nestedIndex}]: ${nst.name}`);
 
           return {
             name: nst.name,
             unit: nst.unit || null,
+            display_order: nestedIndex,
             age_ranges: nst.ageRanges?.map(ar => {
               const ageRangeParts = ar.ageRange?.split(' ') || [];
               const ageRange = ageRangeParts[0] || '-';
@@ -900,6 +903,7 @@ const LabPanelManager: React.FC = () => {
           unit: subTest.unit || 'unit',
           test_type: isTextType ? 'Text' : 'Numeric', // NEW: Save test type
           text_value: isTextType ? (subTest.textValue || null) : null, // NEW: Save text value for Text type
+          formula: subTest.formula || null, // NEW: Save formula for auto-calculation
           min_age: isTextType ? 0 : minAge, // Skip for Text type
           max_age: isTextType ? 100 : maxAge, // Skip for Text type
           age_unit: isTextType ? 'Years' : ageUnit, // Default for Text type
@@ -909,7 +913,7 @@ const LabPanelManager: React.FC = () => {
           max_value: isTextType ? 0 : (firstNormalRange ? parseFloat(firstNormalRange.maxValue) || 0 : 0),
           normal_unit: subTest.unit || 'unit',
           test_level: 1,
-          display_order: 0,
+          display_order: subTestIndex,
           is_active: true,
           lab_id: labId,
           age_ranges: isTextType ? [] : ageRangesData, // Empty array for Text type
@@ -2145,6 +2149,7 @@ const EditPanelForm: React.FC<EditPanelFormProps> = ({ panel, onSubmit }) => {
             id: `subtest_${subTestKey}_${Date.now()}`,
             name: config.sub_test_name,
             unit: config.unit || config.normal_unit || '',
+            formula: config.formula || '',
             ageRanges: [],
             normalRanges: [],
             subTests: []
@@ -2154,23 +2159,40 @@ const EditPanelForm: React.FC<EditPanelFormProps> = ({ panel, onSubmit }) => {
 
         const subTest = subTestsMap.get(subTestKey)!;
 
-        // Create age range string
-        let ageRangeStr = '- Years';
-        if (config.min_age !== undefined && config.max_age !== undefined) {
-          const ageUnit = config.age_unit || 'Years';
-          ageRangeStr = `${config.min_age}-${config.max_age} ${ageUnit}`;
-        }
+        // Load from JSONB normal_ranges if available, otherwise use old columns
+        if (config.normal_ranges && Array.isArray(config.normal_ranges) && config.normal_ranges.length > 0) {
+          // Load from JSONB array
+          config.normal_ranges.forEach((nr: any) => {
+            const normalRange: import('./TestConfigurationSection').NormalRange = {
+              id: `normalrange_${config.id || Date.now()}_${subTest.normalRanges.length}`,
+              ageRange: nr.age_range || '- Years',
+              gender: (nr.gender as 'Male' | 'Female' | 'Both') || 'Both',
+              minValue: nr.min_value?.toString() || '0',
+              maxValue: nr.max_value?.toString() || '0',
+              unit: nr.unit || config.unit || ''
+            };
+            subTest.normalRanges.push(normalRange);
+          });
+        } else {
+          // Fallback to old columns for backward compatibility
+          // Create age range string
+          let ageRangeStr = '- Years';
+          if (config.min_age !== undefined && config.max_age !== undefined) {
+            const ageUnit = config.age_unit || 'Years';
+            ageRangeStr = `${config.min_age}-${config.max_age} ${ageUnit}`;
+          }
 
-        // Add normal range
-        const normalRange: import('./TestConfigurationSection').NormalRange = {
-          id: `normalrange_${config.id || Date.now()}_${subTest.normalRanges.length}`,
-          ageRange: ageRangeStr,
-          gender: (config.gender as 'Male' | 'Female' | 'Both') || 'Both',
-          minValue: config.min_value?.toString() || '0',
-          maxValue: config.max_value?.toString() || '0',
-          unit: config.normal_unit || config.unit || ''
-        };
-        subTest.normalRanges.push(normalRange);
+          // Add normal range from old columns
+          const normalRange: import('./TestConfigurationSection').NormalRange = {
+            id: `normalrange_${config.id || Date.now()}_${subTest.normalRanges.length}`,
+            ageRange: ageRangeStr,
+            gender: (config.gender as 'Male' | 'Female' | 'Both') || 'Both',
+            minValue: config.min_value?.toString() || '0',
+            maxValue: config.max_value?.toString() || '0',
+            unit: config.normal_unit || config.unit || ''
+          };
+          subTest.normalRanges.push(normalRange);
+        }
 
         // Load nested sub-tests from JSONB column
         if (config.nested_sub_tests && Array.isArray(config.nested_sub_tests) && config.nested_sub_tests.length > 0 && !subTest.subTests?.length) {
