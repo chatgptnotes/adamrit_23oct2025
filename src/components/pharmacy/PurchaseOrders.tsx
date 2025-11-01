@@ -4,10 +4,11 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { FileText, Plus, Loader2, Eye, Edit, Trash2, Search } from 'lucide-react';
+import { FileText, Plus, Loader2, Eye, Edit, Trash2, Search, Lock } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { PurchaseOrderService, PurchaseOrder } from '@/lib/purchase-order-service';
 import { SupplierService, Supplier } from '@/lib/supplier-service';
+import { GRNService } from '@/lib/grn-service';
 import { useToast } from '@/hooks/use-toast';
 
 interface PurchaseOrdersProps {
@@ -28,6 +29,7 @@ const PurchaseOrders: React.FC<PurchaseOrdersProps> = ({ onAddClick, onEditClick
   const [filteredOrders, setFilteredOrders] = useState<PurchaseOrderWithSupplier[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [postedGRNs, setPostedGRNs] = useState<Set<string>>(new Set()); // Track POs with POSTED GRNs
 
   // Filter state
   const [supplierSearch, setSupplierSearch] = useState('');
@@ -52,10 +54,11 @@ const PurchaseOrders: React.FC<PurchaseOrdersProps> = ({ onAddClick, onEditClick
     try {
       setIsLoading(true);
 
-      // Fetch purchase orders and suppliers in parallel
-      const [ordersData, suppliersData] = await Promise.all([
+      // Fetch purchase orders, suppliers, and GRNs in parallel
+      const [ordersData, suppliersData, grnsData] = await Promise.all([
         PurchaseOrderService.getAll(),
         SupplierService.getAll(),
+        GRNService.listGRNs(), // Fetch all GRNs
       ]);
 
       // Map supplier names to purchase orders
@@ -67,8 +70,17 @@ const PurchaseOrders: React.FC<PurchaseOrdersProps> = ({ onAddClick, onEditClick
         };
       });
 
+      // Track which POs have POSTED GRNs
+      const postedSet = new Set<string>();
+      grnsData.forEach(grn => {
+        if (grn.status === 'POSTED' && grn.purchase_order_id) {
+          postedSet.add(grn.purchase_order_id);
+        }
+      });
+
       setPurchaseOrders(ordersWithSuppliers);
       setSuppliers(suppliersData);
+      setPostedGRNs(postedSet);
     } catch (error) {
       console.error('Error fetching purchase orders:', error);
       toast({
@@ -370,19 +382,39 @@ const PurchaseOrders: React.FC<PurchaseOrdersProps> = ({ onAddClick, onEditClick
                           >
                             <Eye className="h-4 w-4" />
                           </button>
-                          <button
-                            title="Edit"
-                            className="p-2 text-green-600 hover:bg-green-100 rounded-lg transition-colors"
-                            onClick={() => handleEditClick(order.id)}
-                          >
-                            <Edit className="h-4 w-4" />
-                          </button>
-                          <button
-                            title="Delete"
-                            className="p-2 text-red-600 hover:bg-red-100 rounded-lg transition-colors"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
+                          {postedGRNs.has(order.id) ? (
+                            <button
+                              title="Locked - GRN already posted to inventory"
+                              className="p-2 text-gray-400 bg-gray-100 rounded-lg cursor-not-allowed"
+                              disabled
+                            >
+                              <Lock className="h-4 w-4" />
+                            </button>
+                          ) : (
+                            <button
+                              title="Edit"
+                              className="p-2 text-green-600 hover:bg-green-100 rounded-lg transition-colors"
+                              onClick={() => handleEditClick(order.id)}
+                            >
+                              <Edit className="h-4 w-4" />
+                            </button>
+                          )}
+                          {order.status !== 'Completed' ? (
+                            <button
+                              title="Delete"
+                              className="p-2 text-red-600 hover:bg-red-100 rounded-lg transition-colors"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          ) : (
+                            <button
+                              title="Cannot delete completed orders"
+                              className="p-2 text-gray-400 bg-gray-100 rounded-lg cursor-not-allowed"
+                              disabled
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

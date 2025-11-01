@@ -25,7 +25,7 @@ import { useToast } from '@/hooks/use-toast';
 import { supabaseClient } from '@/lib/supabase';
 import { GRNService } from '@/lib/grn-service';
 import type { PurchaseOrder, CreateGRNItemPayload } from '@/types/pharmacy';
-import { Loader2, Package, AlertCircle } from 'lucide-react';
+import { Loader2, Package, AlertCircle, CheckCircle } from 'lucide-react';
 
 interface GRNItemRow extends CreateGRNItemPayload {
   product_name: string;
@@ -39,6 +39,7 @@ const CreateGRN: React.FC = () => {
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isPosting, setIsPosting] = useState(false);
 
   // Purchase Orders
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
@@ -46,10 +47,13 @@ const CreateGRN: React.FC = () => {
   const [poDetails, setPoDetails] = useState<PurchaseOrder | null>(null);
 
   // GRN Header
+  const [grnId, setGrnId] = useState<string | null>(null);
+  const [grnStatus, setGrnStatus] = useState<'DRAFT' | 'POSTED' | null>(null);
   const [grnDate, setGrnDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [invoiceNumber, setInvoiceNumber] = useState<string>('');
   const [invoiceDate, setInvoiceDate] = useState<string>('');
   const [invoiceAmount, setInvoiceAmount] = useState<string>('');
+  const [discount, setDiscount] = useState<string>('');
   const [notes, setNotes] = useState<string>('');
 
   // GRN Items
@@ -303,20 +307,15 @@ const CreateGRN: React.FC = () => {
 
       const result = await GRNService.createGRNFromPO(payload);
 
+      // Store GRN ID and status for Submit action
+      setGrnId(result.grn.id);
+      setGrnStatus('DRAFT');
+
       toast({
         title: 'Success',
-        description: `GRN ${result.grn.grn_number} created successfully`,
+        description: `GRN ${result.grn.grn_number} saved as draft. Click Submit to add inventory.`,
       });
 
-      // Reset form
-      setSelectedPO('');
-      setPoDetails(null);
-      setGrnItems([]);
-      setInvoiceNumber('');
-      setInvoiceDate('');
-      setInvoiceAmount('');
-      setNotes('');
-      loadPurchaseOrders();
     } catch (error) {
       console.error('Error creating GRN:', error);
       toast({
@@ -326,6 +325,51 @@ const CreateGRN: React.FC = () => {
       });
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handlePostGRN = async () => {
+    if (!grnId) {
+      toast({
+        title: 'Error',
+        description: 'Please save GRN draft first',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    try {
+      setIsPosting(true);
+
+      const discountValue = discount ? parseFloat(discount) : undefined;
+      const result = await GRNService.postGRN(grnId, undefined, discountValue);
+
+      toast({
+        title: 'Success!',
+        description: `GRN ${result.grn.grn_number} posted successfully. ${result.batch_inventories.length} batches added to inventory.`,
+      });
+
+      // Reset form
+      setSelectedPO('');
+      setPoDetails(null);
+      setGrnItems([]);
+      setGrnId(null);
+      setGrnStatus(null);
+      setInvoiceNumber('');
+      setInvoiceDate('');
+      setInvoiceAmount('');
+      setDiscount('');
+      setNotes('');
+      loadPurchaseOrders();
+    } catch (error: any) {
+      console.error('Error posting GRN:', error);
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to post GRN. Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsPosting(false);
     }
   };
 
@@ -408,6 +452,20 @@ const CreateGRN: React.FC = () => {
                 placeholder="Enter invoice amount"
                 value={invoiceAmount}
                 onChange={(e) => setInvoiceAmount(e.target.value)}
+              />
+            </div>
+
+            {/* Discount */}
+            <div className="space-y-2">
+              <Label htmlFor="discount">Discount (₹)</Label>
+              <Input
+                id="discount"
+                type="number"
+                step="0.01"
+                placeholder="Enter discount amount"
+                value={discount}
+                onChange={(e) => setDiscount(e.target.value)}
+                className="font-semibold text-red-600"
               />
             </div>
           </div>
@@ -604,6 +662,24 @@ const CreateGRN: React.FC = () => {
               </div>
             </div>
 
+            {/* GRN Status Indicator */}
+            {grnStatus && (
+              <div className="bg-blue-50 p-4 rounded-lg border-2 border-blue-200">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-semibold text-blue-900">GRN Status</p>
+                    <p className="text-lg font-bold text-blue-600">{grnStatus}</p>
+                  </div>
+                  <Package className="h-8 w-8 text-blue-600" />
+                </div>
+                {grnStatus === 'DRAFT' && (
+                  <p className="text-sm text-blue-700 mt-2">
+                    ⚠️ GRN saved as draft. Click <strong>Submit</strong> to add inventory.
+                  </p>
+                )}
+              </div>
+            )}
+
             {/* Action Buttons */}
             <div className="flex justify-end gap-4 mt-6">
               <Button
@@ -612,19 +688,48 @@ const CreateGRN: React.FC = () => {
                   setSelectedPO('');
                   setPoDetails(null);
                   setGrnItems([]);
+                  setGrnId(null);
+                  setGrnStatus(null);
+                  setDiscount('');
                 }}
-                disabled={isSaving}
+                disabled={isSaving || isPosting}
               >
                 Cancel
               </Button>
-              <Button onClick={handleSaveGRN} disabled={isSaving} className="min-w-[150px]">
+
+              {/* Update/Save Draft Button */}
+              <Button
+                onClick={handleSaveGRN}
+                disabled={isSaving || isPosting || grnStatus === 'POSTED'}
+                className="min-w-[150px]"
+                variant={grnId ? "outline" : "default"}
+              >
                 {isSaving ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Creating GRN...
+                    Saving...
                   </>
                 ) : (
-                  'Create GRN'
+                  grnId ? 'Update Draft' : 'Save Draft'
+                )}
+              </Button>
+
+              {/* Submit Button (only enabled after draft is saved) */}
+              <Button
+                onClick={handlePostGRN}
+                disabled={!grnId || isPosting || isSaving || grnStatus === 'POSTED'}
+                className="min-w-[150px] bg-green-600 hover:bg-green-700"
+              >
+                {isPosting ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Posting...
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle className="mr-2 h-4 w-4" />
+                    Submit & Add to Inventory
+                  </>
                 )}
               </Button>
             </div>

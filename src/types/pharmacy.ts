@@ -279,7 +279,7 @@ export interface PurchaseOrder {
   total_amount: number;
   
   // Status
-  status: 'PENDING' | 'APPROVED' | 'ORDERED' | 'PARTIAL_RECEIVED' | 'RECEIVED' | 'CANCELLED';
+  status: 'Pending' | 'Completed' | 'Cancelled';
   
   // Approval
   approved_by?: string;
@@ -693,6 +693,7 @@ export interface GoodsReceivedNote {
   total_quantity_ordered: number;
   total_quantity_received: number;
   total_amount: number;
+  discount?: number;
 
   // Status
   status: 'DRAFT' | 'VERIFIED' | 'POSTED' | 'CANCELLED';
@@ -846,6 +847,7 @@ export interface CreateGRNPayload {
   invoice_number?: string;
   invoice_date?: string;
   invoice_amount?: number;
+  discount?: number;
   notes?: string;
   hospital_name?: string;
   items: CreateGRNItemPayload[];
