@@ -5,7 +5,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
-import { Plus, FlaskConical, X } from 'lucide-react';
+import { Plus, FlaskConical, X, GripVertical } from 'lucide-react';
 
 export interface SubTest {
   id: string;
@@ -13,6 +13,7 @@ export interface SubTest {
   unit: string;
   type?: 'Numeric' | 'Text'; // Type field for numeric or text values
   textValue?: string; // Text value when type is Text
+  formula?: string; // Formula for auto-calculation
   ageRanges: AgeRange[];
   normalRanges: NormalRange[];
   subTests?: SubTest[]; // Nested sub-tests
@@ -40,6 +41,7 @@ interface TestConfigurationSectionProps {
   onTestNameChange: (testName: string) => void;
   subTests: SubTest[];
   onSubTestsChange: (subTests: SubTest[]) => void;
+  onReorder?: () => void;  // Callback when drag-drop reorder happens
   isLoading?: boolean;
 }
 
@@ -48,6 +50,7 @@ const TestConfigurationSection: React.FC<TestConfigurationSectionProps> = ({
   onTestNameChange,
   subTests,
   onSubTestsChange,
+  onReorder,
   isLoading = false
 }) => {
   const [nextSubTestId, setNextSubTestId] = useState(1);
@@ -55,6 +58,7 @@ const TestConfigurationSection: React.FC<TestConfigurationSectionProps> = ({
   const [currentSubTestId, setCurrentSubTestId] = useState<string>('');
   const [selectedTest, setSelectedTest] = useState('');
   const [formula, setFormula] = useState('');
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
 
   const addNewSubTest = () => {
     const newSubTest: SubTest = {
@@ -229,6 +233,46 @@ const TestConfigurationSection: React.FC<TestConfigurationSectionProps> = ({
     updateSubTest(subTestId, {
       normalRanges: subTest.normalRanges.filter(nr => nr.id !== normalRangeId)
     });
+  };
+
+  // Drag and drop handlers
+  const handleDragStart = (index: number) => {
+    setDraggedIndex(index);
+  };
+
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+  };
+
+  const handleDrop = (e: React.DragEvent, dropIndex: number) => {
+    e.preventDefault();
+
+    if (draggedIndex === null || draggedIndex === dropIndex) {
+      setDraggedIndex(null);
+      return;
+    }
+
+    const newSubTests = [...subTests];
+    const [draggedItem] = newSubTests.splice(draggedIndex, 1);
+    newSubTests.splice(dropIndex, 0, draggedItem);
+
+    onSubTestsChange(newSubTests);
+    setDraggedIndex(null);
+
+    // Trigger auto-save callback after reordering
+    if (onReorder) {
+      console.log('🔄 Drag-drop complete! Triggering auto-save...');
+      setTimeout(() => {
+        console.log('⏰ Calling onReorder (auto-save)...');
+        onReorder();
+      }, 100);
+    } else {
+      console.log('⚠️ onReorder callback not provided');
+    }
+  };
+
+  const handleDragEnd = () => {
+    setDraggedIndex(null);
   };
 
   // Functions for nested sub-test age ranges
@@ -414,25 +458,52 @@ const TestConfigurationSection: React.FC<TestConfigurationSectionProps> = ({
   const openFormulaDialog = (subTestId: string) => {
     setCurrentSubTestId(subTestId);
     setSelectedTest('none');
-    setFormula('');
+
+    // Load existing formula if available
+    const subTest = subTests.find(st => st.id === subTestId);
+    setFormula(subTest?.formula || '');
+
     setIsFormulaDialogOpen(true);
   };
 
-  // Standard test options for formula builder
-  const standardTestOptions = [
-    'Total Leukocyte Count',
-    'Eosinophils',
-    'Monocyte',
-    'Polymorphs',
-    'Lymphocyte',
-    'Red Cell Count',
-    'Packed Cell Volume',
-    'Mean Cell Volume',
-    'Mean Cell Haemoglobin',
-    'Mean Cell He Concentration',
-    'Platelet Count',
-    'E.S.R. (Wintrobe)'
-  ];
+  const saveFormula = () => {
+    // Find and update the sub-test with formula
+    const updatedSubTests = subTests.map(subTest => {
+      if (subTest.id === currentSubTestId) {
+        return { ...subTest, formula: formula };
+      }
+      return subTest;
+    });
+
+    console.log('Formula saved:', formula, 'for subtest:', currentSubTestId);
+    onSubTestsChange(updatedSubTests);
+    setIsFormulaDialogOpen(false);
+  };
+
+  // Get dynamic test options from current test's sub-tests
+  const getDynamicTestOptions = () => {
+    const options: string[] = [];
+
+    // Add all parent sub-tests
+    subTests.forEach(subTest => {
+      if (subTest.name && subTest.name.trim()) {
+        options.push(subTest.name);
+      }
+
+      // Add nested sub-tests (indented)
+      if (subTest.subTests && subTest.subTests.length > 0) {
+        subTest.subTests.forEach(nested => {
+          if (nested.name && nested.name.trim()) {
+            options.push(`  ${nested.name}`); // Indent nested with spaces
+          }
+        });
+      }
+    });
+
+    return options;
+  };
+
+  const dynamicTestOptions = getDynamicTestOptions();
 
   // Get nested sub-tests for the current sub-test
   const getCurrentSubTestNestedTests = () => {
@@ -485,7 +556,20 @@ const TestConfigurationSection: React.FC<TestConfigurationSectionProps> = ({
 
       {/* Sub-Test Rows */}
       {subTests.map((subTest, index) => (
-        <div key={subTest.id} className="border border-gray-200 rounded-lg p-4 bg-white space-y-4 relative">
+        <div
+          key={subTest.id}
+          className={`border border-gray-200 rounded-lg p-4 bg-white space-y-4 relative ${draggedIndex === index ? 'opacity-50' : ''}`}
+          draggable
+          onDragStart={() => handleDragStart(index)}
+          onDragOver={(e) => handleDragOver(e, index)}
+          onDrop={(e) => handleDrop(e, index)}
+          onDragEnd={handleDragEnd}
+        >
+          {/* Drag handle */}
+          <div className="absolute top-2 left-2 cursor-move">
+            <GripVertical className="h-5 w-5 text-gray-400 hover:text-gray-600" />
+          </div>
+
           {/* Remove button */}
           <Button
             type="button"
@@ -498,7 +582,7 @@ const TestConfigurationSection: React.FC<TestConfigurationSectionProps> = ({
           </Button>
 
           {/* Sub-Test Header */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 ml-8">
             <div className="flex-1 grid grid-cols-3 gap-4">
               <div>
                 <Label className="text-sm font-medium text-gray-700 mb-1 block">Sub Test Name</Label>
@@ -1014,7 +1098,7 @@ const TestConfigurationSection: React.FC<TestConfigurationSectionProps> = ({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">Please Select</SelectItem>
-                  {standardTestOptions.map((testName, index) => (
+                  {dynamicTestOptions.map((testName, index) => (
                     <SelectItem key={index} value={testName}>
                       {testName}
                     </SelectItem>
@@ -1155,11 +1239,7 @@ const TestConfigurationSection: React.FC<TestConfigurationSectionProps> = ({
                 </Button>
                 <Button
                   type="button"
-                  onClick={() => {
-                    // Save formula logic here
-                    console.log('Formula saved:', formula, 'for subtest:', currentSubTestId);
-                    setIsFormulaDialogOpen(false);
-                  }}
+                  onClick={saveFormula}
                 >
                   Save Formula
                 </Button>

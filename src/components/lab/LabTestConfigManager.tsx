@@ -15,7 +15,7 @@ export default function LabTestConfigManager() {
   const { toast } = useToast();
 
   // Function to save sub-tests (now saves nested sub-tests in JSONB)
-  const saveSubTest = async (subTest: SubTest): Promise<void> => {
+  const saveSubTest = async (subTest: SubTest, index: number): Promise<void> => {
     try {
       console.log('=== SAVING SUB-TEST ===');
       console.log('Sub-test name:', subTest.name);
@@ -96,7 +96,7 @@ export default function LabTestConfigManager() {
           max_value: firstNormalRange ? parseFloat(firstNormalRange.maxValue) || 0 : 0,
           normal_unit: subTest.unit || null,
           test_level: 1,
-          display_order: 0,
+          display_order: index,
           is_active: true,
           age_ranges: ageRangesData,
           normal_ranges: normalRangesData,
@@ -120,26 +120,27 @@ export default function LabTestConfigManager() {
 
   // Main save function
   const handleSave = async () => {
-    console.log('🚀 HANDLE SAVE CLICKED!');
-    console.log('testName:', testName);
-    console.log('labId:', labId);
-    console.log('subTests:', subTests);
+    console.log('🚀 HANDLE SAVE CALLED!');
+    console.log('📝 testName:', testName);
+    console.log('🏥 labId:', labId);
+    console.log('📊 subTests count:', subTests.length);
+    console.log('📊 subTests:', subTests);
 
     if (!testName.trim()) {
-      console.log('❌ Test name is empty');
+      console.log('❌ SAVE BLOCKED: Test name is empty');
       toast({
-        title: 'Error',
-        description: 'Please enter test name',
+        title: 'Cannot Auto-Save',
+        description: 'Please enter test name first',
         variant: 'destructive'
       });
       return;
     }
 
     if (!labId.trim()) {
-      console.log('❌ Lab ID is empty');
+      console.log('❌ SAVE BLOCKED: Lab ID is empty');
       toast({
-        title: 'Error',
-        description: 'Please enter lab ID',
+        title: 'Cannot Auto-Save',
+        description: 'Please enter lab ID first',
         variant: 'destructive'
       });
       return;
@@ -164,15 +165,29 @@ export default function LabTestConfigManager() {
       console.log('Lab ID:', labId);
       console.log('Sub-Tests:', JSON.stringify(subTests, null, 2));
 
+      // Delete existing records for this test to ensure clean save with new sequence
+      console.log('🗑️ Deleting old records for:', testName, 'Lab ID:', labId);
+      const { error: deleteError } = await supabase
+        .from('lab_test_config')
+        .delete()
+        .eq('test_name', testName)
+        .eq('lab_id', labId);
+
+      if (deleteError) {
+        console.error('Error deleting old records:', deleteError);
+        throw new Error(`Failed to delete old records: ${deleteError.message}`);
+      }
+      console.log('✅ Old records deleted successfully');
+
       let totalSaved = 0;
       let totalNested = 0;
 
       // Save each sub-test with nested sub-tests in JSONB
-      for (const subTest of subTests) {
-        await saveSubTest(subTest);
+      for (let i = 0; i < subTests.length; i++) {
+        await saveSubTest(subTests[i], i);
         totalSaved++;
-        if (subTest.subTests && subTest.subTests.length > 0) {
-          totalNested += subTest.subTests.length;
+        if (subTests[i].subTests && subTests[i].subTests.length > 0) {
+          totalNested += subTests[i].subTests.length;
         }
       }
 
@@ -384,6 +399,7 @@ export default function LabTestConfigManager() {
         onTestNameChange={setTestName}
         subTests={subTests}
         onSubTestsChange={setSubTests}
+        onReorder={handleSave}
         isLoading={isLoading}
       />
 
