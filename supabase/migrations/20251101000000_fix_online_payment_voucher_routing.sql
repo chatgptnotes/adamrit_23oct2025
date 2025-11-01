@@ -9,12 +9,18 @@
 --   2. Automatically inserts 'REC' if missing for compatibility
 --   3. Function accepts TEXT dates (frontend sends strings, not DATE objects)
 --   4. Includes generate_voucher_number function (self-contained)
+--   5. Drops old function signature to prevent PostgreSQL function overloading
+--   6. All VARCHAR columns cast to TEXT to match return type
 -- ============================================================================
 
 -- ============================================================================
 -- STEP 1: Ensure ledger statement function exists
 -- ============================================================================
--- This is a safety check to ensure the function exists for the ledger statement page
+-- Drop the old function with DATE parameters to avoid function overloading issues
+-- PostgreSQL treats functions with different parameter types as separate functions
+DROP FUNCTION IF EXISTS get_ledger_statement_with_patients(TEXT, DATE, DATE, TEXT);
+
+-- Now create the function with TEXT parameters (frontend sends date strings)
 CREATE OR REPLACE FUNCTION get_ledger_statement_with_patients(
   p_account_name TEXT,
   p_from_date TEXT,
@@ -131,8 +137,11 @@ GRANT EXECUTE ON FUNCTION get_ledger_statement_with_patients TO authenticated;
 -- ============================================================================
 -- STEP 2: Create/Update voucher number generation function
 -- ============================================================================
+-- Drop existing function first to allow parameter name change
+DROP FUNCTION IF EXISTS generate_voucher_number(TEXT);
+
 -- This function generates sequential voucher numbers like REC-001, REC-002, etc.
-CREATE OR REPLACE FUNCTION generate_voucher_number(voucher_type_code TEXT)
+CREATE OR REPLACE FUNCTION generate_voucher_number(p_voucher_type_code TEXT)
 RETURNS TEXT AS $$
 DECLARE
   current_num INTEGER;
@@ -141,16 +150,16 @@ BEGIN
   -- Get and increment the current number for this voucher type
   UPDATE voucher_types
   SET current_number = current_number + 1
-  WHERE voucher_type_code = generate_voucher_number.voucher_type_code
+  WHERE voucher_types.voucher_type_code = p_voucher_type_code
   RETURNING current_number INTO current_num;
 
   -- Handle case where voucher type doesn't exist
   IF current_num IS NULL THEN
-    RAISE EXCEPTION 'Voucher type % not found in voucher_types table', voucher_type_code;
+    RAISE EXCEPTION 'Voucher type % not found in voucher_types table', p_voucher_type_code;
   END IF;
 
   -- Format: REC-001, RV-001, etc.
-  new_number := voucher_type_code || '-' || LPAD(current_num::TEXT, 3, '0');
+  new_number := p_voucher_type_code || '-' || LPAD(current_num::TEXT, 3, '0');
 
   RETURN new_number;
 END;

@@ -435,9 +435,9 @@ export interface DailyTransaction {
  * Hook to fetch ALL daily transactions from all billing tables
  * Includes: OPD, Lab, Radiology, Pharmacy, Physiotherapy, Mandatory Services
  */
-export const useAllDailyTransactions = (filters?: CashBookFilters) => {
+export const useAllDailyTransactions = (filters?: CashBookFilters, hospitalName?: string) => {
   return useQuery({
-    queryKey: ['all-daily-transactions', filters],
+    queryKey: ['all-daily-transactions', filters, hospitalName],
     queryFn: async () => {
       const fromDate = filters?.from_date || new Date().toISOString().split('T')[0];
       const toDate = filters?.to_date || new Date().toISOString().split('T')[0];
@@ -448,7 +448,8 @@ export const useAllDailyTransactions = (filters?: CashBookFilters) => {
           p_from_date: fromDate,
           p_to_date: toDate,
           p_transaction_type: filters?.voucher_type || null,
-          p_patient_id: null
+          p_patient_id: null,
+          p_hospital_name: hospitalName || null
         });
 
       if (error) {

@@ -137,7 +137,7 @@ const TodaysIpdDashboard = () => {
       'Ruchi',
       'Gayatri',
       'Noor',
-      'Neesha',
+      'Nisha',
       'Diksha',
       'Ayush',
       'Kiran',
@@ -2007,7 +2007,7 @@ const TodaysIpdDashboard = () => {
               <option value="Ruchi">Ruchi</option>
               <option value="Gayatri">Gayatri</option>
               <option value="Noor">Noor</option>
-              <option value="Neesha">Neesha</option>
+              <option value="Nisha">Nisha</option>
               <option value="Diksha">Diksha</option>
               <option value="Ayush">Ayush</option>
               <option value="Kiran">Kiran</option>

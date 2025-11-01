@@ -3,11 +3,13 @@ import { useNavigate } from 'react-router-dom';
 import { Calendar, Loader2, ArrowLeft } from 'lucide-react';
 import { useCashBookEntries, useCashBookUsers, useCashBookVoucherTypes, useAllDailyTransactions, DailyTransaction } from '@/hooks/useCashBookQueries';
 import PatientTransactionModal from '@/components/PatientTransactionModal';
+import { useAuth } from '@/contexts/AuthContext';
 
 const CashBook: React.FC = () => {
   // Get today's date in YYYY-MM-DD format
   const today = new Date().toISOString().split('T')[0];
   const navigate = useNavigate();
+  const { hospitalConfig } = useAuth();
 
   const [fromDate, setFromDate] = useState(today);
   const [toDate, setToDate] = useState(today);
@@ -27,14 +29,14 @@ const CashBook: React.FC = () => {
     transactionDate?: string;
   } | null>(null);
 
-  // Fetch ALL daily transactions from all billing tables
+  // Fetch ALL daily transactions from all billing tables (filtered by hospital)
   const { data: dailyTransactions, isLoading, error } = useAllDailyTransactions({
     from_date: fromDate,
     to_date: toDate,
     voucher_type: selectedType || undefined,
     search_narration: searchNarration || undefined,
     payment_mode: selectedPaymentMode || undefined
-  });
+  }, hospitalConfig.name);
 
   // Fetch old voucher data for Opening Balance only
   const { data: cashBookData } = useCashBookEntries({
