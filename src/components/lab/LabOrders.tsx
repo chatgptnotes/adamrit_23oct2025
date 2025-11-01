@@ -2458,13 +2458,20 @@ const LabOrders = () => {
   // Lab Results Form Handlers
   // Function to calculate formulas for sub-tests
   const calculateFormulas = (currentFormData: any, currentTestRow: any) => {
-    if (!currentTestRow || !currentTestRow.sub_tests) return {};
+    if (!currentTestRow || !currentTestRow.sub_tests) {
+      console.log('⚠️ No test row or sub-tests found for formula calculation');
+      return {};
+    }
+
+    console.log('🧮 Starting formula calculation for test:', currentTestRow.test_name);
+    console.log('📊 Sub-tests:', currentTestRow.sub_tests.map((st: any) => ({ name: st.name, formula: st.formula })));
 
     const calculatedValues: any = {};
 
     currentTestRow.sub_tests.forEach((subTest: any) => {
       // Check if this sub-test has a formula
       if (subTest.formula && subTest.formula.trim()) {
+        console.log(`📐 Processing formula for "${subTest.name}": ${subTest.formula}`);
         let formula = subTest.formula;
         let canCalculate = true;
 
@@ -2473,12 +2480,20 @@ const LabOrders = () => {
           const subTestKey = `${currentTestRow.id}_subtest_${st.id}`;
           const subTestValue = currentFormData[subTestKey]?.result_value;
 
+          console.log(`  🔍 Checking "${st.name}" (key: ${subTestKey}), value: ${subTestValue}`);
+
           if (subTestValue && !isNaN(parseFloat(subTestValue))) {
             // Replace test name with its value (case-sensitive, whole word match)
             const regex = new RegExp(`\\b${st.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'g');
+            const beforeReplace = formula;
             formula = formula.replace(regex, subTestValue);
+            if (beforeReplace !== formula) {
+              console.log(`    ✅ Replaced "${st.name}" with ${subTestValue}`);
+              console.log(`    Formula now: ${formula}`);
+            }
           } else if (formula.includes(st.name)) {
             // If formula contains this test name but no value is entered yet
+            console.log(`    ⚠️ Formula contains "${st.name}" but no value entered yet`);
             canCalculate = false;
           }
         });
@@ -2486,16 +2501,23 @@ const LabOrders = () => {
         // Only calculate if all required values are available
         if (canCalculate) {
           try {
+            console.log(`  🎯 Final formula to evaluate: ${formula}`);
             // Safely evaluate the formula
             const result = eval(formula);
+            console.log(`  📊 Evaluation result: ${result}`);
             if (!isNaN(result) && isFinite(result)) {
               const subTestKey = `${currentTestRow.id}_subtest_${subTest.id}`;
               calculatedValues[subTestKey] = result.toFixed(2);
-              console.log(`🧮 Formula calculated for ${subTest.name}: ${subTest.formula} = ${result.toFixed(2)}`);
+              console.log(`  ✅ Formula calculated for ${subTest.name}: ${subTest.formula} = ${result.toFixed(2)}`);
+              console.log(`  💾 Will save to key: ${subTestKey}`);
+            } else {
+              console.log(`  ❌ Result is NaN or Infinite: ${result}`);
             }
           } catch (error) {
-            console.error(`❌ Error calculating formula for ${subTest.name}:`, error);
+            console.error(`  ❌ Error calculating formula for ${subTest.name}:`, error);
           }
+        } else {
+          console.log(`  ⏸️ Cannot calculate yet - missing values`);
         }
       }
     });
@@ -2517,10 +2539,19 @@ const LabOrders = () => {
       // Calculate formulas if this is a result_value change
       if (field === 'result_value' && selectedTestsForEntry.length > 0) {
         const currentTestRow = selectedTestsForEntry[0]; // Assuming single test entry
-        const calculatedValues = calculateFormulas(updated, currentTestRow);
+
+        // Create a combined test row with sub_tests from testSubTests state
+        const testRowWithSubTests = {
+          ...currentTestRow,
+          sub_tests: testSubTests[currentTestRow.id] || []
+        };
+
+        console.log('🔄 Triggering formula calculation after value change');
+        const calculatedValues = calculateFormulas(updated, testRowWithSubTests);
 
         // Merge calculated values into updated form data
         Object.keys(calculatedValues).forEach(key => {
+          console.log(`📝 Updating ${key} with calculated value: ${calculatedValues[key]}`);
           updated[key] = {
             ...updated[key],
             result_value: calculatedValues[key]
