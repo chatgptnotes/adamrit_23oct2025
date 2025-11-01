@@ -81,7 +81,7 @@ const billingExecutives = [
   'Ruchi',
   'Gayatri',
   'Noor',
-  'Neesha',
+  'Nisha',
   'Diksha',
   'Ayush',
   'Kiran',
