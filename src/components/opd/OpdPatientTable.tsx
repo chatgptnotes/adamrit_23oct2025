@@ -1058,7 +1058,7 @@ Verified by: [To be verified by doctor]`;
             <TableHead className="text-center font-medium">Admit To Hospital</TableHead>
             <TableHead className="text-center font-medium">Admission Notes</TableHead>
             <TableHead className="text-center font-medium">Physiotherapy Bill</TableHead>
-            <TableHead className="text-center font-medium">Discharge Summary</TableHead>
+            <TableHead className="text-center font-medium">OPD Summary</TableHead>
             <TableHead className="text-center font-medium">Actions</TableHead>
           </TableRow>
         </TableHeader>
@@ -1160,7 +1160,7 @@ Verified by: [To be verified by doctor]`;
                   size="sm"
                   className="h-8 w-8 p-0"
                   onClick={() => handleDischargeSummaryClick(patient)}
-                  title="View/Add Discharge Summary"
+                  title="View/Add OPD Summary"
                 >
                   <FileTextIcon className="h-4 w-4 text-purple-600" />
                 </Button>
@@ -1384,7 +1384,7 @@ Verified by: [To be verified by doctor]`;
         </Dialog>
       ))}
 
-      {/* Discharge Summary Dialogs - removed (now uses dedicated page) */}
+      {/* OPD Summary Dialogs - removed (now uses dedicated page) */}
     </div>
   );
 };
