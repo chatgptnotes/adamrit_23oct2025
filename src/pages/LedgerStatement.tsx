@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Calendar, Printer, Edit2, Trash2, Eye } from 'lucide-react';
 import { usePaymentByVoucherNo } from '@/hooks/useCashBookQueries';
@@ -7,6 +7,8 @@ import { printReceipt } from '@/utils/receiptPrinter';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import PaymentDetailsModal from '@/components/PaymentDetailsModal';
+import { PatientDetailsModal } from '@/components/PatientDetailsModal';
+import * as XLSX from 'xlsx';
 
 const LedgerStatement: React.FC = () => {
   // Get today's date in YYYY-MM-DD format
@@ -22,6 +24,14 @@ const LedgerStatement: React.FC = () => {
   const [hideNarration, setHideNarration] = useState(false);
   const [activeMenuItem, setActiveMenuItem] = useState('Ledger Statement');
   const [printingVoucherNo, setPrintingVoucherNo] = useState<string | undefined>(undefined);
+  const [paymentModeFilter, setPaymentModeFilter] = useState<string | undefined>('ONLINE');
+
+  // Auto-set ONLINE mode for bank accounts by default
+  useEffect(() => {
+    if (accountName === 'SARASWAT BANK' || accountName === 'STATE BANK OF INDIA (DRM)') {
+      setPaymentModeFilter('ONLINE');
+    }
+  }, [accountName]);
 
   // Fetch ledger data from database
   const { data: ledgerData, isLoading: isLoadingLedger, error: ledgerError } = useLedgerStatementData({
@@ -29,14 +39,34 @@ const LedgerStatement: React.FC = () => {
     fromDate,
     toDate,
     mrnFilter: mrnNo || undefined,
+    paymentModeFilter,
   });
 
   // Calculate balances
   const balances = useLedgerBalances(ledgerData);
 
+  // Debug: Log ledger data to check patient_id values
+  useEffect(() => {
+    if (ledgerData && ledgerData.length > 0) {
+      console.log('📊 Ledger Data Sample (first 3 entries):',
+        ledgerData.slice(0, 3).map(entry => ({
+          patient_name: entry.patient_name,
+          mrn_number: entry.mrn_number,
+          patient_id: entry.patient_id,
+          patient_id_is_null: entry.patient_id === null,
+          voucher_number: entry.voucher_number
+        }))
+      );
+    }
+  }, [ledgerData]);
+
   // State for Payment Details Modal
   const [selectedVoucherNo, setSelectedVoucherNo] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+
+  // State for Patient Details Modal
+  const [patientToView, setPatientToView] = useState<{ id: string; name: string } | null>(null);
+  const [isPatientModalOpen, setIsPatientModalOpen] = useState(false);
 
   // Fetch payment data when printing is triggered
   const { data: paymentData, isLoading: isLoadingPayment, error: paymentError } = usePaymentByVoucherNo(printingVoucherNo);
@@ -102,9 +132,19 @@ const LedgerStatement: React.FC = () => {
     setPrintingVoucherNo(voucherNo);
   };
 
-  const handlePatientClick = (patientId: string, visitId: string) => {
-    if (patientId && visitId) {
-      navigate(`/patient-profile?patient=${patientId}&visit=${visitId}`);
+  const handlePatientClick = (patientId: string, patientName: string) => {
+    console.log('🔍 Patient Click Debug:', {
+      patientId,
+      patientName,
+      hasPatientId: !!patientId,
+      patientIdType: typeof patientId
+    });
+
+    if (patientId) {
+      setPatientToView({ id: patientId, name: patientName });
+      setIsPatientModalOpen(true);
+    } else {
+      console.warn('⚠️ Patient ID is null/undefined - modal will not open properly');
     }
   };
 
@@ -130,13 +170,123 @@ const LedgerStatement: React.FC = () => {
     return dateStr;
   };
 
+  // Helper to format date as DD/MM/YYYY
+  const formatDateForExcel = (dateStr: string) => {
+    const date = new Date(dateStr);
+    return `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}/${date.getFullYear()}`;
+  };
+
+  // Handler to export Ledger Statement to Excel
+  const handleExcelExport = () => {
+    if (!ledgerData || ledgerData.length === 0) {
+      toast.error('No data to export');
+      return;
+    }
+
+    // Create workbook
+    const workbook = XLSX.utils.book_new();
+
+    // Prepare data array
+    const data: any[][] = [];
+
+    // Add title with account name
+    data.push([`Ledger : ${accountName}`]);
+
+    // Add date range
+    data.push([`${formatDateForExcel(fromDate)} To ${formatDateForExcel(toDate)}`]);
+    data.push([]);  // Empty row
+
+    // Add headers
+    data.push(['Date', 'Particulars', 'Voucher Type', 'Voucher No.', 'Debit', 'Credit']);
+
+    // Add all transaction entries
+    ledgerData.forEach((entry) => {
+      // Build particulars string with patient name and narration
+      const particulars = entry.narration
+        ? `${entry.patient_name}\nNarration : ${entry.narration}`
+        : entry.patient_name;
+
+      data.push([
+        formatDateForExcel(entry.voucher_date),
+        particulars,
+        entry.voucher_type || '',
+        entry.voucher_number || '',
+        entry.debit_amount > 0 ? entry.debit_amount : '',
+        entry.credit_amount > 0 ? entry.credit_amount : ''
+      ]);
+    });
+
+    // Add empty row before balance summary
+    data.push([]);
+
+    // Add Opening Balance with Dr/Cr label
+    const openingBalanceLabel = balances.openingBalance >= 0 ? 'Dr' : 'Cr';
+    data.push([
+      '',
+      'Opening Balance',
+      '',
+      '',
+      '',
+      `${Math.abs(balances.openingBalance).toFixed(2)} ${openingBalanceLabel}`
+    ]);
+
+    // Add Current Balance with totals in respective columns
+    data.push([
+      '',
+      'Current Balance :',
+      '',
+      '',
+      balances.currentDebit.toFixed(2),
+      balances.currentCredit.toFixed(2)
+    ]);
+
+    // Add Closing Balance with Dr/Cr label
+    const closingBalanceLabel = balances.closingBalance >= 0 ? 'Dr' : 'Cr';
+    data.push([
+      '',
+      'Closing Balance',
+      '',
+      '',
+      '',
+      `${Math.abs(balances.closingBalance).toFixed(2)} ${closingBalanceLabel}`
+    ]);
+
+    // Create worksheet from data
+    const worksheet = XLSX.utils.aoa_to_sheet(data);
+
+    // Set column widths
+    worksheet['!cols'] = [
+      { wch: 12 },  // Date column
+      { wch: 50 },  // Particulars column
+      { wch: 15 },  // Voucher Type column
+      { wch: 12 },  // Voucher No. column
+      { wch: 15 },  // Debit column
+      { wch: 15 }   // Credit column
+    ];
+
+    // Add worksheet to workbook
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Ledger Statement');
+
+    // Generate filename with date range
+    const sanitizedAccountName = accountName.replace(/[^a-zA-Z0-9]/g, '_');
+    const filename = `Ledger_${sanitizedAccountName}_${formatDateForExcel(fromDate)}_to_${formatDateForExcel(toDate)}.xlsx`.replace(/\//g, '-');
+
+    // Save file
+    XLSX.writeFile(workbook, filename);
+
+    toast.success('Excel file downloaded successfully');
+  };
+
   return (
     <div className="min-h-screen bg-white flex flex-col">
       {/* Top Control Bar */}
       <div className="bg-gradient-to-r from-blue-500 to-blue-600 px-4 py-2 flex justify-between items-center">
         <h1 className="text-white text-xl font-bold">Ledger Vouchers</h1>
         <div className="flex space-x-2">
-          <button className="bg-blue-700 hover:bg-blue-800 text-white px-4 py-1.5 rounded text-sm font-medium">
+          <button
+            onClick={handleExcelExport}
+            className="bg-blue-700 hover:bg-blue-800 text-white px-4 py-1.5 rounded text-sm font-medium"
+          >
             Export To Excel
           </button>
           <button className="bg-blue-700 hover:bg-blue-800 text-white px-4 py-1.5 rounded text-sm font-medium">
@@ -334,8 +484,8 @@ const LedgerStatement: React.FC = () => {
                         <td className="py-2 px-3 border border-gray-300 text-sm align-top">
                           <div
                             className="font-medium text-blue-600 hover:text-blue-800 cursor-pointer"
-                            onClick={() => handlePatientClick(entry.patient_id, entry.visit_id)}
-                            title="Click to view patient profile"
+                            onClick={() => handlePatientClick(entry.patient_id, entry.patient_name)}
+                            title="Click to view patient details"
                           >
                             {entry.patient_name}
                           </div>
@@ -387,8 +537,8 @@ const LedgerStatement: React.FC = () => {
                             </button>
                             <button
                               className="text-purple-600 hover:text-purple-800"
-                              onClick={() => handlePatientClick(entry.patient_id, entry.visit_id)}
-                              title="View Patient"
+                              onClick={() => handlePatientClick(entry.patient_id, entry.patient_name)}
+                              title="View Patient Details"
                             >
                               <Eye className="h-4 w-4" />
                             </button>
@@ -435,6 +585,15 @@ const LedgerStatement: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* Patient Details Modal */}
+      {patientToView && (
+        <PatientDetailsModal
+          isOpen={isPatientModalOpen}
+          onClose={() => setIsPatientModalOpen(false)}
+          patient={patientToView}
+        />
+      )}
     </div>
   );
 };

@@ -2746,7 +2746,7 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
 <html>
 <head>
     <meta charset="utf-8">
-    <title>OPD Discharge Summary - ${patient?.patients?.name || 'Patient'}</title>
+    <title>OPD Summary - ${patient?.patients?.name || 'Patient'}</title>
     <style>
         @page {
             size: A4;
@@ -3017,7 +3017,7 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
             </Button>
             <div>
               <h1 className="text-2xl font-bold text-gray-900">
-                Discharge Summary
+                OPD Summary
               </h1>
               <p className="text-gray-600">
                 Patient: {patient.patients?.name} | Visit ID: {patient.visit_id}
@@ -3091,7 +3091,7 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
-                <CardTitle>Discharge Summary Content</CardTitle>
+                <CardTitle>OPD Summary Content</CardTitle>
                 <div className="flex items-center gap-2">
                   <Button
                     variant="outline"
@@ -3284,7 +3284,7 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Settings className="h-5 w-5" />
-              AI Discharge Summary Generation
+              AI OPD Summary Generation
             </DialogTitle>
             <DialogDescription>
               Review and edit the patient data and prompt before generating the AI discharge summary.

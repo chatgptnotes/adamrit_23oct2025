@@ -127,7 +127,7 @@ Discharge Condition: ${data.condition.length > 0 ? data.condition.join(', ') : '
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.728-.833-2.498 0L4.316 15.5c-.77.833.192 2.5 1.732 2.5z" />
             </svg>
           </div>
-          <h1 className="text-2xl font-bold text-red-600 mb-4">Discharge Summary Not Available</h1>
+          <h1 className="text-2xl font-bold text-red-600 mb-4">OPD Summary Not Available</h1>
           <p className="text-gray-600 mb-4">
             {error
               ? `Error loading data: ${error.message || 'Database connection failed'}`
@@ -200,7 +200,7 @@ Discharge Condition: ${data.condition.length > 0 ? data.condition.join(', ') : '
             className="bg-blue-600 text-white px-6 py-3 rounded-md hover:bg-blue-700 transition-colors font-medium shadow-sm"
             title="Print this discharge summary"
           >
-            🖨️ Print Discharge Summary
+            🖨️ Print OPD Summary
           </button>
           <button
             onClick={() => {
