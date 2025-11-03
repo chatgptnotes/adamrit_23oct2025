@@ -59,11 +59,20 @@ const EnhancedLabResultsForm: React.FC<EnhancedLabResultsFormProps> = ({
   }, [selectedTest, fetchSubTestsForTest, debugTestData]);
 
   useEffect(() => {
-    console.log('SubTests updated:', subTests);
+    console.log('📦 SubTests updated:', subTests.length, 'tests');
+    console.log('🔍 Checking for formulas:');
+    subTests.forEach((st, idx) => {
+      if (st.formula) {
+        console.log(`  ${idx}. ✅ "${st.sub_test_name}" has formula: ${st.formula}`);
+      } else {
+        console.log(`  ${idx}. ⚪ "${st.sub_test_name}" - no formula`);
+      }
+    });
+
     const results: TestResult[] = [];
 
-    subTests.forEach(subTest => {
-      // Add parent sub-test
+    subTests.forEach((subTest, subTestIndex) => {
+      // Add parent sub-test with metadata
       results.push({
         subTestId: subTest.id,
         subTestName: subTest.sub_test_name,
@@ -71,8 +80,10 @@ const EnhancedLabResultsForm: React.FC<EnhancedLabResultsFormProps> = ({
         normalRange: `Consult reference values ${subTest.unit}`,
         status: '',
         comments: '',
-        abnormal: false
-      });
+        abnormal: false,
+        // Store reference to original subTest for formula lookup
+        _subTestData: subTest
+      } as TestResult & { _subTestData?: SubTest });
 
       // Add nested sub-tests if they exist
       if (subTest.nested_sub_tests && subTest.nested_sub_tests.length > 0) {
@@ -94,11 +105,188 @@ const EnhancedLabResultsForm: React.FC<EnhancedLabResultsFormProps> = ({
     });
 
     console.log('Generated test results with nested:', results);
+    console.log('🔍 SubTests with formulas:', subTests.filter(st => st.formula).map(st => ({
+      name: st.sub_test_name,
+      formula: st.formula
+    })));
     setTestResults(results);
   }, [subTests, patient.age, patient.gender]);
 
+  // Function to calculate formula-based values
+  const calculateFormulaValues = (updatedResults: TestResult[]) => {
+    console.log('🧮 Starting formula calculations...');
+    console.log('📋 Test Results:', updatedResults.map(r => ({ name: r.subTestName, value: r.observedValue })));
+
+    // DEBUG: Check if _subTestData exists
+    console.log('🔍 Checking _subTestData in results:');
+    updatedResults.forEach((r, idx) => {
+      const subTestData = (r as any)._subTestData;
+      console.log(`  ${idx}. "${r.subTestName}" - has _subTestData:`, !!subTestData, 'has formula:', !!subTestData?.formula);
+      if (subTestData?.formula) {
+        console.log(`     Formula: ${subTestData.formula}`);
+      }
+    });
+
+    // Get formulas from the stored _subTestData in results
+    const resultsWithFormulas = updatedResults.filter(r => {
+      const subTestData = (r as any)._subTestData;
+      return subTestData && subTestData.formula;
+    });
+
+    console.log('📋 Results with formulas:', resultsWithFormulas.map(r => {
+      const subTestData = (r as any)._subTestData;
+      return { name: r.subTestName, formula: subTestData?.formula };
+    }));
+
+    if (resultsWithFormulas.length === 0) {
+      console.warn('⚠️ NO FORMULAS FOUND! Calculation skipped.');
+      return updatedResults;
+    }
+
+    // Create a map of test name to value AND index for easy lookup
+    const valueMap = new Map<string, { value: number | null, index: number }>();
+    updatedResults.forEach((result, resultIndex) => {
+      const cleanName = result.subTestName.trim();
+      const numValue = parseFloat(result.observedValue);
+
+      // Store value OR null if empty (to detect deletions)
+      if (!isNaN(numValue) && result.observedValue !== '') {
+        valueMap.set(cleanName, { value: numValue, index: resultIndex });
+        valueMap.set(cleanName.toLowerCase(), { value: numValue, index: resultIndex });
+        console.log(`  📍 Stored value for "${cleanName}" (index ${resultIndex}): ${numValue}`);
+      } else if (result.observedValue === '' || result.observedValue.trim() === '') {
+        // Empty value - mark as null for deletion detection
+        valueMap.set(cleanName, { value: null, index: resultIndex });
+        valueMap.set(cleanName.toLowerCase(), { value: null, index: resultIndex });
+        console.log(`  🗑️ Empty value for "${cleanName}" (index ${resultIndex})`);
+      }
+    });
+
+    console.log('📊 Value map:', Object.fromEntries(valueMap));
+
+    // Check each result with formula
+    resultsWithFormulas.forEach((resultWithFormula) => {
+      const subTestData = (resultWithFormula as any)._subTestData;
+      if (subTestData && subTestData.formula && subTestData.formula.trim()) {
+        console.log(`\n📐 Processing formula for "${subTestData.sub_test_name}":`);
+        console.log(`   Formula: ${subTestData.formula}`);
+        let formula = subTestData.formula;
+        let originalFormula = formula;
+
+        // Replace test names in formula with actual values
+        let hasAllValues = true;
+        let replacements = 0;
+
+        // Track if any dependency is null/empty (for clearing calculated values)
+        let hasNullDependency = false;
+
+        // Sort test names by length (longest first) to avoid partial replacements
+        const sortedResults = [...updatedResults].sort((a, b) =>
+          b.subTestName.trim().length - a.subTestName.trim().length
+        );
+
+        // Try to match with all available test results
+        sortedResults.forEach((result) => {
+          const testName = result.subTestName.trim();
+          const mapEntry = valueMap.get(testName);
+          const value = mapEntry?.value;
+
+          // Create regex to match the test name (case-insensitive, word boundaries)
+          // Escape special regex characters
+          const escapedName = testName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          const regex = new RegExp(`\\b${escapedName}\\b`, 'gi');
+
+          const matches = formula.match(regex);
+          if (matches) {
+            // This test name is in the formula
+            console.log(`  🔍 Found "${testName}" in formula (value: ${value})`);
+            if (value === null) {
+              // Dependency is empty/deleted
+              console.log(`  🗑️ "${testName}" is EMPTY - will clear calculated value`);
+              hasNullDependency = true;
+            } else if (value !== undefined && value !== null) {
+              // Valid value found
+              console.log(`  ✅ Replacing "${testName}" with ${value}`);
+              console.log(`  🔧 BEFORE: ${formula}`);
+              formula = formula.replace(regex, value.toString());
+              console.log(`  🔧 AFTER: ${formula}`);
+              replacements++;
+            } else {
+              // Value not entered yet
+              console.log(`  ⚠️ "${testName}" - value not entered yet`);
+              hasAllValues = false;
+            }
+          }
+        });
+
+        console.log(`  📝 Replacements made: ${replacements}`);
+        console.log(`  📝 Formula after replacements: ${formula}`);
+        console.log(`  📝 Has null dependency: ${hasNullDependency}`);
+
+        // Find the correct index in updatedResults for this sub-test
+        const targetIndex = updatedResults.findIndex(r =>
+          r.subTestName.trim().toLowerCase() === subTestData.sub_test_name.trim().toLowerCase()
+        );
+
+        console.log(`  📍 Target index for "${subTestData.sub_test_name}": ${targetIndex}`);
+
+        // If any dependency is null/deleted, clear the calculated value
+        if (hasNullDependency && targetIndex >= 0) {
+          console.log(`  🗑️ Clearing calculated value for "${subTestData.sub_test_name}"`);
+          updatedResults[targetIndex].observedValue = '';
+          return; // Skip to next formula
+        }
+
+        // Check if formula still contains any test names (letters except scientific notation)
+        const hasUnresolvedNames = /[a-zA-Z]/.test(formula.replace(/[eE][+-]?[0-9]+/g, '').replace(/[^a-zA-Z0-9+\-*/().\s]/g, ''));
+        if (hasUnresolvedNames) {
+          console.log(`  ⚠️ Formula still has unresolved names: ${formula}`);
+          hasAllValues = false;
+        }
+
+        // Only calculate if we made replacements and all values are available
+        if (hasAllValues && replacements > 0 && targetIndex >= 0) {
+          try {
+            // Safe evaluation (only allow numbers and basic operators)
+            const sanitizedFormula = formula.replace(/[^0-9+\-*/().\s]/g, '');
+            console.log(`  🔢 Sanitized formula: ${sanitizedFormula}`);
+
+            if (sanitizedFormula.trim()) {
+              // Use Function constructor for safe evaluation
+              const result = new Function(`return ${sanitizedFormula}`)();
+
+              if (!isNaN(result) && isFinite(result)) {
+                const calculatedValue = result.toFixed(2);
+                console.log(`  ✅ Formula calculated: ${originalFormula} = ${calculatedValue}`);
+                console.log(`  ✅ Updating result at index ${targetIndex}`);
+                updatedResults[targetIndex].observedValue = calculatedValue;
+              } else {
+                console.log(`  ❌ Invalid calculation result: ${result}`);
+              }
+            }
+          } catch (error) {
+            console.error(`  ❌ Error calculating formula for ${subTestData.sub_test_name}:`, error);
+          }
+        } else if (replacements === 0) {
+          console.log(`  ⏸️ No replacements made - formula dependencies not entered yet`);
+        } else {
+          console.log(`  ⏸️ Skipping calculation - not all values available`);
+        }
+      }
+    });
+
+    console.log('🏁 Formula calculations complete\n');
+    return updatedResults;
+  };
+
   const handleValueChange = (index: number, value: string) => {
-    const updatedResults = [...testResults];
+    console.log(`\n🔄 VALUE CHANGE TRIGGERED for index ${index}:`);
+    console.log(`   Test: ${testResults[index]?.subTestName}`);
+    console.log(`   New Value: ${value}`);
+    console.log(`   Has _subTestData:`, !!(testResults[index] as any)._subTestData);
+
+    // Deep copy to preserve _subTestData
+    let updatedResults = testResults.map(r => ({ ...r }));
     updatedResults[index].observedValue = value;
 
     const subTest = subTests[index];
@@ -106,6 +294,24 @@ const EnhancedLabResultsForm: React.FC<EnhancedLabResultsFormProps> = ({
       const status = isAbnormalValue(value, subTest, patient.age, patient.gender);
       updatedResults[index].status = status;
     }
+
+    console.log('📊 Current test results before calculation:');
+    updatedResults.forEach((r, i) => {
+      if (r.observedValue) {
+        console.log(`   ${i}. ${r.subTestName}: ${r.observedValue}`);
+      }
+    });
+
+    // Auto-calculate formula-based fields
+    console.log('🔄 Triggering formula calculation...');
+    updatedResults = calculateFormulaValues(updatedResults);
+
+    console.log('📊 Test results after calculation:');
+    updatedResults.forEach((r, i) => {
+      if (r.observedValue) {
+        console.log(`   ${i}. ${r.subTestName}: ${r.observedValue}`);
+      }
+    });
 
     setTestResults(updatedResults);
   };
@@ -125,6 +331,13 @@ const EnhancedLabResultsForm: React.FC<EnhancedLabResultsFormProps> = ({
   const handleFileChange = (index: number, file: File | undefined) => {
     const updatedResults = [...testResults];
     updatedResults[index].file = file;
+    setTestResults(updatedResults);
+  };
+
+  // Manual trigger for formula calculations
+  const handleRecalculate = () => {
+    console.log('🔄 Manual recalculation triggered');
+    const updatedResults = calculateFormulaValues([...testResults]);
     setTestResults(updatedResults);
   };
 
@@ -407,6 +620,10 @@ const EnhancedLabResultsForm: React.FC<EnhancedLabResultsFormProps> = ({
           {/* Action Buttons */}
           {testResults.length > 0 && (
             <div className="flex justify-center space-x-4 pt-6 border-t">
+              <Button onClick={handleRecalculate} variant="secondary" className="px-6">
+                <Plus className="h-4 w-4 mr-2 rotate-45" />
+                Calculate Formulas
+              </Button>
               <Button onClick={() => onSave(testResults)} className="px-6">
                 <Save className="h-4 w-4 mr-2" />
                 Save Results
