@@ -509,8 +509,8 @@ const LabOrders = () => {
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
 
   const [dateRange, setDateRange] = useState({
-    from: new Date(),
-    to: new Date()
+    from: '',
+    to: ''
   });
   const [isCreateOrderOpen, setIsCreateOrderOpen] = useState(false);
   const [isViewOrderOpen, setIsViewOrderOpen] = useState(false);
@@ -1896,12 +1896,43 @@ const LabOrders = () => {
   // Load sample taken status and included tests from database when data is loaded
   useEffect(() => {
     if (labTestRows.length > 0) {
-      console.log('🔄 Loading sample taken and included status from lab_results table...');
+      console.log('🔄 Loading sample taken status from visit_labs table...');
       setIsCheckingSampleStatus(true); // Start checking
 
       const checkLabResultsForSampleStatus = async () => {
         const statusMap: Record<string, 'not_taken' | 'taken' | 'saved'> = {};
         const includedTestIds: string[] = [];
+
+        // FIRST: Check visit_labs table for saved sample status (from Save button)
+        console.log('🔍 Checking visit_labs table for collected samples...');
+        for (const testRow of labTestRows) {
+          try {
+            const { data: visitLabData, error: visitLabError } = await supabase
+              .from('visit_labs')
+              .select('id, status, collected_date')
+              .eq('id', testRow.id)
+              .single();
+
+            if (!visitLabError && visitLabData) {
+              // Check if sample is collected (status = 'collected')
+              if (visitLabData.status === 'collected' && visitLabData.collected_date) {
+                statusMap[testRow.id] = 'saved';
+                console.log(`✅ Sample collected for test ID ${testRow.id} on ${visitLabData.collected_date}`);
+              } else {
+                statusMap[testRow.id] = 'not_taken';
+                console.log(`⚪ Sample not collected for test ID ${testRow.id}`);
+              }
+            } else {
+              console.log(`⚪ No visit_labs record found for test ID ${testRow.id}`);
+              statusMap[testRow.id] = 'not_taken';
+            }
+          } catch (error) {
+            console.error(`❌ Error checking visit_labs for test ID ${testRow.id}:`, error);
+            statusMap[testRow.id] = 'not_taken';
+          }
+        }
+
+        // SECOND: Check lab_results table for entry mode status
 
         // First, let's get all data from lab_results table for debugging
         console.log('🔍 === DEBUGGING LAB_RESULTS TABLE ===');
@@ -2030,28 +2061,31 @@ const LabOrders = () => {
               }
             }
 
-            if (hasActualData) {
-              statusMap[testRow.id] = 'saved';
-              console.log(`✅ FINAL: Patient ${testRow.patient_name} has saved data for SPECIFIC test ${testRow.test_name} - Sample Taken: TRUE`);
-              console.log(`📋 Matching data values:`, labResults?.filter(r =>
-                r.test_name === testRow.test_name ||
-                r.test_category === testRow.test_category ||
-                r.main_test_name === testRow.test_name
-              ).map(r => ({ test_name: r.test_name, result_value: r.result_value })));
+            // Only update status if not already marked as 'saved' from visit_labs check
+            if (statusMap[testRow.id] !== 'saved') {
+              if (hasActualData) {
+                statusMap[testRow.id] = 'saved';
+                console.log(`✅ FINAL (lab_results): Patient ${testRow.patient_name} has saved data for SPECIFIC test ${testRow.test_name}`);
+              } else {
+                // Keep the status from visit_labs check (might be 'saved' or 'not_taken')
+                console.log(`⚪ FINAL (lab_results): No lab_results data for ${testRow.test_name}, keeping visit_labs status`);
+              }
             } else {
-              statusMap[testRow.id] = 'not_taken';
-              console.log(`❌ FINAL: Patient ${testRow.patient_name} has NO saved data for SPECIFIC test ${testRow.test_name} - Sample Taken: FALSE`);
+              console.log(`✅ Status already 'saved' from visit_labs, skipping lab_results check`);
             }
 
           } catch (error) {
             console.error(`❌ Exception checking lab_results for ${testRow.patient_name} - ${testRow.test_name}:`, error);
-            statusMap[testRow.id] = 'not_taken';
+            // Don't override visit_labs status on error
+            if (statusMap[testRow.id] !== 'saved') {
+              statusMap[testRow.id] = 'not_taken';
+            }
           }
         }
 
         setTestSampleStatus(statusMap);
         setIncludedTests(includedTestIds);
-        console.log('✅ Updated status based on lab_results table:', {
+        console.log('✅ Final status after checking visit_labs + lab_results:', {
           sampleStatus: statusMap,
           includedTests: includedTestIds.length,
           testsWithSavedData: Object.keys(statusMap).filter(key => statusMap[key] === 'saved')
@@ -5072,17 +5106,12 @@ const LabOrders = () => {
                 <Button
                   variant="outline"
                   className="px-8"
-                  onClick={async () => {
-                    // Save first, then print
-                    if (!isFormSaved) {
-                      await handleSaveLabResults();
-                    }
-                    // Wait a moment for save to complete, then print
-                    setTimeout(() => {
-                      handlePreviewAndPrint();
-                    }, 500);
+                  onClick={() => {
+                    // Print without saving - uses current form data
+                    handlePreviewAndPrint();
                   }}
                   disabled={selectedTestsForEntry.length === 0}
+                  title="Print report with current entered values (saved or unsaved)"
                 >
                   Preview & Print
                 </Button>
