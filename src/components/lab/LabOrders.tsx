@@ -694,9 +694,38 @@ const LabOrders = () => {
         return [];
       }
 
+      // Load formulas from lab_test_formulas table
+      console.log('🔍 Fetching formulas for test_name:', testName);
+      const { data: formulasData, error: formulaError } = await supabase
+        .from('lab_test_formulas')
+        .select('*')
+        .eq('test_name', testName);
+
+      console.log('📐 Formulas fetched:', formulasData?.length || 0, 'formulas');
+      if (formulaError) {
+        console.error('❌ Error fetching formulas:', formulaError);
+      }
+      if (formulasData && formulasData.length > 0) {
+        console.log('✅ Formulas found:', formulasData.map(f => ({ sub_test: f.sub_test_name, formula: f.formula })));
+      } else {
+        console.warn('⚠️ No formulas found for test:', testName);
+      }
+
+      // Create a map of formulas by sub_test_name
+      const formulasMap = new Map<string, any>();
+      if (formulasData) {
+        formulasData.forEach(formula => {
+          formulasMap.set(formula.sub_test_name, formula);
+        });
+      }
+      console.log('📊 Formula map created with', formulasMap.size, 'entries');
+
       console.log('📊 Raw sub-tests found for', testName, ':', subTestsData);
       console.log('👤 Patient info:', { age: patientAge, gender: patientGender });
-      console.log('🔍 Sub-test types:', subTestsData?.map(st => ({ name: st.sub_test_name, type: st.test_type, textValue: st.text_value })));
+      console.log('🔍 Sub-test types:', subTestsData?.map(st => {
+        const formulaData = formulasMap.get(st.sub_test_name);
+        return { name: st.sub_test_name, type: formulaData?.test_type, textValue: formulaData?.text_value };
+      }));
 
       // Group by sub_test_name to handle multiple ranges per sub-test
       const groupedSubTests = subTestsData?.reduce((acc, subTest) => {
@@ -723,6 +752,9 @@ const LabOrders = () => {
         // Find the best matching range based on age and gender
         const bestMatch = findBestMatchingRange(ranges, patientAge || 30, patientGender || 'Both');
 
+        // Get formula data for this sub-test
+        const formulaData = formulasMap.get(subTestName);
+
         // Get unit from normal_ranges JSONB array if available, otherwise use normal_unit column
         const parentUnit = bestMatch.normal_ranges?.[0]?.unit || bestMatch.normal_unit || bestMatch.unit || '';
         const parentMinValue = bestMatch.normal_ranges?.[0]?.min_value ?? bestMatch.min_value;
@@ -741,9 +773,9 @@ const LabOrders = () => {
           maxAge: bestMatch.max_age,
           allRanges: ranges,
           isParent: true,
-          test_type: bestMatch.test_type || 'Numeric', // NEW: Include test type
-          text_value: bestMatch.text_value || null,     // NEW: Include text value for Text type
-          formula: bestMatch.formula || null            // NEW: Include formula for auto-calculation
+          test_type: formulaData?.test_type || 'Numeric', // Load from lab_test_formulas
+          text_value: formulaData?.text_value || null,     // Load from lab_test_formulas
+          formula: formulaData?.formula || null            // Load from lab_test_formulas
         };
         processedSubTests.push(parentSubTest);
 
@@ -2474,29 +2506,47 @@ const LabOrders = () => {
         console.log(`📐 Processing formula for "${subTest.name}": ${subTest.formula}`);
         let formula = subTest.formula;
         let canCalculate = true;
+        let hasEmptyDependency = false;
 
         // Replace test names in formula with actual values
         currentTestRow.sub_tests.forEach((st: any) => {
           const subTestKey = `${currentTestRow.id}_subtest_${st.id}`;
           const subTestValue = currentFormData[subTestKey]?.result_value;
 
-          console.log(`  🔍 Checking "${st.name}" (key: ${subTestKey}), value: ${subTestValue}`);
+          console.log(`  🔍 Checking "${st.name}" (key: ${subTestKey}), value: "${subTestValue}"`);
 
-          if (subTestValue && !isNaN(parseFloat(subTestValue))) {
-            // Replace test name with its value (case-sensitive, whole word match)
-            const regex = new RegExp(`\\b${st.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'g');
-            const beforeReplace = formula;
-            formula = formula.replace(regex, subTestValue);
-            if (beforeReplace !== formula) {
-              console.log(`    ✅ Replaced "${st.name}" with ${subTestValue}`);
-              console.log(`    Formula now: ${formula}`);
+          // Check if this test name is used in the formula
+          if (formula.includes(st.name)) {
+            if (!subTestValue || subTestValue.trim() === '') {
+              // Dependency is empty or cleared
+              console.log(`    🗑️ "${st.name}" in formula is EMPTY - will clear calculated value`);
+              hasEmptyDependency = true;
+              canCalculate = false;
+            } else if (!isNaN(parseFloat(subTestValue))) {
+              // Replace test name with its value (case-sensitive, whole word match)
+              const regex = new RegExp(`\\b${st.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'g');
+              const beforeReplace = formula;
+              formula = formula.replace(regex, subTestValue);
+              if (beforeReplace !== formula) {
+                console.log(`    ✅ Replaced "${st.name}" with ${subTestValue}`);
+                console.log(`    Formula now: ${formula}`);
+              }
+            } else {
+              // Value exists but is not a valid number
+              console.log(`    ⚠️ "${st.name}" has invalid numeric value: ${subTestValue}`);
+              canCalculate = false;
             }
-          } else if (formula.includes(st.name)) {
-            // If formula contains this test name but no value is entered yet
-            console.log(`    ⚠️ Formula contains "${st.name}" but no value entered yet`);
-            canCalculate = false;
           }
         });
+
+        const subTestKey = `${currentTestRow.id}_subtest_${subTest.id}`;
+
+        // If any dependency is empty/cleared, clear the calculated value
+        if (hasEmptyDependency) {
+          console.log(`  🗑️ Clearing calculated value for "${subTest.name}" - dependency deleted`);
+          calculatedValues[subTestKey] = '';  // Set to empty string to clear
+          return; // Skip to next sub-test
+        }
 
         // Only calculate if all required values are available
         if (canCalculate) {
@@ -2506,7 +2556,6 @@ const LabOrders = () => {
             const result = eval(formula);
             console.log(`  📊 Evaluation result: ${result}`);
             if (!isNaN(result) && isFinite(result)) {
-              const subTestKey = `${currentTestRow.id}_subtest_${subTest.id}`;
               calculatedValues[subTestKey] = result.toFixed(2);
               console.log(`  ✅ Formula calculated for ${subTest.name}: ${subTest.formula} = ${result.toFixed(2)}`);
               console.log(`  💾 Will save to key: ${subTestKey}`);
@@ -2517,7 +2566,7 @@ const LabOrders = () => {
             console.error(`  ❌ Error calculating formula for ${subTest.name}:`, error);
           }
         } else {
-          console.log(`  ⏸️ Cannot calculate yet - missing values`);
+          console.log(`  ⏸️ Cannot calculate yet - missing or invalid values`);
         }
       }
     });
@@ -2541,12 +2590,17 @@ const LabOrders = () => {
         const currentTestRow = selectedTestsForEntry[0]; // Assuming single test entry
 
         // Create a combined test row with sub_tests from testSubTests state
+        // FIX: Use test_name instead of id to access testSubTests
         const testRowWithSubTests = {
           ...currentTestRow,
-          sub_tests: testSubTests[currentTestRow.id] || []
+          sub_tests: testSubTests[currentTestRow.test_name] || []
         };
 
         console.log('🔄 Triggering formula calculation after value change');
+        console.log('📊 Test row test_name:', currentTestRow.test_name);
+        console.log('📊 Sub-tests available:', testRowWithSubTests.sub_tests.length);
+        console.log('📊 Sub-tests with formulas:', testRowWithSubTests.sub_tests.filter((st: any) => st.formula).map((st: any) => ({name: st.name, formula: st.formula})));
+
         const calculatedValues = calculateFormulas(updated, testRowWithSubTests);
 
         // Merge calculated values into updated form data
@@ -2809,17 +2863,17 @@ const LabOrders = () => {
         resultsToUse = altResults || [];
       }
 
+      // Allow printing with unsaved form data if no saved results found
       if (!resultsToUse || resultsToUse.length === 0) {
+        console.log('⚠️ No saved results found, will use current form data for printing');
         toast({
-          title: "No Saved Results Found",
-          description: "No lab results found in database for this patient.",
-          variant: "destructive"
+          title: "Printing Current Form Data",
+          description: "No saved results found. Printing with current entered values.",
         });
-        return;
       }
 
       // Create print content with fetched data or current form data
-      const printContent = await generatePrintContent(resultsToUse);
+      const printContent = await generatePrintContent(resultsToUse || []);
       console.log('📄 Generated print content length:', printContent.length);
 
       // Open print preview
