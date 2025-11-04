@@ -11,7 +11,7 @@ import { AppRoutes } from "@/components/AppRoutes";
 import { useCounts } from "@/hooks/useCounts";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
-import Login from "@/components/Login";
+import LoginPage from "@/components/LoginPage";
 import LandingPage from "@/components/LandingPage";
 import HospitalSelection from "@/components/HospitalSelection";
 import { useToast } from "@/hooks/use-toast";
@@ -75,15 +75,14 @@ class ErrorBoundary extends React.Component<
 }
 
 const AppContent = () => {
-  const { 
-    isAuthenticated, 
-    login, 
-    loginWithCredentials,
-    showLanding, 
-    setShowLanding, 
-    showHospitalSelection, 
+  const {
+    isAuthenticated,
+    login,
+    showLanding,
+    setShowLanding,
+    showHospitalSelection,
     setShowHospitalSelection,
-    hospitalConfig 
+    hospitalConfig
   } = useAuth();
   const { toast } = useToast();
   // Always call hooks at the top level; avoid wrapping hooks in try/catch
@@ -101,24 +100,6 @@ const AppContent = () => {
       </div>
     );
   }
-
-  const handleLogin = (credentials: { username: string; password: string; hospitalType: HospitalType }) => {
-    const success = loginWithCredentials(credentials);
-    if (success) {
-      const config = getHospitalConfig(credentials.hospitalType);
-      toast({
-        title: "Welcome!",
-        description: `Logged in to ${config.name} as ${credentials.username}`,
-      });
-      setShowHospitalSelection(false);
-    } else {
-      toast({
-        title: "Login Failed",
-        description: "Invalid username or password for this hospital",
-        variant: "destructive"
-      });
-    }
-  };
 
   const handleGetStarted = () => {
     localStorage.setItem('hmis_visited', 'true');
@@ -192,19 +173,9 @@ const AppContent = () => {
     return <HospitalSelection onHospitalSelect={handleHospitalSelect} onBackToHome={handleBackToHome} />;
   }
 
-  // Show login page for specific hospital
+  // Show database login page after hospital selection
   if (!isAuthenticated && selectedHospitalType) {
-    const config = getHospitalConfig(selectedHospitalType);
-    return (
-      <Login 
-        onLogin={handleLogin} 
-        onBackToHome={handleBackToHome}
-        onHospitalSelect={handleBackToHospitalSelection}
-        hospitalType={selectedHospitalType}
-        hospitalName={config.fullName}
-        hospitalPrimaryColor={config.primaryColor}
-      />
-    );
+    return <LoginPage />;
   }
 
   // Fallback: Show hospital selection if no hospital is selected

@@ -3,10 +3,12 @@ import { useMemo } from 'react';
 import { menuItems } from './menuItems';
 import { AppSidebarProps, MenuItem } from './types';
 import { useAuth } from '@/contexts/AuthContext';
+import { usePermissions } from '@/hooks/usePermissions';
 import { isFeatureEnabled } from '@/types/hospital';
 
 export const useMenuItems = (props: AppSidebarProps): MenuItem[] => {
   const { hospitalType } = useAuth();
+  const { canManageUsers } = usePermissions();
   const {
     diagnosesCount = 0,
     patientsCount = 0,
@@ -28,8 +30,13 @@ export const useMenuItems = (props: AppSidebarProps): MenuItem[] => {
   return useMemo(() => 
     menuItems
       .filter(item => {
+        // Hide Users tab for non-admins
+        if (item.title === "Users" && !canManageUsers) {
+          return false;
+        }
+
         if (!hospitalType) return true; // Show all items if no hospital type
-        
+
         // Filter menu items based on hospital features
         switch (item.title) {
           case "Pharmacy":
@@ -82,7 +89,7 @@ export const useMenuItems = (props: AppSidebarProps): MenuItem[] => {
                item.title === "Ayushman Consultants" ? ayushmanConsultantsCount :
                item.title === "Ayushman Anaesthetists" ? ayushmanAnaesthetistsCount : 0
       })), [
-        hospitalType, diagnosesCount, patientsCount, usersCount, complicationsCount,
+        hospitalType, canManageUsers, diagnosesCount, patientsCount, usersCount, complicationsCount,
         cghsSurgeryCount, labCount, radiologyCount, medicationCount,
         refereesCount, hopeSurgeonsCount, hopeConsultantsCount, hopeAnaesthetistsCount,
         ayushmanSurgeonsCount, ayushmanConsultantsCount, ayushmanAnaesthetistsCount

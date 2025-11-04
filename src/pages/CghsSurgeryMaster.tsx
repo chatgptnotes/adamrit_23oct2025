@@ -4,6 +4,7 @@ import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { FileText, AlertCircle, Plus, Edit, Eye, Trash2, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
+import { usePermissions } from '@/hooks/usePermissions';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -33,6 +34,7 @@ interface CghsSurgery {
 const CghsSurgeryMaster = () => {
   const navigate = useNavigate();
   const { hospitalConfig } = useAuth();
+  const { canEditMasters } = usePermissions();
   const queryClient = useQueryClient();
 
   // State for modals and forms
@@ -376,20 +378,24 @@ const CghsSurgeryMaster = () => {
                           >
                             <Eye className="h-4 w-4" />
                           </button>
-                          <button
-                            onClick={() => handleEdit(surgery)}
-                            className="p-1 text-green-600 hover:text-green-800"
-                            title="Edit surgery"
-                          >
-                            <Edit className="h-4 w-4" />
-                          </button>
-                          <button
-                            onClick={() => handleDelete(surgery)}
-                            className="p-1 text-red-600 hover:text-red-800"
-                            title="Delete surgery"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
+                          {canEditMasters && (
+                            <button
+                              onClick={() => handleEdit(surgery)}
+                              className="p-1 text-green-600 hover:text-green-800"
+                              title="Edit surgery"
+                            >
+                              <Edit className="h-4 w-4" />
+                            </button>
+                          )}
+                          {canEditMasters && (
+                            <button
+                              onClick={() => handleDelete(surgery)}
+                              className="p-1 text-red-600 hover:text-red-800"
+                              title="Delete surgery"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

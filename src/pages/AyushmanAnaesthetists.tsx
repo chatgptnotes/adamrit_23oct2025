@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Plus, Search, Syringe, Trash2, Edit } from 'lucide-react';
 import { AddItemDialog } from '@/components/AddItemDialog';
 import { useToast } from '@/hooks/use-toast';
+import { usePermissions } from '@/hooks/usePermissions';
 
 interface AyushmanAnaesthetist {
   name: string;
@@ -24,6 +25,7 @@ const AyushmanAnaesthetists = () => {
   const [editingAnaesthetist, setEditingAnaesthetist] = useState<AyushmanAnaesthetist | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { canEditMasters } = usePermissions();
 
   const { data: ayushmanAnaesthetists = [], isLoading } = useQuery({
     queryKey: ['ayushman-anaesthetists'],
@@ -249,22 +251,28 @@ const AyushmanAnaesthetists = () => {
                     {anaesthetist.spinal_rate && (
                       <Badge variant="secondary" className="bg-purple-100 text-purple-700">Spinal: ₹{anaesthetist.spinal_rate}</Badge>
                     )}
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleEdit(anaesthetist)}
-                      className="text-blue-600 hover:text-blue-700 border-blue-300"
-                    >
-                      <Edit className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleDelete(anaesthetist.name)}
-                      className="text-red-600 hover:text-red-700 border-red-300"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+                    {canEditMasters && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleEdit(anaesthetist)}
+                        className="text-blue-600 hover:text-blue-700 border-blue-300"
+                        title="Edit anaesthetist"
+                      >
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                    )}
+                    {canEditMasters && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleDelete(anaesthetist.name)}
+                        className="text-red-600 hover:text-red-700 border-red-300"
+                        title="Delete anaesthetist"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    )}
                   </div>
                 </CardTitle>
               </CardHeader>

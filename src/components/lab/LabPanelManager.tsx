@@ -49,6 +49,7 @@ import {
 } from 'lucide-react';
 import { useTestPanels, useLabSubspecialties } from '@/hooks/useLabData';
 import { useToast } from '@/hooks/use-toast';
+import { usePermissions } from '@/hooks/usePermissions';
 import LabTestFormBuilder from './LabTestFormBuilder';
 import TestConfigurationSection, { SubTest } from './TestConfigurationSection';
 import { supabase } from '@/integrations/supabase/client';
@@ -596,6 +597,7 @@ const LabPanelManager: React.FC = () => {
   const [pageSize, setPageSize] = useState(10);
   const [showFormBuilder, setShowFormBuilder] = useState(false);
   const { toast } = useToast();
+  const { canEditMasters } = usePermissions();
 
   // Use real database data with fallback to local storage
   const { panels: dbPanels, loading, error, refetch, createPanel, updatePanel, deletePanel } = useTestPanels();
@@ -1350,20 +1352,26 @@ const LabPanelManager: React.FC = () => {
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setEditingPanel(panel)}
-                        >
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          onClick={() => handleDeletePanel(panel.id)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        {canEditMasters && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setEditingPanel(panel)}
+                            title="Edit panel"
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                        )}
+                        {canEditMasters && (
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => handleDeletePanel(panel.id)}
+                            title="Delete panel"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>

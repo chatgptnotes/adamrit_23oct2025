@@ -107,22 +107,14 @@ const LoginPage: React.FC = () => {
               </div>
             </div>
 
-            <Button 
-              type="submit" 
-              className="w-full" 
+            <Button
+              type="submit"
+              className="w-full"
               disabled={isLoading}
             >
               {isLoading ? 'Signing In...' : 'Sign In'}
             </Button>
           </form>
-
-          <div className="mt-4 p-4 bg-gray-50 rounded-lg">
-            <p className="text-sm font-medium text-gray-700 mb-2">Test Accounts:</p>
-            <div className="text-xs text-gray-600 space-y-1">
-              <div>Hope Hospital: <code>admin@hopehospital.com</code> / <code>admin123</code></div>
-              <div>Ayushman Hospital: <code>admin@ayushmanhospital.com</code> / <code>admin123</code></div>
-            </div>
-          </div>
         </CardContent>
         
         <CardFooter className="text-center">

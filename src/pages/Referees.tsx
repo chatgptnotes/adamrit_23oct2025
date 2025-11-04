@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Plus, Search, Building2, Trash2 } from 'lucide-react';
 import { AddItemDialog } from '@/components/AddItemDialog';
 import { useToast } from '@/hooks/use-toast';
+import { usePermissions } from '@/hooks/usePermissions';
 
 interface Referee {
   id: string;
@@ -25,6 +26,7 @@ const Referees = () => {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { canEditMasters } = usePermissions();
 
   const { data: referees = [], isLoading } = useQuery({
     queryKey: ['referees'],
@@ -181,14 +183,17 @@ const Referees = () => {
                     {referee.institution && (
                       <Badge variant="secondary">{referee.institution}</Badge>
                     )}
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleDelete(referee.id)}
-                      className="text-red-600 hover:text-red-700"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+                    {canEditMasters && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleDelete(referee.id)}
+                        className="text-red-600 hover:text-red-700"
+                        title="Delete referee"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    )}
                   </div>
                 </CardTitle>
               </CardHeader>
