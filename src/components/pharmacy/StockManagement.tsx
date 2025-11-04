@@ -4,26 +4,26 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { 
-  Table, 
-  TableBody, 
-  TableCell, 
-  TableHead, 
-  TableHeader, 
-  TableRow 
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow
 } from '@/components/ui/table';
-import { 
-  Dialog, 
-  DialogContent, 
-  DialogHeader, 
-  DialogTitle, 
-  DialogTrigger 
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger
 } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { 
-  Package, 
-  Search, 
-  Filter, 
+import {
+  Package,
+  Search,
+  Filter,
   AlertTriangle,
   TrendingDown,
   TrendingUp,
@@ -43,8 +43,18 @@ import {
   Truck,
   Factory,
   MapPin,
-  ShoppingCart
+  ShoppingCart,
+  Loader2
 } from 'lucide-react';
+import {
+  useBatchInventory,
+  useAllAlerts,
+  useAdjustBatchStock,
+  useMedicineBatches
+} from '@/hooks/useBatchInventory';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
+import { toast } from 'sonner';
 
 interface StockItem {
   id: string;
@@ -102,222 +112,54 @@ const StockManagement: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [alertFilter, setAlertFilter] = useState('all');
   const [stockFilter, setStockFilter] = useState('all');
-  const [selectedStockItem, setSelectedStockItem] = useState<StockItem | null>(null);
+  const [selectedStockItem, setSelectedStockItem] = useState<any | null>(null);
   const [isAdjustmentDialogOpen, setIsAdjustmentDialogOpen] = useState(false);
-  const [adjustmentType, setAdjustmentType] = useState<'IN' | 'OUT' | 'ADJUSTMENT'>('ADJUSTMENT');
+  const [selectedBatchForHistory, setSelectedBatchForHistory] = useState<string | null>(null);
 
-  // Mock data - will be replaced with real data from hooks
-  const stockItems: StockItem[] = [
-    {
-      id: '1',
-      medicine_id: 'med_001',
-      medicine_name: 'Paracetamol',
-      generic_name: 'Acetaminophen',
-      strength: '500mg',
-      dosage_form: 'Tablet',
-      batch_number: 'PAR2024001',
-      manufacturing_date: '2024-01-15',
-      expiry_date: '2025-12-31',
-      received_quantity: 1500,
-      current_stock: 1250,
-      reserved_stock: 50,
-      damaged_stock: 0,
-      supplier_name: 'GSK Pharmaceuticals',
-      purchase_rate: 4.50,
-      mrp: 5.50,
-      rack_number: 'A1',
-      shelf_location: 'Level 2',
-      minimum_stock_level: 100,
-      reorder_level: 200,
-      is_active: true,
-      days_to_expiry: 565
-    },
-    {
-      id: '2',
-      medicine_id: 'med_002',
-      medicine_name: 'Amoxicillin',
-      generic_name: 'Amoxicillin',
-      strength: '250mg',
-      dosage_form: 'Capsule',
-      batch_number: 'AMX2024001',
-      manufacturing_date: '2023-12-01',
-      expiry_date: '2024-08-15',
-      received_quantity: 100,
-      current_stock: 45,
-      reserved_stock: 15,
-      damaged_stock: 2,
-      supplier_name: 'Cipla Ltd',
-      purchase_rate: 10.00,
-      mrp: 12.00,
-      rack_number: 'B2',
-      shelf_location: 'Level 1',
-      minimum_stock_level: 50,
-      reorder_level: 75,
-      is_active: true,
-      days_to_expiry: 63
-    },
-    {
-      id: '3',
-      medicine_id: 'med_003',
-      medicine_name: 'Ibuprofen',
-      generic_name: 'Ibuprofen',
-      strength: '400mg',
-      dosage_form: 'Tablet',
-      batch_number: 'IBU2024001',
-      manufacturing_date: '2024-03-01',
-      expiry_date: '2026-03-20',
-      received_quantity: 1000,
-      current_stock: 890,
-      reserved_stock: 25,
-      damaged_stock: 0,
-      supplier_name: 'Abbott Healthcare',
-      purchase_rate: 7.00,
-      mrp: 8.75,
-      rack_number: 'A3',
-      shelf_location: 'Level 3',
-      minimum_stock_level: 75,
-      reorder_level: 150,
-      is_active: true,
-      days_to_expiry: 645
-    },
-    {
-      id: '4',
-      medicine_id: 'med_004',
-      medicine_name: 'Aspirin',
-      generic_name: 'Acetylsalicylic Acid',
-      strength: '75mg',
-      dosage_form: 'Tablet',
-      batch_number: 'ASP2024001',
-      manufacturing_date: '2023-06-01',
-      expiry_date: '2024-06-30',
-      received_quantity: 200,
-      current_stock: 0,
-      reserved_stock: 0,
-      damaged_stock: 5,
-      supplier_name: 'Bayer Pharmaceuticals',
-      purchase_rate: 3.50,
-      mrp: 4.25,
-      rack_number: 'C1',
-      shelf_location: 'Level 1',
-      minimum_stock_level: 25,
-      reorder_level: 50,
-      is_active: true,
-      days_to_expiry: 17
-    }
-  ];
+  // Fetch real data using custom hooks
+  const { data: batchInventoryData, isLoading: isLoadingInventory, refetch: refetchInventory } = useBatchInventory({
+    has_stock: stockFilter === 'out' ? false : stockFilter === 'low' ? undefined : undefined,
+    search_term: searchTerm || undefined
+  });
 
-  const stockMovements: StockMovement[] = [
-    {
-      id: '1',
-      medicine_name: 'Paracetamol',
-      batch_number: 'PAR2024001',
-      movement_type: 'OUT',
-      reference_type: 'SALE',
-      quantity_before: 1280,
-      quantity_changed: -30,
-      quantity_after: 1250,
-      reason: 'Sale to customer',
-      performed_by: 'Pharmacist John',
-      movement_date: '2025-06-13T10:30:00Z'
-    },
-    {
-      id: '2',
-      medicine_name: 'Amoxicillin',
-      batch_number: 'AMX2024001',
-      movement_type: 'OUT',
-      reference_type: 'PRESCRIPTION',
-      quantity_before: 60,
-      quantity_changed: -15,
-      quantity_after: 45,
-      reason: 'Prescription dispensing',
-      performed_by: 'Pharmacist Jane',
-      movement_date: '2025-06-13T09:15:00Z'
-    },
-    {
-      id: '3',
-      medicine_name: 'Ibuprofen',
-      batch_number: 'IBU2024001',
-      movement_type: 'ADJUSTMENT',
-      quantity_before: 885,
-      quantity_changed: 5,
-      quantity_after: 890,
-      reason: 'Stock count adjustment',
-      performed_by: 'Store Manager',
-      movement_date: '2025-06-13T08:00:00Z'
-    },
-    {
-      id: '4',
-      medicine_name: 'Aspirin',
-      batch_number: 'ASP2024001',
-      movement_type: 'DAMAGE',
-      quantity_before: 5,
-      quantity_changed: -5,
-      quantity_after: 0,
-      reason: 'Damaged packaging',
-      performed_by: 'Quality Control',
-      movement_date: '2025-06-12T16:45:00Z'
-    }
-  ];
+  const { alerts: stockAlerts, isLoading: isLoadingAlerts, refetch: refetchAlerts } = useAllAlerts(90);
 
-  const generateAlerts = (): StockAlert[] => {
-    const alerts: StockAlert[] = [];
-    
-    stockItems.forEach(item => {
-      // Out of stock alert
-      if (item.current_stock === 0) {
-        alerts.push({
-          id: `alert_${item.id}_out`,
-          medicine_name: item.medicine_name,
-          alert_type: 'OUT_OF_STOCK',
-          current_stock: item.current_stock,
-          threshold: item.minimum_stock_level,
-          severity: 'CRITICAL',
-          batch_number: item.batch_number
-        });
-      }
-      // Low stock alert
-      else if (item.current_stock <= item.minimum_stock_level) {
-        alerts.push({
-          id: `alert_${item.id}_low`,
-          medicine_name: item.medicine_name,
-          alert_type: 'LOW_STOCK',
-          current_stock: item.current_stock,
-          threshold: item.minimum_stock_level,
-          severity: item.current_stock <= item.reorder_level ? 'HIGH' : 'MEDIUM',
-          batch_number: item.batch_number
-        });
-      }
-      
-      // Expiry alerts
-      if (item.days_to_expiry < 0) {
-        alerts.push({
-          id: `alert_${item.id}_expired`,
-          medicine_name: item.medicine_name,
-          alert_type: 'EXPIRED',
-          current_stock: item.current_stock,
-          days_to_expiry: item.days_to_expiry,
-          severity: 'CRITICAL',
-          batch_number: item.batch_number,
-          expiry_date: item.expiry_date
-        });
-      } else if (item.days_to_expiry <= 90) {
-        alerts.push({
-          id: `alert_${item.id}_expiring`,
-          medicine_name: item.medicine_name,
-          alert_type: 'NEAR_EXPIRY',
-          current_stock: item.current_stock,
-          days_to_expiry: item.days_to_expiry,
-          severity: item.days_to_expiry <= 30 ? 'HIGH' : 'MEDIUM',
-          batch_number: item.batch_number,
-          expiry_date: item.expiry_date
-        });
-      }
-    });
-    
-    return alerts;
+  // Transform batch inventory data to match StockItem interface
+  const stockItems: any[] = batchInventoryData?.map(batch => ({
+    id: batch.id,
+    medicine_id: batch.medicine_id,
+    medicine_name: batch.medicine_name || 'Unknown',
+    generic_name: batch.generic_name,
+    strength: batch.strength,
+    dosage_form: batch.dosage_form,
+    batch_number: batch.batch_number,
+    manufacturing_date: batch.manufacturing_date,
+    expiry_date: batch.expiry_date,
+    received_quantity: batch.received_quantity || 0,
+    current_stock: batch.current_stock || 0,
+    reserved_stock: batch.reserved_stock || 0,
+    damaged_stock: 0, // TODO: Add damaged stock tracking
+    supplier_name: batch.supplier_name,
+    purchase_rate: batch.purchase_price,
+    mrp: batch.mrp,
+    rack_number: batch.rack_number,
+    shelf_location: batch.shelf_location,
+    minimum_stock_level: 0, // TODO: Get from medication table
+    reorder_level: 0, // TODO: Get from medication table
+    is_active: batch.is_active,
+    days_to_expiry: batch.days_to_expiry || 0,
+    expiry_status: batch.expiry_status
+  })) || [];
+
+  // Fetch stock movements for selected batch (will be implemented when viewing batch details)
+  const [stockMovements, setStockMovements] = useState<StockMovement[]>([]);
+
+  // Refresh handler
+  const handleRefresh = () => {
+    refetchInventory();
+    refetchAlerts();
+    toast.success('Stock data refreshed');
   };
-
-  const stockAlerts = generateAlerts();
 
   const formatCurrency = (amount: number) => 
     new Intl.NumberFormat('en-IN', { 
@@ -376,17 +218,19 @@ const StockManagement: React.FC = () => {
     return matchesSearch && matchesStockFilter;
   });
 
-  const filteredAlerts = stockAlerts.filter(alert => {
-    return alertFilter === 'all' || alert.alert_type === alertFilter;
+  const filteredAlerts = (stockAlerts || []).filter(alert => {
+    if (alertFilter === 'all') return true;
+    if (alertFilter === 'EXPIRING_SOON') return alert.alert_type === 'EXPIRING_SOON';
+    return alert.alert_type === alertFilter;
   });
 
   const stockStats = {
     totalItems: stockItems.length,
-    lowStockItems: stockItems.filter(item => item.current_stock <= item.minimum_stock_level).length,
+    lowStockItems: (stockAlerts || []).filter(a => a.alert_type === 'LOW_STOCK').length,
     outOfStockItems: stockItems.filter(item => item.current_stock === 0).length,
-    expiringItems: stockItems.filter(item => item.days_to_expiry <= 90 && item.days_to_expiry >= 0).length,
-    expiredItems: stockItems.filter(item => item.days_to_expiry < 0).length,
-    totalValue: stockItems.reduce((sum, item) => sum + (item.current_stock * (item.purchase_rate || item.mrp)), 0)
+    expiringItems: (stockAlerts || []).filter(a => a.alert_type === 'NEAR_EXPIRY').length,
+    expiredItems: (stockAlerts || []).filter(a => a.alert_type === 'EXPIRED').length,
+    totalValue: stockItems.reduce((sum, item) => sum + (item.current_stock * (item.purchase_rate || item.mrp || 0)), 0)
   };
 
   return (
@@ -403,12 +247,12 @@ const StockManagement: React.FC = () => {
           </div>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline">
+          <Button variant="outline" disabled>
             <Download className="h-4 w-4 mr-2" />
             Export Report
           </Button>
-          <Button variant="outline">
-            <RefreshCw className="h-4 w-4 mr-2" />
+          <Button variant="outline" onClick={handleRefresh} disabled={isLoadingInventory}>
+            <RefreshCw className={`h-4 w-4 mr-2 ${isLoadingInventory ? 'animate-spin' : ''}`} />
             Refresh
           </Button>
           <Dialog open={isAdjustmentDialogOpen} onOpenChange={setIsAdjustmentDialogOpen}>
@@ -418,11 +262,14 @@ const StockManagement: React.FC = () => {
                 Stock Adjustment
               </Button>
             </DialogTrigger>
-            <DialogContent>
+            <DialogContent className="max-w-2xl">
               <DialogHeader>
                 <DialogTitle>Stock Adjustment</DialogTitle>
               </DialogHeader>
-              <StockAdjustmentForm onSuccess={() => setIsAdjustmentDialogOpen(false)} />
+              <StockAdjustmentForm onSuccess={() => {
+                setIsAdjustmentDialogOpen(false);
+                handleRefresh();
+              }} />
             </DialogContent>
           </Dialog>
         </div>
@@ -480,10 +327,23 @@ const StockManagement: React.FC = () => {
         </Card>
       </div>
 
+      {/* Loading State */}
+      {isLoadingInventory && (
+        <Card>
+          <CardContent className="pt-8 pb-8">
+            <div className="flex flex-col items-center justify-center gap-4">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              <p className="text-muted-foreground">Loading batch inventory...</p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {!isLoadingInventory && (
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
         <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="inventory">Inventory</TabsTrigger>
-          <TabsTrigger value="alerts">Alerts ({stockAlerts.length})</TabsTrigger>
+          <TabsTrigger value="inventory">Inventory ({stockItems.length})</TabsTrigger>
+          <TabsTrigger value="alerts">Alerts ({(stockAlerts || []).length})</TabsTrigger>
           <TabsTrigger value="movements">Movements</TabsTrigger>
           <TabsTrigger value="reports">Reports</TabsTrigger>
         </TabsList>
@@ -756,6 +616,24 @@ const StockManagement: React.FC = () => {
           </Card>
         </TabsContent>
       </Tabs>
+      )}
+
+      {/* Empty State */}
+      {!isLoadingInventory && stockItems.length === 0 && (
+        <Card>
+          <CardContent className="pt-12 pb-12">
+            <div className="flex flex-col items-center justify-center gap-4">
+              <Package className="h-16 w-16 text-muted-foreground" />
+              <div className="text-center">
+                <h3 className="text-lg font-semibold">No Batch Inventory Found</h3>
+                <p className="text-sm text-muted-foreground mt-2">
+                  No batch inventory records available. Stock will appear here after you receive medicines through GRN.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Stock Item Details Dialog */}
       <Dialog open={!!selectedStockItem} onOpenChange={() => setSelectedStockItem(null)}>
@@ -801,76 +679,265 @@ const StockManagement: React.FC = () => {
 
 // Stock Adjustment Form Component
 const StockAdjustmentForm: React.FC<{ onSuccess: () => void }> = ({ onSuccess }) => {
-  const [formData, setFormData] = useState({
-    medicine_id: '',
-    batch_number: '',
-    adjustment_type: 'ADJUSTMENT' as const,
-    quantity_change: 0,
-    reason: ''
-  });
+  const { selectedHospital } = useAuth();
+  const adjustBatchStockMutation = useAdjustBatchStock();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const [medicineSearch, setMedicineSearch] = useState('');
+  const [selectedMedicine, setSelectedMedicine] = useState<any>(null);
+  const [medicines, setMedicines] = useState<any[]>([]);
+  const [searchingMedicines, setSearchingMedicines] = useState(false);
+
+  const [selectedBatch, setSelectedBatch] = useState<any>(null);
+  const { data: batches, isLoading: loadingBatches } = useMedicineBatches(
+    selectedMedicine?.id || null,
+    { has_stock: true }
+  );
+
+  const [adjustmentType, setAdjustmentType] = useState<'IN' | 'OUT' | 'ADJUSTMENT' | 'DAMAGE' | 'EXPIRY'>('ADJUSTMENT');
+  const [quantity, setQuantity] = useState<number>(0);
+  const [reason, setReason] = useState('');
+
+  // Search medicines
+  const searchMedicines = async (term: string) => {
+    if (!term || term.length < 2) {
+      setMedicines([]);
+      return;
+    }
+
+    setSearchingMedicines(true);
+    try {
+      const { data, error } = await supabase
+        .from('medication')
+        .select('id, product_name, generic, manufacturer, item_code')
+        .or(`product_name.ilike.%${term}%,generic.ilike.%${term}%,item_code.ilike.%${term}%`)
+        .limit(10);
+
+      if (error) throw error;
+      setMedicines(data || []);
+    } catch (error) {
+      console.error('Error searching medicines:', error);
+      toast.error('Failed to search medicines');
+    } finally {
+      setSearchingMedicines(false);
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log('Stock adjustment:', formData);
-    alert('Stock adjustment recorded successfully! (Demo mode)');
-    onSuccess();
+
+    if (!selectedBatch) {
+      toast.error('Please select a batch');
+      return;
+    }
+
+    if (quantity === 0) {
+      toast.error('Quantity cannot be zero');
+      return;
+    }
+
+    if (!reason.trim()) {
+      toast.error('Please provide a reason for adjustment');
+      return;
+    }
+
+    try {
+      await adjustBatchStockMutation.mutateAsync({
+        batch_id: selectedBatch.id,
+        adjustment_type: adjustmentType,
+        quantity: Math.abs(quantity),
+        reason: reason,
+        performed_by: 'Current User', // TODO: Get from auth context
+        reference_type: 'ADJUSTMENT'
+      });
+
+      toast.success('Stock adjustment recorded successfully');
+      onSuccess();
+    } catch (error: any) {
+      console.error('Error adjusting stock:', error);
+      toast.error(error.message || 'Failed to adjust stock');
+    }
   };
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
+      {/* Medicine Search */}
       <div>
-        <label className="text-sm font-medium">Medicine *</label>
-        <Input
-          required
-          placeholder="Search and select medicine"
-          value={formData.medicine_id}
-          onChange={(e) => setFormData(prev => ({ ...prev, medicine_id: e.target.value }))}
-        />
+        <label className="text-sm font-medium block mb-2">Medicine *</label>
+        <div className="relative">
+          <Input
+            required
+            placeholder="Search by medicine name, generic name, or code..."
+            value={medicineSearch}
+            onChange={(e) => {
+              setMedicineSearch(e.target.value);
+              searchMedicines(e.target.value);
+              setSelectedMedicine(null);
+              setSelectedBatch(null);
+            }}
+            className="mb-2"
+          />
+          {searchingMedicines && (
+            <Loader2 className="absolute right-3 top-3 h-4 w-4 animate-spin text-muted-foreground" />
+          )}
+        </div>
+
+        {medicines.length > 0 && !selectedMedicine && (
+          <div className="border rounded-md max-h-48 overflow-y-auto">
+            {medicines.map((med) => (
+              <div
+                key={med.id}
+                className="p-3 hover:bg-accent cursor-pointer border-b last:border-b-0"
+                onClick={() => {
+                  setSelectedMedicine(med);
+                  setMedicineSearch(med.product_name);
+                  setMedicines([]);
+                }}
+              >
+                <div className="font-medium">{med.product_name}</div>
+                <div className="text-sm text-muted-foreground">
+                  {med.generic} • {med.manufacturer} • Code: {med.item_code}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {selectedMedicine && (
+          <div className="p-3 bg-accent rounded-md">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="font-medium">{selectedMedicine.product_name}</div>
+                <div className="text-sm text-muted-foreground">{selectedMedicine.generic}</div>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setSelectedMedicine(null);
+                  setSelectedBatch(null);
+                  setMedicineSearch('');
+                }}
+              >
+                Change
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
+
+      {/* Batch Selection */}
+      {selectedMedicine && (
+        <div>
+          <label className="text-sm font-medium block mb-2">Select Batch *</label>
+          {loadingBatches ? (
+            <div className="flex items-center gap-2 p-3 border rounded-md">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              <span className="text-sm text-muted-foreground">Loading batches...</span>
+            </div>
+          ) : batches && batches.length > 0 ? (
+            <div className="border rounded-md max-h-64 overflow-y-auto">
+              {batches.map((batch: any) => (
+                <div
+                  key={batch.id}
+                  className={`p-3 border-b last:border-b-0 cursor-pointer hover:bg-accent ${
+                    selectedBatch?.id === batch.id ? 'bg-accent' : ''
+                  }`}
+                  onClick={() => setSelectedBatch(batch)}
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="font-medium font-mono">{batch.batch_number}</div>
+                      <div className="text-sm text-muted-foreground">
+                        Stock: {batch.current_stock} • Expires: {new Date(batch.expiry_date).toLocaleDateString()}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        Location: {batch.rack_number} {batch.shelf_location}
+                      </div>
+                    </div>
+                    {selectedBatch?.id === batch.id && (
+                      <CheckCircle className="h-5 w-5 text-green-600" />
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="p-4 border rounded-md text-center text-sm text-muted-foreground">
+              No batches with stock available for this medicine
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Adjustment Type */}
       <div>
-        <label className="text-sm font-medium">Batch Number *</label>
-        <Input
-          required
-          value={formData.batch_number}
-          onChange={(e) => setFormData(prev => ({ ...prev, batch_number: e.target.value }))}
-          placeholder="Enter batch number"
-        />
-      </div>
-      <div>
-        <label className="text-sm font-medium">Adjustment Type</label>
+        <label className="text-sm font-medium block mb-2">Adjustment Type *</label>
         <select
-          className="w-full p-2 border rounded"
-          value={formData.adjustment_type}
-          onChange={(e) => setFormData(prev => ({ ...prev, adjustment_type: e.target.value as any }))}
+          className="w-full p-2 border rounded-md"
+          value={adjustmentType}
+          onChange={(e) => setAdjustmentType(e.target.value as any)}
+          required
         >
-          <option value="ADJUSTMENT">Stock Adjustment</option>
+          <option value="IN">Stock In (Increase)</option>
+          <option value="OUT">Stock Out (Decrease)</option>
+          <option value="ADJUSTMENT">Manual Adjustment</option>
           <option value="DAMAGE">Damage/Loss</option>
           <option value="EXPIRY">Expiry Removal</option>
         </select>
       </div>
+
+      {/* Quantity */}
       <div>
-        <label className="text-sm font-medium">Quantity Change *</label>
+        <label className="text-sm font-medium block mb-2">
+          Quantity * {selectedBatch && `(Available: ${selectedBatch.current_stock})`}
+        </label>
         <Input
           type="number"
           required
-          value={formData.quantity_change}
-          onChange={(e) => setFormData(prev => ({ ...prev, quantity_change: parseInt(e.target.value) || 0 }))}
-          placeholder="Enter quantity (positive for increase, negative for decrease)"
+          min="1"
+          max={adjustmentType === 'OUT' || adjustmentType === 'DAMAGE' || adjustmentType === 'EXPIRY'
+            ? selectedBatch?.current_stock : undefined}
+          value={quantity || ''}
+          onChange={(e) => setQuantity(parseInt(e.target.value) || 0)}
+          placeholder="Enter quantity"
         />
+        {adjustmentType === 'IN' && (
+          <p className="text-xs text-muted-foreground mt-1">This will increase the stock</p>
+        )}
+        {(adjustmentType === 'OUT' || adjustmentType === 'DAMAGE' || adjustmentType === 'EXPIRY') && (
+          <p className="text-xs text-muted-foreground mt-1">This will decrease the stock</p>
+        )}
       </div>
+
+      {/* Reason */}
       <div>
-        <label className="text-sm font-medium">Reason *</label>
+        <label className="text-sm font-medium block mb-2">Reason *</label>
         <textarea
-          className="w-full p-2 border rounded"
+          className="w-full p-2 border rounded-md"
           rows={3}
           required
-          value={formData.reason}
-          onChange={(e) => setFormData(prev => ({ ...prev, reason: e.target.value }))}
-          placeholder="Enter reason for adjustment"
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          placeholder="Enter reason for stock adjustment (e.g., Physical count correction, Damaged items, etc.)"
         />
       </div>
-      <div className="flex justify-end gap-2">
-        <Button type="submit">Record Adjustment</Button>
+
+      {/* Submit Button */}
+      <div className="flex justify-end gap-2 pt-4">
+        <Button
+          type="submit"
+          disabled={!selectedBatch || quantity === 0 || !reason.trim() || adjustBatchStockMutation.isPending}
+        >
+          {adjustBatchStockMutation.isPending ? (
+            <>
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              Recording...
+            </>
+          ) : (
+            'Record Adjustment'
+          )}
+        </Button>
       </div>
     </form>
   );
