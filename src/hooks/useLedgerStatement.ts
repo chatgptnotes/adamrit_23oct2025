@@ -27,6 +27,7 @@ interface UseLedgerStatementParams {
   fromDate: string;
   toDate: string;
   mrnFilter?: string;
+  paymentModeFilter?: string;
 }
 
 export const useLedgerStatementData = ({
@@ -34,15 +35,17 @@ export const useLedgerStatementData = ({
   fromDate,
   toDate,
   mrnFilter,
+  paymentModeFilter,
 }: UseLedgerStatementParams) => {
   return useQuery({
-    queryKey: ['ledger-statement', accountName, fromDate, toDate, mrnFilter],
+    queryKey: ['ledger-statement', accountName, fromDate, toDate, mrnFilter, paymentModeFilter],
     queryFn: async () => {
       console.log('Fetching ledger statement:', {
         accountName,
         fromDate,
         toDate,
         mrnFilter,
+        paymentModeFilter,
       });
 
       const { data, error } = await supabase.rpc('get_ledger_statement_with_patients', {
@@ -50,6 +53,7 @@ export const useLedgerStatementData = ({
         p_from_date: fromDate,
         p_to_date: toDate,
         p_mrn_filter: mrnFilter || null,
+        p_payment_mode: paymentModeFilter || null,
       });
 
       if (error) {

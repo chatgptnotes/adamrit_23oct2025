@@ -318,7 +318,7 @@ export default function DischargeSummary({
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.728-.833-2.498 0L4.316 15.5c-.77.833.192 2.5 1.732 2.5z" />
             </svg>
           </div>
-          <h2 className="text-2xl font-bold text-red-600 mb-4">No Discharge Summary Data</h2>
+          <h2 className="text-2xl font-bold text-red-600 mb-4">No OPD Summary Data</h2>
           <p className="text-gray-600">No patient data available to generate discharge summary.</p>
         </div>
       </div>
@@ -338,7 +338,7 @@ export default function DischargeSummary({
           <div className="text-center">
             <h1 className="text-sm font-bold tracking-wide">**DISCHARGE SUMMARY**</h1>
           </div>
-          <div className="text-[10px] text-gray-500">{header?.right || 'Discharge Summary'}</div>
+          <div className="text-[10px] text-gray-500">{header?.right || 'OPD Summary'}</div>
         </div>
 
         {/* Patient Card */}
@@ -615,7 +615,7 @@ export default function DischargeSummary({
 
 // ------------------------ DEMO DATA (replace with real data) ------------------------
 export const DemoData: DischargeSummaryData = {
-  header: { left: "8/20/25, 11:48 AM", right: "Discharge Summary" },
+  header: { left: "8/20/25, 11:48 AM", right: "OPD Summary" },
   patient: {
     name: "NIYATI BAWANKAR",
     age: "3",

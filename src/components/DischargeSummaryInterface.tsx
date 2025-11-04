@@ -195,7 +195,7 @@ The patient was admitted with a history of LEFT CONGENITAL INGUINAL HERNIA. The 
 
     // Create the discharge summary text
     const dischargeSummaryText = `
-Discharge Summary - ${patientName || 'test2'}
+OPD Summary - ${patientName || 'test2'}
 
 Name: ${patientName || 'test2'}
 Patient ID: ${visitId || 'UHAY25I22001'}
@@ -621,7 +621,7 @@ Note: URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 763097481
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <FileText className="h-5 w-5" />
-                All Patient Data (Auto-populated when Discharge Summary is clicked):
+                All Patient Data (Auto-populated when OPD Summary is clicked):
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -639,7 +639,7 @@ Note: URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 763097481
                   className="bg-blue-600 hover:bg-blue-700"
                 >
                   <FileText className="mr-2 h-4 w-4" />
-                  View Full Discharge Summary
+                  View Full OPD Summary
                 </Button>
                 <Button 
                   onClick={() => console.log('Generate AI Summary')}

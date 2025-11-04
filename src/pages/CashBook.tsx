@@ -4,6 +4,7 @@ import { Calendar, Loader2, ArrowLeft } from 'lucide-react';
 import { useCashBookEntries, useCashBookUsers, useCashBookVoucherTypes, useAllDailyTransactions, DailyTransaction } from '@/hooks/useCashBookQueries';
 import PatientTransactionModal from '@/components/PatientTransactionModal';
 import { useAuth } from '@/contexts/AuthContext';
+import * as XLSX from 'xlsx';
 
 const CashBook: React.FC = () => {
   // Get today's date in YYYY-MM-DD format
@@ -57,6 +58,129 @@ const CashBook: React.FC = () => {
   // Handler to navigate back to Ledger Statement
   const handleBack = () => {
     navigate('/ledger-statement');
+  };
+
+  // Handler to export Cash Book to Excel
+  const handleExcelExport = () => {
+    if (displayEntries.length === 0) {
+      alert('No data to export');
+      return;
+    }
+
+    // Create workbook
+    const workbook = XLSX.utils.book_new();
+
+    // Prepare data array
+    const data: any[][] = [];
+
+    // Add hospital header
+    data.push(['Drm Hope Hospitals Pvt Ltd']);
+    data.push(['Shreevardhan Complex 3 Rd Floor Ramdaspet']);
+    data.push(['Kamptee Road Takia Naka Nagpur']);
+    data.push([]);  // Empty row
+
+    // Add title with hospital identifier
+    const hospitalIdentifier = hospitalConfig?.name === 'Hope' ? 'HOPE' : hospitalConfig?.name === 'Ayushman' ? 'Ayushman' : 'HOPE';
+    data.push([`Cash (${hospitalIdentifier}) Book`]);
+    data.push([]);  // Empty row
+
+    // Add date period
+    data.push([`For ${formatDateForInput(fromDate)}`]);
+    data.push([]);  // Empty row
+
+    // Add headers with voucher columns
+    data.push(['Date', 'Particulars', 'Vch Type', 'Vch No.', 'Debit', 'Credit']);
+
+    // Counter for voucher numbers
+    let voucherCounter = 1;
+
+    // Add all entries
+    displayEntries.forEach((entry) => {
+      if (entry.type === 'opening-balance') {
+        data.push([
+          entry.date,
+          entry.particulars,
+          '', // No voucher type for opening balance
+          '', // No voucher number for opening balance
+          entry.debit > 0 ? entry.debit : '',
+          entry.credit > 0 ? entry.credit : ''
+        ]);
+      } else if (entry.type === 'patient-summary') {
+        // Add main row with patient name
+        data.push([
+          entry.date,
+          entry.particulars,
+          'Payment', // Voucher type
+          voucherCounter++, // Voucher number (auto-increment)
+          entry.debit > 0 ? entry.debit : '',
+          entry.credit > 0 ? entry.credit : ''
+        ]);
+        // Add summary as a sub-row (without amounts, just detail)
+        if (entry.summary) {
+          data.push([
+            '',
+            `  ${entry.summary}`,
+            '',
+            '',
+            '',
+            ''
+          ]);
+        }
+      }
+    });
+
+    // Add empty row before totals
+    data.push([]);
+
+    // Add total row
+    data.push([
+      '',
+      'Total:',
+      '',
+      '',
+      totals.totalDebit,
+      totals.totalCredit
+    ]);
+
+    // Add closing balance row
+    data.push([
+      '',
+      'By',
+      'Closing Balance',
+      '',
+      '',
+      Math.abs(totals.closingBalance)
+    ]);
+    data.push([
+      '',
+      '',
+      '',
+      '',
+      totals.totalDebit,
+      totals.totalCredit
+    ]);
+
+    // Create worksheet from data
+    const worksheet = XLSX.utils.aoa_to_sheet(data);
+
+    // Set column widths
+    worksheet['!cols'] = [
+      { wch: 12 },  // Date column
+      { wch: 50 },  // Particulars column (wider for summary text)
+      { wch: 12 },  // Vch Type column
+      { wch: 8 },   // Vch No. column
+      { wch: 15 },  // Debit column
+      { wch: 15 }   // Credit column
+    ];
+
+    // Add worksheet to workbook
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Cash Book');
+
+    // Generate filename with date range
+    const filename = `CashBook_${formatDateForInput(fromDate)}_to_${formatDateForInput(toDate)}.xlsx`.replace(/\//g, '-');
+
+    // Save file
+    XLSX.writeFile(workbook, filename);
   };
 
   // Prepare entries with opening balance and grouped by patient
@@ -195,7 +319,10 @@ const CashBook: React.FC = () => {
           <h1 className="text-white text-xl font-bold">Cash Book</h1>
         </div>
         <div className="flex space-x-2">
-          <button className="bg-blue-700 hover:bg-blue-800 text-white px-4 py-1.5 rounded text-sm font-medium">
+          <button
+            onClick={handleExcelExport}
+            className="bg-blue-700 hover:bg-blue-800 text-white px-4 py-1.5 rounded text-sm font-medium"
+          >
             Export To Excel
           </button>
           <button className="bg-blue-700 hover:bg-blue-800 text-white px-4 py-1.5 rounded text-sm font-medium">

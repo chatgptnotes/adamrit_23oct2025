@@ -700,7 +700,10 @@ const LabPanelManager: React.FC = () => {
         .from('lab_test_config')
         .select('*')
         .eq('test_name', testName)
-        .order('sub_test_name, min_age, gender');
+        .order('display_order', { ascending: true })
+        .order('sub_test_name', { ascending: true })
+        .order('min_age', { ascending: true })
+        .order('gender', { ascending: true });
 
       if (error) {
         console.error('Error loading sub-test configs:', error);
@@ -714,26 +717,47 @@ const LabPanelManager: React.FC = () => {
         return [];
       }
 
-      // Group data by sub_test_name
+      // Load formulas from lab_test_formulas table
+      const { data: formulasData } = await supabase
+        .from('lab_test_formulas')
+        .select('*')
+        .eq('test_name', testName);
+
+      // Create a map of formulas by sub_test_name
+      const formulasMap = new Map<string, any>();
+      if (formulasData) {
+        formulasData.forEach(formula => {
+          formulasMap.set(formula.sub_test_name, formula);
+        });
+      }
+
+      // Group data by sub_test_name - Map preserves insertion order
       const subTestsMap = new Map<string, SubTest>();
+      const subTestOrder = new Map<string, number>(); // Track display_order for sorting
 
       for (const config of data) {
         const subTestKey = config.sub_test_name;
 
         if (!subTestsMap.has(subTestKey)) {
-          // Create new sub-test with type support
-          const isTextType = config.test_type === 'Text';
+          // Get formula data for this sub-test
+          const formulaData = formulasMap.get(subTestKey);
+          const isTextType = formulaData?.test_type === 'Text';
 
           const newSubTest: SubTest = {
             id: `subtest_${subTestKey}_${Date.now()}`,
             name: config.sub_test_name,
             unit: config.unit || config.normal_unit || '',
-            type: isTextType ? 'Text' : 'Numeric', // NEW: Load test type
-            textValue: isTextType ? (config.text_value || '') : '', // NEW: Load text value
+            type: isTextType ? 'Text' : 'Numeric', // Load test type from lab_test_formulas
+            textValue: isTextType ? (formulaData?.text_value || '') : '', // Load text value from lab_test_formulas
             ageRanges: [],
             normalRanges: []
           };
           subTestsMap.set(subTestKey, newSubTest);
+
+          // Store display_order for this sub-test (use first occurrence's display_order)
+          if (!subTestOrder.has(subTestKey)) {
+            subTestOrder.set(subTestKey, config.display_order ?? 999);
+          }
         }
 
         const subTest = subTestsMap.get(subTestKey)!;
@@ -777,7 +801,19 @@ const LabPanelManager: React.FC = () => {
         }
       }
 
-      return Array.from(subTestsMap.values());
+      // Convert to array and sort by display_order to maintain save order
+      const subTestsArray = Array.from(subTestsMap.values());
+
+      // Sort by display_order (first saved test appears first)
+      subTestsArray.sort((a, b) => {
+        const orderA = subTestOrder.get(a.name) ?? 999;
+        const orderB = subTestOrder.get(b.name) ?? 999;
+        return orderA - orderB;
+      });
+
+      console.log('✅ Loaded sub-tests in order:', subTestsArray.map((st, i) => `${i + 1}. ${st.name}`));
+
+      return subTestsArray;
     } catch (error) {
       console.error('Error in loadSubTestsFromDatabase:', error);
       return [];
@@ -901,9 +937,6 @@ const LabPanelManager: React.FC = () => {
           test_name: testName || 'Unknown Test',
           sub_test_name: subTest.name || 'Unknown SubTest',
           unit: subTest.unit || 'unit',
-          test_type: isTextType ? 'Text' : 'Numeric', // NEW: Save test type
-          text_value: isTextType ? (subTest.textValue || null) : null, // NEW: Save text value for Text type
-          formula: subTest.formula || null, // NEW: Save formula for auto-calculation
           min_age: isTextType ? 0 : minAge, // Skip for Text type
           max_age: isTextType ? 100 : maxAge, // Skip for Text type
           age_unit: isTextType ? 'Years' : ageUnit, // Default for Text type
@@ -931,6 +964,32 @@ const LabPanelManager: React.FC = () => {
           console.error('❌ Error saving sub-test config:', error);
           console.error('Config data that failed:', configData);
           throw error;
+        }
+
+        // Save formula, test_type, and text_value to lab_test_formulas table
+        if (subTest.formula || isTextType) {
+          const formulaData = {
+            lab_id: labId,
+            test_name: testName || 'Unknown Test',
+            sub_test_name: subTest.name || 'Unknown SubTest',
+            formula: subTest.formula || null,
+            test_type: isTextType ? 'Text' : 'Numeric',
+            text_value: isTextType ? (subTest.textValue || null) : null,
+            is_active: true
+          };
+
+          const { error: formulaError } = await supabase
+            .from('lab_test_formulas')
+            .upsert(formulaData, {
+              onConflict: 'lab_id,test_name,sub_test_name'
+            });
+
+          if (formulaError) {
+            console.error('⚠️ Error saving formula data:', formulaError);
+            // Don't throw - formula is optional, continue with main data
+          } else {
+            console.log(`✅ Saved formula for: ${subTest.name}`);
+          }
         }
 
         console.log(`✅ Saved sub-test: ${subTest.name} with ${nestedSubTestsData.length} nested sub-tests`);
@@ -2126,7 +2185,10 @@ const EditPanelForm: React.FC<EditPanelFormProps> = ({ panel, onSubmit }) => {
         .from('lab_test_config')
         .select('*')
         .eq('test_name', testName)
-        .order('sub_test_name, min_age, gender');
+        .order('display_order', { ascending: true })
+        .order('sub_test_name', { ascending: true })
+        .order('min_age', { ascending: true })
+        .order('gender', { ascending: true });
 
       if (error) {
         console.error('Error loading sub-test configs:', error);
@@ -2137,24 +2199,47 @@ const EditPanelForm: React.FC<EditPanelFormProps> = ({ panel, onSubmit }) => {
         return [];
       }
 
-      // Group data by sub_test_name
+      // Load formulas from lab_test_formulas table
+      const { data: formulasData } = await supabase
+        .from('lab_test_formulas')
+        .select('*')
+        .eq('test_name', testName);
+
+      // Create a map of formulas by sub_test_name
+      const formulasMap = new Map<string, any>();
+      if (formulasData) {
+        formulasData.forEach(formula => {
+          formulasMap.set(formula.sub_test_name, formula);
+        });
+      }
+
+      // Group data by sub_test_name - Map preserves insertion order
       const subTestsMap = new Map<string, SubTest>();
+      const subTestOrder = new Map<string, number>(); // Track display_order for sorting
 
       for (const config of data) {
         const subTestKey = config.sub_test_name;
 
         if (!subTestsMap.has(subTestKey)) {
+          // Get formula data for this sub-test
+          const formulaData = formulasMap.get(subTestKey);
+
           // Create new sub-test
           const newSubTest: SubTest = {
             id: `subtest_${subTestKey}_${Date.now()}`,
             name: config.sub_test_name,
             unit: config.unit || config.normal_unit || '',
-            formula: config.formula || '',
+            formula: formulaData?.formula || '',
             ageRanges: [],
             normalRanges: [],
             subTests: []
           };
           subTestsMap.set(subTestKey, newSubTest);
+
+          // Store display_order for this sub-test (use first occurrence's display_order)
+          if (!subTestOrder.has(subTestKey)) {
+            subTestOrder.set(subTestKey, config.display_order ?? 999);
+          }
         }
 
         const subTest = subTestsMap.get(subTestKey)!;
@@ -2220,7 +2305,19 @@ const EditPanelForm: React.FC<EditPanelFormProps> = ({ panel, onSubmit }) => {
         }
       }
 
-      return Array.from(subTestsMap.values());
+      // Convert to array and sort by display_order to maintain save order
+      const subTestsArray = Array.from(subTestsMap.values());
+
+      // Sort by display_order (first saved test appears first)
+      subTestsArray.sort((a, b) => {
+        const orderA = subTestOrder.get(a.name) ?? 999;
+        const orderB = subTestOrder.get(b.name) ?? 999;
+        return orderA - orderB;
+      });
+
+      console.log('✅ Loaded sub-tests in order:', subTestsArray.map((st, i) => `${i + 1}. ${st.name}`));
+
+      return subTestsArray;
     } catch (error) {
       console.error('Error in loadSubTestsFromDatabaseInForm:', error);
       return [];

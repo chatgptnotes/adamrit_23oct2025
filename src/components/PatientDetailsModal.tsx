@@ -22,9 +22,20 @@ export const PatientDetailsModal: React.FC<PatientDetailsModalProps> = ({
   onClose,
   patient
 }) => {
+  // Debug: Log what props the modal receives
+  console.log('🎭 PatientDetailsModal Received:', {
+    isOpen,
+    patient,
+    patientId: patient?.id,
+    patientName: patient?.name,
+    patientIdExists: !!patient?.id
+  });
+
   const { data: patientDetails, isLoading } = useQuery({
     queryKey: ['patient-details', patient.id],
     queryFn: async () => {
+      console.log('🔍 Fetching patient details for ID:', patient.id);
+
       // First get patient basic info
       const { data: patientData, error: patientError } = await supabase
         .from('patients')
@@ -33,9 +44,15 @@ export const PatientDetailsModal: React.FC<PatientDetailsModalProps> = ({
         .single();
 
       if (patientError) {
-        console.error('Error fetching patient:', patientError);
+        console.error('❌ Error fetching patient:', patientError);
         throw patientError;
       }
+
+      console.log('✅ Patient data fetched:', {
+        name: patientData.name,
+        patients_id: patientData.patients_id,
+        id: patientData.id
+      });
 
       // Get visits for this patient
       const { data: visits, error: visitsError } = await supabase
