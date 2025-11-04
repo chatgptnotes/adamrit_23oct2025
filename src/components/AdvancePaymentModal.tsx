@@ -506,9 +506,10 @@ export const AdvancePaymentModal: React.FC<AdvancePaymentModalProps> = ({
 
     }
 
-    // Validate bank selection for Online Transfer
-    if (formData.paymentMode === 'ONLINE' && !formData.selectedBank) {
-      toast.error('Please select a bank account for online transfer');
+    // Validate bank selection for all payment modes that require bank account (except CASH and CREDIT)
+    const modesRequiringBank = ['ONLINE', 'UPI', 'NEFT', 'RTGS', 'CHEQUE', 'CARD', 'DD'];
+    if (modesRequiringBank.includes(formData.paymentMode) && !formData.selectedBank) {
+      toast.error(`Please select a bank account for ${formData.paymentMode} payment`);
       return;
     }
 
@@ -916,8 +917,8 @@ export const AdvancePaymentModal: React.FC<AdvancePaymentModalProps> = ({
               </Select>
             </div>
 
-            {/* Bank Selection - Only show when Online Transfer is selected */}
-            {formData.paymentMode === 'ONLINE' && (
+            {/* Bank Selection - Show for all payment modes except CASH and CREDIT */}
+            {['ONLINE', 'UPI', 'NEFT', 'RTGS', 'CHEQUE', 'CARD', 'DD'].includes(formData.paymentMode) && (
               <div className="grid grid-cols-2 items-center gap-4">
                 <Label htmlFor="bankAccount" className="text-sm font-medium">
                   Select Bank Account <span className="text-red-500">*</span>
