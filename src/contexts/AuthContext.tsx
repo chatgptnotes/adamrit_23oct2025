@@ -15,7 +15,6 @@ interface AuthContextType {
   user: User | null;
   login: (credentials: { email: string; password: string }) => Promise<boolean>;
   signup: (userData: { email: string; password: string; role: 'admin' | 'doctor' | 'nurse' | 'user'; hospitalType: HospitalType }) => Promise<{ success: boolean; error?: string }>;
-  loginWithCredentials: (credentials: { username: string; password: string; hospitalType: HospitalType }) => boolean; // Keep for backward compatibility
   logout: () => void;
   isAuthenticated: boolean;
   isAdmin: boolean;
@@ -45,14 +44,6 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [user, setUser] = useState<User | null>(null);
   const [showLanding, setShowLanding] = useState<boolean>(true);
   const [showHospitalSelection, setShowHospitalSelection] = useState<boolean>(false);
-
-  // Hospital-specific credentials - Simple login credentials
-  const getValidCredentials = (hospitalType: HospitalType) => [
-    { username: 'admin', password: 'admin', role: 'admin' as const },
-    { username: 'doctor', password: 'doctor', role: 'doctor' as const },
-    { username: 'user', password: 'user', role: 'user' as const },
-    { username: hospitalType, password: hospitalType, role: 'user' as const }, // hope/hope, ayushman/ayushman
-  ];
 
   // Check for saved session on load
   useEffect(() => {
@@ -192,30 +183,6 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     }
   };
 
-  // Keep old login method for backward compatibility
-  const loginWithCredentials = (credentials: { username: string; password: string; hospitalType: HospitalType }): boolean => {
-    const validCredentials = getValidCredentials(credentials.hospitalType);
-    const isValid = validCredentials.some(
-      cred => cred.username === credentials.username && cred.password === credentials.password
-    );
-
-    if (isValid) {
-      const found = validCredentials.find(
-        cred => cred.username === credentials.username && cred.password === credentials.password
-      )!;
-      const user: User = { 
-        email: `${found.username}@mock.com`, // Add mock email for compatibility
-        username: found.username, 
-        role: found.role,
-        hospitalType: credentials.hospitalType
-      };
-      setUser(user);
-      localStorage.setItem('hmis_user', JSON.stringify(user));
-      return true;
-    }
-    return false;
-  };
-
   const logout = () => {
     setUser(null);
     localStorage.removeItem('hmis_user');
@@ -232,7 +199,6 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     user,
     login,
     signup,
-    loginWithCredentials,
     logout,
     isAuthenticated: !!user,
     isAdmin: user?.role === 'admin',

@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { HeartHandshake, AlertCircle, Plus, Edit, Eye, Trash2, X } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
+import { usePermissions } from '@/hooks/usePermissions';
 import { supabase } from '@/integrations/supabase/client';
 import { ClinicalService } from '@/types/clinicalService';
 import { toast } from 'sonner';
@@ -11,6 +12,7 @@ import { toast } from 'sonner';
 const ClinicalServices = () => {
   const navigate = useNavigate();
   const { hospitalConfig } = useAuth();
+  const { canEditMasters } = usePermissions();
   const queryClient = useQueryClient();
 
   // State for modals and forms
@@ -231,20 +233,24 @@ const ClinicalServices = () => {
                           >
                             <Eye className="h-4 w-4" />
                           </button>
-                          <button
-                            onClick={() => handleEdit(service)}
-                            className="p-1 text-green-600 hover:text-green-800"
-                            title="Edit service"
-                          >
-                            <Edit className="h-4 w-4" />
-                          </button>
-                          <button
-                            onClick={() => handleDelete(service)}
-                            className="p-1 text-red-600 hover:text-red-800"
-                            title="Delete service"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
+                          {canEditMasters && (
+                            <button
+                              onClick={() => handleEdit(service)}
+                              className="p-1 text-green-600 hover:text-green-800"
+                              title="Edit service"
+                            >
+                              <Edit className="h-4 w-4" />
+                            </button>
+                          )}
+                          {canEditMasters && (
+                            <button
+                              onClick={() => handleDelete(service)}
+                              className="p-1 text-red-600 hover:text-red-800"
+                              title="Delete service"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

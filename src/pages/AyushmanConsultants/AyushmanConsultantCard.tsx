@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Edit, Trash2 } from 'lucide-react';
 import { AyushmanConsultant } from './types';
+import { usePermissions } from '@/hooks/usePermissions';
 
 interface AyushmanConsultantCardProps {
   consultant: AyushmanConsultant;
@@ -11,6 +12,8 @@ interface AyushmanConsultantCardProps {
 }
 
 export const AyushmanConsultantCard = ({ consultant, onEdit, onDelete }: AyushmanConsultantCardProps) => {
+  const { canEditMasters } = usePermissions();
+
   return (
     <Card className="hover:shadow-md transition-shadow">
       <CardHeader>
@@ -23,22 +26,28 @@ export const AyushmanConsultantCard = ({ consultant, onEdit, onDelete }: Ayushma
             {consultant.department && (
               <Badge variant="secondary">{consultant.department}</Badge>
             )}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => onEdit(consultant)}
-              className="text-blue-600 hover:text-blue-700"
-            >
-              <Edit className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => onDelete(consultant.id)}
-              className="text-red-600 hover:text-red-700"
-            >
-              <Trash2 className="h-4 w-4" />
-            </Button>
+            {canEditMasters && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => onEdit(consultant)}
+                className="text-blue-600 hover:text-blue-700"
+                title="Edit consultant"
+              >
+                <Edit className="h-4 w-4" />
+              </Button>
+            )}
+            {canEditMasters && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => onDelete(consultant.id)}
+                className="text-red-600 hover:text-red-700"
+                title="Delete consultant"
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            )}
           </div>
         </CardTitle>
       </CardHeader>

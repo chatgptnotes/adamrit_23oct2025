@@ -7,11 +7,13 @@ import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { MandatoryService as MandatoryServiceType } from '@/types/mandatoryService';
 import { toast } from 'sonner';
+import { usePermissions } from '@/hooks/usePermissions';
 
 const MandatoryService = () => {
   const navigate = useNavigate();
   const { hospitalConfig } = useAuth();
   const queryClient = useQueryClient();
+  const { canEditMasters } = usePermissions();
 
   // State for modals and forms
   const [viewingService, setViewingService] = useState<MandatoryServiceType | null>(null);
@@ -232,20 +234,24 @@ const MandatoryService = () => {
                           >
                             <Eye className="h-4 w-4" />
                           </button>
-                          <button
-                            onClick={() => handleEdit(service)}
-                            className="p-1 text-green-600 hover:text-green-800"
-                            title="Edit service"
-                          >
-                            <Edit className="h-4 w-4" />
-                          </button>
-                          <button
-                            onClick={() => handleDelete(service)}
-                            className="p-1 text-red-600 hover:text-red-800"
-                            title="Delete service"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
+                          {canEditMasters && (
+                            <button
+                              onClick={() => handleEdit(service)}
+                              className="p-1 text-green-600 hover:text-green-800"
+                              title="Edit service"
+                            >
+                              <Edit className="h-4 w-4" />
+                            </button>
+                          )}
+                          {canEditMasters && (
+                            <button
+                              onClick={() => handleDelete(service)}
+                              className="p-1 text-red-600 hover:text-red-800"
+                              title="Delete service"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

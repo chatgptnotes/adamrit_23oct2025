@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/contexts/AuthContext';
+import { usePermissions } from '@/hooks/usePermissions';
 import { supabase } from '@/integrations/supabase/client';
 import { 
   FileText, 
@@ -164,6 +165,7 @@ interface RadiologyTest {
 
 const RadiologyManagement: React.FC = () => {
   const { hospitalConfig } = useAuth();
+  const { canEditMasters } = usePermissions();
   const [activeView, setActiveView] = useState('orders');
   const [radiologyTests, setRadiologyTests] = useState<RadiologyTest[]>([]);
   const [loading, setLoading] = useState(false);
@@ -996,39 +998,45 @@ const RadiologyManagement: React.FC = () => {
                           <Button size="sm" variant="outline" className="text-blue-600">
                             <Eye className="h-4 w-4" />
                           </Button>
-                          <Button 
-                            size="sm" 
-                            variant="outline" 
-                            className="text-green-600"
-                            onClick={() => {
-                              setEditingTest(test);
-                              setFormData({
-                                name: test.name,
-                                subSpecialty: test.body_part || '',
-                                testingMethod: 'Radiology',
-                                service: '',
-                                note: '',
-                                useAsDefault: false,
-                                nabhNablRate: test.nabhNablRate?.toString() || '',
-                                nonNabhNablRate: test.nonNabhNablRate?.toString() || '',
-                                private: test.private?.toString() || '',
-                                bhopalNabh: test.bhopal_nabh?.toString() || '',
-                                bhopalNonNabh: test.bhopal_non_nabh?.toString() || ''
-                              });
-                              setActiveView('editTestForm');
-                            }}
-                          >
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Button 
-                            size="sm" 
-                            variant="outline" 
-                            className="text-red-600 hover:bg-red-50"
-                            onClick={() => deleteRadiologyTest(test.id, test.name)}
-                            disabled={loading}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                          {canEditMasters && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="text-green-600"
+                              onClick={() => {
+                                setEditingTest(test);
+                                setFormData({
+                                  name: test.name,
+                                  subSpecialty: test.body_part || '',
+                                  testingMethod: 'Radiology',
+                                  service: '',
+                                  note: '',
+                                  useAsDefault: false,
+                                  nabhNablRate: test.nabhNablRate?.toString() || '',
+                                  nonNabhNablRate: test.nonNabhNablRate?.toString() || '',
+                                  private: test.private?.toString() || '',
+                                  bhopalNabh: test.bhopal_nabh?.toString() || '',
+                                  bhopalNonNabh: test.bhopal_non_nabh?.toString() || ''
+                                });
+                                setActiveView('editTestForm');
+                              }}
+                              title="Edit test"
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                          )}
+                          {canEditMasters && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="text-red-600 hover:bg-red-50"
+                              onClick={() => deleteRadiologyTest(test.id, test.name)}
+                              disabled={loading}
+                              title="Delete test"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          )}
                         </div>
                       </td>
                     </tr>
