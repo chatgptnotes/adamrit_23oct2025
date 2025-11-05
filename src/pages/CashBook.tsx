@@ -209,7 +209,7 @@ const CashBook: React.FC = () => {
     if (dailyTransactions && dailyTransactions.length > 0) {
       // Filter to show ONLY payment transactions with CASH payment mode
       const cashPaymentTransactions = dailyTransactions.filter((txn: DailyTransaction) =>
-        txn.transaction_type === 'ADVANCE_PAYMENT' &&
+        (txn.transaction_type === 'ADVANCE_PAYMENT' || txn.transaction_type === 'FINAL_BILL') &&
         txn.payment_mode === 'CASH'
       );
 
@@ -221,6 +221,7 @@ const CashBook: React.FC = () => {
         totalAmount: number;
         firstDate: string;
         remarks: string[];
+        paymentTypes: string[];
       }>();
 
       cashPaymentTransactions.forEach((txn: DailyTransaction) => {
@@ -233,13 +234,20 @@ const CashBook: React.FC = () => {
             transactions: [],
             totalAmount: 0,
             firstDate: txn.transaction_date,
-            remarks: []
+            remarks: [],
+            paymentTypes: []
           });
         }
 
         const group = paymentGroups.get(patientKey)!;
         group.transactions.push(txn);
         group.totalAmount += txn.amount;
+
+        // Track payment type
+        const paymentType = txn.transaction_type === 'FINAL_BILL' ? 'Final Payment' : 'Advance Payment';
+        if (!group.paymentTypes.includes(paymentType)) {
+          group.paymentTypes.push(paymentType);
+        }
 
         // Collect remarks from transaction description
         if (txn.description && txn.description !== 'Advance Payment') {
@@ -253,9 +261,12 @@ const CashBook: React.FC = () => {
         const date = new Date(group.firstDate);
         const formattedDate = `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}/${date.getFullYear()}`;
 
+        // Build payment type label
+        const paymentTypeLabel = group.paymentTypes.join(' & ');
+
         // Build summary line with remarks included
-        const remarksText = group.remarks.length > 0 ? ` | Remarks: ${group.remarks.join('; ')}` : '';
-        const summary = `${group.transactions.length} payment${group.transactions.length > 1 ? 's' : ''} | CASH: Rs ${group.totalAmount.toLocaleString('en-IN')}${remarksText}`;
+        const remarksText = group.remarks.length > 0 ? ` | ${group.remarks.join('; ')}` : '';
+        const summary = `${group.transactions.length} payment${group.transactions.length > 1 ? 's' : ''} (${paymentTypeLabel}) | CASH: Rs ${group.totalAmount.toLocaleString('en-IN')}${remarksText}`;
 
         entries.push({
           type: 'patient-summary' as const,

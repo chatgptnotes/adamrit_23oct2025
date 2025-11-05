@@ -2816,8 +2816,7 @@ const FinalBill = () => {
           reason_of_discharge: finalPaymentReason,
           payment_remark: finalPaymentRemark || `Being cash received towards from pt. ${patientData?.name || billData?.name || 'Patient'} against R. No.:`,
           bank_account_id: finalPaymentSelectedBank || null,
-          bank_account_name: bankAccounts.find(b => b.id === finalPaymentSelectedBank)?.account_name || null,
-          created_by: hospitalConfig?.user_id || 'system'
+          bank_account_name: bankAccounts.find(b => b.id === finalPaymentSelectedBank)?.account_name || null
         }, {
           onConflict: 'visit_id' // Use visit_id as conflict target since it's unique
         });
