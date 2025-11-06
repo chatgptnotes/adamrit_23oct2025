@@ -213,73 +213,31 @@ const CashBook: React.FC = () => {
         txn.payment_mode === 'CASH'
       );
 
-      // Group cash payments by patient
-      const paymentGroups = new Map<string, {
-        patientId: string | null;
-        patientName: string;
-        transactions: DailyTransaction[];
-        totalAmount: number;
-        firstDate: string;
-        remarks: string[];
-        paymentTypes: string[];
-      }>();
-
+      // Create individual entries for each cash payment transaction (no grouping)
       cashPaymentTransactions.forEach((txn: DailyTransaction) => {
-        const patientKey = txn.patient_id || txn.patient_name || 'Unknown';
-
-        if (!paymentGroups.has(patientKey)) {
-          paymentGroups.set(patientKey, {
-            patientId: txn.patient_id,
-            patientName: txn.patient_name || 'Unknown Patient',
-            transactions: [],
-            totalAmount: 0,
-            firstDate: txn.transaction_date,
-            remarks: [],
-            paymentTypes: []
-          });
-        }
-
-        const group = paymentGroups.get(patientKey)!;
-        group.transactions.push(txn);
-        group.totalAmount += txn.amount;
-
-        // Track payment type
-        const paymentType = txn.transaction_type === 'FINAL_BILL' ? 'Final Payment' : 'Advance Payment';
-        if (!group.paymentTypes.includes(paymentType)) {
-          group.paymentTypes.push(paymentType);
-        }
-
-        // Collect remarks from transaction description
-        if (txn.description && txn.description !== 'Advance Payment') {
-          group.remarks.push(txn.description);
-        }
-      });
-
-      // Create cash payment entries
-      paymentGroups.forEach((group) => {
-        // Format first transaction date
-        const date = new Date(group.firstDate);
+        // Format transaction date
+        const date = new Date(txn.transaction_date);
         const formattedDate = `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}/${date.getFullYear()}`;
 
-        // Build payment type label
-        const paymentTypeLabel = group.paymentTypes.join(' & ');
+        // Determine payment type label
+        const paymentType = txn.transaction_type === 'FINAL_BILL' ? 'Final Payment' : 'Advance Payment';
 
-        // Build summary line with remarks included
-        const remarksText = group.remarks.length > 0 ? ` | ${group.remarks.join('; ')}` : '';
-        const summary = `${group.transactions.length} payment${group.transactions.length > 1 ? 's' : ''} (${paymentTypeLabel}) | CASH: Rs ${group.totalAmount.toLocaleString('en-IN')}${remarksText}`;
+        // Build summary line with payment details
+        const remarksText = txn.description && txn.description !== 'Advance Payment' ? ` | ${txn.description}` : '';
+        const summary = `${paymentType} | CASH: Rs ${txn.amount.toLocaleString('en-IN')}${remarksText}`;
 
         entries.push({
           type: 'patient-summary' as const,
           date: formattedDate,
-          particulars: `${group.patientName} - Cash Payment`,
+          particulars: `${txn.patient_name || 'Unknown Patient'} - ${paymentType}`,
           summary: summary,
-          debit: group.totalAmount,
+          debit: txn.amount,
           credit: 0,
-          patientId: group.patientId,
+          patientId: txn.patient_id,
           visitId: undefined,
-          patientName: group.patientName,
-          transactionCount: group.transactions.length,
-          transactionDate: group.firstDate
+          patientName: txn.patient_name || 'Unknown Patient',
+          transactionCount: 1,
+          transactionDate: txn.transaction_date
         });
       });
     }
