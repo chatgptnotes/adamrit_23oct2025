@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 
 export interface LedgerStatementEntry {
   voucher_date: string;
@@ -37,8 +38,10 @@ export const useLedgerStatementData = ({
   mrnFilter,
   paymentModeFilter,
 }: UseLedgerStatementParams) => {
+  const { hospitalType } = useAuth();
+
   return useQuery({
-    queryKey: ['ledger-statement', accountName, fromDate, toDate, mrnFilter, paymentModeFilter],
+    queryKey: ['ledger-statement', accountName, fromDate, toDate, mrnFilter, paymentModeFilter, hospitalType],
     queryFn: async () => {
       console.log('Fetching ledger statement:', {
         accountName,
@@ -46,6 +49,7 @@ export const useLedgerStatementData = ({
         toDate,
         mrnFilter,
         paymentModeFilter,
+        hospitalType,
       });
 
       const { data, error } = await supabase.rpc('get_ledger_statement_with_patients', {
@@ -54,6 +58,7 @@ export const useLedgerStatementData = ({
         p_to_date: toDate,
         p_mrn_filter: mrnFilter || null,
         p_payment_mode: paymentModeFilter || null,
+        p_hospital_name: hospitalType || null,
       });
 
       if (error) {
