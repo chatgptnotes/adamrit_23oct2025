@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import PaymentDetailsModal from '@/components/PaymentDetailsModal';
 import { PatientDetailsModal } from '@/components/PatientDetailsModal';
 import * as XLSX from 'xlsx';
+import { supabase } from '@/integrations/supabase/client';
 
 const LedgerStatement: React.FC = () => {
   // Get today's date in YYYY-MM-DD format
@@ -25,10 +26,54 @@ const LedgerStatement: React.FC = () => {
   const [activeMenuItem, setActiveMenuItem] = useState('Ledger Statement');
   const [printingVoucherNo, setPrintingVoucherNo] = useState<string | undefined>(undefined);
   const [paymentModeFilter, setPaymentModeFilter] = useState<string | undefined>('ONLINE');
+  const [bankAccounts, setBankAccounts] = useState<Array<{ id: string; account_name: string }>>([]);
+
+  // Fetch bank accounts from database
+  useEffect(() => {
+    const fetchBankAccounts = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('chart_of_accounts')
+          .select('id, account_name, account_code')
+          .in('account_code', ['1121', '1122', '1123'])
+          .eq('is_active', true)
+          .order('account_name');
+
+        if (error) {
+          console.error('Error fetching bank accounts:', error);
+          toast.error('Failed to load bank accounts');
+          // Fallback to hardcoded list if fetch fails
+          setBankAccounts([
+            { id: '1', account_name: 'STATE BANK OF INDIA (DRM)' },
+            { id: '2', account_name: 'SARASWAT BANK' }
+          ]);
+        } else if (data && data.length > 0) {
+          setBankAccounts(data);
+        } else {
+          // Fallback if no data returned
+          setBankAccounts([
+            { id: '1', account_name: 'STATE BANK OF INDIA (DRM)' },
+            { id: '2', account_name: 'SARASWAT BANK' }
+          ]);
+        }
+      } catch (err) {
+        console.error('Exception fetching bank accounts:', err);
+        // Fallback to hardcoded list on exception
+        setBankAccounts([
+          { id: '1', account_name: 'STATE BANK OF INDIA (DRM)' },
+          { id: '2', account_name: 'SARASWAT BANK' }
+        ]);
+      }
+    };
+
+    fetchBankAccounts();
+  }, []);
 
   // Auto-set ONLINE mode for bank accounts by default
   useEffect(() => {
-    if (accountName === 'SARASWAT BANK' || accountName === 'STATE BANK OF INDIA (DRM)') {
+    if (accountName === 'SARASWAT BANK' ||
+        accountName === 'STATE BANK OF INDIA (DRM)' ||
+        accountName.includes('Canara Bank')) {
       setPaymentModeFilter('ONLINE');
     }
   }, [accountName]);
@@ -112,7 +157,7 @@ const LedgerStatement: React.FC = () => {
         // Already on this page
         break;
       case 'Day Book':
-        console.log('Day Book - To be implemented');
+        navigate('/day-book');
         break;
       default:
         break;
@@ -318,8 +363,11 @@ const LedgerStatement: React.FC = () => {
               onChange={(e) => setAccountName(e.target.value)}
               className="px-3 py-1.5 border border-gray-300 rounded text-sm outline-none focus:border-blue-500 w-64 bg-white"
             >
-              <option value="STATE BANK OF INDIA (DRM)">STATE BANK OF INDIA ( DRM )</option>
-              <option value="SARASWAT BANK">SARASWAT BANK</option>
+              {bankAccounts.map((bank) => (
+                <option key={bank.id} value={bank.account_name}>
+                  {bank.account_name}
+                </option>
+              ))}
             </select>
           </div>
 

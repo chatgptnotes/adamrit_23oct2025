@@ -529,7 +529,7 @@ const FinalBill = () => {
   const navigate = useNavigate();
   const { billData, isLoading: isBillLoading, saveBill, isSaving } = useFinalBillData(visitId || '');
   const queryClient = useQueryClient();
-  const { hospitalConfig } = useAuth();
+  const { hospitalConfig, user } = useAuth();
   const [surgeons, setSurgeons] = useState<{ id: string; name: string }[]>([]);
   const [anaesthetists, setAnaesthetists] = useState<{ id: string; name: string }[]>([]);
   const [pathologyNote, setPathologyNote] = useState("");
@@ -578,42 +578,26 @@ const FinalBill = () => {
 
         if (error) {
           console.error('❌ Error fetching bank accounts:', error);
-          // Fallback to hardcoded banks if database query fails
-          const fallbackBanks = [
-            { id: '1', account_name: 'Canara Bank [A/C120023677813)JARIPATHKA]', account_code: '1123' },
-            { id: '2', account_name: 'SARASWAT BANK', account_code: '1122' },
-            { id: '3', account_name: 'STATE BANK OF INDIA (DRM)', account_code: '1121' }
-          ];
-          console.log('⚠️ Using fallback hardcoded banks');
-          setBankAccounts(fallbackBanks);
+          toast.error('Failed to load bank accounts. Please contact administrator.');
+          setBankAccounts([]);
           return;
         }
 
         console.log('✅ Fetched bank accounts from database:', data);
         console.log('✅ Number of banks fetched:', data?.length || 0);
 
-        // If no banks found in database, use fallback
+        // If no banks found in database, show error
         if (!data || data.length === 0) {
-          const fallbackBanks = [
-            { id: '1', account_name: 'Canara Bank [A/C120023677813)JARIPATHKA]', account_code: '1123' },
-            { id: '2', account_name: 'SARASWAT BANK', account_code: '1122' },
-            { id: '3', account_name: 'STATE BANK OF INDIA (DRM)', account_code: '1121' }
-          ];
-          console.log('⚠️ No banks in database, using fallback hardcoded banks');
-          setBankAccounts(fallbackBanks);
+          console.error('⚠️ No bank accounts found in database with codes 1121, 1122, 1123');
+          toast.error('No bank accounts configured. Please contact administrator.');
+          setBankAccounts([]);
         } else {
           setBankAccounts(data);
         }
       } catch (error) {
         console.error('❌ Exception fetching bank accounts:', error);
-        // Fallback to hardcoded banks on exception
-        const fallbackBanks = [
-          { id: '1', account_name: 'Canara Bank [A/C120023677813)JARIPATHKA]', account_code: '1123' },
-          { id: '2', account_name: 'SARASWAT BANK', account_code: '1122' },
-          { id: '3', account_name: 'STATE BANK OF INDIA (DRM)', account_code: '1121' }
-        ];
-        console.log('⚠️ Exception occurred, using fallback hardcoded banks');
-        setBankAccounts(fallbackBanks);
+        toast.error('Failed to load bank accounts. Please try again.');
+        setBankAccounts([]);
       }
     };
 
@@ -2790,13 +2774,42 @@ const FinalBill = () => {
         return;
       }
 
-      // Validate bank selection for Bank Transfer
-      if (finalPaymentMode === 'Bank Transfer' && !finalPaymentSelectedBank) {
-        toast.error('Please select a bank account for bank transfer');
+      // Validate bank selection for non-cash payment modes
+      const modesRequiringBank = ['ONLINE', 'UPI', 'NEFT', 'RTGS', 'CHEQUE', 'CARD', 'DD'];
+      if (modesRequiringBank.includes(finalPaymentMode) && !finalPaymentSelectedBank) {
+        toast.error('Please select a bank account for this payment mode');
         return;
       }
 
+      // Validate bank account ID is valid UUID and exists in bankAccounts
+      if (finalPaymentSelectedBank) {
+        const selectedBank = bankAccounts.find(b => b.id === finalPaymentSelectedBank);
+        if (!selectedBank) {
+          console.error('❌ Selected bank ID not found in bank accounts list:', finalPaymentSelectedBank);
+          console.error('Available banks:', bankAccounts);
+          toast.error('Invalid bank account selected. Please refresh and try again.');
+          return;
+        }
+        console.log('✅ Valid bank account selected:', selectedBank.account_name);
+      }
+
       setIsSavingFinalPayment(true);
+
+      // Fetch patient_id from visit
+      const { data: visitData, error: patientFetchError } = await supabase
+        .from('visits')
+        .select('patient_id')
+        .eq('visit_id', visitId)
+        .single();
+
+      if (patientFetchError || !visitData?.patient_id) {
+        console.error('❌ Error fetching patient_id from visit:', patientFetchError);
+        toast.error('Failed to get patient information. Please try again.');
+        setIsSavingFinalPayment(false);
+        return;
+      }
+
+      console.log('✅ Patient ID retrieved:', visitData.patient_id);
 
       // Check if final payment already exists
       const { data: existingPayment } = await supabase
@@ -2811,10 +2824,12 @@ const FinalBill = () => {
         .upsert({
           id: existingPayment?.id, // Include id if updating existing record
           visit_id: visitId,
+          patient_id: visitData.patient_id, // Add patient_id explicitly
           amount: parseFloat(finalPaymentAmount),
           mode_of_payment: finalPaymentMode,
           reason_of_discharge: finalPaymentReason,
           payment_remark: finalPaymentRemark || `Being cash received towards from pt. ${patientData?.name || billData?.name || 'Patient'} against R. No.:`,
+          payment_date: new Date().toISOString().split('T')[0], // Add payment_date as today's date
           bank_account_id: finalPaymentSelectedBank || null,
           bank_account_name: bankAccounts.find(b => b.id === finalPaymentSelectedBank)?.account_name || null
         }, {
@@ -2822,8 +2837,15 @@ const FinalBill = () => {
         });
 
       if (error) {
-        console.error('Error saving final payment:', error);
-        toast.error('Failed to save final payment');
+        console.error('❌ Error saving final payment:', error);
+        console.error('❌ Error details:', {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code
+        });
+        toast.error(`Failed to save final payment: ${error.message}`);
+        setIsSavingFinalPayment(false);
         return;
       }
 
@@ -17611,13 +17633,16 @@ Dr. Murali B K
                                           ₹{lab.cost || 0}
                                         </td>
                                         <td className="border border-gray-300 px-4 py-2 text-sm text-center">
-                                          <button
-                                            onClick={() => handleDeleteLabTest(lab.id)}
-                                            className="text-red-600 hover:text-red-800 p-2 rounded-full hover:bg-red-50 transition-colors"
-                                            title="Delete lab test"
-                                          >
-                                            🗑️
-                                          </button>
+                                          {user?.email !== 'user@ayushmanhospital.com' &&
+                                           user?.email !== 'user@hopehospital.com' && (
+                                            <button
+                                              onClick={() => handleDeleteLabTest(lab.id)}
+                                              className="text-red-600 hover:text-red-800 p-2 rounded-full hover:bg-red-50 transition-colors"
+                                              title="Delete lab test"
+                                            >
+                                              🗑️
+                                            </button>
+                                          )}
                                         </td>
                                       </tr>
                                     ))}
@@ -22066,17 +22091,20 @@ Dr. Murali B K
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors bg-white disabled:bg-gray-100 disabled:cursor-not-allowed"
                   >
                     <option value="">Please select</option>
-                    <option value="Cash">Cash</option>
-                    <option value="Card">Card</option>
+                    <option value="CASH">Cash</option>
+                    <option value="CARD">Card</option>
                     <option value="UPI">UPI</option>
-                    <option value="Bank Transfer">Bank Transfer</option>
-                    <option value="Cheque">Cheque</option>
-                    <option value="Credit">Credit</option>
+                    <option value="ONLINE">Bank Transfer</option>
+                    <option value="NEFT">NEFT</option>
+                    <option value="RTGS">RTGS</option>
+                    <option value="CHEQUE">Cheque</option>
+                    <option value="DD">Demand Draft</option>
+                    <option value="CREDIT">Credit</option>
                   </select>
                 </div>
 
-                {/* Bank Selection - Only show when Bank Transfer is selected */}
-                {finalPaymentMode === 'Bank Transfer' && (
+                {/* Bank Selection - Only show when online payment modes are selected */}
+                {(finalPaymentMode === 'ONLINE' || finalPaymentMode === 'NEFT' || finalPaymentMode === 'RTGS' || finalPaymentMode === 'UPI' || finalPaymentMode === 'CHEQUE' || finalPaymentMode === 'CARD' || finalPaymentMode === 'DD') && (
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Select Bank Account <span className="text-red-600">*</span>
