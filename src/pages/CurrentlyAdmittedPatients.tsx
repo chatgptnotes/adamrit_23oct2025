@@ -413,7 +413,7 @@ const CurrentlyAdmittedPatients = () => {
                         {visit.room_management?.ward_type && visit.room_allotted ? (
                           <div className="text-sm">
                             <div className="font-semibold text-blue-700">{visit.room_management.ward_type}</div>
-                            <div className="text-gray-600">Room {visit.room_allotted}</div>
+                            <div className="text-gray-600">Bed {visit.room_allotted}</div>
                           </div>
                         ) : (
                           <span className="text-gray-400">-</span>
