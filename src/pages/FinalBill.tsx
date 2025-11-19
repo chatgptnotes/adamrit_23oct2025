@@ -612,6 +612,18 @@ const FinalBill = () => {
       console.log('📥 Loading existing final payment data for visit:', visitId);
 
       try {
+        // First, check if patient is actually discharged
+        const { data: visitData, error: visitError } = await supabase
+          .from('visits')
+          .select('discharge_date')
+          .eq('visit_id', visitId)
+          .single();
+
+        if (visitError) {
+          console.error('Error fetching visit data:', visitError);
+        }
+
+        // Then fetch final payments
         const { data, error } = await supabase
           .from('final_payments')
           .select('*')
@@ -623,22 +635,32 @@ const FinalBill = () => {
           return;
         }
 
-        if (data) {
-          console.log('✅ Found existing final payment data:', data);
+        if (data && visitData?.discharge_date) {
+          // Has payment record AND still discharged → View only mode
+          console.log('✅ Found existing final payment data and patient is discharged:', data);
           setFinalPaymentAmount(data.amount?.toString() || '');
           setFinalPaymentMode(data.mode_of_payment || '');
           setFinalPaymentReason(data.reason_of_discharge || '');
           setFinalPaymentRemark(data.payment_remark || '');
-          setIsPatientDischarged(true); // Mark as already discharged
+          setIsPatientDischarged(true);
           toast.info('Patient already discharged - View only mode');
+        } else if (data && !visitData?.discharge_date) {
+          // Has old payment record BUT undischarged → Allow new payment
+          console.log('ℹ️ Found previous payment but patient is undischarged - allowing new payment');
+          setFinalPaymentAmount(data.amount?.toString() || '');
+          setFinalPaymentMode(data.mode_of_payment || '');
+          setFinalPaymentReason(data.reason_of_discharge || '');
+          setFinalPaymentRemark(data.payment_remark || '');
+          setIsPatientDischarged(false);
+          toast.info('Previous payment found. Patient re-admitted - You can make a new final payment');
         } else {
+          // No payment record → Allow payment
           console.log('ℹ️ No existing final payment data found');
-          // Reset form fields if no data exists
           setFinalPaymentAmount('');
           setFinalPaymentMode('');
           setFinalPaymentReason('');
           setFinalPaymentRemark('');
-          setIsPatientDischarged(false); // Mark as not discharged
+          setIsPatientDischarged(false);
         }
       } catch (error) {
         console.error('Error in loadExistingFinalPayment:', error);
@@ -2849,30 +2871,18 @@ const FinalBill = () => {
         return;
       }
 
-      // Fetch the final payment record to get its created_at timestamp
-      const { data: paymentData, error: fetchError } = await supabase
-        .from('final_payments')
-        .select('created_at')
-        .eq('visit_id', visitId)
-        .single();
-
-      if (fetchError) {
-        console.error('Error fetching final payment timestamp:', fetchError);
-        toast.error('Failed to fetch payment timestamp');
-        return;
-      }
-
-      const dischargeTimestamp = paymentData?.created_at || new Date().toISOString();
+      // Use current date for discharge (YYYY-MM-DD format)
+      const currentDate = new Date().toISOString().split('T')[0];
 
       // Log discharge update
       console.log('💾 Starting discharge update for visitId:', visitId);
-      console.log('📅 Using final payment timestamp as discharge date:', dischargeTimestamp);
+      console.log('📅 Setting discharge date to:', currentDate);
 
-      // Update visit discharge status and discharge date with final payment timestamp
+      // Update visit discharge status and discharge date
       const { error: visitError } = await supabase
         .from('visits')
         .update({
-          discharge_date: dischargeTimestamp, // Set discharge date to final payment timestamp
+          discharge_date: currentDate, // Set discharge date to today (DATE format: YYYY-MM-DD)
           discharge_mode: finalPaymentReason.toLowerCase().includes('death') ? 'death' :
                          finalPaymentReason.toLowerCase().includes('dama') ? 'dama' : 'recovery',
           bill_paid: true,

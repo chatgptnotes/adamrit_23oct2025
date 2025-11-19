@@ -301,7 +301,7 @@ const RoomManagement: React.FC = () => {
                     <TableHead className="font-bold text-black">Ward Type</TableHead>
                     <TableHead className="font-bold text-black">Location</TableHead>
                     <TableHead className="font-bold text-black">Ward ID</TableHead>
-                    <TableHead className="font-bold text-black">Maximum Rooms</TableHead>
+                    <TableHead className="font-bold text-black">Maximum Beds</TableHead>
                     <TableHead className="font-bold text-black">Action</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -390,7 +390,7 @@ const RoomManagement: React.FC = () => {
               />
             </div>
             <div>
-              <Label htmlFor="maximum_rooms">Maximum Rooms *</Label>
+              <Label htmlFor="maximum_rooms">Maximum Beds *</Label>
               <Input
                 id="maximum_rooms"
                 type="number"
@@ -449,7 +449,7 @@ const RoomManagement: React.FC = () => {
               />
             </div>
             <div>
-              <Label htmlFor="edit_maximum_rooms">Maximum Rooms *</Label>
+              <Label htmlFor="edit_maximum_rooms">Maximum Beds *</Label>
               <Input
                 id="edit_maximum_rooms"
                 type="number"
@@ -491,7 +491,7 @@ const RoomManagement: React.FC = () => {
                 <p className="font-medium mt-1">{selectedWard.ward_id}</p>
               </div>
               <div>
-                <Label>Maximum Rooms</Label>
+                <Label>Maximum Beds</Label>
                 <p className="font-medium mt-1">{selectedWard.maximum_rooms}</p>
               </div>
               <div className="flex justify-end gap-2 pt-4">
