@@ -33,7 +33,7 @@ const InvestigationsTab = ({ patient, visitId }: InvestigationsTabProps) => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('radiology')
-        .select('*')
+        .select('id, name, category, description, private, NABH_NABL_Rate, Non_NABH_NABL_Rate, bhopal_nabh, bhopal_non_nabh, created_at, updated_at')
         .order('name');
       
       if (error) {

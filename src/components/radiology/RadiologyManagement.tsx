@@ -314,7 +314,7 @@ const RadiologyManagement: React.FC = () => {
       setLoading(true);
       const { data, error } = await supabase
         .from('radiology')
-        .select('*')
+        .select('id, name, category, description, private, NABH_NABL_Rate, Non_NABH_NABL_Rate, bhopal_nabh, bhopal_non_nabh, created_at, updated_at')
         .order('name');
 
       // 🏥 Radiology tests are shared across hospitals
@@ -448,7 +448,6 @@ const RadiologyManagement: React.FC = () => {
           name: formData.name,
           category: formData.subSpecialty || 'General',
           description: formData.note || `${formData.testingMethod} examination`,
-          cost: '₹500', // Default cost
           NABH_NABL_Rate: parseFloat(formData.nabhNablRate) || 0,
           Non_NABH_NABL_Rate: parseFloat(formData.nonNabhNablRate) || 0,
           private: parseFloat(formData.private) || 0,

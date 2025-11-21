@@ -558,39 +558,22 @@ export const useFinancialSummary = (billId?: string, visitId?: string, savedMedi
         return 0;
       }
 
-      // Get radiology details for cost information
-      const radiologyIds = visitRadiologyData.map((item: any) => item.radiology_id);
-      
-      const { data: radiologyDetails, error: radiologyDetailsError } = await supabase
-        .from('radiology')
-        .select('id, name, cost')
-        .in('id', radiologyIds);
-
-      if (radiologyDetailsError || !radiologyDetails) {
-        console.log('📝 No radiology details found for cost calculation');
-        return 0;
-      }
-
       // Calculate total using quantity-based calculation from visit_radiology
       let total = 0;
       visitRadiologyData.forEach((visitRadiology: any) => {
-        // Use quantity-based calculation from visit_radiology table
-        const quantity = visitRadiology.quantity || 1;
-        const unitRate = visitRadiology.unit_rate || 0;
-        const totalCost = visitRadiology.cost || 0;
+        // Parse values to numbers first before comparison
+        const quantity = parseInt(visitRadiology.quantity) || 1;
+        const unitRate = parseFloat(visitRadiology.unit_rate) || 0;
+        const totalCost = parseFloat(visitRadiology.cost) || 0;
 
         // If we have proper quantity data, use the stored total cost
         if (totalCost > 0) {
-          total += parseFloat(totalCost.toString()) || 0;
+          total += totalCost;
         } else if (unitRate > 0) {
           // Fallback: calculate from unit_rate * quantity
-          total += (parseFloat(unitRate.toString()) || 0) * quantity;
-        } else {
-          // Legacy fallback: use radiology table cost
-          const radiologyDetail = radiologyDetails.find((r: any) => r.id === visitRadiology.radiology_id);
-          const legacyCost = parseFloat(radiologyDetail?.cost?.toString() || '0') || 0;
-          total += legacyCost * quantity;
+          total += unitRate * quantity;
         }
+        // If both cost and unit_rate are missing/0, the test contributes 0 to the total
       });
       
       console.log('💰 Radiology total calculated:', total);

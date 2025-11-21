@@ -490,6 +490,12 @@ export const AdvancePaymentModal: React.FC<AdvancePaymentModalProps> = ({
   };
 
   const handleSave = async () => {
+    // Validate payment mode first
+    if (!formData.paymentMode || formData.paymentMode.trim() === '') {
+      toast.error('Please select a payment mode');
+      return;
+    }
+
     // Validation - allow empty amount for refund-only transactions
     if (!formData.isRefund) {
       // Advance payment - amount is required
@@ -545,7 +551,7 @@ export const AdvancePaymentModal: React.FC<AdvancePaymentModalProps> = ({
         is_refund: formData.isRefund || false,
         refund_reason: formData.isRefund && formData.refundReason ? formData.refundReason.trim() : null,
         payment_date: format(formData.paymentDate, 'yyyy-MM-dd'),
-        payment_mode: formData.paymentMode,
+        payment_mode: formData.paymentMode?.trim() || 'CASH',
         billing_executive: formData.billingExecutive && formData.billingExecutive.trim() ? formData.billingExecutive.trim() : null,
         reference_number: formData.referenceNumber && formData.referenceNumber.trim() ? formData.referenceNumber.trim() : null,
         remarks: formData.remarks && formData.remarks.trim() ? formData.remarks.trim() : null,
@@ -905,7 +911,7 @@ export const AdvancePaymentModal: React.FC<AdvancePaymentModalProps> = ({
                 onValueChange={(value) => setFormData({ ...formData, paymentMode: value, selectedBank: '' })}
               >
                 <SelectTrigger className="w-full">
-                  <SelectValue />
+                  <SelectValue placeholder="Select payment mode" />
                 </SelectTrigger>
                 <SelectContent>
                   {paymentModes.map((mode) => (
