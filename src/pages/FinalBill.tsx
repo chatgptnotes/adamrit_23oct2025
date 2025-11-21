@@ -744,11 +744,9 @@ const FinalBill = () => {
   // Fetch saved labs when visit ID is available - MOVED AFTER STATE DECLARATIONS
 
   // Fetch saved radiology when visit ID is available
-  useEffect(() => {
-    if (visitId) {
-      fetchSavedRadiology(visitId);
-    }
-  }, [visitId]);
+  // NOTE: fetchSavedRadiology is now called from fetchPatientInfo() instead of here
+  // This ensures patientInfo is loaded before calculating radiology rates
+  // See line 2985 in fetchPatientInfo function
 
   // Fetch saved medications when visit ID is available
   useEffect(() => {
@@ -1069,7 +1067,7 @@ const FinalBill = () => {
 
         const { data, error } = await supabase
           .from('radiology')
-          .select('id, name, cost, category, description, private, NABH_NABL_Rate, Non_NABH_NABL_Rate, bhopal_nabh')
+          .select('id, name, category, description, private, NABH_NABL_Rate, Non_NABH_NABL_Rate, bhopal_nabh, bhopal_non_nabh')
           .order('name');
 
         if (error) {
@@ -2424,14 +2422,14 @@ const FinalBill = () => {
               if (item.radiology_id) {
                 const { data: radiologyDetails } = await supabase
                   .from('radiology')
-                  .select('name, cost, description')
+                  .select('name, description')
                   .eq('id', item.radiology_id)
                   .single();
 
                 return {
                   ...item,
                   radiology_name: radiologyDetails?.name || 'Unknown Radiology',
-                  cost: radiologyDetails?.cost || 0,
+                  cost: item.cost || 0,
                   description: radiologyDetails?.description || ''
                 };
               }
@@ -2676,21 +2674,21 @@ const FinalBill = () => {
             if (item.radiology_id) {
               const { data: radiologyDetails } = await supabase
                 .from('radiology')
-                .select('name, cost, description')
+                .select('name, description')
                 .eq('id', item.radiology_id)
                 .single();
 
               return {
                 ...item,
                 radiology_name: radiologyDetails?.name || 'Unknown Radiology',
-                cost: radiologyDetails?.cost || 0,
+                cost: item.cost || 0,
                 description: radiologyDetails?.description || ''
               };
             }
             return {
               ...item,
               radiology_name: 'Unknown Radiology',
-              cost: 0,
+              cost: item.cost || 0,
               description: ''
             };
           })
@@ -3008,7 +3006,14 @@ const FinalBill = () => {
       };
 
       setPatientInfo(combinedInfo);
-      
+
+      // Fetch saved radiology data now that patientInfo is loaded
+      // Pass combinedInfo directly to avoid race condition with async state update
+      // This ensures correct pricing based on patient type
+      if (visitId) {
+        await fetchSavedRadiology(visitId, combinedInfo);
+      }
+
       // Auto-populate Additional Sanction Approval field with patient's lab and radiology data only
       let investigationText = '';
       let itemCount = 0;
@@ -5250,7 +5255,7 @@ INSTRUCTIONS:
             if (item.radiology_id) {
               const { data: radiologyDetail } = await supabase
                 .from('radiology')
-                .select('name, description, cost, bhopal_nabh, Non_NABH_NABL_Rate, NABH_NABL_Rate')
+                .select('name, description, private, bhopal_nabh, Non_NABH_NABL_Rate, NABH_NABL_Rate')
                 .eq('id', item.radiology_id)
                 .single();
 
@@ -5288,8 +5293,8 @@ INSTRUCTIONS:
                 rateSource = correctRate > 0 ? 'nabh_nabl' : 'not_available';
               } else {
                 // Private patients
-                correctRate = parseFloat(radiologyDetail?.cost?.toString().replace(/[^\d.-]/g, '')) || 0;
-                rateSource = 'regular_cost';
+                correctRate = radiologyDetail?.private || 0;
+                rateSource = 'private';
               }
 
               console.log('🔍 Saved radiology rate determination:', {
@@ -8610,7 +8615,7 @@ INSTRUCTIONS:
   };
 
   // Function to fetch saved radiology from visit_radiology table
-  const fetchSavedRadiology = async (visitId: string) => {
+  const fetchSavedRadiology = async (visitId: string, patientInfoOverride?: any) => {
     try {
       if (!visitId) {
         console.log('No visit ID provided for fetching radiology');
@@ -8622,7 +8627,7 @@ INSTRUCTIONS:
       // First get the actual visit UUID and patient_type from the visits table
       const { data: visitData, error: visitError } = await supabase
         .from('visits')
-        .select('id, patient_type, insurance_type')
+        .select('id, patient_type')
         .eq('visit_id', visitId)
         .single();
 
@@ -8665,7 +8670,7 @@ INSTRUCTIONS:
 
       const { data: radiologyData, error: radiologyError } = await supabase
         .from('radiology')
-        .select('id, name, description, category, cost, private, NABH_NABL_Rate, Non_NABH_NABL_Rate, bhopal_nabh')
+        .select('id, name, description, category, private, NABH_NABL_Rate, Non_NABH_NABL_Rate, bhopal_nabh, bhopal_non_nabh')
         .in('id', radiologyIds);
 
       if (radiologyError) {
@@ -8685,8 +8690,10 @@ INSTRUCTIONS:
       console.log('Radiology details data:', radiologyData);
 
       // Determine patient type to select appropriate rate
-      const patientType = (visitData?.patient_type || patientInfo?.patient_type || '').toLowerCase().trim();
-      const corporate = (patientInfo?.corporate || '').toLowerCase().trim();
+      // Use patientInfoOverride if provided (when called from fetchPatientInfo), otherwise use state
+      const currentPatientInfo = patientInfoOverride || patientInfo;
+      const patientType = (visitData?.patient_type || currentPatientInfo?.patient_type || '').toLowerCase().trim();
+      const corporate = (currentPatientInfo?.corporate || '').toLowerCase().trim();
 
       // Corporate field takes priority - check if patient has a corporate panel first
       const hasCorporate = corporate.length > 0 && corporate !== 'private';
@@ -8719,43 +8726,53 @@ INSTRUCTIONS:
         usesNABHRate
       });
 
-      // Combine the data and RECALCULATE rates based on patient type
+      // Combine the data and USE STORED COST (only recalculate if missing)
       const formattedRadiology = visitRadiologyData.map((visitRadiology: any) => {
         const radiologyDetail = radiologyData?.find((r: any) => r.id === visitRadiology.radiology_id);
         const quantity = visitRadiology.quantity || 1;
 
-        // ALWAYS RECALCULATE rate based on current patient type
-        let correctRate = 0;
-        let rateSource = 'not_available';
+        // Check if we have stored cost and unit_rate from database
+        const storedCost = visitRadiology.cost ? parseFloat(visitRadiology.cost) : null;
+        const storedUnitRate = visitRadiology.unit_rate ? parseFloat(visitRadiology.unit_rate) : null;
 
-        // ALWAYS check private patient FIRST
-        if (isPrivatePatient && radiologyDetail?.private && radiologyDetail.private > 0) {
-          correctRate = radiologyDetail.private;
-          rateSource = 'private';
-        } else if (usesNonNABHRate && radiologyDetail?.Non_NABH_NABL_Rate && radiologyDetail.Non_NABH_NABL_Rate > 0) {
-          correctRate = radiologyDetail.Non_NABH_NABL_Rate;
-          rateSource = 'non_nabh_nabl';
-        } else if (usesBhopaliNABHRate && radiologyDetail?.bhopal_nabh && radiologyDetail.bhopal_nabh > 0) {
-          correctRate = radiologyDetail.bhopal_nabh;
-          rateSource = 'bhopal_nabh';
-        } else if (usesNABHRate && radiologyDetail?.NABH_NABL_Rate && radiologyDetail.NABH_NABL_Rate > 0) {
-          correctRate = radiologyDetail.NABH_NABL_Rate;
-          rateSource = 'nabh_nabl';
-        } else if (radiologyDetail?.private && radiologyDetail.private > 0) {
-          correctRate = radiologyDetail.private;
-          rateSource = 'private_fallback';
+        // Only recalculate if stored cost is missing or 0
+        let correctRate = storedUnitRate || 0;
+        let rateSource = storedCost ? 'stored_in_database' : 'recalculating';
+
+        if (!storedCost || storedCost === 0) {
+          // RECALCULATE rate based on current patient type only if not stored
+          if (isPrivatePatient && radiologyDetail?.private && radiologyDetail.private > 0) {
+            correctRate = radiologyDetail.private;
+            rateSource = 'private';
+          } else if (usesNonNABHRate && radiologyDetail?.Non_NABH_NABL_Rate && radiologyDetail.Non_NABH_NABL_Rate > 0) {
+            correctRate = radiologyDetail.Non_NABH_NABL_Rate;
+            rateSource = 'non_nabh_nabl';
+          } else if (usesBhopaliNABHRate && radiologyDetail?.bhopal_nabh && radiologyDetail.bhopal_nabh > 0) {
+            correctRate = radiologyDetail.bhopal_nabh;
+            rateSource = 'bhopal_nabh';
+          } else if (usesNABHRate && radiologyDetail?.NABH_NABL_Rate && radiologyDetail.NABH_NABL_Rate > 0) {
+            correctRate = radiologyDetail.NABH_NABL_Rate;
+            rateSource = 'nabh_nabl';
+          } else if (radiologyDetail?.private && radiologyDetail.private > 0) {
+            correctRate = radiologyDetail.private;
+            rateSource = 'private_fallback';
+          } else {
+            rateSource = 'not_available';
+          }
         }
 
-        const finalUnitRate = correctRate;
-        const finalCost = correctRate * quantity;
+        const finalUnitRate = storedUnitRate || correctRate;
+        const finalCost = storedCost || (correctRate * quantity);
 
-        console.log('🔍 Saved Radiology Rate Recalculation:', {
+        console.log('🔍 Saved Radiology Cost Processing:', {
           radiologyName: radiologyDetail?.name,
-          storedCost: visitRadiology.cost,
-          recalculatedUnitRate: correctRate,
-          recalculatedCost: finalCost,
+          storedCostFromDB: visitRadiology.cost,
+          storedUnitRateFromDB: visitRadiology.unit_rate,
+          finalCostUsed: finalCost,
+          finalUnitRateUsed: finalUnitRate,
           quantity,
           rateSource,
+          usingStoredData: !!storedCost,
           patientType,
           isPrivatePatient,
           patientCorporate: patientInfo?.corporate || 'NOT SET'
@@ -8774,6 +8791,11 @@ INSTRUCTIONS:
       });
 
       console.log('Final formatted radiology:', formattedRadiology);
+      console.log('📊 Radiology cost summary:', formattedRadiology.map(r => ({
+        name: r.radiology_name,
+        cost: r.cost,
+        type: typeof r.cost
+      })));
       setSavedRadiologyData(formattedRadiology);
       console.log('State updated - savedRadiologyData should now contain:', formattedRadiology.length, 'items');
     } catch (error) {
@@ -9014,7 +9036,7 @@ INSTRUCTIONS:
 
       const { data, error } = await supabase
         .from('radiology')
-        .select('id, name, cost, category, description, private, bhopal_nabh, Non_NABH_NABL_Rate, NABH_NABL_Rate')
+        .select('id, name, category, description, private, bhopal_nabh, bhopal_non_nabh, Non_NABH_NABL_Rate, NABH_NABL_Rate')
         .or(`name.ilike.%${serviceSearchTerm}%,description.ilike.%${serviceSearchTerm}%`)
         .order('name')
         .limit(20);
@@ -13457,10 +13479,10 @@ Dr. Murali B K
               .select(`*, lab:lab_id (name, CGHS_code, private)`)
               .eq('visit_id', visitData.id);
 
-            // Fetch visit_radiology for radiology investigations  
+            // Fetch visit_radiology for radiology investigations
             const { data: visitRadiology } = await supabase
               .from('visit_radiology')
-              .select(`*, radiology:radiology_id (name, code, cost)`)
+              .select(`*, radiology:radiology_id (name, code)`)
               .eq('visit_id', visitData.id);
 
             let srNo = 1;
@@ -13484,7 +13506,7 @@ Dr. Murali B K
                   srNo: srNo++,
                   code: radioItem.radiology?.code || '-',
                   particular: radioItem.radiology?.name || 'Radiology Investigation',
-                  cost: radioItem.radiology?.cost || '0'
+                  cost: radioItem.cost || radioItem.unit_rate || '0'
                 });
               });
             }
@@ -17703,8 +17725,15 @@ Dr. Murali B K
                                   </>
                                 )}
                                 <div className="text-lg font-bold text-green-600">
-                                  Total: ₹{savedRadiologyData.reduce((total, radiology) => {
+                                  Total: ₹{savedRadiologyData.reduce((total, radiology, index) => {
                                     // Each radiology entry represents an individual test with its own cost
+                                    console.log(`🔍 Radiology ${index}:`, {
+                                      name: radiology.radiology_name,
+                                      cost: radiology.cost,
+                                      costType: typeof radiology.cost,
+                                      parsed: parseFloat(radiology.cost),
+                                      parsedType: typeof parseFloat(radiology.cost)
+                                    });
                                     const individualCost = parseFloat(radiology.cost) || 0;
                                     return total + individualCost;
                                   }, 0)}

@@ -6453,51 +6453,90 @@ export type Database = {
       }
       visit_radiology: {
         Row: {
+          additional_notes: string | null
+          advice: string | null
           completed_date: string | null
+          cost: number | null
           created_at: string | null
           findings: string | null
           id: string
+          image_impression: string | null
           impression: string | null
+          no_of_slices: number | null
           notes: string | null
           ordered_date: string | null
+          quantity: number | null
           radiology_id: string
           report_text: string | null
+          result_date: string | null
+          result_status: string | null
           scheduled_date: string | null
           selected_doctor: string | null
           status: string | null
+          template_used: string | null
+          unit_rate: number | null
           updated_at: string | null
+          uploaded_file_name: string | null
+          uploaded_file_path: string | null
+          uploaded_file_size: number | null
           visit_id: string
         }
         Insert: {
+          additional_notes?: string | null
+          advice?: string | null
           completed_date?: string | null
+          cost?: number | null
           created_at?: string | null
           findings?: string | null
           id?: string
+          image_impression?: string | null
           impression?: string | null
+          no_of_slices?: number | null
           notes?: string | null
           ordered_date?: string | null
+          quantity?: number | null
           radiology_id: string
           report_text?: string | null
+          result_date?: string | null
+          result_status?: string | null
           scheduled_date?: string | null
           selected_doctor?: string | null
           status?: string | null
+          template_used?: string | null
+          unit_rate?: number | null
           updated_at?: string | null
+          uploaded_file_name?: string | null
+          uploaded_file_path?: string | null
+          uploaded_file_size?: number | null
           visit_id: string
         }
         Update: {
+          additional_notes?: string | null
+          advice?: string | null
           completed_date?: string | null
+          cost?: number | null
           created_at?: string | null
           findings?: string | null
           id?: string
+          image_impression?: string | null
           impression?: string | null
+          no_of_slices?: number | null
           notes?: string | null
           ordered_date?: string | null
+          quantity?: number | null
           radiology_id?: string
           report_text?: string | null
+          result_date?: string | null
+          result_status?: string | null
           scheduled_date?: string | null
           selected_doctor?: string | null
           status?: string | null
+          template_used?: string | null
+          unit_rate?: number | null
           updated_at?: string | null
+          uploaded_file_name?: string | null
+          uploaded_file_path?: string | null
+          uploaded_file_size?: number | null
           visit_id?: string
         }
         Relationships: [

@@ -407,8 +407,7 @@ const Invoice = () => {
             id,
             name,
             category,
-            description,
-            cost
+            description
           )
         `)
         .eq('visit_id', visitUUID)
@@ -754,12 +753,13 @@ const Invoice = () => {
       if (radiologyOrdersData && radiologyOrdersData.length > 0) {
         radiologyOrdersData.forEach((visitRadiology) => {
           console.log('Processing visit radiology test:', visitRadiology);
-          // Use actual cost from database
-          const rate = visitRadiology.radiology?.cost ? parseFloat(visitRadiology.radiology.cost) : 1000;
+          // Use actual cost from visit_radiology table (stored cost for this visit)
+          const rate = visitRadiology.cost ? parseFloat(visitRadiology.cost.toString()) : (visitRadiology.unit_rate ? parseFloat(visitRadiology.unit_rate.toString()) : 1000);
 
           console.log('Radiology test details:', {
             name: visitRadiology.radiology?.name,
-            cost: visitRadiology.radiology?.cost,
+            storedCost: visitRadiology.cost,
+            unitRate: visitRadiology.unit_rate,
             rate: rate,
             id: visitRadiology.radiology?.id
           });
@@ -894,11 +894,13 @@ const Invoice = () => {
     let totalRadiologyCharges = 0;
     if (radiologyOrdersData && radiologyOrdersData.length > 0) {
       radiologyOrdersData.forEach((visitRadiology) => {
-        const rate = visitRadiology.radiology?.cost ? parseFloat(visitRadiology.radiology.cost) : 1000;
+        // Use stored cost from visit_radiology table
+        const rate = visitRadiology.cost ? parseFloat(visitRadiology.cost.toString()) : (visitRadiology.unit_rate ? parseFloat(visitRadiology.unit_rate.toString()) : 1000);
         totalRadiologyCharges += rate;
         console.log('Adding radiology to total:', {
           name: visitRadiology.radiology?.name,
-          cost: visitRadiology.radiology?.cost,
+          storedCost: visitRadiology.cost,
+          unitRate: visitRadiology.unit_rate,
           rate: rate
         });
       });
