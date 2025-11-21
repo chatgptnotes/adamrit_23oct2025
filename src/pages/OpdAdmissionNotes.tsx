@@ -313,7 +313,7 @@ const OpdAdmissionNotes = () => {
             <FileText className="h-8 w-8 text-blue-600" />
             <div>
               <CardTitle className="text-2xl font-bold text-blue-900">
-                ADMISSION NOTES
+                OPD NOTES
               </CardTitle>
               <p className="text-sm text-gray-600 mt-1">
                 Visit ID: {patientData.visit_id} | Date: {formatDate(patientData.created_at)}
@@ -563,12 +563,12 @@ const OpdAdmissionNotes = () => {
             body {
               print-color-adjust: exact;
               -webkit-print-color-adjust: exact;
-              font-size: 8pt;
+              font-size: 12pt;
             }
 
             @page {
               size: A4;
-              margin: 0.4cm 0.5cm;
+              margin: 0.25cm 0.3cm;
             }
 
             /* Hide screen elements */
@@ -618,7 +618,7 @@ const OpdAdmissionNotes = () => {
             }
 
             .bg-gray-50 > div label {
-              font-size: 6pt !important;
+              font-size: 9pt !important;
               font-weight: 600 !important;
               color: #333 !important;
               display: block !important;
@@ -626,7 +626,7 @@ const OpdAdmissionNotes = () => {
             }
 
             .bg-gray-50 > div p {
-              font-size: 7pt !important;
+              font-size: 10pt !important;
               color: #000 !important;
               margin: 0 !important;
             }
@@ -635,7 +635,7 @@ const OpdAdmissionNotes = () => {
             label {
               font-weight: 600 !important;
               color: #000 !important;
-              font-size: 7pt !important;
+              font-size: 10pt !important;
             }
 
             /* Textareas for print - Compact but readable */
@@ -645,7 +645,7 @@ const OpdAdmissionNotes = () => {
               max-height: 32px !important;
               background: white !important;
               padding: 2px 4px !important;
-              font-size: 7pt !important;
+              font-size: 10pt !important;
               line-height: 1.3 !important;
               overflow: hidden !important;
             }
@@ -655,7 +655,7 @@ const OpdAdmissionNotes = () => {
               border: 1px solid #000 !important;
               padding: 1px 3px !important;
               background: white !important;
-              font-size: 7pt !important;
+              font-size: 10pt !important;
             }
 
             /* Footer section - Clear separator */
@@ -678,21 +678,21 @@ const OpdAdmissionNotes = () => {
 
             /* Text sizing for print */
             .text-sm {
-              font-size: 7pt !important;
+              font-size: 9pt !important;
             }
 
             .text-xs {
-              font-size: 5pt !important;
+              font-size: 8pt !important;
             }
 
             /* Footer specific labels */
             .border-t-2 .text-xs {
-              font-size: 5pt !important;
+              font-size: 8pt !important;
             }
 
             /* Footer specific text */
             .border-t-2 .text-sm {
-              font-size: 6pt !important;
+              font-size: 9pt !important;
             }
 
             /* Card content padding */
@@ -786,13 +786,13 @@ const OpdAdmissionNotes = () => {
 
             /* Card title text size */
             .text-2xl {
-              font-size: 11pt !important;
+              font-size: 18pt !important;
               font-weight: bold !important;
             }
 
             /* Header subtitle */
             .text-sm.text-gray-600 {
-              font-size: 7pt !important;
+              font-size: 10pt !important;
             }
 
             /* Pathology section compact */

@@ -1786,6 +1786,33 @@ export const useFinancialSummary = (billId?: string, visitId?: string, savedMedi
       if (!visitId) return;
 
       try {
+        // STEP 1: Check if patient is currently discharged
+        const { data: visitData, error: visitError } = await supabase
+          .from('visits')
+          .select('discharge_date')
+          .eq('visit_id', visitId)
+          .single();
+
+        if (visitError) {
+          console.error('Error fetching visit data:', visitError);
+          return;
+        }
+
+        // STEP 2: Only fetch final payment if patient IS CURRENTLY DISCHARGED
+        if (!visitData?.discharge_date) {
+          console.log('⚠️ Patient is not discharged (discharge_date is NULL), skipping final payment load for Amount Pending calculation');
+          // Reset finalPayment to 0 for undischarged patients
+          setFinancialSummaryDataTracked((prev) => ({
+            ...prev,
+            finalPayment: {
+              ...prev.finalPayment,
+              total: '0'
+            }
+          }));
+          return;
+        }
+
+        // STEP 3: Patient is discharged, fetch final payment normally
         const { data, error } = await supabase
           .from('final_payments')
           .select('*')
@@ -1798,7 +1825,7 @@ export const useFinancialSummary = (billId?: string, visitId?: string, savedMedi
         }
 
         if (data) {
-          console.log('✅ Final payment data loaded:', data);
+          console.log('✅ Final payment data loaded for discharged patient:', data);
 
           // Update finalPayment in state with the amount
           // For now, we'll put the full amount in the total

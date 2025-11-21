@@ -16,8 +16,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuCheckboxItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
-import { Loader2, Search, Users, Calendar, Clock, UserCheck, Shield, AlertTriangle, Filter } from "lucide-react";
+import { Loader2, Search, Users, Calendar, Clock, UserCheck, Shield, AlertTriangle, Filter, RotateCcw } from "lucide-react";
 import { useNavigate } from 'react-router-dom';
 import { toast } from "@/hooks/use-toast";
 import { CascadingBillingStatusDropdown } from '@/components/shared/CascadingBillingStatusDropdown';
@@ -77,6 +78,10 @@ const DischargedPatients = () => {
   const [corporateFilter, setCorporateFilter] = useState<string>('all');
   const [sortBy, setSortBy] = useState<string>('discharge_date');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+
+  // State for undischarge functionality
+  const [isUndischargeDialogOpen, setIsUndischargeDialogOpen] = useState(false);
+  const [selectedVisitForUndischarge, setSelectedVisitForUndischarge] = useState<Visit | null>(null);
 
   // Fetch available corporates for filter
   const { data: availableCorporates, isLoading: corporatesLoading } = useQuery({
@@ -207,6 +212,57 @@ const DischargedPatients = () => {
       visit.patients?.insurance_person_no?.toLowerCase().includes(searchLower)
     );
   }) || [];
+
+  // Undischarge mutation
+  const undischargeMutation = useMutation({
+    mutationFn: async (visitId: string) => {
+      const { error } = await supabase
+        .from('visits')
+        .update({
+          discharge_date: null,
+          status: 'admitted'
+        })
+        .eq('id', visitId);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      // Refresh both dashboards
+      queryClient.invalidateQueries({ queryKey: ['discharged-patients'] });
+      queryClient.invalidateQueries({ queryKey: ['currently-admitted-patients'] });
+
+      // Show success message
+      toast({
+        title: "Patient Undischarged",
+        description: "Patient has been moved back to Currently Admitted dashboard",
+      });
+
+      // Close dialog
+      setIsUndischargeDialogOpen(false);
+      setSelectedVisitForUndischarge(null);
+    },
+    onError: (error) => {
+      console.error('Error undischarging patient:', error);
+      toast({
+        title: "Error",
+        description: "Failed to undischarge patient. Please try again.",
+        variant: "destructive"
+      });
+    }
+  });
+
+  // Handle undischarge button click
+  const handleUndischargeClick = (visit: Visit) => {
+    setSelectedVisitForUndischarge(visit);
+    setIsUndischargeDialogOpen(true);
+  };
+
+  // Handle confirm undischarge
+  const handleConfirmUndischarge = () => {
+    if (selectedVisitForUndischarge) {
+      undischargeMutation.mutate(selectedVisitForUndischarge.id);
+    }
+  };
 
   // Format date helper
   const formatDate = (dateString: string | null) => {
@@ -469,6 +525,7 @@ const DischargedPatients = () => {
                     <TableHead>Days Admitted</TableHead>
                     <TableHead>Billing Status</TableHead>
                     <TableHead>Corporate</TableHead>
+                    <TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -546,6 +603,24 @@ const DischargedPatients = () => {
                       <TableCell>
                         {visit.patients?.corporate || '—'}
                       </TableCell>
+                      <TableCell>
+                        {user?.role === 'admin' && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleUndischargeClick(visit)}
+                            className="text-orange-600 hover:text-orange-700 hover:bg-orange-50"
+                            disabled={undischargeMutation.isPending}
+                          >
+                            {undischargeMutation.isPending && selectedVisitForUndischarge?.id === visit.id ? (
+                              <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                            ) : (
+                              <RotateCcw className="h-4 w-4 mr-1" />
+                            )}
+                            Undischarge
+                          </Button>
+                        )}
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -554,6 +629,68 @@ const DischargedPatients = () => {
           )}
         </CardContent>
       </Card>
+
+      {/* Undischarge Confirmation Dialog */}
+      <AlertDialog open={isUndischargeDialogOpen} onOpenChange={setIsUndischargeDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Undischarge Patient?</AlertDialogTitle>
+            <AlertDialogDescription>
+              <div className="space-y-3 mt-4">
+                <p>You are about to move this patient back to the Currently Admitted dashboard:</p>
+
+                <div className="bg-muted p-4 rounded-lg space-y-2">
+                  <div className="flex justify-between">
+                    <span className="font-medium">Patient:</span>
+                    <span>{selectedVisitForUndischarge?.patients?.name}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="font-medium">Visit ID:</span>
+                    <span>{selectedVisitForUndischarge?.visit_id}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="font-medium">Discharge Date:</span>
+                    <span>{selectedVisitForUndischarge?.discharge_date && formatDateTime(selectedVisitForUndischarge.discharge_date)}</span>
+                  </div>
+                </div>
+
+                <p className="text-orange-600 font-medium">
+                  ⚠️ This will:
+                </p>
+                <ul className="list-disc list-inside space-y-1 text-sm">
+                  <li>Remove the patient from Discharged Patients</li>
+                  <li>Move the patient to Currently Admitted</li>
+                  <li>Mark their bed as occupied again</li>
+                  <li>Set discharge date to NULL</li>
+                </ul>
+
+                <p className="text-sm text-muted-foreground">
+                  Are you sure you want to proceed?
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setSelectedVisitForUndischarge(null)}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmUndischarge}
+              className="bg-orange-600 hover:bg-orange-700"
+              disabled={undischargeMutation.isPending}
+            >
+              {undischargeMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Processing...
+                </>
+              ) : (
+                'Confirm Undischarge'
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

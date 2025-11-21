@@ -181,7 +181,7 @@ export const AdvancePaymentModal: React.FC<AdvancePaymentModalProps> = ({
         const { data, error } = await supabase
           .from('chart_of_accounts')
           .select('id, account_name, account_code')
-          .in('account_name', ['SARASWAT BANK', 'STATE BANK OF INDIA (DRM)', 'Canara Bank [A/C120023677813)JARIPATHKA]'])
+          .in('account_code', ['1121', '1122', '1123'])
           .eq('is_active', true)
           .order('account_name');
 
@@ -189,7 +189,7 @@ export const AdvancePaymentModal: React.FC<AdvancePaymentModalProps> = ({
           console.error('❌ Error fetching bank accounts:', error);
           // Fallback to hardcoded banks if database query fails
           const fallbackBanks = [
-            { id: '1', account_name: 'Canara Bank [A/C120023677813)JARIPATHKA]', account_code: '1123' },
+            { id: '1', account_name: 'Canara Bank [A/C120023677813)JARIPATHKA ]', account_code: '1123' },
             { id: '2', account_name: 'SARASWAT BANK', account_code: '1122' },
             { id: '3', account_name: 'STATE BANK OF INDIA (DRM)', account_code: '1121' }
           ];
@@ -204,7 +204,7 @@ export const AdvancePaymentModal: React.FC<AdvancePaymentModalProps> = ({
         // If no banks found in database, use fallback
         if (!data || data.length === 0) {
           const fallbackBanks = [
-            { id: '1', account_name: 'Canara Bank [A/C120023677813)JARIPATHKA]', account_code: '1123' },
+            { id: '1', account_name: 'Canara Bank [A/C120023677813)JARIPATHKA ]', account_code: '1123' },
             { id: '2', account_name: 'SARASWAT BANK', account_code: '1122' },
             { id: '3', account_name: 'STATE BANK OF INDIA (DRM)', account_code: '1121' }
           ];
@@ -217,7 +217,7 @@ export const AdvancePaymentModal: React.FC<AdvancePaymentModalProps> = ({
         console.error('❌ Exception fetching bank accounts:', error);
         // Fallback to hardcoded banks on exception
         const fallbackBanks = [
-          { id: '1', account_name: 'Canara Bank [A/C120023677813)JARIPATHKA]', account_code: '1123' },
+          { id: '1', account_name: 'Canara Bank [A/C120023677813)JARIPATHKA ]', account_code: '1123' },
           { id: '2', account_name: 'SARASWAT BANK', account_code: '1122' },
           { id: '3', account_name: 'STATE BANK OF INDIA (DRM)', account_code: '1121' }
         ];

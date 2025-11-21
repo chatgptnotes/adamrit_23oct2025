@@ -391,7 +391,7 @@ export const VisitDetailsSection: React.FC<VisitDetailsSectionProps> = ({
                 <SelectContent>
                   {wards.map((ward) => (
                     <SelectItem key={ward.ward_id} value={ward.ward_id}>
-                      {ward.ward_type} (Max: {ward.maximum_rooms} rooms)
+                      {ward.ward_type} (Max: {ward.maximum_rooms} beds)
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -413,7 +413,7 @@ export const VisitDetailsSection: React.FC<VisitDetailsSectionProps> = ({
                 <SelectContent>
                   {availableRooms.map((roomNum) => (
                     <SelectItem key={roomNum} value={roomNum.toString()}>
-                      Room {roomNum}
+                      Bed {roomNum}
                     </SelectItem>
                   ))}
                 </SelectContent>
