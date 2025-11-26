@@ -617,7 +617,7 @@ const DischargedPatients = () => {
                             ) : (
                               <RotateCcw className="h-4 w-4 mr-1" />
                             )}
-                            Undischarge
+                            Revoke Discharge
                           </Button>
                         )}
                       </TableCell>
@@ -634,7 +634,7 @@ const DischargedPatients = () => {
       <AlertDialog open={isUndischargeDialogOpen} onOpenChange={setIsUndischargeDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Undischarge Patient?</AlertDialogTitle>
+            <AlertDialogTitle>Revoke Discharge?</AlertDialogTitle>
             <AlertDialogDescription>
               <div className="space-y-3 mt-4">
                 <p>You are about to move this patient back to the Currently Admitted dashboard:</p>
@@ -685,7 +685,7 @@ const DischargedPatients = () => {
                   Processing...
                 </>
               ) : (
-                'Confirm Undischarge'
+                'Confirm Revoke Discharge'
               )}
             </AlertDialogAction>
           </AlertDialogFooter>
