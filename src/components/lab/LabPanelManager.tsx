@@ -2914,6 +2914,7 @@ const EditPanelForm: React.FC<EditPanelFormProps> = ({ panel, onSubmit }) => {
         subTests={formData.subTests}
         onSubTestsChange={(subTests) => setFormData({...formData, subTests})}
         isLoading={isLoadingSubTests}
+        labId={formData.id}
       />
 
       <div className="flex justify-end gap-2">

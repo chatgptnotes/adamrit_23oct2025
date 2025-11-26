@@ -6,6 +6,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { Plus, FlaskConical, X, GripVertical } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
 
 export interface SubTest {
   id: string;
@@ -43,6 +45,7 @@ interface TestConfigurationSectionProps {
   onSubTestsChange: (subTests: SubTest[]) => void;
   onReorder?: () => void;  // Callback when drag-drop reorder happens
   isLoading?: boolean;
+  labId?: string; // Lab/Panel ID for direct formula save
 }
 
 const TestConfigurationSection: React.FC<TestConfigurationSectionProps> = ({
@@ -51,7 +54,8 @@ const TestConfigurationSection: React.FC<TestConfigurationSectionProps> = ({
   subTests,
   onSubTestsChange,
   onReorder,
-  isLoading = false
+  isLoading = false,
+  labId
 }) => {
   const [nextSubTestId, setNextSubTestId] = useState(1);
   const [isFormulaDialogOpen, setIsFormulaDialogOpen] = useState(false);
@@ -59,6 +63,9 @@ const TestConfigurationSection: React.FC<TestConfigurationSectionProps> = ({
   const [selectedTest, setSelectedTest] = useState('');
   const [formula, setFormula] = useState('');
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const [isSavingFormula, setIsSavingFormula] = useState(false);
+
+  const { toast } = useToast();
 
   const addNewSubTest = () => {
     const newSubTest: SubTest = {
@@ -466,8 +473,20 @@ const TestConfigurationSection: React.FC<TestConfigurationSectionProps> = ({
     setIsFormulaDialogOpen(true);
   };
 
-  const saveFormula = () => {
-    // Find and update the sub-test with formula
+  const saveFormula = async () => {
+    // Find the current sub-test
+    const currentSubTest = subTests.find(st => st.id === currentSubTestId);
+
+    if (!currentSubTest || !currentSubTest.name) {
+      toast({
+        title: "Error",
+        description: "Sub-test name is required to save formula",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    // Update local state first
     const updatedSubTests = subTests.map(subTest => {
       if (subTest.id === currentSubTestId) {
         return { ...subTest, formula: formula };
@@ -477,7 +496,62 @@ const TestConfigurationSection: React.FC<TestConfigurationSectionProps> = ({
 
     console.log('Formula saved:', formula, 'for subtest:', currentSubTestId);
     onSubTestsChange(updatedSubTests);
-    setIsFormulaDialogOpen(false);
+
+    // If labId is available, save directly to database
+    if (labId && testName) {
+      setIsSavingFormula(true);
+
+      try {
+        const formulaData = {
+          lab_id: labId,
+          test_name: testName,
+          sub_test_name: currentSubTest.name,
+          formula: formula || null,
+          test_type: currentSubTest.type || 'Numeric',
+          text_value: currentSubTest.type === 'Text' ? (currentSubTest.textValue || null) : null,
+          is_active: true
+        };
+
+        const { error: formulaError } = await supabase
+          .from('lab_test_formulas')
+          .upsert(formulaData, {
+            onConflict: 'lab_id,test_name,sub_test_name'
+          });
+
+        if (formulaError) {
+          console.error('⚠️ Error saving formula to database:', formulaError);
+          toast({
+            title: "Warning",
+            description: `Formula updated locally but failed to save to database: ${formulaError.message}`,
+            variant: "destructive"
+          });
+        } else {
+          console.log(`✅ Formula saved to database for: ${currentSubTest.name}`);
+          toast({
+            title: "Success",
+            description: `Formula saved successfully for ${currentSubTest.name}`,
+          });
+          setIsFormulaDialogOpen(false);
+        }
+      } catch (error) {
+        console.error('⚠️ Unexpected error saving formula:', error);
+        toast({
+          title: "Error",
+          description: `Unexpected error: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          variant: "destructive"
+        });
+      } finally {
+        setIsSavingFormula(false);
+      }
+    } else {
+      // No labId available, just close dialog (will save on panel save)
+      console.log('⚠️ No labId available, formula will be saved when panel is saved');
+      toast({
+        title: "Info",
+        description: "Formula updated. Click 'Save Panel' to persist changes.",
+      });
+      setIsFormulaDialogOpen(false);
+    }
   };
 
   // Get dynamic test options from current test's sub-tests
@@ -1240,8 +1314,9 @@ const TestConfigurationSection: React.FC<TestConfigurationSectionProps> = ({
                 <Button
                   type="button"
                   onClick={saveFormula}
+                  disabled={isSavingFormula}
                 >
-                  Save Formula
+                  {isSavingFormula ? 'Saving...' : 'Save Formula'}
                 </Button>
               </div>
             </div>

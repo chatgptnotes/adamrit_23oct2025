@@ -5973,7 +5973,9 @@ INSTRUCTIONS:
             font-size: 11px;
           }
           .short-field {
-            max-width: 120px;
+            max-width: 100px;
+            flex: none;
+            margin-right: 10px;
           }
           .investigations { 
             margin-top: 25px;
@@ -6024,11 +6026,14 @@ INSTRUCTIONS:
           
           <div class="form-row">
             <span class="form-label">Date :</span>
-            <span class="form-value">${currentDate}</span>
-            <span class="form-label">Tariff :</span>
+            <span class="form-value" style="flex: none; width: 80px;">${currentDate}</span>
+            <span class="form-label" style="min-width: 50px;">Tariff :</span>
             <span class="form-value short-field">MUPJAY 1</span>
-            <span class="form-label">Mode :</span>
-            <span class="form-value short-field">On Credit</span>
+            <span class="form-label" style="min-width: 50px;">Mode :</span>
+            <select class="form-value short-field" style="border: 1px solid #000; padding: 2px;">
+              <option value="credit">Credit</option>
+              <option value="cash">Cash</option>
+            </select>
           </div>
           
           <div class="form-row">
@@ -6038,7 +6043,7 @@ INSTRUCTIONS:
           
           <div class="form-row">
             <span class="form-label">Requisition Tariff :</span>
-            <span class="form-value">Private ₹ ${selectedTests.reduce((total, test) => total + (parseFloat(test.cost) || 0), 0).toFixed(2)}</span>
+            <span class="form-value">Private</span>
           </div>
           
           <div class="form-row">
@@ -6049,11 +6054,6 @@ INSTRUCTIONS:
           <div class="form-row">
             <span class="form-label">Money Collected by GALAXY :</span>
             <span class="form-value"><span class="checkbox-field"></span></span>
-          </div>
-          
-          <div class="form-row">
-            <span class="form-label">Service Amount :</span>
-            <span class="form-value">${selectedTests.reduce((total, test) => total + (parseFloat(test.cost) || 0), 0).toFixed(2)}</span>
           </div>
           
           <div class="form-row">
@@ -6077,7 +6077,7 @@ INSTRUCTIONS:
           
           <div class="form-row">
             <span class="form-label">Referring Doctor :</span>
-            <span class="form-value">${visitData?.referring_doctor || visitData?.doctor_name || 'Dr. [Referring Doctor]'}</span>
+            <input type="text" class="form-value" value="${visitData?.referring_doctor || visitData?.doctor_name || 'Dr. [Referring Doctor]'}" style="border: none; border-bottom: 1px solid #000; outline: none; width: 80%;">
           </div>
           
           <div class="form-row">
@@ -6209,7 +6209,9 @@ INSTRUCTIONS:
             font-size: 11px;
           }
           .short-field {
-            max-width: 120px;
+            max-width: 100px;
+            flex: none;
+            margin-right: 10px;
           }
           .investigations { 
             margin-top: 25px;
@@ -6257,14 +6259,17 @@ INSTRUCTIONS:
           <div class="header">
             <input type="text" class="header-input" value="RADIOLOGY REQUISITION" onclick="this.select()" />
           </div>
-          
+
           <div class="form-row">
             <span class="form-label">Date :</span>
-            <span class="form-value">${currentDate}</span>
-            <span class="form-label">Tariff :</span>
-            <span class="form-value short-field">MUPJAY 1</span>
-            <span class="form-label">Mode :</span>
-            <span class="form-value short-field">On Credit</span>
+            <span class="form-value" style="flex: none; width: 80px;">${currentDate}</span>
+            <span class="form-label" style="min-width: 50px;">Tariff :</span>
+            <span class="form-value short-field">private</span>
+            <span class="form-label" style="min-width: 50px;">Mode :</span>
+            <select class="form-value short-field" style="border: 1px solid #000; padding: 2px;">
+              <option value="credit">Credit</option>
+              <option value="cash">Cash</option>
+            </select>
           </div>
           
           <div class="form-row">
@@ -6274,7 +6279,7 @@ INSTRUCTIONS:
           
           <div class="form-row">
             <span class="form-label">Requisition Tariff :</span>
-            <span class="form-value">Private ₹ ${selectedTests.reduce((total, test) => total + (parseFloat(test.cost) || 0), 0).toFixed(2)}</span>
+            <span class="form-value">Private</span>
           </div>
           
           <div class="form-row">
@@ -6285,11 +6290,6 @@ INSTRUCTIONS:
           <div class="form-row">
             <span class="form-label">Money Collected by RADIOLOGY :</span>
             <span class="form-value"><span class="checkbox-field"></span></span>
-          </div>
-          
-          <div class="form-row">
-            <span class="form-label">Service Amount :</span>
-            <span class="form-value">${selectedTests.reduce((total, test) => total + (parseFloat(test.cost) || 0), 0).toFixed(2)}</span>
           </div>
           
           <div class="form-row">
@@ -6313,7 +6313,7 @@ INSTRUCTIONS:
           
           <div class="form-row">
             <span class="form-label">Referring Doctor :</span>
-            <span class="form-value">${visitData?.referring_doctor || visitData?.doctor_name || 'Dr. [Referring Doctor]'}</span>
+            <input type="text" class="form-value" value="${visitData?.referring_doctor || visitData?.doctor_name || 'Dr. [Referring Doctor]'}" style="border: none; border-bottom: 1px solid #000; outline: none; width: 80%;">
           </div>
           
           <div class="form-row">
