@@ -2222,6 +2222,7 @@ const TodaysIpdDashboard = () => {
                   </TableCell>
                   <TableCell className="font-medium">
                     {visit.patients?.name}
+                    {visit.discharge_date && <span className="text-red-500 text-xs ml-1">(discharged)</span>}
                   </TableCell>
                   <TableCell>
                     <ClaimIdInput visit={visit} />
