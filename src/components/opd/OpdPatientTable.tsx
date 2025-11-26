@@ -8,6 +8,7 @@ import { X, Check, Eye, FileText, UserCheck, Trash2, DollarSign, MessageSquare, 
 import { VisitRegistrationForm } from '@/components/VisitRegistrationForm';
 import { supabase } from '@/integrations/supabase/client';
 import { useDebounce } from 'use-debounce';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface Patient {
   id: string;
@@ -42,6 +43,7 @@ interface OpdPatientTableProps {
 
 export const OpdPatientTable = ({ patients, refetch }: OpdPatientTableProps) => {
   const navigate = useNavigate();
+  const { isAdmin } = useAuth();
   const [selectedPatientForVisit, setSelectedPatientForVisit] = useState<Patient | null>(null);
   const [isVisitFormOpen, setIsVisitFormOpen] = useState(false);
   const [hiddenPatients, setHiddenPatients] = useState<Set<string>>(new Set());
@@ -1194,15 +1196,17 @@ Verified by: [To be verified by doctor]`;
                   >
                     <MessageSquare className="h-4 w-4 text-green-600" />
                   </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 w-8 p-0"
-                    onClick={() => handleDeleteClick(patient)}
-                    title="Delete Visit"
-                  >
-                    <Trash2 className="h-4 w-4 text-red-600" />
-                  </Button>
+                  {isAdmin && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 w-8 p-0"
+                      onClick={() => handleDeleteClick(patient)}
+                      title="Delete Visit"
+                    >
+                      <Trash2 className="h-4 w-4 text-red-600" />
+                    </Button>
+                  )}
                 </div>
               </TableCell>
             </TableRow>

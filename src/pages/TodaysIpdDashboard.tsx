@@ -41,7 +41,7 @@ import { IPD_PRINT_COLUMNS, IPD_PRINT_PRESETS, generateIPDFilterSummary } from '
 import '@/styles/print.css';
 
 const TodaysIpdDashboard = () => {
-  const { isAdmin, hospitalConfig } = useAuth();
+  const { isAdmin, hospitalConfig, user } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [showEditPatientDialog, setShowEditPatientDialog] = useState(false);
   const [selectedPatientForEdit, setSelectedPatientForEdit] = useState(null);
@@ -2490,15 +2490,17 @@ const TodaysIpdDashboard = () => {
                            </AlertDialogContent>
                          </AlertDialog>
                        )}
-                       <Button
-                         variant="ghost"
-                         size="sm"
-                         className="h-8 w-8 p-0 hover:bg-red-50"
-                         onClick={() => handleDeleteVisit(visit.visit_id)}
-                         title="Delete Visit"
-                       >
-                         <Trash2 className="h-4 w-4 text-red-600" />
-                       </Button>
+                       {(user?.email === 'user@ayushmanhospital.com' || user?.email === 'user@hopehospital.com') && (
+                         <Button
+                           variant="ghost"
+                           size="sm"
+                           className="h-8 w-8 p-0 hover:bg-red-50"
+                           onClick={() => handleDeleteVisit(visit.visit_id)}
+                           title="Delete Visit"
+                         >
+                           <Trash2 className="h-4 w-4 text-red-600" />
+                         </Button>
+                       )}
                      </div>
                    </TableCell>
                   )}

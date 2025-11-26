@@ -170,6 +170,7 @@ const RadiologyManagement: React.FC = () => {
   const [radiologyTests, setRadiologyTests] = useState<RadiologyTest[]>([]);
   const [loading, setLoading] = useState(false);
   const [editingTest, setEditingTest] = useState<RadiologyTest | null>(null);
+  const [viewingTest, setViewingTest] = useState<RadiologyTest | null>(null);
 
   // 🏥 EXPLICIT HOSPITAL FILTERING - If-Else Condition
   const getHospitalFilter = () => {
@@ -994,7 +995,13 @@ const RadiologyManagement: React.FC = () => {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                         <div className="flex items-center gap-2">
-                          <Button size="sm" variant="outline" className="text-blue-600">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="text-blue-600"
+                            onClick={() => setViewingTest(test)}
+                            title="View test details"
+                          >
                             <Eye className="h-4 w-4" />
                           </Button>
                           {canEditMasters && (
@@ -1106,6 +1113,27 @@ const RadiologyManagement: React.FC = () => {
             )}
           </div>
         </div>
+
+        {/* View Test Modal */}
+        {viewingTest && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-6 max-w-lg w-full mx-4">
+              <h2 className="text-xl font-bold mb-4">Test Details</h2>
+              <div className="space-y-3">
+                <p><strong>Name:</strong> {viewingTest.name}</p>
+                <p><strong>Active:</strong> {viewingTest.is_active ? 'Yes' : 'No'}</p>
+                <p><strong>NABH/NABL Rate:</strong> {viewingTest.nabhNablRate || 'N/A'}</p>
+                <p><strong>Non-NABH/NABL Rate:</strong> {viewingTest.nonNabhNablRate || 'N/A'}</p>
+                <p><strong>Private Rate:</strong> {viewingTest.private || 'N/A'}</p>
+                <p><strong>Bhopal NABH:</strong> {viewingTest.bhopal_nabh || 'N/A'}</p>
+                <p><strong>Bhopal Non-NABH:</strong> {viewingTest.bhopal_non_nabh || 'N/A'}</p>
+              </div>
+              <div className="mt-6 flex justify-end">
+                <Button onClick={() => setViewingTest(null)}>Close</Button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Radiology Sub Speciality Form - Add here too */}
         <RadiologySubSpecialityForm
