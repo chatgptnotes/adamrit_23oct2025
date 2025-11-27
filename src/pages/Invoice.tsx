@@ -4,6 +4,27 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 
+// Convert amount to words (Indian format)
+const convertAmountToWords = (amount: number): string => {
+  const ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine'];
+  const teens = ['Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
+  const tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+
+  const convertToWords = (num: number): string => {
+    if (num === 0) return '';
+    if (num < 10) return ones[num];
+    if (num < 20) return teens[num - 10];
+    if (num < 100) return tens[Math.floor(num / 10)] + (num % 10 !== 0 ? ' ' + ones[num % 10] : '');
+    if (num < 1000) return ones[Math.floor(num / 100)] + ' Hundred' + (num % 100 !== 0 ? ' ' + convertToWords(num % 100) : '');
+    if (num < 100000) return convertToWords(Math.floor(num / 1000)) + ' Thousand' + (num % 1000 !== 0 ? ' ' + convertToWords(num % 1000) : '');
+    if (num < 10000000) return convertToWords(Math.floor(num / 100000)) + ' Lakh' + (num % 100000 !== 0 ? ' ' + convertToWords(num % 100000) : '');
+    return convertToWords(Math.floor(num / 10000000)) + ' Crore' + (num % 10000000 !== 0 ? ' ' + convertToWords(num % 10000000) : '');
+  };
+
+  if (amount === 0) return 'Zero Rupees Only';
+  return 'Rupee ' + convertToWords(Math.floor(amount)) + ' Only';
+};
+
 const Invoice = () => {
   const [showPharmacyCharges, setShowPharmacyCharges] = useState(false);
   const [discountRemoved, setDiscountRemoved] = useState(false);
@@ -248,6 +269,29 @@ const Invoice = () => {
         console.error('Exception fetching advance payment:', error);
         return [];
       }
+    },
+    enabled: !!visitId
+  });
+
+  // Fetch final payment from final_payments table
+  const { data: finalPaymentData } = useQuery({
+    queryKey: ['invoice-final-payment', visitId],
+    queryFn: async () => {
+      if (!visitId) return null;
+
+      const { data, error } = await supabase
+        .from('final_payments')
+        .select('*')
+        .eq('visit_id', visitId)
+        .maybeSingle();
+
+      if (error) {
+        console.error('Error fetching final payment:', error);
+        return null;
+      }
+
+      console.log('Final payment data:', data);
+      return data;
     },
     enabled: !!visitId
   });
@@ -1048,9 +1092,16 @@ const Invoice = () => {
     console.log('💵 Total from accounting_transactions:', accountingTransactionsTotal);
 
     // Use advance_payment data if available, otherwise fall back to accounting_transactions
-    const totalAmountPaid = netAdvancePayment > 0 ? netAdvancePayment : accountingTransactionsTotal;
+    const advanceAmount = netAdvancePayment > 0 ? netAdvancePayment : accountingTransactionsTotal;
 
-    console.log('💵 FINAL Total Amount Paid:', totalAmountPaid);
+    // Add final payment amount
+    const finalPaymentAmount = finalPaymentData?.amount || 0;
+    console.log('💵 Final Payment Amount:', finalPaymentAmount);
+
+    // Total Amount Paid = Advance Payment + Final Payment
+    const totalAmountPaid = advanceAmount + finalPaymentAmount;
+
+    console.log('💵 FINAL Total Amount Paid (Advance + Final):', totalAmountPaid);
 
     // Get discount from visit_discounts table (same as Final Bill)
     const discountAmount = discountData || 0;
@@ -1098,7 +1149,7 @@ const Invoice = () => {
     amountPaid: actualAmounts.amountPaid,
     discount: actualAmounts.discount,
     balance: actualAmounts.balance,
-    amountInWords: 'Rupee Thirteen Thousand Nine Hundred Three Only' // TODO: Implement number to words conversion
+    amountInWords: convertAmountToWords(actualAmounts.total)
   };
 
   // Filter services based on hideLabRadiology state
@@ -1378,7 +1429,7 @@ const Invoice = () => {
             <div class="amount-section">
               <div class="amount-words">
                 <strong>Amount Chargeable (in words)</strong><br>
-                ${invoiceData.amountInWords}
+                ${convertAmountToWords(visibleTotal)}
               </div>
 
               <div class="amount-table">
@@ -1566,7 +1617,7 @@ const Invoice = () => {
             <div className="w-1/2 pr-4">
               <div className="text-sm">
                 <strong>Amount Chargeable (in words)</strong><br />
-                {invoiceData.amountInWords}
+                {convertAmountToWords(visibleTotal)}
               </div>
             </div>
             <div className="w-1/2">

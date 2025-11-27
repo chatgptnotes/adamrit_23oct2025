@@ -19,11 +19,15 @@ import '@/styles/print.css';
 
 const AdvanceStatementReport = () => {
   const navigate = useNavigate();
-  const { hospitalConfig } = useAuth();
+  const { hospitalConfig, hospitalType } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+
+  // Financial data for print report
+  const [billsData, setBillsData] = useState<Record<string, number>>({});
+  const [advancePaymentsData, setAdvancePaymentsData] = useState<Record<string, { totalAdvance: number; lastPayment: { amount: number; date: string | null } }>>({});
 
   // Debounce search term
   useEffect(() => {
@@ -55,6 +59,7 @@ const AdvanceStatementReport = () => {
           file_status,
           ward_allotted,
           room_allotted,
+          comments,
           patients!inner (
             id,
             name,
@@ -181,6 +186,68 @@ const AdvanceStatementReport = () => {
 
   const advanceData = filteredData;
 
+  // Fetch financial data for print report (bills and advance payments)
+  useEffect(() => {
+    const fetchFinancialData = async () => {
+      if (!advanceData || advanceData.length === 0) return;
+
+      const visitIds = advanceData.map(v => v.visit_id).filter(Boolean) as string[];
+      const patientIds = advanceData.map(v => v.patients?.id).filter(Boolean) as string[];
+
+      if (visitIds.length === 0) return;
+
+      try {
+        // Fetch bills data
+        const { data: bills, error: billsError } = await supabase
+          .from('bills')
+          .select('patient_id, total_amount')
+          .in('patient_id', patientIds);
+
+        if (billsError) {
+          console.error('Error fetching bills:', billsError);
+        } else if (bills) {
+          const billMap: Record<string, number> = {};
+          bills.forEach((bill: { patient_id: string; total_amount: number | null }) => {
+            if (bill.patient_id) {
+              billMap[bill.patient_id] = (billMap[bill.patient_id] || 0) + (bill.total_amount || 0);
+            }
+          });
+          setBillsData(billMap);
+        }
+
+        // Fetch advance payments data
+        const { data: advances, error: advancesError } = await supabase
+          .from('advance_payment')
+          .select('visit_id, advance_amount, payment_date')
+          .in('visit_id', visitIds)
+          .order('payment_date', { ascending: false });
+
+        if (advancesError) {
+          console.error('Error fetching advance payments:', advancesError);
+        } else if (advances) {
+          const advanceMap: Record<string, { totalAdvance: number; lastPayment: { amount: number; date: string | null } }> = {};
+
+          advances.forEach((payment: { visit_id: string; advance_amount: number; payment_date: string | null }) => {
+            if (payment.visit_id) {
+              if (!advanceMap[payment.visit_id]) {
+                advanceMap[payment.visit_id] = {
+                  totalAdvance: 0,
+                  lastPayment: { amount: payment.advance_amount || 0, date: payment.payment_date }
+                };
+              }
+              advanceMap[payment.visit_id].totalAdvance += (payment.advance_amount || 0);
+            }
+          });
+          setAdvancePaymentsData(advanceMap);
+        }
+      } catch (error) {
+        console.error('Error fetching financial data:', error);
+      }
+    };
+
+    fetchFinancialData();
+  }, [advanceData]);
+
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-IN', {
       style: 'currency',
@@ -248,14 +315,19 @@ const AdvanceStatementReport = () => {
           <table>
             <thead>
               <tr>
-                <th style="width: 4%;">Sr. No.</th>
-                <th style="width: 18%;">Patient Details</th>
-                <th style="width: 10%;">Corporate Type</th>
-                <th style="width: 10%;">Room/Bed</th>
-                <th style="width: 9%;">Admission Date</th>
-                <th style="width: 13%;">Diagnosis</th>
-                <th style="width: 11%;">Referral Letter</th>
-                <th style="width: 25%;">Planned Surgery or Procedure and Cost</th>
+                <th style="width: 3%;">Sr.</th>
+                <th style="width: 12%;">Patient Details</th>
+                ${hospitalType === 'hope' ? '<th style="width: 6%;">Corporate</th>' : ''}
+                <th style="width: 6%;">Room/Bed</th>
+                <th style="width: 6%;">Admission</th>
+                <th style="width: 10%;">Diagnosis</th>
+                <th style="width: 12%;">Surgery/Procedure</th>
+                <th style="width: 7%;">Total Bill</th>
+                <th style="width: 7%;">Advance</th>
+                <th style="width: 9%;">Last Payment</th>
+                <th style="width: 7%;">Balance</th>
+                <th style="width: 7%;">Ask to Pay</th>
+                <th style="width: 8%;">Remark</th>
               </tr>
             </thead>
             <tbody>
@@ -297,18 +369,6 @@ const AdvanceStatementReport = () => {
                   }).join('') :
                   'No surgery planned';
 
-                // Get Referral Letter status
-                const getReferralLetterDisplay = (status: string | null) => {
-                  switch (status) {
-                    case 'available': return 'Sanctioned';
-                    case 'missing': return 'Not Sanction';
-                    case 'pending': return 'Initiated Sanction';
-                    default: return 'Not Set';
-                  }
-                };
-                
-                const referralLetterText = getReferralLetterDisplay(item.file_status);
-
                 // Room/Bed text
                 const roomBedText = item.room_management?.ward_type && item.room_allotted
                   ? `<strong>${item.room_management.ward_type}</strong><br/>Room ${item.room_allotted}`
@@ -323,16 +383,37 @@ const AdvanceStatementReport = () => {
                 const corporateText = patient?.corporate || 'N/A';
                 const corporateColor = patient?.corporate ? '#4f46e5' : '#6b7280'; // indigo-600 or gray
 
+                // Financial calculations
+                const patientId = patient?.id || '';
+                const visitId = item.visit_id || '';
+                const totalBill = billsData[patientId] || 0;
+                const advanceInfo = advancePaymentsData[visitId] || { totalAdvance: 0, lastPayment: { amount: 0, date: null } };
+                const advanceTillDate = advanceInfo.totalAdvance;
+                const lastPayment = advanceInfo.lastPayment;
+                const balance = totalBill - advanceTillDate;
+                const askToPay = balance > 0 ? balance : 0;
+                const remark = item.comments || '';
+
+                // Format last payment text
+                const lastPaymentText = lastPayment.amount > 0
+                  ? `₹${lastPayment.amount.toLocaleString('en-IN')}${lastPayment.date ? '<br/>' + format(new Date(lastPayment.date), 'dd/MM/yyyy') : ''}`
+                  : '-';
+
                 return `
                   <tr>
                     <td style="text-align: center;">${index + 1}</td>
                     <td>${patientDetailsText}</td>
-                    <td style="text-align: center;"><strong style="color: ${corporateColor};">${corporateText}</strong></td>
+                    ${hospitalType === 'hope' ? `<td style="text-align: center;"><strong style="color: ${corporateColor};">${corporateText}</strong></td>` : ''}
                     <td>${roomBedText}</td>
                     <td style="text-align: center;">${admissionDateText}</td>
                     <td>${diagnosisText}</td>
-                    <td style="text-align: center;">${referralLetterText}</td>
                     <td>${surgeryText}</td>
+                    <td style="text-align: right; font-weight: bold;">₹${totalBill.toLocaleString('en-IN')}</td>
+                    <td style="text-align: right; color: #16a34a;">₹${advanceTillDate.toLocaleString('en-IN')}</td>
+                    <td style="text-align: center; font-size: 11px;">${lastPaymentText}</td>
+                    <td style="text-align: right; color: ${balance > 0 ? '#dc2626' : '#16a34a'}; font-weight: bold;">₹${balance.toLocaleString('en-IN')}</td>
+                    <td style="text-align: right; color: #ea580c; font-weight: bold;">₹${askToPay.toLocaleString('en-IN')}</td>
+                    <td style="font-size: 11px;">${remark || '-'}</td>
                   </tr>
                 `;
               }).join('')}
@@ -582,7 +663,9 @@ const AdvanceStatementReport = () => {
                 <TableRow>
                   <TableHead className="w-16">Sr. No.</TableHead>
                   <TableHead className="min-w-[250px]">Patient Details</TableHead>
-                  <TableHead className="min-w-[150px]">Corporate Type</TableHead>
+                  {hospitalType === 'hope' && (
+                    <TableHead className="min-w-[150px]">Corporate Type</TableHead>
+                  )}
                   <TableHead className="min-w-[150px]">Room/Bed</TableHead>
                   <TableHead className="min-w-[120px]">Admission Date</TableHead>
                   <TableHead className="min-w-[200px]">Diagnosis</TableHead>
@@ -592,13 +675,13 @@ const AdvanceStatementReport = () => {
               <TableBody>
                 {isLoading ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8">
+                    <TableCell colSpan={hospitalType === 'hope' ? 7 : 6} className="text-center py-8">
                       Loading...
                     </TableCell>
                   </TableRow>
                 ) : advanceData.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8 text-gray-500">
+                    <TableCell colSpan={hospitalType === 'hope' ? 7 : 6} className="text-center py-8 text-gray-500">
                       No data found
                     </TableCell>
                   </TableRow>
@@ -690,7 +773,9 @@ const AdvanceStatementReport = () => {
                       <TableRow key={item.id}>
                         <TableCell className="text-center">{index + 1}</TableCell>
                         <TableCell>{patientDetails}</TableCell>
-                        <TableCell>{corporateDisplay}</TableCell>
+                        {hospitalType === 'hope' && (
+                          <TableCell>{corporateDisplay}</TableCell>
+                        )}
                         <TableCell>{roomBedDisplay}</TableCell>
                         <TableCell>{admissionDateDisplay}</TableCell>
                         <TableCell>{diagnosisDisplay}</TableCell>
