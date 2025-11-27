@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useDebounce } from 'use-debounce';
 import { Badge } from '@/components/ui/badge';
-import { Eye, FileText, Search, Calendar, DollarSign, Trash2, FolderOpen, FolderX, CheckCircle, XCircle, Clock, MinusCircle, RotateCcw, Printer, Filter, MessageSquare, ClipboardList, ArrowUpDown } from 'lucide-react';
+import { Eye, FileText, Search, Calendar, DollarSign, Trash2, FolderOpen, FolderX, CheckCircle, XCircle, Clock, MinusCircle, RotateCcw, Printer, Filter, MessageSquare, ClipboardList, ArrowUpDown, Circle } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -70,6 +70,10 @@ const TodaysIpdDashboard = () => {
   const [condonationIntimationFilter, setCondonationIntimationFilter] = useState<string[]>([]);
   const [extensionOfStayFilter, setExtensionOfStayFilter] = useState<string[]>([]);
   const [additionalApprovalsFilter, setAdditionalApprovalsFilter] = useState<string[]>([]);
+
+  // Advance payment status tracking
+  const [advancePayments, setAdvancePayments] = useState<Record<string, number>>({});
+  const [billTotals, setBillTotals] = useState<Record<string, number>>({});
 
   // Print functionality
   const [showPrintPreview, setShowPrintPreview] = useState(false);
@@ -1242,6 +1246,68 @@ const TodaysIpdDashboard = () => {
     }
   });
 
+  // Fetch advance payments and bill totals for payment status column
+  useEffect(() => {
+    const fetchPaymentData = async () => {
+      if (!todaysVisits || todaysVisits.length === 0) return;
+
+      const visitIds = todaysVisits.map(v => v.visit_id).filter(Boolean) as string[];
+      const patientIds = todaysVisits.map(v => v.patient_id || v.patients?.id).filter(Boolean) as string[];
+
+      if (visitIds.length === 0) return;
+
+      try {
+        // Fetch advance payments
+        const { data: advanceData, error: advanceError } = await supabase
+          .from('advance_payment')
+          .select('visit_id, advance_amount')
+          .in('visit_id', visitIds);
+
+        if (advanceError) {
+          console.error('Error fetching advance payments:', advanceError);
+        } else if (advanceData) {
+          const advanceSums: Record<string, number> = {};
+          advanceData.forEach((payment: { visit_id: string; advance_amount: number }) => {
+            if (payment.visit_id) {
+              advanceSums[payment.visit_id] = (advanceSums[payment.visit_id] || 0) + (payment.advance_amount || 0);
+            }
+          });
+          setAdvancePayments(advanceSums);
+        }
+
+        // Fetch bill totals
+        const { data: billData, error: billError } = await supabase
+          .from('bills')
+          .select('patient_id, total_amount')
+          .in('patient_id', patientIds);
+
+        if (billError) {
+          console.error('Error fetching bills:', billError);
+        } else if (billData) {
+          const billMap: Record<string, number> = {};
+          billData.forEach((bill: { patient_id: string; total_amount: number | null }) => {
+            if (bill.patient_id) {
+              billMap[bill.patient_id] = (billMap[bill.patient_id] || 0) + (bill.total_amount || 0);
+            }
+          });
+
+          const billByVisit: Record<string, number> = {};
+          todaysVisits.forEach(v => {
+            const patientId = v.patient_id || v.patients?.id;
+            if (patientId && v.visit_id && billMap[patientId]) {
+              billByVisit[v.visit_id] = billMap[patientId];
+            }
+          });
+          setBillTotals(billByVisit);
+        }
+      } catch (error) {
+        console.error('Error fetching payment data:', error);
+      }
+    };
+
+    fetchPaymentData();
+  }, [todaysVisits]);
+
   // Function to check if referral letter is uploaded for a visit
   const checkReferralLetterUploaded = async (visitId: string) => {
     try {
@@ -1292,6 +1358,37 @@ const TodaysIpdDashboard = () => {
     const minutes = Math.floor((remainingTime % (60 * 60 * 1000)) / (60 * 1000));
     
     return `${hours}h ${minutes}m remaining`;
+  };
+
+  // Render advance payment status with color coding
+  // Red: No payment, Orange: Partial/Advance payment, Green: Full payment
+  const renderAdvancePaymentStatus = (visit: any) => {
+    const visitId = visit.visit_id || '';
+    const totalAdvance = advancePayments[visitId] || 0;
+    const totalBill = billTotals[visitId] || 0;
+
+    if (totalAdvance === 0) {
+      // No payment made - Red
+      return (
+        <div className="flex justify-center" title="No payment received">
+          <Circle className="h-4 w-4 text-red-600 fill-red-600" />
+        </div>
+      );
+    } else if (totalBill > 0 && totalAdvance < totalBill) {
+      // Partial payment (advance) - Orange
+      return (
+        <div className="flex justify-center" title={`Advance payment: ₹${totalAdvance.toLocaleString()} / ₹${totalBill.toLocaleString()}`}>
+          <Circle className="h-4 w-4 text-orange-500 fill-orange-500" />
+        </div>
+      );
+    } else {
+      // Full payment - Green
+      return (
+        <div className="flex justify-center" title={`Full payment received: ₹${totalAdvance.toLocaleString()}`}>
+          <Circle className="h-4 w-4 text-green-600 fill-green-600" />
+        </div>
+      );
+    }
   };
 
   // Load referral letter status for all visits
@@ -2128,8 +2225,10 @@ const TodaysIpdDashboard = () => {
                 <TableHead className="font-semibold">Visit ID</TableHead>
                 <TableHead className="font-semibold">Patient Name</TableHead>
                 <TableHead className="font-semibold">Claim ID</TableHead>
+                <TableHead className="text-center font-semibold">Payment Received</TableHead>
                 <TableHead className="font-semibold">ESIC UHID</TableHead>
                 <TableHead className="font-semibold">Bill</TableHead>
+                <TableHead className="font-semibold">Admission Notes</TableHead>
                 <TableHead className="font-semibold">Billing Executive</TableHead>
                 <TableHead className="font-semibold">Billing Status</TableHead>
                 <TableHead className="font-semibold">Corporate</TableHead>
@@ -2149,7 +2248,6 @@ const TodaysIpdDashboard = () => {
                 <TableHead className="font-semibold">Days Admitted</TableHead>
                 <TableHead className="font-semibold">Discharge Date</TableHead>
                 <TableHead className="font-semibold">Discharge Summary</TableHead>
-                <TableHead className="font-semibold">Admission Notes</TableHead>
                 {isAdmin && <TableHead className="font-semibold">Actions</TableHead>}
               </TableRow>
               <TableRow className="bg-muted/30">
@@ -2226,6 +2324,9 @@ const TodaysIpdDashboard = () => {
                   </TableCell>
                   <TableCell>
                     <ClaimIdInput visit={visit} />
+                  </TableCell>
+                  <TableCell className="text-center">
+                    {renderAdvancePaymentStatus(visit)}
                   </TableCell>
                   <TableCell>
                     <EsicUhidInput visit={visit} />
@@ -2329,6 +2430,17 @@ const TodaysIpdDashboard = () => {
                     })()}
                   </TableCell>
                   <TableCell>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 w-8 p-0 hover:bg-green-50"
+                      onClick={() => navigate(`/admission-notes/${visit.visit_id}`)}
+                      title="Admission Notes"
+                    >
+                      <FileText className="h-4 w-4 text-green-600" />
+                    </Button>
+                  </TableCell>
+                  <TableCell>
                     <BillingExecutiveInput visit={visit} isAdmin={isAdmin} />
                   </TableCell>
                   <TableCell>
@@ -2413,17 +2525,6 @@ const TodaysIpdDashboard = () => {
                       title="IPD Discharge Summary"
                     >
                       <ClipboardList className="h-4 w-4 text-blue-600" />
-                    </Button>
-                  </TableCell>
-                  <TableCell>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-8 w-8 p-0 hover:bg-green-50"
-                      onClick={() => navigate(`/admission-notes/${visit.visit_id}`)}
-                      title="Admission Notes"
-                    >
-                      <FileText className="h-4 w-4 text-green-600" />
                     </Button>
                   </TableCell>
                   {isAdmin && (

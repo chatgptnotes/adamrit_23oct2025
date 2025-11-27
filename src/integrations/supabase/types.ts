@@ -341,6 +341,8 @@ export type Database = {
       }
       cghs_surgery: {
         Row: {
+          bhopal_nabh_rate: string | null
+          bhopal_non_nabh_rate: string | null
           category: string | null
           code: string | null
           cost: string | null
@@ -350,11 +352,14 @@ export type Database = {
           NABH_NABL_Rate: string | null
           name: string
           Non_NABH_NABL_Rate: string | null
+          private: string | null
           Procedure_Name: string | null
           Revised_Date: string | null
           updated_at: string | null
         }
         Insert: {
+          bhopal_nabh_rate?: string | null
+          bhopal_non_nabh_rate?: string | null
           category?: string | null
           code?: string | null
           cost?: string | null
@@ -364,11 +369,14 @@ export type Database = {
           NABH_NABL_Rate?: string | null
           name: string
           Non_NABH_NABL_Rate?: string | null
+          private?: string | null
           Procedure_Name?: string | null
           Revised_Date?: string | null
           updated_at?: string | null
         }
         Update: {
+          bhopal_nabh_rate?: string | null
+          bhopal_non_nabh_rate?: string | null
           category?: string | null
           code?: string | null
           cost?: string | null
@@ -378,6 +386,7 @@ export type Database = {
           NABH_NABL_Rate?: string | null
           name?: string
           Non_NABH_NABL_Rate?: string | null
+          private?: string | null
           Procedure_Name?: string | null
           Revised_Date?: string | null
           updated_at?: string | null

@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { X, Check, Eye, FileText, UserCheck, Trash2, DollarSign, MessageSquare, FileTextIcon, Activity, ClipboardEdit } from 'lucide-react';
+import { X, Check, Eye, FileText, UserCheck, Trash2, DollarSign, MessageSquare, FileTextIcon, Activity, ClipboardEdit, Circle } from 'lucide-react';
 import { VisitRegistrationForm } from '@/components/VisitRegistrationForm';
 import { supabase } from '@/integrations/supabase/client';
 import { useDebounce } from 'use-debounce';
@@ -56,6 +56,75 @@ export const OpdPatientTable = ({ patients, refetch }: OpdPatientTableProps) => 
   const [originalComments, setOriginalComments] = useState<Record<string, string>>({});
   const [savingComments, setSavingComments] = useState<Record<string, boolean>>({});
   const [savedComments, setSavedComments] = useState<Record<string, boolean>>({});
+
+  // Advance payment status tracking
+  const [advancePayments, setAdvancePayments] = useState<Record<string, number>>({});
+  const [billTotals, setBillTotals] = useState<Record<string, number>>({});
+
+  // Fetch advance payments and bill totals for all patients
+  useEffect(() => {
+    const fetchPaymentData = async () => {
+      if (patients.length === 0) return;
+
+      const visitIds = patients.map(p => p.visit_id).filter(Boolean) as string[];
+      const patientIds = patients.map(p => p.patient_id || p.patients?.id).filter(Boolean) as string[];
+
+      if (visitIds.length === 0) return;
+
+      try {
+        // Fetch advance payments
+        const { data: advanceData, error: advanceError } = await supabase
+          .from('advance_payment')
+          .select('visit_id, advance_amount')
+          .in('visit_id', visitIds);
+
+        if (advanceError) {
+          console.error('Error fetching advance payments:', advanceError);
+        } else if (advanceData) {
+          // Sum advance payments per visit_id
+          const advanceSums: Record<string, number> = {};
+          advanceData.forEach((payment: { visit_id: string; advance_amount: number }) => {
+            if (payment.visit_id) {
+              advanceSums[payment.visit_id] = (advanceSums[payment.visit_id] || 0) + (payment.advance_amount || 0);
+            }
+          });
+          setAdvancePayments(advanceSums);
+        }
+
+        // Fetch bill totals
+        const { data: billData, error: billError } = await supabase
+          .from('bills')
+          .select('patient_id, total_amount')
+          .in('patient_id', patientIds);
+
+        if (billError) {
+          console.error('Error fetching bills:', billError);
+        } else if (billData) {
+          // Map bill totals by patient_id, then we'll map to visit_id
+          const billMap: Record<string, number> = {};
+          billData.forEach((bill: { patient_id: string; total_amount: number | null }) => {
+            if (bill.patient_id) {
+              billMap[bill.patient_id] = (billMap[bill.patient_id] || 0) + (bill.total_amount || 0);
+            }
+          });
+
+          // Convert patient_id to visit_id mapping
+          const billByVisit: Record<string, number> = {};
+          patients.forEach(p => {
+            const patientId = p.patient_id || p.patients?.id;
+            if (patientId && p.visit_id && billMap[patientId]) {
+              billByVisit[p.visit_id] = billMap[patientId];
+            }
+          });
+          setBillTotals(billByVisit);
+        }
+      } catch (error) {
+        console.error('Error fetching payment data:', error);
+      }
+    };
+
+    fetchPaymentData();
+  }, [patients]);
 
   // Discharge summary state management - removed (now uses dedicated page)
 
@@ -1036,6 +1105,37 @@ Verified by: [To be verified by doctor]`;
     );
   };
 
+  // Render advance payment status with color coding
+  // Red: No payment, Orange: Partial/Advance payment, Green: Full payment
+  const renderAdvancePaymentStatus = (patient: Patient) => {
+    const visitId = patient.visit_id || '';
+    const totalAdvance = advancePayments[visitId] || 0;
+    const totalBill = billTotals[visitId] || 0;
+
+    if (totalAdvance === 0) {
+      // No payment made - Red
+      return (
+        <div className="flex justify-center" title="No payment received">
+          <Circle className="h-4 w-4 text-red-600 fill-red-600" />
+        </div>
+      );
+    } else if (totalBill > 0 && totalAdvance < totalBill) {
+      // Partial payment (advance) - Orange
+      return (
+        <div className="flex justify-center" title={`Advance payment: ₹${totalAdvance.toLocaleString()} / ₹${totalBill.toLocaleString()}`}>
+          <Circle className="h-4 w-4 text-orange-500 fill-orange-500" />
+        </div>
+      );
+    } else {
+      // Full payment - Green
+      return (
+        <div className="flex justify-center" title={`Full payment received: ₹${totalAdvance.toLocaleString()}`}>
+          <Circle className="h-4 w-4 text-green-600 fill-green-600" />
+        </div>
+      );
+    }
+  };
+
   if (patients.length === 0) {
     return (
       <div className="text-center py-8 text-muted-foreground">
@@ -1055,8 +1155,9 @@ Verified by: [To be verified by doctor]`;
             <TableHead className="font-medium">Visit Type</TableHead>
             <TableHead className="font-medium">Doctor</TableHead>
             <TableHead className="font-medium">Diagnosis</TableHead>
-            <TableHead className="font-medium">Corporate</TableHead>
             <TableHead className="text-center font-medium">Payment Received</TableHead>
+            <TableHead className="font-medium">Corporate</TableHead>
+            <TableHead className="text-center font-medium">Bill</TableHead>
             <TableHead className="text-center font-medium">Admit To Hospital</TableHead>
             <TableHead className="text-center font-medium">Admission Notes</TableHead>
             <TableHead className="text-center font-medium">Physiotherapy Bill</TableHead>
@@ -1116,6 +1217,9 @@ Verified by: [To be verified by doctor]`;
               </TableCell>
               <TableCell>
                 {patient.diagnosis || 'General'}
+              </TableCell>
+              <TableCell className="text-center">
+                {renderAdvancePaymentStatus(patient)}
               </TableCell>
               <TableCell>
                 {patient.patients?.corporate || '-'}

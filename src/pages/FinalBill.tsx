@@ -1,7 +1,7 @@
 // @ts-nocheck
 "use client"
 
-import React, { useState, useEffect, useCallback } from "react"
+import React, { useState, useEffect, useCallback, useMemo } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { supabase } from "@/integrations/supabase/client"
 import { format, differenceInDays } from "date-fns"
@@ -1282,6 +1282,39 @@ const FinalBill = () => {
     retry: false, // Don't retry on error to avoid multiple failed requests
   })
 
+  // Memoized patient data for Advance Payment Modal to prevent re-rendering
+  const advancePaymentPatientData = useMemo(() => {
+    try {
+      return {
+        name: visitData?.patients?.name || undefined,
+        billNo: billData?.bill_no || undefined,
+        registrationNo: visitData?.patients?.patients_id || undefined,
+        dateOfAdmission: (() => {
+          try {
+            if (visitData?.admission_date) {
+              return format(new Date(visitData.admission_date), 'dd/MM/yyyy');
+            }
+            if (visitData?.visit_date) {
+              return format(new Date(visitData.visit_date), 'dd/MM/yyyy');
+            }
+            return undefined;
+          } catch (dateError) {
+            console.error('❌ Date formatting error:', dateError);
+            return undefined;
+          }
+        })()
+      };
+    } catch (error) {
+      console.error('❌ Error creating patient data object:', error);
+      return {
+        name: undefined,
+        billNo: undefined,
+        registrationNo: undefined,
+        dateOfAdmission: undefined
+      };
+    }
+  }, [visitData?.patients?.name, visitData?.patients?.patients_id, visitData?.admission_date, visitData?.visit_date, billData?.bill_no]);
+
   // Auto-create bill when visit data is available
   useEffect(() => {
     const createBillIfNeeded = async () => {
@@ -2224,6 +2257,58 @@ const FinalBill = () => {
     } catch (error) {
       console.error('Error updating medication field:', error);
       toast.error('Failed to update medication data');
+    }
+  };
+
+  // Functions to update mandatory services data
+  const updateMandatoryServiceField = async (serviceId: string, field: string, value: string) => {
+    try {
+      const { error } = await supabase
+        .from('visit_mandatory_services')
+        .update({ [field]: value })
+        .eq('id', serviceId);
+
+      if (error) {
+        console.error('Error updating mandatory service field:', error);
+        toast.error('Failed to update mandatory service data');
+        return;
+      }
+
+      // Update local state
+      setSavedMandatoryServicesData(prev => prev.map(service =>
+        service.id === serviceId ? { ...service, [field]: value } : service
+      ));
+
+      toast.success('Mandatory service date updated successfully');
+    } catch (error) {
+      console.error('Error updating mandatory service field:', error);
+      toast.error('Failed to update mandatory service data');
+    }
+  };
+
+  // Functions to update clinical services data
+  const updateClinicalServiceField = async (junctionId: string, field: string, value: string) => {
+    try {
+      const { error } = await supabase
+        .from('visit_clinical_services')
+        .update({ [field]: value })
+        .eq('id', junctionId);
+
+      if (error) {
+        console.error('Error updating clinical service field:', error);
+        toast.error('Failed to update clinical service data');
+        return;
+      }
+
+      // Update local state
+      setSavedClinicalServicesData(prev => prev.map(service =>
+        service.junction_id === junctionId ? { ...service, [field]: value } : service
+      ));
+
+      toast.success('Clinical service date updated successfully');
+    } catch (error) {
+      console.error('Error updating clinical service field:', error);
+      toast.error('Failed to update clinical service data');
     }
   };
 
@@ -17660,14 +17745,12 @@ Dr. Murali B K
                                           />
                                         </td>
                                         <td className="border border-gray-300 px-4 py-2 text-sm text-gray-600">
-                                          {lab.ordered_date ? new Date(lab.ordered_date).toLocaleString('en-IN', {
-                                            year: 'numeric',
-                                            month: '2-digit',
-                                            day: '2-digit',
-                                            hour: '2-digit',
-                                            minute: '2-digit',
-                                            second: '2-digit'
-                                          }) : 'No date'}
+                                          <input
+                                            type="date"
+                                            value={lab.ordered_date ? new Date(lab.ordered_date).toISOString().split('T')[0] : ''}
+                                            onChange={(e) => updateLabField(lab.id, 'ordered_date', e.target.value)}
+                                            className="w-full px-2 py-1 text-xs border border-gray-200 rounded focus:outline-none focus:border-blue-500"
+                                          />
                                         </td>
                                         <td className="border border-gray-300 px-4 py-2 text-sm text-gray-900 font-medium">
                                           {lab.lab_name}
@@ -17782,14 +17865,12 @@ Dr. Murali B K
                                           />
                                         </td>
                                         <td className="border border-gray-300 px-4 py-2 text-sm text-gray-600">
-                                          {radiology.ordered_date ? new Date(radiology.ordered_date).toLocaleString('en-IN', {
-                                            year: 'numeric',
-                                            month: '2-digit',
-                                            day: '2-digit',
-                                            hour: '2-digit',
-                                            minute: '2-digit',
-                                            second: '2-digit'
-                                          }) : 'No date'}
+                                          <input
+                                            type="date"
+                                            value={radiology.ordered_date ? new Date(radiology.ordered_date).toISOString().split('T')[0] : ''}
+                                            onChange={(e) => updateRadiologyField(radiology.id, 'ordered_date', e.target.value)}
+                                            className="w-full px-2 py-1 text-xs border border-gray-200 rounded focus:outline-none focus:border-blue-500"
+                                          />
                                         </td>
                                         <td className="border border-gray-300 px-4 py-2 text-sm text-gray-900 font-medium">
                                           {radiology.radiology_name}
@@ -17934,7 +18015,12 @@ Dr. Murali B K
                                           ₹{service.selectedRate || service.amount}
                                         </td>
                                         <td className="border border-gray-300 px-4 py-2 text-sm text-gray-600">
-                                          {service.selected_at ? new Date(service.selected_at).toLocaleDateString() : 'N/A'}
+                                          <input
+                                            type="date"
+                                            value={service.selected_at ? new Date(service.selected_at).toISOString().split('T')[0] : ''}
+                                            onChange={(e) => updateClinicalServiceField(service.junction_id, 'selected_at', e.target.value)}
+                                            className="w-full px-2 py-1 text-xs border border-gray-200 rounded focus:outline-none focus:border-blue-500"
+                                          />
                                         </td>
                                         <td className="border border-gray-300 px-4 py-2 text-sm text-center">
                                           <button
@@ -18050,7 +18136,12 @@ Dr. Murali B K
                                             })()}
                                           </td>
                                           <td className="border border-gray-300 px-4 py-2 text-sm text-gray-600">
-                                            {service.selected_at ? new Date(service.selected_at).toLocaleDateString() : 'N/A'}
+                                            <input
+                                              type="date"
+                                              value={service.selected_at ? new Date(service.selected_at).toISOString().split('T')[0] : ''}
+                                              onChange={(e) => updateMandatoryServiceField(service.id, 'selected_at', e.target.value)}
+                                              className="w-full px-2 py-1 text-xs border border-gray-200 rounded focus:outline-none focus:border-blue-500"
+                                            />
                                           </td>
                                           <td className="border border-gray-300 px-4 py-2 text-sm text-center">
                                             <button
@@ -21928,48 +22019,7 @@ Dr. Murali B K
           onClose={() => setIsAdvancePaymentModalOpen(false)}
           visitId={visitId}
           patientId={visitData?.patients?.id}
-          patientData={(() => {
-            try {
-              console.log('🏥 FinalBill visitData debug:', {
-                visitDataExists: !!visitData,
-                patientsExists: !!visitData?.patients,
-                patientName: visitData?.patients?.name,
-                registrationNo: visitData?.patients?.patients_id,
-                patientId: visitData?.patients?.id,
-                billNo: billData?.bill_no,
-                admissionDate: visitData?.admission_date,
-                visitDate: visitData?.visit_date
-              });
-              
-              return {
-                name: visitData?.patients?.name || undefined,
-                billNo: billData?.bill_no || undefined,
-                registrationNo: visitData?.patients?.patients_id || undefined,
-                dateOfAdmission: (() => {
-                  try {
-                    if (visitData?.admission_date) {
-                      return format(new Date(visitData.admission_date), 'dd/MM/yyyy');
-                    }
-                    if (visitData?.visit_date) {
-                      return format(new Date(visitData.visit_date), 'dd/MM/yyyy');
-                    }
-                    return undefined;
-                  } catch (dateError) {
-                    console.error('❌ Date formatting error:', dateError);
-                    return undefined;
-                  }
-                })()
-              };
-            } catch (error) {
-              console.error('❌ Error creating patient data object:', error);
-              return {
-                name: undefined,
-                billNo: undefined,
-                registrationNo: undefined,
-                dateOfAdmission: undefined
-              };
-            }
-          })()}
+          patientData={advancePaymentPatientData}
           onPaymentAdded={() => {
             // RE-ENABLED: Auto-populate now has enhanced discount preservation
             console.log('💰 [PAYMENT ADDED] Refreshing financial calculations with discount preservation');
