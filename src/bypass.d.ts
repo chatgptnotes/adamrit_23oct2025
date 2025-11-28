@@ -1,2 +1,0 @@
-// TypeScript global declarations
-export {};

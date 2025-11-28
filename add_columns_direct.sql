@@ -1,6 +1,0 @@
--- Add new columns to cghs_surgery table
-ALTER TABLE cghs_surgery 
-ADD COLUMN IF NOT EXISTS "Procedure_Name" TEXT,
-ADD COLUMN IF NOT EXISTS "Non_NABH_NABL_Rate" DECIMAL(10,2),
-ADD COLUMN IF NOT EXISTS "NABH_NABL_Rate" DECIMAL(10,2),
-ADD COLUMN IF NOT EXISTS "Revised_Date" DATE;
