@@ -1,0 +1,7 @@
+{
+  "enabled": false,
+  "agentName": "auto-confirm",
+  "version": "1.0.0",
+  "lastModified": "2025-09-09T00:00:00Z",
+  "description": "Configuration for Claude Code auto-confirmation behavior"
+}

@@ -1,0 +1,104 @@
+/* ======================================== */
+/* FIX BLACK RECTANGLE HIGHLIGHT */
+/* ======================================== */
+
+/* Remove any black borders or highlights */
+* {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+/* Remove any black borders from navigation items */
+.sidebar-item,
+.nav-item,
+.database-table-item {
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+/* Remove any black rectangle highlights */
+.sidebar-item:hover,
+.nav-item:hover,
+.database-table-item:hover {
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+/* Remove any black borders from active states */
+.sidebar-item.active,
+.nav-item.active,
+.database-table-item.active {
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+/* Remove any black borders from focus states */
+.sidebar-item:focus,
+.nav-item:focus,
+.database-table-item:focus {
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+/* Remove any black borders from selected states */
+.sidebar-item.selected,
+.nav-item.selected,
+.database-table-item.selected {
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+/* Remove any black borders from table cells */
+td, th {
+  border: 1px solid #e5e7eb !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+/* Remove any black borders from buttons */
+button {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+button:focus {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+/* Remove any black borders from inputs */
+input, select, textarea {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+input:focus, select:focus, textarea:focus {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+/* Success message */
+body::after {
+  content: "Black rectangle styling removed!";
+  position: fixed;
+  top: 10px;
+  right: 10px;
+  background: #10b981;
+  color: white;
+  padding: 8px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  z-index: 9999;
+  animation: fadeOut 3s forwards;
+}
+
+@keyframes fadeOut {
+  0% { opacity: 1; }
+  70% { opacity: 1; }
+  100% { opacity: 0; }
+}

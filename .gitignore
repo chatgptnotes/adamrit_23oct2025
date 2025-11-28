@@ -1,0 +1,10 @@
+node_modules
+
+dist/
+.env
+.env.local
+.vercel
+
+# macOS system files
+.DS_Store
+**/.DS_Store

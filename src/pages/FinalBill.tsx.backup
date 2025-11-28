@@ -1,0 +1,4337 @@
+"use client"
+
+import React, { useState, useEffect, useCallback } from "react"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
+import { supabase } from "@/integrations/supabase/client"
+import { format, differenceInDays } from "date-fns"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { Textarea } from "@/components/ui/textarea"
+import { ChevronUp, ChevronDown, Trash2, Plus, ChevronLeft, ChevronRight, Edit, X } from "lucide-react"
+import { useParams } from "react-router-dom";
+import { ScrollArea } from "@/components/ui/scroll-area"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
+import "@/styles/print.css"
+import { useFinalBillData } from "@/hooks/useFinalBillData"
+import { toast } from "sonner"
+import { DateRangePicker } from "@/components/ui/date-range-picker"
+import { DateRange } from "react-day-picker"
+import { Badge } from "@/components/ui/badge"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+
+// This component needs to be created or installed. It is not a standard shadcn/ui component.
+// You can find implementations online or build one yourself.
+// For now, I'll mock it to avoid breaking the app.
+// import { DateRangePicker } from "@/components/ui/date-range-picker" 
+
+// Define interfaces for our data structures
+interface PatientData {
+  billNo: string;
+  claimId: string;
+  registrationNo: string;
+  name: string;
+  age: string;
+  sex: string;
+  contactNo: string;
+  address: string;
+  beneficiaryName: string;
+  relation: string;
+  rank: string;
+  serviceNo: string;
+  category: string;
+  diagnosis: string;
+  dateOfAdmission: string;
+  dateOfDischarge: string;
+  billDate: string;
+}
+
+interface SurgicalSubItem {
+    id: string;
+    type: 'surgical';
+    srNo: string;
+    description: string;
+    code: string;
+    baseAmount: number;
+    primaryAdjustment: string;
+    secondaryAdjustment: string;
+    qty: number;
+    amount: number;
+    dates?: DateRange;
+    breakdown?: {
+        baseAmount: number;
+        adjustments: Array<{label: string, amount: number}>;
+        finalAmount: number;
+    };
+    surgeryId?: string;
+}
+
+interface StandardSubItem {
+    id: string;
+    srNo: string;
+    description: string;
+    code?: string;
+    rate: number;
+    qty: number;
+    amount: number;
+    dates?: DateRange;
+    type?: 'standard';
+}
+
+type SubItem = SurgicalSubItem | StandardSubItem;
+
+interface SectionItem {
+    id: string;
+    type: 'section';
+    title: string;
+    dates: DateRange | undefined;
+    isOpen: boolean;
+    subItems?: never; // Sections don't have sub-items in this structure
+}
+
+interface MainItem {
+    id: string;
+    type: 'main';
+    srNo: string;
+    description: string;
+    subItems: SubItem[];
+    amount?: number;
+    dates?: DateRange;
+}
+
+type InvoiceItem = SectionItem | MainItem;
+
+const initialPatientData: PatientData = {
+  billNo: "BL24D-21/06",
+  claimId: "",
+  registrationNo: "PAT-2025-71078",
+  name: "SANJEEV KAPOOR",
+  age: "69 YEARS",
+  sex: "MALE",
+  contactNo: "",
+  address: "",
+  beneficiaryName: "SANJEEV KAPOOR",
+  relation: "SELF",
+  rank: "Sep (RETD)",
+  serviceNo: "1231207F",
+  category: "GENERAL",
+  diagnosis: "fever",
+  dateOfAdmission: "2025-05-25",
+  dateOfDischarge: "",
+  billDate: "2025-06-21",
+}
+
+const initialInvoiceItems: InvoiceItem[] = [
+  {
+    id: 'header_1',
+    type: 'section',
+    title: 'Conservative Treatment',
+    dates: { from: new Date('2024-03-04'), to: new Date('2024-03-09') },
+    isOpen: true,
+  },
+  {
+    id: 'header_2',
+    type: 'section',
+    title: 'Surgical Package (6 Days)',
+    dates: { from: new Date('2024-03-10'), to: new Date('2024-03-15') },
+    isOpen: true,
+  },
+  {
+    id: 'main_1',
+    type: 'main',
+    srNo: '1',
+    description: 'Consultation for Inpatients',
+    amount: 2800,
+    subItems: [
+      {
+        id: 'sub_consultation_1',
+        srNo: 'a)',
+        description: 'Select Doctor',
+        dates: { from: new Date('2024-03-04'), to: new Date('2024-03-09') },
+        code: '',
+        rate: 350,
+        qty: 8,
+        amount: 2800,
+        type: 'standard',
+      },
+    ],
+  },
+  {
+    id: 'main_2',
+    type: 'main',
+    srNo: '2',
+    description: 'Accommodation Charges',
+    amount: 9000,
+    subItems: [
+      {
+        id: 'sub_accommodation_1',
+        srNo: 'a)',
+        description: 'Accommodation of Genral Ward',
+        dates: { from: new Date('2024-03-04'), to: new Date('2024-03-09') },
+        code: '',
+        rate: 1500,
+        qty: 6,
+        amount: 9000,
+        type: 'standard',
+      },
+    ],
+  },
+  {
+    id: 'main_3',
+    type: 'main',
+    srNo: '3',
+    description: 'Pathology Charges',
+    amount: 250,
+    subItems: [
+      {
+        id: 'sub_pathology_1',
+        srNo: 'a)',
+        description: '',
+        dates: { from: new Date('2024-03-04'), to: new Date('2024-03-04') },
+        rate: 250,
+        qty: 1,
+        amount: 250,
+        type: 'standard',
+      },
+    ],
+  },
+  {
+    id: 'main_4',
+    type: 'main',
+    srNo: '4',
+    description: 'Medicine Charges',
+    amount: 100,
+    subItems: [
+      {
+        id: 'sub_medicine_1',
+        srNo: 'a)',
+        description: '',
+        dates: { from: new Date('2024-03-05'), to: new Date('2024-03-05') },
+        rate: 10,
+        qty: 10,
+        amount: 100,
+        type: 'standard',
+      },
+    ],
+  },
+  {
+    id: 'main_6',
+    type: 'main',
+    srNo: '6',
+    description: 'Other Charges',
+    amount: 58,
+    subItems: [
+      {
+        id: 'sub_other_1',
+        srNo: 'a)',
+        description: 'ECG',
+        code: '590',
+        rate: 58,
+        qty: 1,
+        amount: 58,
+        type: 'standard',
+      },
+    ],
+  },
+  {
+    id: 'main_7',
+    type: 'main',
+    srNo: '7',
+    description: 'Implant Charges',
+    amount: 60400,
+    subItems: [
+      {
+        id: 'sub_implant_1',
+        srNo: 'a)',
+        description: 'Biliary Stent',
+        code: 'UNLISTED',
+        rate: 60400,
+        qty: 1,
+        amount: 60400,
+        type: 'standard',
+      },
+    ],
+  },
+  {
+    id: 'main_8',
+    type: 'main',
+    srNo: '8',
+    description: 'Miscellaneous Charges',
+    amount: 500,
+    subItems: [
+      {
+        id: 'sub_misc_1',
+        srNo: 'a)',
+        description: 'Registration',
+        rate: 500,
+        qty: 1,
+        amount: 500,
+        type: 'standard',
+      },
+    ],
+  },
+  {
+    id: 'main_5',
+    type: 'main',
+    srNo: '5',
+    description: 'Surgical Treatment (10/03/2024)',
+    amount: 10177.2,
+    subItems: [
+      {
+        id: 'sub_surgical_1',
+        srNo: 'a)',
+        description:
+          'Resection Bladder Neck Endoscopic /Bladder neck incision/transurethral incision on prostate',
+        baseAmount: 11308,
+        primaryAdjustment: 'ward10',
+        secondaryAdjustment: 'none',
+        breakdown: {
+          baseAmount: 11308,
+          adjustments: [
+            { label: 'Less 10% Gen. Ward Charges', amount: -1131 },
+            { label: 'No Adjustment', amount: 0 },
+          ],
+          finalAmount: 10177,
+        },
+        code: '874',
+        qty: 1,
+        amount: 10177.2,
+        type: 'surgical',
+      },
+    ],
+  },
+];
+
+const cghsAdjustmentOptions = [
+    { value: 'none', label: 'No Adjustment', percentage: 0 },
+    { value: 'ward10', label: 'Less 10% Gen. Ward Charges', percentage: -10 },
+    { value: 'guideline50', label: 'Less 50% as per CGHS Guideline', percentage: -50 },
+    { value: 'guideline25', label: 'Less 25% as per CGHS Guideline', percentage: -25 },
+];
+
+const wardAdjustments = {
+    'none': 1, 'ward10': 1.1, 'semi20': 1.2, 'private30': 1.3
+};
+const guidelineAdjustments = {
+    'none': 1, 'guideline50': 0.5, 'guideline25': 0.25
+};
+
+// Convert number to words
+function convertToWords(num) {
+    if (num === 0) return "ZERO";
+    const belowTwenty = ["", "ONE", "TWO", "THREE", "FOUR", "FIVE", "SIX", "SEVEN", "EIGHT", "NINE", "TEN", "ELEVEN", "TWELVE", "THIRTEEN", "FOURTEEN", "FIFTEEN", "SIXTEEN", "SEVENTEEN", "EIGHTEEN", "NINETEEN"];
+    const tens = ["", "", "TWENTY", "THIRTY", "FORTY", "FIFTY", "SIXTY", "SEVENTY", "EIGHTY", "NINETY"];
+    const thousands = ["", "THOUSAND", "LAKH", "CRORE"];
+
+    function helper(n) {
+        if (n < 20) return belowTwenty[n];
+        if (n < 100) return tens[Math.floor(n / 10)] + (n % 10 > 0 ? " " + belowTwenty[n % 10] : "");
+        if (n < 1000) return belowTwenty[Math.floor(n / 100)] + " HUNDRED" + (n % 100 > 0 ? " AND " + helper(n % 100) : "");
+        return "";
+    }
+    
+    let word = "";
+    let i = 0;
+    while (num > 0) {
+        let n = num % 1000;
+        if (i === 1) n = num % 100;
+        if (i > 1) n = num % 100;
+
+        if (n > 0) {
+            word = helper(n) + " " + thousands[i] + " " + word;
+        }
+
+        if (i === 0) num = Math.floor(num / 1000);
+        else num = Math.floor(num / 100);
+        i++;
+    }
+    return word.trim() + " ONLY";
+}
+
+
+const SurgicalPricingAdjuster = ({ item, onUpdate }) => {
+    const primaryAdjOption = cghsAdjustmentOptions.find(o => o.value === item.primaryAdjustment) || cghsAdjustmentOptions[0];
+    const secondaryAdjOption = cghsAdjustmentOptions.find(o => o.value === item.secondaryAdjustment) || cghsAdjustmentOptions[0];
+    
+    const primaryAdjAmount = (item.baseAmount * primaryAdjOption.percentage) / 100;
+    const amountAfterPrimary = item.baseAmount + primaryAdjAmount;
+    const secondaryAdjAmount = (amountAfterPrimary * secondaryAdjOption.percentage) / 100;
+    const finalAmount = amountAfterPrimary + secondaryAdjAmount;
+
+    useEffect(() => {
+        if (item.amount !== finalAmount) {
+            onUpdate('amount', finalAmount);
+        }
+    }, [finalAmount, item.amount, onUpdate]);
+
+    return (
+        <div className="text-xs space-y-1 mt-1">
+            <p>Base Amount: {item.baseAmount}</p>
+            <div className="flex items-center space-x-2">
+                <Select value={item.primaryAdjustment} onValueChange={(value) => onUpdate('primaryAdjustment', value)}>
+                    <SelectTrigger className="h-7 text-xs">
+                        <SelectValue placeholder="Primary Adjustment" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        {cghsAdjustmentOptions.map(opt => (
+                            <SelectItem key={opt.value} value={opt.value} className="text-xs">{opt.label}</SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+                <span className={primaryAdjAmount < 0 ? 'text-red-600' : ''}>{primaryAdjAmount.toFixed(0)}</span>
+            </div>
+            <div className="flex items-center space-x-2">
+                 <Select value={item.secondaryAdjustment} onValueChange={(value) => onUpdate('secondaryAdjustment', value)}>
+                    <SelectTrigger className="h-7 text-xs">
+                        <SelectValue placeholder="Secondary Adjustment" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        {cghsAdjustmentOptions.map(opt => (
+                            <SelectItem key={opt.value} value={opt.value} className="text-xs">{opt.label}</SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+                <span className={secondaryAdjAmount < 0 ? 'text-red-600' : ''}>{secondaryAdjAmount.toFixed(0)}</span>
+            </div>
+            <p className="font-bold">Final Amount: {finalAmount.toFixed(0)}</p>
+        </div>
+    );
+};
+
+const FinalBill = () => {
+  const { visitId } = useParams<{ visitId: string }>();
+  const { billData, isLoading: isBillLoading, saveBill, isSaving } = useFinalBillData(visitId || '');
+  const queryClient = useQueryClient();
+  const [surgeons, setSurgeons] = useState<{ id: string; name: string }[]>([]);
+  const [pathologyNote, setPathologyNote] = useState("");
+  const [cghsSurgeries, setCghsSurgeries] = useState<{ id: string; name: string; NABH_NABL_Rate: number; code: string }[]>([]);
+
+  useEffect(() => {
+    const fetchSurgeons = async () => {
+      const { data, error } = await supabase
+        .from('esic_surgeons')
+        .select('id, name');
+      
+      if (error) {
+        console.error("Error fetching surgeons:", error);
+        toast.error("Failed to fetch surgeons.");
+      } else if (data) {
+        setSurgeons(data);
+      }
+    };
+
+    fetchSurgeons();
+  }, []);
+
+  // This useEffect will be moved after visitData declaration
+
+  // Fetch saved labs when visit ID is available
+  useEffect(() => {
+    if (visitId) {
+      fetchSavedLabs(visitId);
+    }
+  }, [visitId]);
+
+  // Fetch saved radiology when visit ID is available
+  useEffect(() => {
+    if (visitId) {
+      fetchSavedRadiology(visitId);
+    }
+  }, [visitId]);
+
+  // Fetch saved medications when visit ID is available
+  useEffect(() => {
+    if (visitId) {
+      fetchSavedMedications(visitId);
+    }
+  }, [visitId]);
+
+  // Helper type guard
+  function isCghsSurgeryArray(data: any): data is { id: string; name: string; amount: number }[] {
+    return (
+      Array.isArray(data) &&
+      data.length > 0 &&
+      data.every(
+        (item) =>
+          item &&
+          typeof item === 'object' &&
+          'id' in item &&
+          'name' in item &&
+          'amount' in item &&
+          typeof item.id === 'string' &&
+          typeof item.name === 'string' &&
+          typeof item.amount === 'number'
+      )
+    );
+  }
+
+  useEffect(() => {
+    const fetchSurgeries = async () => {
+      const { data, error } = await supabase
+        .from('cghs_surgery')
+        .select('id, name, NABH_NABL_Rate, code');
+      console.log('CGHS Surgery fetch:', { data, error });
+      if (data && Array.isArray(data)) {
+        setCghsSurgeries(data as any);
+      }
+    };
+    fetchSurgeries();
+  }, []);
+
+  const {
+    data: visitData,
+    isLoading,
+    isError,
+    error,
+  } = useQuery({
+    queryKey: ["finalBillData", visitId],
+    queryFn: async () => {
+      if (!visitId) return null
+          const { data, error } = await supabase
+        .from("visits")
+        .select(
+          `
+                *,
+                patients(*),
+                diagnosis:diagnosis_id (
+                  id,
+                  name
+                )
+            `
+        )
+        .eq("visit_id", visitId)
+        .single()
+          
+          if (error) {
+        console.error("Error fetching visit data:", error)
+        throw new Error(error.message)
+      }
+      return data
+    },
+    enabled: !!visitId,
+  })
+
+  // Auto-create bill when visit data is available
+  useEffect(() => {
+    const createBillIfNeeded = async () => {
+      if (!visitData || !visitId || billData?.id) return;
+
+      console.log('Creating new bill for visit:', visitId);
+      try {
+        const { data: newBill, error: billError } = await supabase
+          .from('bills')
+          .insert({
+            patient_id: visitData.patients.id,
+            bill_no: `BL-${visitId}`,
+            claim_id: visitData.claim_id || visitId || 'TEMP-CLAIM',
+            date: new Date().toISOString().split('T')[0],
+            category: 'GENERAL',
+            total_amount: 0,
+            status: 'DRAFT'
+          })
+          .select()
+          .single();
+
+        if (billError) {
+          console.error('Error creating bill:', billError);
+          return;
+        }
+
+        console.log('Created new bill with ID:', newBill.id);
+        // Invalidate the query cache to refresh billData
+        queryClient.invalidateQueries({ queryKey: ['final-bill', visitId] });
+      } catch (error) {
+        console.error('Error creating bill:', error);
+      }
+    };
+
+    createBillIfNeeded();
+  }, [visitData, visitId, billData?.id, queryClient]);
+
+  // Fetch saved data when bill is available
+  useEffect(() => {
+    const fetchAllSavedData = async () => {
+      if (!billData?.id || !visitId) {
+        console.log('Skipping data fetch - missing requirements:', {
+          billId: billData?.id,
+          visitId,
+          hasBillData: !!billData,
+          hasVisitId: !!visitId
+        });
+        return;
+      }
+
+      console.log('=== STARTING COMPREHENSIVE DATA FETCH ===');
+      console.log('Bill ID:', billData.id);
+      console.log('Visit ID:', visitId);
+      console.log('Current state before fetch:', {
+        savedDiagnoses: savedDiagnoses.length,
+        savedSurgeries: savedSurgeries.length,
+        savedComplications: savedComplications.length,
+        savedLabs: savedLabs.length,
+        savedRadiology: savedRadiology.length,
+        savedMedications: savedMedications.length
+      });
+
+      try {
+        console.log('Fetching bill-related data...');
+        // Fetch bill-related data (diagnoses and surgeries)
+        await Promise.all([
+          fetchSavedDiagnoses(billData.id),
+          fetchSavedSurgeries(billData.id)
+        ]);
+
+        console.log('Fetching visit-related data...');
+        // Fetch visit-related data (complications, labs, radiology, medications)
+        await Promise.all([
+          fetchSavedComplications(visitId),
+          fetchSavedLabs(visitId),
+          fetchSavedRadiology(visitId),
+          fetchSavedMedications(visitId)
+        ]);
+
+        console.log('=== ALL SAVED DATA FETCHED SUCCESSFULLY ===');
+
+        // Log final state after a short delay to ensure state updates have completed
+        setTimeout(() => {
+          console.log('Final state after fetch:', {
+            savedDiagnoses: savedDiagnoses.length,
+            savedSurgeries: savedSurgeries.length,
+            savedComplications: savedComplications.length,
+            savedLabs: savedLabs.length,
+            savedRadiology: savedRadiology.length,
+            savedMedications: savedMedications.length
+          });
+        }, 1000);
+
+      } catch (error) {
+        console.error('Error fetching saved data:', error);
+      }
+    };
+
+    fetchAllSavedData();
+  }, [billData?.id, visitId]);
+
+  // Helper function to get diagnosis text
+  const getDiagnosisText = useCallback(() => {
+    // First priority: diagnosis from the diagnosis relationship
+    if (visitData?.diagnosis && typeof visitData.diagnosis === 'object' && 'name' in visitData.diagnosis) {
+      return visitData.diagnosis.name as string
+    }
+    
+    // Second priority: diagnosis_and_surgery_performed field
+    if (visitData?.diagnosis_and_surgery_performed?.trim()) {
+      return visitData.diagnosis_and_surgery_performed
+    }
+    
+    // Fallback: No diagnosis
+    return "No diagnosis"
+  }, [visitData?.diagnosis, visitData?.diagnosis_and_surgery_performed])
+
+  const [patientData, setPatientData] = useState<PatientData>(initialPatientData)
+  const [invoiceItems, setInvoiceItems] = useState<InvoiceItem[]>(initialInvoiceItems)
+  const [totalAmount, setTotalAmount] = useState(0);
+  const [medicineNote, setMedicineNote] = useState("");
+
+  // Middle section state for search and selection
+  const [serviceSearchTerm, setServiceSearchTerm] = useState("");
+  const [activeServiceTab, setActiveServiceTab] = useState("Laboratory services");
+  const [diagnosisSearchTerm, setDiagnosisSearchTerm] = useState("");
+  const [selectedDiagnoses, setSelectedDiagnoses] = useState<any[]>([]);
+  const [savedDiagnoses, setSavedDiagnoses] = useState<{ id: string; name: string; is_primary: boolean }[]>([]);
+
+  // Edit service modal state
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editingServiceIndex, setEditingServiceIndex] = useState<number | null>(null);
+  const [editServiceData, setEditServiceData] = useState({
+    name: '',
+    amount: 0,
+    status: 'completed'
+  });
+
+  // Delete confirmation state
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [deletingServiceIndex, setDeletingServiceIndex] = useState<number | null>(null);
+  const [surgerySearchTerm, setSurgerySearchTerm] = useState("");
+  const [selectedSurgeries, setSelectedSurgeries] = useState<any[]>([]);
+  const [savedSurgeries, setSavedSurgeries] = useState<{ id: string; name: string; code: string; is_primary: boolean }[]>([]);
+  const [complicationSearchTerm, setComplicationSearchTerm] = useState("");
+  const [selectedComplications, setSelectedComplications] = useState<any[]>([]);
+  const [savedComplications, setSavedComplications] = useState<{ id: string; name: string; is_primary: boolean }[]>([]);
+  const [labSearchTerm, setLabSearchTerm] = useState("");
+  const [selectedLabs, setSelectedLabs] = useState<any[]>([]);
+  const [savedLabs, setSavedLabs] = useState<{ id: string; name: string; description: string }[]>([]);
+  const [radiologySearchTerm, setRadiologySearchTerm] = useState("");
+  const [selectedRadiology, setSelectedRadiology] = useState<any[]>([]);
+  const [savedRadiology, setSavedRadiology] = useState<{ id: string; name: string; description: string }[]>([]);
+  const [medicationSearchTerm, setMedicationSearchTerm] = useState("");
+  const [selectedMedications, setSelectedMedications] = useState<any[]>([]);
+  const [savedMedications, setSavedMedications] = useState<{ id: string; name: string; description: string }[]>([]);
+
+  // Available lab services data
+  const [availableLabServices] = useState([
+    { id: 'cbc', name: 'CBC (Complete Blood Count)', amount: 500, code: 'LAB001' },
+    { id: 'kft', name: 'KFT (Kidney Function Test)', amount: 563, code: 'LAB002' },
+    { id: 'lft', name: 'LFT (Liver Function Test)', amount: 750, code: 'LAB003' },
+    { id: 'hiv', name: 'HIV I & II', amount: 438, code: 'LAB004' },
+    { id: 'hcv', name: 'HCV (Hepatitis C Virus)', amount: 500, code: 'LAB005' },
+    { id: 'hbsag', name: 'HBsAg', amount: 313, code: 'LAB006' },
+    { id: 'bsr', name: 'Blood Sugar Random', amount: 125, code: 'LAB007' },
+    { id: 'calcium', name: 'Calcium', amount: 375, code: 'LAB008' },
+    { id: 'pt', name: 'PROTHROMBIN TIME (PT)', amount: 375, code: 'LAB009' },
+    { id: 'bsf', name: 'Blood Sugar Fasting', amount: 125, code: 'LAB010' },
+    { id: 'aptt', name: '(APTT) alpha-2-antiplasmin', amount: 1650, code: 'LAB011' },
+    { id: 'cpk', name: 'CPK -Total (Creatinine Phospho Kinase)', amount: 875, code: 'LAB012' }
+  ]);
+
+  // Available radiology services data
+  const [availableRadiologyServices] = useState([
+    { id: 'mri_spine', name: 'MRI LS Spine', amount: 10000, code: 'RAD001', externalRequisition: 'None' },
+    { id: 'ct_chest', name: 'CT Chest', amount: 3750, code: 'RAD002', externalRequisition: 'None' },
+    { id: 'sonography_abdomen', name: 'SONOGRAPHY OF ABDOMEN', amount: 3750, code: 'RAD003', externalRequisition: 'None' },
+    { id: 'xray_chest', name: 'X-RAY Left hand AP/Oblique VIEW', amount: 1375, code: 'RAD004', externalRequisition: 'None' },
+    { id: 'usg_prostate', name: 'Usg Guided Prostate Biopsy', amount: 25000, code: 'RAD005', externalRequisition: 'None' },
+    { id: 'mri_brain', name: 'MRI Brain', amount: 8500, code: 'RAD006', externalRequisition: 'None' },
+    { id: 'ct_abdomen', name: 'CT Abdomen', amount: 4200, code: 'RAD007', externalRequisition: 'None' },
+    { id: 'ultrasound_pelvis', name: 'Ultrasound Pelvis', amount: 2800, code: 'RAD008', externalRequisition: 'None' },
+    { id: 'xray_spine', name: 'X-RAY Lumbar Spine AP/Lateral', amount: 1200, code: 'RAD009', externalRequisition: 'None' },
+    { id: 'mammography', name: 'Mammography Bilateral', amount: 3200, code: 'RAD010', externalRequisition: 'None' }
+  ]);
+
+  // Available pharmacy services data
+  const [availablePharmacyServices] = useState([
+    {
+      id: 'paracetamol_500',
+      name: 'Paracetamol 500mg',
+      code: 'MED001',
+      mrp: 45.50,
+      amount: 40.95,
+      pack: 'Strip of 10 tablets',
+      batchNo: 'PCM2024A',
+      stock: 150,
+      expiryDate: '12/2025',
+      administrationTimes: ['MORNING', 'AFTERNOON', 'EVENING', 'NIGHT', 'BREAKFAST TIME', 'LUNCH TIME', 'DINNER TIME', 'HS', 'SOS']
+    },
+    {
+      id: 'amoxicillin_250',
+      name: 'Amoxicillin 250mg',
+      code: 'MED002',
+      mrp: 125.00,
+      amount: 112.50,
+      pack: 'Strip of 10 capsules',
+      batchNo: 'AMX2024B',
+      stock: 85,
+      expiryDate: '08/2025',
+      administrationTimes: ['MORNING', 'AFTERNOON', 'EVENING', 'NIGHT', 'BREAKFAST TIME', 'LUNCH TIME', 'DINNER TIME', 'HS', 'SOS']
+    },
+    {
+      id: 'omeprazole_20',
+      name: 'Omeprazole 20mg',
+      code: 'MED003',
+      mrp: 89.75,
+      amount: 80.78,
+      pack: 'Strip of 14 capsules',
+      batchNo: 'OMP2024C',
+      stock: 200,
+      expiryDate: '03/2026',
+      administrationTimes: ['MORNING', 'AFTERNOON', 'EVENING', 'NIGHT', 'BREAKFAST TIME', 'LUNCH TIME', 'DINNER TIME', 'HS', 'SOS']
+    },
+    {
+      id: 'metformin_500',
+      name: 'Metformin 500mg',
+      code: 'MED004',
+      mrp: 156.25,
+      amount: 140.63,
+      pack: 'Strip of 20 tablets',
+      batchNo: 'MET2024D',
+      stock: 120,
+      expiryDate: '11/2025',
+      administrationTimes: ['MORNING', 'AFTERNOON', 'EVENING', 'NIGHT', 'BREAKFAST TIME', 'LUNCH TIME', 'DINNER TIME', 'HS', 'SOS']
+    },
+    {
+      id: 'aspirin_75',
+      name: 'Aspirin 75mg',
+      code: 'MED005',
+      mrp: 67.50,
+      amount: 60.75,
+      pack: 'Strip of 14 tablets',
+      batchNo: 'ASP2024E',
+      stock: 95,
+      expiryDate: '07/2025',
+      administrationTimes: ['MORNING', 'AFTERNOON', 'EVENING', 'NIGHT', 'BREAKFAST TIME', 'LUNCH TIME', 'DINNER TIME', 'HS', 'SOS']
+    }
+  ]);
+
+  // Collapsible sections state
+  const [isLeftSidebarCollapsed, setIsLeftSidebarCollapsed] = useState(false);
+  const [isMiddleSectionCollapsed, setIsMiddleSectionCollapsed] = useState(false);
+
+  const getSectionTitle = (item: SectionItem) => {
+    if (item.title.includes('( Days)')) {
+      let days = 0;
+      if (item.dates?.from && item.dates?.to) {
+        // Adding 1 to include both start and end dates
+        days = differenceInDays(item.dates.to, item.dates.from) + 1;
+      }
+      return item.title.replace('( Days)', `(${days} Days)`);
+    }
+    return item.title;
+  }
+
+  // Load bill data when available
+  useEffect(() => {
+    if (billData) {
+      setPatientData(prev => ({
+        ...prev,
+        billNo: billData.bill_no,
+        category: billData.category,
+        billDate: billData.date,
+      }));
+      // TODO: Load sections and line items into invoiceItems
+    }
+  }, [billData]);
+
+  useEffect(() => {
+    if (visitData) {
+      const patient = visitData.patients;
+      setPatientData(prev => ({
+        ...prev,
+        claimId: visitData.claim_id || visitId || "",
+        billNo: billData?.bill_no || `BL-${visitData.visit_id}`,
+        registrationNo: "",
+        name: patient.name,
+        age: String(patient.age || ""),
+        sex: patient.gender || "",
+        contactNo: patient.phone || "",
+        address: patient.address || "",
+        beneficiaryName: "",
+        relation: "SELF",
+        rank: "",
+        serviceNo: "1231207F",
+        category: billData?.category || "GENERAL",
+        diagnosis: getDiagnosisText(),
+        dateOfAdmission: visitData.admission_date
+          ? format(new Date(visitData.admission_date), "yyyy-MM-dd")
+          : (patient.created_at ? format(new Date(patient.created_at), "yyyy-MM-dd") : ""),
+        dateOfDischarge: visitData.discharge_date
+          ? format(new Date(visitData.discharge_date), "yyyy-MM-dd")
+          : "",
+        billDate: billData?.date || format(new Date(), "yyyy-MM-dd"),
+      }))
+    }
+  }, [visitData, billData, getDiagnosisText])
+
+  const handlePatientDataChange = (field: keyof PatientData, value: string) => {
+    setPatientData(prev => ({ ...prev, [field]: value }))
+  }
+
+  const handleItemChange = (itemId: string, subItemId: string | null, field: string, value: any) => {
+      setInvoiceItems(prev => prev.map((item): InvoiceItem => {
+          if (item.type === 'main' && (item.id === itemId)) {
+              if (field === 'description' && !subItemId) {
+                  return { ...item, description: value };
+              }
+              if (field === 'dates' && !subItemId) {
+                  let newDescription = item.description;
+                  if (item.description.startsWith('Surgical Treatment')) {
+                      // Update the date range in the description
+                      const fromDate = value?.from ? format(value.from, 'dd/MM/yyyy') : '';
+                      const toDate = value?.to ? format(value.to, 'dd/MM/yyyy') : '';
+                      if (fromDate && toDate) {
+                          newDescription = `Surgical Treatment (${fromDate} to ${toDate})`;
+                      } else if (fromDate) {
+                          newDescription = `Surgical Treatment (${fromDate})`;
+                      } else {
+                          newDescription = 'Surgical Treatment';
+                      }
+                  }
+                  return { ...item, dates: value as DateRange | undefined, description: newDescription };
+              }
+              const newSubItems = item.subItems.map((subItem): SubItem => {
+                  if (subItemId && subItem.id === subItemId) {
+                      let processedValue = value;
+                      if (field === 'rate' || field === 'qty' || field === 'amount') {
+                          processedValue = parseFloat(value) || 0;
+                      }
+                      if (typeof subItem === 'object') {
+                          return { ...subItem, [field]: processedValue };
+                      }
+                      return subItem;
+                  }
+                  return subItem;
+              });
+              return { ...item, subItems: newSubItems };
+          }
+          if (item.type === 'section' && (item.id === itemId)) {
+              if (field === 'dates') {
+                  return { ...item, dates: value as DateRange | undefined };
+              }
+          }
+          return item;
+      }));
+    };
+
+  const handleSurgicalItemChange = (itemId: string, subItemId: string, field: string, value: any) => {
+    setInvoiceItems(prev => prev.map((item): InvoiceItem => {
+      if (item.type === 'main' && item.id === itemId) {
+        return {
+          ...item,
+          subItems: item.subItems.map((subItem): SubItem => {
+            if (subItem.id === subItemId) {
+              if (subItem.type === 'surgical') {
+                if (field === 'surgeryId') {
+                  const selectedSurgery = cghsSurgeries.find(s => s.id === value);
+                  return {
+                    ...subItem,
+                    surgeryId: value,
+                    description: selectedSurgery ? selectedSurgery.name : subItem.description,
+                    baseAmount: selectedSurgery ? selectedSurgery.NABH_NABL_Rate : subItem.baseAmount,
+                    code: selectedSurgery ? selectedSurgery.code : subItem.code,
+                    amount: selectedSurgery ? selectedSurgery.NABH_NABL_Rate : subItem.amount,
+                  };
+                } else if (field === 'description') {
+                  return { ...subItem, description: value };
+                } else {
+                  return { ...subItem, [field]: value };
+                }
+              } else {
+                // For standard subitems, just update the field
+                return { ...subItem, [field]: value };
+              }
+            }
+            return subItem;
+          })
+        };
+      }
+      return item;
+    }));
+    };
+
+  const handleAddItem = (mainItemId: string) => {
+      setInvoiceItems(prev => prev.map((item): InvoiceItem => {
+          if (item.type === 'main' && item.id === mainItemId) {
+              const newSubId = `sub${mainItemId.replace('main', '')}-${item.subItems.length + 1}`;
+
+              if (item.description.startsWith('Surgical Treatment')) {
+                  const newSurgicalItem: SurgicalSubItem = {
+                      id: newSubId,
+                      type: 'surgical',
+                      srNo: `${String.fromCharCode(97 + item.subItems.length)})`,
+                      description: 'New Surgical Procedure',
+                      code: '',
+                      baseAmount: 0,
+                      primaryAdjustment: 'none',
+                      secondaryAdjustment: 'none',
+                      qty: 1,
+                      amount: 0,
+                  };
+                  return { ...item, subItems: [...item.subItems, newSurgicalItem] };
+              }
+              
+              let description = 'Select Doctor'; // Default
+              let addDatePicker = true;
+
+              if (item.description === 'Accommodation Charges') {
+                  description = 'Accommodation of General Ward';
+              } else if (item.description === 'Pathology Charges') {
+                  description = '';
+              } else if (item.description === 'Medicine Charges') {
+                  description = '';
+              } else if (item.description === 'Other Charges') {
+                  description = '';
+                  addDatePicker = false;
+              } else if (item.description === 'Miscellaneous Charges') {
+                  description = '';
+                  addDatePicker = false;
+              } else if (item.description === 'Implant Charges') {
+                  description = '';
+                  addDatePicker = false;
+              }
+
+              const newSubItem: StandardSubItem = {
+                  id: newSubId,
+                  srNo: `${String.fromCharCode(97 + item.subItems.length)})`,
+                  description,
+                  rate: 0,
+                  qty: 1,
+                  amount: 0,
+                  type: 'standard',
+              };
+
+              if (addDatePicker) {
+                newSubItem.dates = { from: new Date(), to: new Date() };
+              }
+
+              return { ...item, subItems: [...item.subItems, newSubItem]};
+          }
+          return item;
+      }));
+  }
+
+  const handleRemoveItem = (mainItemId: string, subItemId: string) => {
+    setInvoiceItems(prev => prev.map((item): InvoiceItem => {
+        if (item.type === 'main' && item.id === mainItemId) {
+            const newSubItems = item.subItems.filter(si => si.id !== subItemId)
+                .map((sub, idx) => ({
+                    ...sub,
+                    srNo: `${String.fromCharCode(97 + idx)})`
+                }));
+            return { ...item, subItems: newSubItems };
+        }
+        return item;
+    }));
+  }
+  
+  const moveItem = (mainItemId: string, subItemId: string, direction: number) => {
+      setInvoiceItems(prev => prev.map((item): InvoiceItem => {
+          if (item.type === 'main' && item.id === mainItemId) {
+              const index = item.subItems.findIndex(si => si.id === subItemId);
+              if (index === -1) return item;
+              
+              const newIndex = index + direction;
+              if (newIndex < 0 || newIndex >= item.subItems.length) return item;
+
+              const newSubItems = [...item.subItems];
+              [newSubItems[index], newSubItems[newIndex]] = [newSubItems[newIndex], newSubItems[index]];
+              
+              const renumberedSubItems = newSubItems.map((sub, idx) => ({
+                ...sub,
+                srNo: `${String.fromCharCode(97 + idx)})`
+              }));
+
+              return { ...item, subItems: renumberedSubItems };
+          }
+          return item;
+      }));
+  }
+
+  const toggleSection = (sectionId: string) => {
+    setInvoiceItems(prev => prev.map((item): InvoiceItem =>
+        item.id === sectionId && item.type === 'section' ? { ...item, isOpen: !item.isOpen } : item
+    ));
+  }
+  
+  const calculateTotalAmount = () => {
+      return invoiceItems.reduce((total, item) => {
+          if (item.type === 'main' && item.subItems) {
+              return total + item.subItems.reduce((subTotal, subItem) => {
+                  let currentAmount = 0;
+                  if (subItem.type === 'surgical') {
+                       const surgicalItem = subItem as SurgicalSubItem;
+                       const primaryAdjOption = cghsAdjustmentOptions.find(o => o.value === surgicalItem.primaryAdjustment) || cghsAdjustmentOptions[0];
+                       const secondaryAdjOption = cghsAdjustmentOptions.find(o => o.value === surgicalItem.secondaryAdjustment) || cghsAdjustmentOptions[0];
+                       const primaryAdjAmount = (surgicalItem.baseAmount * primaryAdjOption.percentage) / 100;
+                       const amountAfterPrimary = surgicalItem.baseAmount + primaryAdjAmount;
+                       const secondaryAdjAmount = (amountAfterPrimary * secondaryAdjOption.percentage) / 100;
+                       currentAmount = amountAfterPrimary + secondaryAdjAmount;
+                  } else {
+                      currentAmount = (subItem as StandardSubItem).amount || 0;
+                  }
+                  return subTotal + currentAmount;
+              }, 0);
+          }
+          return total;
+      }, 0);
+  };
+
+
+
+
+
+  // Function to add lab service to invoice (for manual addition to main bill)
+  const addLabServiceToInvoice = (labService: any) => {
+    // Find or create Laboratory Services main item
+    let labMainIndex = invoiceItems.findIndex(item =>
+      item.type === 'main' && item.description === 'Laboratory Services'
+    );
+
+    if (labMainIndex === -1) {
+      // Create new Laboratory Services main item
+      const newLabMain: MainItem = {
+        id: `main-lab-${Date.now()}`,
+        type: 'main',
+        srNo: (invoiceItems.length + 1).toString(),
+        description: 'Laboratory Services',
+        subItems: []
+      };
+      setInvoiceItems(prev => [...prev, newLabMain]);
+      labMainIndex = invoiceItems.length;
+    }
+
+    // Add lab service as sub-item
+    const newLabItem: StandardSubItem = {
+      id: `lab-${labService.id}-${Date.now()}`,
+      srNo: (invoiceItems.filter(item => item.type === 'main').length + 1).toString(),
+      description: labService.name,
+      code: labService.code,
+      rate: labService.amount,
+      qty: 1,
+      amount: labService.amount,
+      type: 'standard'
+    };
+
+    setInvoiceItems(prev => {
+      const updated = [...prev];
+      if (updated[labMainIndex] && updated[labMainIndex].type === 'main') {
+        const mainItem = updated[labMainIndex] as MainItem;
+        mainItem.subItems.push(newLabItem);
+      }
+      return updated;
+    });
+
+    toast.success(`${labService.name} added to invoice`);
+  };
+
+  // Function to add radiology service to invoice
+  const addRadiologyServiceToInvoice = (radiologyService: any) => {
+    // Find or create Radiology Services main item
+    let radiologyMainIndex = invoiceItems.findIndex(item =>
+      item.type === 'main' && item.description === 'Radiology Services'
+    );
+
+    if (radiologyMainIndex === -1) {
+      // Create new Radiology Services main item
+      const newRadiologyMain: MainItem = {
+        id: `main-radiology-${Date.now()}`,
+        type: 'main',
+        srNo: (invoiceItems.length + 1).toString(),
+        description: 'Radiology Services',
+        subItems: []
+      };
+      setInvoiceItems(prev => [...prev, newRadiologyMain]);
+      radiologyMainIndex = invoiceItems.length;
+    }
+
+    // Add radiology service as sub-item
+    const newRadiologyItem: StandardSubItem = {
+      id: `radiology-${radiologyService.id}-${Date.now()}`,
+      srNo: (invoiceItems.filter(item => item.type === 'main').length + 1).toString(),
+      description: radiologyService.name,
+      code: radiologyService.code,
+      rate: radiologyService.amount,
+      qty: 1,
+      amount: radiologyService.amount,
+      type: 'standard'
+    };
+
+    setInvoiceItems(prev => {
+      const updated = [...prev];
+      if (updated[radiologyMainIndex] && updated[radiologyMainIndex].type === 'main') {
+        const mainItem = updated[radiologyMainIndex] as MainItem;
+        mainItem.subItems.push(newRadiologyItem);
+      }
+      return updated;
+    });
+
+    toast.success(`${radiologyService.name} added to invoice`);
+  };
+
+  // Filter available services based on search term and active tab
+  const filteredLabServices = availableLabServices.filter(service =>
+    service.name.toLowerCase().includes(serviceSearchTerm.toLowerCase()) ||
+    service.code.toLowerCase().includes(serviceSearchTerm.toLowerCase())
+  );
+
+  const filteredRadiologyServices = availableRadiologyServices.filter(service =>
+    service.name.toLowerCase().includes(serviceSearchTerm.toLowerCase()) ||
+    service.code.toLowerCase().includes(serviceSearchTerm.toLowerCase())
+  );
+
+  // Function to add pharmacy service to invoice
+  const addPharmacyServiceToInvoice = (pharmacyService: any) => {
+    // Find or create Pharmacy Services main item
+    let pharmacyMainIndex = invoiceItems.findIndex(item =>
+      item.type === 'main' && item.description === 'Pharmacy Services'
+    );
+
+    if (pharmacyMainIndex === -1) {
+      // Create new Pharmacy Services main item
+      const newPharmacyMain: MainItem = {
+        id: `main-pharmacy-${Date.now()}`,
+        type: 'main',
+        srNo: (invoiceItems.length + 1).toString(),
+        description: 'Pharmacy Services',
+        subItems: []
+      };
+      setInvoiceItems(prev => [...prev, newPharmacyMain]);
+      pharmacyMainIndex = invoiceItems.length;
+    }
+
+    // Add pharmacy service as sub-item
+    const newPharmacyItem: StandardSubItem = {
+      id: `pharmacy-${pharmacyService.id}-${Date.now()}`,
+      srNo: (invoiceItems.filter(item => item.type === 'main').length + 1).toString(),
+      description: pharmacyService.name,
+      code: pharmacyService.code,
+      rate: pharmacyService.amount,
+      qty: 1,
+      amount: pharmacyService.amount,
+      type: 'standard'
+    };
+
+    setInvoiceItems(prev => {
+      const updated = [...prev];
+      if (updated[pharmacyMainIndex] && updated[pharmacyMainIndex].type === 'main') {
+        const mainItem = updated[pharmacyMainIndex] as MainItem;
+        mainItem.subItems.push(newPharmacyItem);
+      }
+      return updated;
+    });
+
+    toast.success(`${pharmacyService.name} added to invoice`);
+  };
+
+  const filteredPharmacyServices = availablePharmacyServices.filter(service =>
+    service.name.toLowerCase().includes(serviceSearchTerm.toLowerCase()) ||
+    service.code.toLowerCase().includes(serviceSearchTerm.toLowerCase())
+  );
+
+  // Diagnosis search query
+  const { data: availableDiagnoses = [] } = useQuery({
+    queryKey: ['diagnoses', diagnosisSearchTerm],
+    queryFn: async () => {
+      if (!diagnosisSearchTerm || diagnosisSearchTerm.length < 2) return [];
+
+      const { data, error } = await supabase
+        .from('diagnoses')
+        .select('*')
+        .or(`name.ilike.%${diagnosisSearchTerm}%,description.ilike.%${diagnosisSearchTerm}%`)
+        .order('name')
+        .limit(10);
+
+      if (error) {
+        console.error('Error fetching diagnoses:', error);
+        return [];
+      }
+
+      return data || [];
+    },
+    enabled: diagnosisSearchTerm.length >= 2
+  });
+
+  // CGHS Surgery search query
+  const { data: availableSurgeries = [] } = useQuery({
+    queryKey: ['cghs_surgery', surgerySearchTerm],
+    queryFn: async () => {
+      if (!surgerySearchTerm || surgerySearchTerm.length < 2) return [];
+
+      const { data, error } = await supabase
+        .from('cghs_surgery')
+        .select('*')
+        .or(`name.ilike.%${surgerySearchTerm}%,code.ilike.%${surgerySearchTerm}%`)
+        .order('name')
+        .limit(10);
+
+      if (error) {
+        console.error('Error fetching surgeries:', error);
+        return [];
+      }
+
+      return data || [];
+    },
+    enabled: surgerySearchTerm.length >= 2
+  });
+
+  // Complications search query
+  const { data: complicationsData } = useQuery({
+    queryKey: ['complications', complicationSearchTerm],
+    queryFn: async () => {
+      if (complicationSearchTerm.length < 2) return [];
+
+      const { data, error } = await supabase
+        .from('complications')
+        .select('id, name')
+        .ilike('name', `%${complicationSearchTerm}%`)
+        .limit(10);
+
+      if (error) {
+        console.error('Error fetching complications:', error);
+        return [];
+      }
+
+      return data || [];
+    },
+    enabled: complicationSearchTerm.length >= 2,
+  });
+
+  const filteredComplications = complicationsData || [];
+
+  // Labs search query
+  const { data: labsData } = useQuery({
+    queryKey: ['labs', labSearchTerm],
+    queryFn: async () => {
+      if (labSearchTerm.length < 2) return [];
+
+      const { data, error } = await supabase
+        .from('lab')
+        .select('id, name, description')
+        .ilike('name', `%${labSearchTerm}%`)
+        .limit(10);
+
+      if (error) {
+        console.error('Error fetching labs:', error);
+        return [];
+      }
+
+      return data || [];
+    },
+    enabled: labSearchTerm.length >= 2,
+  });
+
+  const filteredLabs = labsData || [];
+
+  // Radiology search query
+  const { data: radiologyData } = useQuery({
+    queryKey: ['radiology', radiologySearchTerm],
+    queryFn: async () => {
+      if (radiologySearchTerm.length < 2) return [];
+
+      const { data, error } = await supabase
+        .from('radiology')
+        .select('id, name, description')
+        .ilike('name', `%${radiologySearchTerm}%`)
+        .limit(10);
+
+      if (error) {
+        console.error('Error fetching radiology:', error);
+        return [];
+      }
+
+      return data || [];
+    },
+    enabled: radiologySearchTerm.length >= 2,
+  });
+
+  const filteredRadiology = radiologyData || [];
+
+  // Medications search query
+  const { data: medicationsData } = useQuery({
+    queryKey: ['medications', medicationSearchTerm],
+    queryFn: async () => {
+      if (medicationSearchTerm.length < 2) return [];
+
+      const { data, error } = await supabase
+        .from('medication')
+        .select('id, name, description')
+        .ilike('name', `%${medicationSearchTerm}%`)
+        .limit(10);
+
+      if (error) {
+        console.error('Error fetching medications:', error);
+        return [];
+      }
+
+      return data || [];
+    },
+    enabled: medicationSearchTerm.length >= 2,
+  });
+
+  const filteredMedications = medicationsData || [];
+
+  // Function to fetch saved diagnoses from bills_diagnoses table
+  const fetchSavedDiagnoses = async (billId: string) => {
+    try {
+      if (!billId) {
+        console.log('No bill ID provided for fetching diagnoses');
+        setSavedDiagnoses([]);
+        return;
+      }
+
+      console.log('Fetching saved diagnoses for bill ID:', billId);
+
+      // First, try to get bills_diagnoses data with join to get diagnosis details
+      const { data: billsDiagnosesData, error: billsDiagnosesError } = await supabase
+        .from('bills_diagnoses')
+        .select(`
+          *,
+          diagnoses:diagnosis_id (
+            id,
+            name
+          )
+        `)
+        .eq('bill_id', billId);
+
+      if (billsDiagnosesError) {
+        console.error('Error fetching bills_diagnoses:', billsDiagnosesError);
+        setSavedDiagnoses([]);
+        return;
+      }
+
+      console.log('Bills diagnoses raw data:', billsDiagnosesData);
+
+      if (!billsDiagnosesData || billsDiagnosesData.length === 0) {
+        console.log('No saved diagnoses found for this bill');
+        setSavedDiagnoses([]);
+        return;
+      }
+
+      // Format the data
+      const formattedDiagnoses = billsDiagnosesData.map((billDiagnosis: any) => {
+        const diagnosisDetail = billDiagnosis.diagnoses;
+        return {
+          id: billDiagnosis.diagnosis_id,
+          name: diagnosisDetail?.name || `Unknown Diagnosis (${billDiagnosis.diagnosis_id})`,
+          is_primary: billDiagnosis.is_primary || false
+        };
+      });
+
+      console.log('Final formatted diagnoses:', formattedDiagnoses);
+      setSavedDiagnoses(formattedDiagnoses);
+      console.log('State updated - savedDiagnoses should now contain:', formattedDiagnoses.length, 'items');
+    } catch (error) {
+      console.error('Error in fetchSavedDiagnoses:', error);
+      setSavedDiagnoses([]);
+    }
+  };
+
+  // Function to save selected diagnoses to bills_diagnoses junction table
+  const saveDiagnosesToBill = async (billId: string) => {
+    try {
+      console.log('Saving diagnoses to bill:', billId, selectedDiagnoses);
+      console.log('Bill data:', billData);
+
+      if (selectedDiagnoses.length === 0) {
+        toast.error('No diagnoses selected to save');
+        return;
+      }
+
+      // If no bill exists, create one first
+      let actualBillId = billId;
+      if (!billData?.id) {
+        console.log('No bill exists, creating one first...');
+
+        // Get patient ID from visit data
+        if (!visitData?.patients?.id) {
+          toast.error('Patient information not found. Cannot create bill.');
+          return;
+        }
+
+        try {
+          const { data: newBill, error: billError } = await supabase
+            .from('bills')
+            .insert({
+              patient_id: visitData.patients.id, // Use actual patient UUID
+              bill_no: `BL-${visitId}`,
+              claim_id: visitData.claim_id || visitId || 'TEMP-CLAIM',
+              date: new Date().toISOString().split('T')[0],
+              category: 'GENERAL',
+              total_amount: 0,
+              status: 'DRAFT'
+            })
+            .select()
+            .single();
+
+          if (billError) {
+            console.error('Error creating bill:', billError);
+            toast.error('Failed to create bill. Please try again.');
+            return;
+          }
+
+          actualBillId = newBill.id;
+          console.log('Created new bill:', newBill);
+
+          // Invalidate the query cache to refresh billData
+          queryClient.invalidateQueries({ queryKey: ['final-bill', visitId] });
+          console.log('Query cache invalidated for visitId:', visitId);
+        } catch (error) {
+          console.error('Error creating bill:', error);
+          toast.error('Failed to create bill');
+          return;
+        }
+      }
+
+      // Prepare data for insertion
+      const diagnosesToSave = selectedDiagnoses.map((diagnosis, index) => ({
+        bill_id: actualBillId,
+        diagnosis_id: diagnosis.id,
+        is_primary: index === 0, // First diagnosis is primary
+        notes: null
+      }));
+
+      console.log('Diagnoses to save:', diagnosesToSave);
+
+      // Validate that we have a proper UUID
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+      if (!uuidRegex.test(actualBillId)) {
+        toast.error('Invalid bill ID format. Please create a proper bill first.');
+        console.error('Invalid bill ID:', actualBillId);
+        return;
+      }
+
+      // Insert directly using Supabase client (table exists)
+      try {
+        // First, delete existing diagnoses for this bill
+        const { error: deleteError } = await supabase
+          .from('bills_diagnoses' as any)
+          .delete()
+          .eq('bill_id', actualBillId);
+
+        if (deleteError) {
+          console.error('Error deleting existing diagnoses:', deleteError);
+        }
+
+        // Insert new diagnoses
+        const { data, error: insertError } = await supabase
+          .from('bills_diagnoses' as any)
+          .insert(diagnosesToSave)
+          .select();
+
+        if (insertError) {
+          console.error('Error inserting diagnoses:', insertError);
+          toast.error(`Failed to save diagnoses: ${insertError.message}`);
+        } else {
+          toast.success(`${selectedDiagnoses.length} diagnoses saved to bill ${actualBillId} successfully!`);
+          console.log('Saved diagnoses data:', data);
+
+          console.log('About to clear selected diagnoses...');
+          // Clear selected diagnoses after successful save
+          setSelectedDiagnoses([]);
+
+          console.log('About to fetch saved diagnoses...');
+          console.log('fetchSavedDiagnoses function:', typeof fetchSavedDiagnoses);
+          // Fetch updated saved diagnoses to refresh the display
+          console.log('Fetching saved diagnoses after save with bill ID:', actualBillId);
+          try {
+            await fetchSavedDiagnoses(actualBillId);
+            console.log('Fetch completed successfully');
+          } catch (fetchError) {
+            console.error('Error fetching saved diagnoses after save:', fetchError);
+          }
+        }
+      } catch (dbError) {
+        console.error('Database operation failed:', dbError);
+        toast.error('Failed to save diagnoses to database');
+      }
+
+    } catch (error) {
+      console.error('Error in saveDiagnosesToBill:', error);
+      toast.error('Failed to save diagnoses');
+    }
+  };
+
+  // Function to fetch saved surgeries from bills_surgeries table
+  const fetchSavedSurgeries = async (billId: string) => {
+    try {
+      if (!billId) {
+        console.log('No bill ID provided for fetching surgeries');
+        setSavedSurgeries([]);
+        return;
+      }
+
+      console.log('Fetching saved surgeries for bill ID:', billId);
+
+      // First, try to get bills_surgeries data with join to get surgery details
+      const { data: billsSurgeriesData, error: billsSurgeriesError } = await supabase
+        .from('bills_surgeries')
+        .select(`
+          *,
+          cghs_surgery:surgery_id (
+            id,
+            name,
+            code
+          )
+        `)
+        .eq('bill_id', billId);
+
+      if (billsSurgeriesError) {
+        console.error('Error fetching bills_surgeries:', billsSurgeriesError);
+        setSavedSurgeries([]);
+        return;
+      }
+
+      console.log('Bills surgeries raw data:', billsSurgeriesData);
+
+      if (!billsSurgeriesData || billsSurgeriesData.length === 0) {
+        console.log('No saved surgeries found for this bill');
+        setSavedSurgeries([]);
+        return;
+      }
+
+      // Format the data
+      const formattedSurgeries = billsSurgeriesData.map((billSurgery: any) => {
+        const surgeryDetail = billSurgery.cghs_surgery;
+        return {
+          id: billSurgery.surgery_id,
+          name: surgeryDetail?.name || `Unknown Surgery (${billSurgery.surgery_id})`,
+          code: surgeryDetail?.code || 'Unknown',
+          is_primary: billSurgery.is_primary || false
+        };
+      });
+
+      console.log('Final formatted surgeries:', formattedSurgeries);
+      setSavedSurgeries(formattedSurgeries);
+      console.log('State updated - savedSurgeries should now contain:', formattedSurgeries.length, 'items');
+    } catch (error) {
+      console.error('Error in fetchSavedSurgeries:', error);
+      setSavedSurgeries([]);
+    }
+  };
+
+  // Function to fetch saved complications from visit_complications table
+  const fetchSavedComplications = async (visitId: string) => {
+    try {
+      if (!visitId) {
+        console.log('No visit ID provided for fetching complications');
+        setSavedComplications([]);
+        return;
+      }
+
+      console.log('Fetching saved complications for visit ID:', visitId);
+
+      // First get the actual visit UUID from the visits table
+      const { data: visitData, error: visitError } = await supabase
+        .from('visits')
+        .select('id')
+        .eq('visit_id', visitId)
+        .single();
+
+      if (visitError) {
+        console.error('Error fetching visit UUID for complications:', visitError);
+        setSavedComplications([]);
+        return;
+      }
+
+      if (!visitData?.id) {
+        console.log('Visit record not found for complications fetch');
+        setSavedComplications([]);
+        return;
+      }
+
+      console.log('Found visit UUID for complications:', visitData.id, 'for visit_id:', visitId);
+
+      // Then get visit_complications data using the UUID with join to get complication details
+      const { data: visitComplicationsData, error: visitComplicationsError } = await supabase
+        .from('visit_complications')
+        .select(`
+          *,
+          complications:complication_id (
+            id,
+            name
+          )
+        `)
+        .eq('visit_id', visitData.id);
+
+      if (visitComplicationsError) {
+        console.error('Error fetching visit_complications:', visitComplicationsError);
+        setSavedComplications([]);
+        return;
+      }
+
+      console.log('Visit complications raw data:', visitComplicationsData);
+
+      if (!visitComplicationsData || visitComplicationsData.length === 0) {
+        console.log('No saved complications found for this visit');
+        setSavedComplications([]);
+        return;
+      }
+
+      // Format the data
+      const formattedComplications = visitComplicationsData.map((visitComplication: any) => {
+        const complicationDetail = visitComplication.complications;
+        return {
+          id: visitComplication.complication_id,
+          name: complicationDetail?.name || `Unknown Complication (${visitComplication.complication_id})`,
+          is_primary: visitComplication.is_primary || false
+        };
+      });
+
+      console.log('Final formatted complications:', formattedComplications);
+      setSavedComplications(formattedComplications);
+      console.log('State updated - savedComplications should now contain:', formattedComplications.length, 'items');
+    } catch (error) {
+      console.error('Error in fetchSavedComplications:', error);
+      setSavedComplications([]);
+    }
+  };
+
+  // Function to fetch saved labs from visit_labs table
+  const fetchSavedLabs = async (visitId: string) => {
+    try {
+      if (!visitId) {
+        console.log('No visit ID provided for fetching labs');
+        return;
+      }
+
+      console.log('Fetching saved labs for visit ID:', visitId);
+
+      // First get the actual visit UUID from the visits table
+      const { data: visitData, error: visitError } = await supabase
+        .from('visits')
+        .select('id')
+        .eq('visit_id', visitId)
+        .single();
+
+      if (visitError) {
+        console.error('Error fetching visit UUID for labs:', visitError);
+        return;
+      }
+
+      if (!visitData?.id) {
+        console.log('Visit record not found for labs fetch');
+        setSavedLabs([]);
+        return;
+      }
+
+      console.log('Found visit UUID for labs:', visitData.id, 'for visit_id:', visitId);
+
+      // Then get visit_labs data using the UUID
+      const { data: visitLabsData, error: visitLabsError } = await supabase
+        .from('visit_labs' as any)
+        .select('*')
+        .eq('visit_id', visitData.id);
+
+      if (visitLabsError) {
+        console.error('Error fetching visit_labs:', visitLabsError);
+        return;
+      }
+
+      console.log('Visit labs raw data:', visitLabsData);
+
+      if (!visitLabsData || visitLabsData.length === 0) {
+        console.log('No saved labs found for this visit');
+        setSavedLabs([]);
+        return;
+      }
+
+      // Get lab details for each lab_id
+      const labIds = visitLabsData.map((item: any) => item.lab_id);
+      console.log('Lab IDs to fetch:', labIds);
+
+      const { data: labsData, error: labsError } = await supabase
+        .from('lab')
+        .select('id, name, description')
+        .in('id', labIds);
+
+      if (labsError) {
+        console.error('Error fetching labs details:', labsError);
+        // Still show the data we have, even without names
+        const formattedLabs = visitLabsData.map((item: any) => ({
+          id: item.lab_id,
+          name: `Lab ID: ${item.lab_id}`,
+          description: 'Unknown'
+        }));
+        setSavedLabs(formattedLabs);
+        return;
+      }
+
+      console.log('Labs details data:', labsData);
+
+      // Combine the data
+      const formattedLabs = visitLabsData.map((visitLab: any) => {
+        const labDetail = labsData?.find((l: any) => l.id === visitLab.lab_id);
+        return {
+          id: visitLab.lab_id,
+          name: labDetail?.name || `Unknown Lab (${visitLab.lab_id})`,
+          description: labDetail?.description || 'No description available'
+        };
+      });
+
+      console.log('Final formatted labs:', formattedLabs);
+      setSavedLabs(formattedLabs);
+      console.log('State updated - savedLabs should now contain:', formattedLabs.length, 'items');
+    } catch (error) {
+      console.error('Error in fetchSavedLabs:', error);
+    }
+  };
+
+  // Function to save selected surgeries to bills_surgeries junction table
+  const saveSurgeriesToBill = async (billId: string) => {
+    try {
+      console.log('Saving surgeries to bill:', billId, selectedSurgeries);
+      console.log('Bill data:', billData);
+
+      if (selectedSurgeries.length === 0) {
+        toast.error('No surgeries selected to save');
+        return;
+      }
+
+      // If no bill exists, create one first
+      let actualBillId = billId;
+      if (!billData?.id) {
+        console.log('No bill exists, creating one first...');
+
+        // Get patient ID from visit data
+        if (!visitData?.patients?.id) {
+          toast.error('Patient information not found. Cannot create bill.');
+          return;
+        }
+
+        try {
+          const { data: newBill, error: billError } = await supabase
+            .from('bills')
+            .insert({
+              patient_id: visitData.patients.id, // Use actual patient UUID
+              bill_no: `BL-${visitId}`,
+              claim_id: visitData.claim_id || visitId || 'TEMP-CLAIM',
+              date: new Date().toISOString().split('T')[0],
+              category: 'GENERAL',
+              total_amount: 0,
+              status: 'DRAFT'
+            })
+            .select()
+            .single();
+
+          if (billError) {
+            console.error('Error creating bill:', billError);
+            toast.error('Failed to create bill. Please try again.');
+            return;
+          }
+
+          actualBillId = newBill.id;
+          console.log('Created new bill:', newBill);
+
+          // Invalidate the query cache to refresh billData
+          queryClient.invalidateQueries({ queryKey: ['final-bill', visitId] });
+          console.log('Query cache invalidated for visitId:', visitId);
+        } catch (error) {
+          console.error('Error creating bill:', error);
+          toast.error('Failed to create bill');
+          return;
+        }
+      }
+
+      // Prepare data for insertion
+      const surgeriesToSave = selectedSurgeries.map((surgery, index) => ({
+        bill_id: actualBillId,
+        surgery_id: surgery.id,
+        is_primary: index === 0, // First surgery is primary
+        status: 'planned',
+        sanction_status: 'Not Sanctioned',
+        notes: null
+      }));
+
+      console.log('Surgeries to save:', surgeriesToSave);
+
+      // Validate that we have a proper UUID
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+      if (!uuidRegex.test(actualBillId)) {
+        toast.error('Invalid bill ID format. Please create a proper bill first.');
+        console.error('Invalid bill ID:', actualBillId);
+        return;
+      }
+
+      // Insert directly using Supabase client (table exists)
+      try {
+        // First, delete existing surgeries for this bill
+        const { error: deleteError } = await supabase
+          .from('bills_surgeries' as any)
+          .delete()
+          .eq('bill_id', billId);
+
+        if (deleteError) {
+          console.error('Error deleting existing surgeries:', deleteError);
+        }
+
+        // Insert new surgeries
+        const { data, error: insertError } = await supabase
+          .from('bills_surgeries' as any)
+          .insert(surgeriesToSave)
+          .select();
+
+        if (insertError) {
+          console.error('Error inserting surgeries:', insertError);
+          toast.error(`Failed to save surgeries: ${insertError.message}`);
+        } else {
+          toast.success(`${selectedSurgeries.length} surgeries saved to bill ${billId} successfully!`);
+          console.log('Saved surgeries data:', data);
+
+          console.log('About to clear selected surgeries...');
+          // Clear selected surgeries after successful save
+          setSelectedSurgeries([]);
+
+          console.log('About to fetch saved surgeries...');
+          console.log('fetchSavedSurgeries function:', typeof fetchSavedSurgeries);
+          // Fetch updated saved surgeries to refresh the display
+          console.log('Fetching saved surgeries after save with bill ID:', actualBillId);
+          try {
+            await fetchSavedSurgeries(actualBillId);
+            console.log('Surgery fetch completed successfully');
+          } catch (fetchError) {
+            console.error('Error fetching saved surgeries after save:', fetchError);
+          }
+        }
+      } catch (dbError) {
+        console.error('Database operation failed:', dbError);
+        toast.error('Failed to save surgeries to database');
+      }
+
+    } catch (error) {
+      console.error('Error in saveSurgeriesToBill:', error);
+      toast.error('Failed to save surgeries');
+    }
+  };
+
+  // Function to fetch saved radiology from visit_radiology table
+  const fetchSavedRadiology = async (visitId: string) => {
+    try {
+      if (!visitId) {
+        console.log('No visit ID provided for fetching radiology');
+        return;
+      }
+
+      console.log('Fetching saved radiology for visit ID:', visitId);
+
+      // First get the actual visit UUID from the visits table
+      const { data: visitData, error: visitError } = await supabase
+        .from('visits')
+        .select('id')
+        .eq('visit_id', visitId)
+        .single();
+
+      if (visitError) {
+        console.error('Error fetching visit UUID for radiology:', visitError);
+        return;
+      }
+
+      if (!visitData?.id) {
+        console.log('Visit record not found for radiology fetch');
+        setSavedRadiology([]);
+        return;
+      }
+
+      console.log('Found visit UUID for radiology:', visitData.id, 'for visit_id:', visitId);
+
+      // Then get visit_radiology data using the UUID
+      const { data: visitRadiologyData, error: visitRadiologyError } = await supabase
+        .from('visit_radiology' as any)
+        .select('*')
+        .eq('visit_id', visitData.id);
+
+      if (visitRadiologyError) {
+        console.error('Error fetching visit_radiology:', visitRadiologyError);
+        return;
+      }
+
+      console.log('Visit radiology raw data:', visitRadiologyData);
+
+      if (!visitRadiologyData || visitRadiologyData.length === 0) {
+        console.log('No saved radiology found for this visit');
+        setSavedRadiology([]);
+        return;
+      }
+
+      // Get radiology details for each radiology_id
+      const radiologyIds = visitRadiologyData.map((item: any) => item.radiology_id);
+      console.log('Radiology IDs to fetch:', radiologyIds);
+
+      const { data: radiologyData, error: radiologyError } = await supabase
+        .from('radiology')
+        .select('id, name, description')
+        .in('id', radiologyIds);
+
+      if (radiologyError) {
+        console.error('Error fetching radiology details:', radiologyError);
+        // Still show the data we have, even without names
+        const formattedRadiology = visitRadiologyData.map((item: any) => ({
+          id: item.radiology_id,
+          name: `Radiology ID: ${item.radiology_id}`,
+          description: 'Unknown'
+        }));
+        setSavedRadiology(formattedRadiology);
+        return;
+      }
+
+      console.log('Radiology details data:', radiologyData);
+
+      // Combine the data
+      const formattedRadiology = visitRadiologyData.map((visitRadiology: any) => {
+        const radiologyDetail = radiologyData?.find((r: any) => r.id === visitRadiology.radiology_id);
+        return {
+          id: visitRadiology.radiology_id,
+          name: radiologyDetail?.name || `Unknown Radiology (${visitRadiology.radiology_id})`,
+          description: radiologyDetail?.description || 'No description available'
+        };
+      });
+
+      console.log('Final formatted radiology:', formattedRadiology);
+      setSavedRadiology(formattedRadiology);
+      console.log('State updated - savedRadiology should now contain:', formattedRadiology.length, 'items');
+    } catch (error) {
+      console.error('Error in fetchSavedRadiology:', error);
+    }
+  };
+
+  // Function to fetch saved medications from visit_medications table
+  const fetchSavedMedications = async (visitId: string) => {
+    try {
+      if (!visitId) {
+        console.log('No visit ID provided for fetching medications');
+        return;
+      }
+
+      console.log('Fetching saved medications for visit ID:', visitId);
+
+      // First get the actual visit UUID from the visits table
+      const { data: visitData, error: visitError } = await supabase
+        .from('visits')
+        .select('id')
+        .eq('visit_id', visitId)
+        .single();
+
+      if (visitError) {
+        console.error('Error fetching visit UUID for medications:', visitError);
+        return;
+      }
+
+      if (!visitData?.id) {
+        console.log('Visit record not found for medications fetch');
+        setSavedMedications([]);
+        return;
+      }
+
+      console.log('Found visit UUID for medications:', visitData.id, 'for visit_id:', visitId);
+
+      // Then get visit_medications data using the UUID
+      const { data: visitMedicationsData, error: visitMedicationsError } = await supabase
+        .from('visit_medications' as any)
+        .select('*')
+        .eq('visit_id', visitData.id);
+
+      if (visitMedicationsError) {
+        console.error('Error fetching visit_medications:', visitMedicationsError);
+        return;
+      }
+
+      console.log('Visit medications raw data:', visitMedicationsData);
+
+      if (!visitMedicationsData || visitMedicationsData.length === 0) {
+        console.log('No saved medications found for this visit');
+        setSavedMedications([]);
+        return;
+      }
+
+      // Get medication details for each medication_id
+      const medicationIds = visitMedicationsData.map((item: any) => item.medication_id);
+      console.log('Medication IDs to fetch:', medicationIds);
+
+      const { data: medicationsData, error: medicationsError } = await supabase
+        .from('medication')
+        .select('id, name, description')
+        .in('id', medicationIds);
+
+      if (medicationsError) {
+        console.error('Error fetching medications details:', medicationsError);
+        // Still show the data we have, even without names
+        const formattedMedications = visitMedicationsData.map((item: any) => ({
+          id: item.medication_id,
+          name: `Medication ID: ${item.medication_id}`,
+          description: 'Unknown'
+        }));
+        setSavedMedications(formattedMedications);
+        return;
+      }
+
+      console.log('Medications details data:', medicationsData);
+
+      // Combine the data
+      const formattedMedications = visitMedicationsData.map((visitMedication: any) => {
+        const medicationDetail = medicationsData?.find((m: any) => m.id === visitMedication.medication_id);
+        return {
+          id: visitMedication.medication_id,
+          name: medicationDetail?.name || `Unknown Medication (${visitMedication.medication_id})`,
+          description: medicationDetail?.description || 'No description available'
+        };
+      });
+
+      console.log('Final formatted medications:', formattedMedications);
+      setSavedMedications(formattedMedications);
+      console.log('State updated - savedMedications should now contain:', formattedMedications.length, 'items');
+    } catch (error) {
+      console.error('Error in fetchSavedMedications:', error);
+    }
+  };
+
+  // Function to save selected complications to visit_complications table
+  const saveComplicationsToVisit = async (visitId: string) => {
+    try {
+      console.log('Saving complications to visit:', visitId, selectedComplications);
+
+      if (selectedComplications.length === 0) {
+        toast.error('No complications selected to save');
+        return;
+      }
+
+      // First get the actual visit UUID from the visits table
+      const { data: visitData, error: visitError } = await supabase
+        .from('visits')
+        .select('id')
+        .eq('visit_id', visitId)
+        .single();
+
+      if (visitError) {
+        console.error('Error fetching visit UUID:', visitError);
+        toast.error('Failed to find visit record. Cannot save complications.');
+        return;
+      }
+
+      if (!visitData?.id) {
+        toast.error('Visit record not found. Cannot save complications.');
+        return;
+      }
+
+      console.log('Found visit UUID:', visitData.id, 'for visit_id:', visitId);
+
+      // Prepare data for insertion using the actual visit UUID
+      const complicationsToSave = selectedComplications.map((complication) => ({
+        visit_id: visitData.id, // Use the actual UUID
+        complication_id: complication.id
+      }));
+
+      console.log('Complications to save:', complicationsToSave);
+
+      // Insert directly using Supabase client
+      try {
+        // First, delete existing complications for this visit using the UUID
+        const { error: deleteError } = await supabase
+          .from('visit_complications' as any)
+          .delete()
+          .eq('visit_id', visitData.id);
+
+        if (deleteError) {
+          console.error('Error deleting existing complications:', deleteError);
+        }
+
+        // Insert new complications
+        const { data, error: insertError } = await supabase
+          .from('visit_complications' as any)
+          .insert(complicationsToSave)
+          .select();
+
+        if (insertError) {
+          console.error('Error inserting complications:', insertError);
+          toast.error(`Failed to save complications: ${insertError.message}`);
+        } else {
+          toast.success(`${selectedComplications.length} complications saved to visit ${visitId} successfully!`);
+          console.log('Saved complications data:', data);
+
+          console.log('About to clear selected complications...');
+          // Clear selected complications after successful save
+          setSelectedComplications([]);
+
+          console.log('About to fetch saved complications...');
+          console.log('fetchSavedComplications function:', typeof fetchSavedComplications);
+          // Fetch updated saved complications to refresh the display
+          console.log('Fetching saved complications after save with visit ID:', visitId);
+          try {
+            await fetchSavedComplications(visitId);
+            console.log('Complications fetch completed successfully');
+          } catch (fetchError) {
+            console.error('Error fetching saved complications after save:', fetchError);
+          }
+        }
+      } catch (dbError) {
+        console.error('Database operation failed:', dbError);
+        toast.error('Failed to save complications to database');
+      }
+
+    } catch (error) {
+      console.error('Error in saveComplicationsToVisit:', error);
+      toast.error('Failed to save complications');
+    }
+  };
+
+  // Function to save selected labs to visit_labs table
+  const saveLabsToVisit = async (visitId: string) => {
+    try {
+      console.log('Saving labs to visit:', visitId, selectedLabs);
+
+      if (selectedLabs.length === 0) {
+        toast.error('No labs selected to save');
+        return;
+      }
+
+      // First get the actual visit UUID from the visits table
+      const { data: visitData, error: visitError } = await supabase
+        .from('visits')
+        .select('id')
+        .eq('visit_id', visitId)
+        .single();
+
+      if (visitError) {
+        console.error('Error fetching visit UUID for labs:', visitError);
+        toast.error('Failed to find visit record. Cannot save labs.');
+        return;
+      }
+
+      if (!visitData?.id) {
+        toast.error('Visit record not found. Cannot save labs.');
+        return;
+      }
+
+      console.log('Found visit UUID for labs:', visitData.id, 'for visit_id:', visitId);
+
+      // Prepare data for insertion using the actual visit UUID
+      const labsToSave = selectedLabs.map((lab) => ({
+        visit_id: visitData.id, // Use the actual UUID
+        lab_id: lab.id
+      }));
+
+      console.log('Labs to save:', labsToSave);
+
+      // Insert directly using Supabase client
+      try {
+        // First, delete existing labs for this visit
+        const { error: deleteError } = await supabase
+          .from('visit_labs' as any)
+          .delete()
+          .eq('visit_id', visitData.id);
+
+        if (deleteError) {
+          console.error('Error deleting existing labs:', deleteError);
+        }
+
+        // Insert new labs
+        const { data, error: insertError } = await supabase
+          .from('visit_labs' as any)
+          .insert(labsToSave)
+          .select();
+
+        if (insertError) {
+          console.error('Error inserting labs:', insertError);
+          toast.error(`Failed to save labs: ${insertError.message}`);
+        } else {
+          toast.success(`${selectedLabs.length} labs saved to visit ${visitId} successfully!`);
+          console.log('Saved labs data:', data);
+
+          console.log('About to clear selected labs...');
+          // Clear selected labs after successful save
+          setSelectedLabs([]);
+
+          console.log('About to fetch saved labs...');
+          // Fetch updated saved labs to refresh the display
+          console.log('Fetching saved labs after save with visit ID:', visitId);
+          try {
+            await fetchSavedLabs(visitId);
+            console.log('Labs fetch completed successfully');
+          } catch (fetchError) {
+            console.error('Error fetching saved labs after save:', fetchError);
+          }
+        }
+      } catch (dbError) {
+        console.error('Database operation failed for labs:', dbError);
+        toast.error('Failed to save labs to database');
+      }
+
+    } catch (error) {
+      console.error('Error in saveLabsToVisit:', error);
+      toast.error('Failed to save labs');
+    }
+  };
+
+  // Function to save selected medications to bills_pharmacy junction table
+  const saveMedicationsToBill = async (billId: string) => {
+    try {
+      console.log('Saving medications to bill:', billId, selectedMedications);
+
+      // For now, we'll simulate the save operation since the junction table may not exist yet
+      // This will be replaced with actual database operations once tables are created
+
+      if (selectedMedications.length > 0) {
+        const medicationsToSave = selectedMedications.map((medication) => ({
+          bill_id: billId,
+          medication_name: medication.name,
+          medication_code: medication.code || null,
+          batch_no: medication.batchNo || null,
+          expiry_date: medication.expiryDate || null,
+          quantity: medication.quantity || 1,
+          unit_price: parseFloat(medication.amount || 0),
+          total_amount: parseFloat(medication.amount || 0) * (medication.quantity || 1),
+          administration_date: medication.date || null,
+          administration_time: medication.time || null,
+          instructions: medication.instructions || null,
+          external_requisition: medication.externalRequisition || null,
+          notes: null
+        }));
+
+        console.log('Medications to save:', medicationsToSave);
+
+        // Insert medications to bills_pharmacy table
+        try {
+          // First, delete existing medications for this bill
+          const { error: deleteError } = await supabase
+            .from('bills_pharmacy' as any)
+            .delete()
+            .eq('bill_id', billId);
+
+          if (deleteError) {
+            console.error('Error deleting existing medications:', deleteError);
+          }
+
+          // Insert new medications
+          const { data, error: insertError } = await supabase
+            .from('bills_pharmacy' as any)
+            .insert(medicationsToSave)
+            .select();
+
+          if (insertError) {
+            console.error('Error inserting medications:', insertError);
+            toast.error(`Failed to save medications: ${insertError.message}`);
+          } else {
+            const totalAmount = medicationsToSave.reduce((sum, med) => sum + med.total_amount, 0);
+            toast.success(`${selectedMedications.length} medications saved to bill ${billId} successfully! (Total: ₹${totalAmount})`);
+            console.log('Saved medications data:', data);
+
+            // Clear selected medications after successful save
+            setSelectedMedications([]);
+          }
+        } catch (dbError) {
+          console.error('Database operation failed:', dbError);
+          const totalAmount = medicationsToSave.reduce((sum, med) => sum + med.total_amount, 0);
+          toast.error('Failed to save medications to database');
+        }
+      } else {
+        toast.error('No medications selected to save');
+      }
+    } catch (error) {
+      console.error('Error in saveMedicationsToBill:', error);
+      toast.error('Failed to save medications');
+    }
+  };
+
+  // Function to save selected radiology to visit_radiology table
+  const saveRadiologyToVisit = async (visitId: string) => {
+    try {
+      console.log('Saving radiology to visit:', visitId, selectedRadiology);
+
+      if (selectedRadiology.length === 0) {
+        toast.error('No radiology selected to save');
+        return;
+      }
+
+      // First get the actual visit UUID from the visits table
+      const { data: visitData, error: visitError } = await supabase
+        .from('visits')
+        .select('id')
+        .eq('visit_id', visitId)
+        .single();
+
+      if (visitError) {
+        console.error('Error fetching visit UUID for radiology:', visitError);
+        toast.error('Failed to find visit record. Cannot save radiology.');
+        return;
+      }
+
+      if (!visitData?.id) {
+        toast.error('Visit record not found. Cannot save radiology.');
+        return;
+      }
+
+      console.log('Found visit UUID for radiology:', visitData.id, 'for visit_id:', visitId);
+
+      // Prepare data for insertion using the actual visit UUID
+      const radiologyToSave = selectedRadiology.map((radiology) => ({
+        visit_id: visitData.id, // Use the actual UUID
+        radiology_id: radiology.id
+      }));
+
+      console.log('Radiology to save:', radiologyToSave);
+
+      // Insert directly using Supabase client
+      try {
+        // First, delete existing radiology for this visit
+        const { error: deleteError } = await supabase
+          .from('visit_radiology' as any)
+          .delete()
+          .eq('visit_id', visitData.id);
+
+        if (deleteError) {
+          console.error('Error deleting existing radiology:', deleteError);
+        }
+
+        // Insert new radiology
+        const { data, error: insertError } = await supabase
+          .from('visit_radiology' as any)
+          .insert(radiologyToSave)
+          .select();
+
+        if (insertError) {
+          console.error('Error inserting radiology:', insertError);
+          toast.error(`Failed to save radiology: ${insertError.message}`);
+        } else {
+          toast.success(`${selectedRadiology.length} radiology services saved to visit ${visitId} successfully!`);
+          console.log('Saved radiology data:', data);
+
+          console.log('About to clear selected radiology...');
+          // Clear selected radiology after successful save
+          setSelectedRadiology([]);
+
+          console.log('About to fetch saved radiology...');
+          // Fetch updated saved radiology to refresh the display
+          console.log('Fetching saved radiology after save with visit ID:', visitId);
+          try {
+            await fetchSavedRadiology(visitId);
+            console.log('Radiology fetch completed successfully');
+          } catch (fetchError) {
+            console.error('Error fetching saved radiology after save:', fetchError);
+          }
+        }
+      } catch (dbError) {
+        console.error('Database operation failed for radiology:', dbError);
+        toast.error('Failed to save radiology to database');
+      }
+
+    } catch (error) {
+      console.error('Error in saveRadiologyToVisit:', error);
+      toast.error('Failed to save radiology');
+    }
+  };
+
+  // Function to save selected medications to visit_medications table
+  const saveMedicationsToVisit = async (visitId: string) => {
+    try {
+      console.log('Saving medications to visit:', visitId, selectedMedications);
+
+      if (selectedMedications.length === 0) {
+        toast.error('No medications selected to save');
+        return;
+      }
+
+      // First get the actual visit UUID from the visits table
+      const { data: visitData, error: visitError } = await supabase
+        .from('visits')
+        .select('id')
+        .eq('visit_id', visitId)
+        .single();
+
+      if (visitError) {
+        console.error('Error fetching visit UUID for medications:', visitError);
+        toast.error('Failed to find visit record. Cannot save medications.');
+        return;
+      }
+
+      if (!visitData?.id) {
+        toast.error('Visit record not found. Cannot save medications.');
+        return;
+      }
+
+      console.log('Found visit UUID for medications:', visitData.id, 'for visit_id:', visitId);
+
+      // Prepare data for insertion using the actual visit UUID
+      const medicationsToSave = selectedMedications.map((medication) => ({
+        visit_id: visitData.id, // Use the actual UUID
+        medication_id: medication.id
+      }));
+
+      console.log('Medications to save:', medicationsToSave);
+
+      // Insert directly using Supabase client
+      try {
+        // First, delete existing medications for this visit
+        const { error: deleteError } = await supabase
+          .from('visit_medications' as any)
+          .delete()
+          .eq('visit_id', visitData.id);
+
+        if (deleteError) {
+          console.error('Error deleting existing medications:', deleteError);
+        }
+
+        // Insert new medications
+        const { data, error: insertError } = await supabase
+          .from('visit_medications' as any)
+          .insert(medicationsToSave)
+          .select();
+
+        if (insertError) {
+          console.error('Error inserting medications:', insertError);
+          toast.error(`Failed to save medications: ${insertError.message}`);
+        } else {
+          toast.success(`${selectedMedications.length} medications saved to visit ${visitId} successfully!`);
+          console.log('Saved medications data:', data);
+
+          console.log('About to clear selected medications...');
+          // Clear selected medications after successful save
+          setSelectedMedications([]);
+
+          console.log('About to fetch saved medications...');
+          // Fetch updated saved medications to refresh the display
+          console.log('Fetching saved medications after save with visit ID:', visitId);
+          try {
+            await fetchSavedMedications(visitId);
+            console.log('Medications fetch completed successfully');
+          } catch (fetchError) {
+            console.error('Error fetching saved medications after save:', fetchError);
+          }
+        }
+      } catch (dbError) {
+        console.error('Database operation failed for medications:', dbError);
+        toast.error('Failed to save medications to database');
+      }
+
+    } catch (error) {
+      console.error('Error in saveMedicationsToVisit:', error);
+      toast.error('Failed to save medications');
+    }
+  };
+
+  const findParentSection = (mainIndex: number) => {
+      for (let i = mainIndex - 1; i >= 0; i--) {
+          if(invoiceItems[i].type === 'section') {
+              return invoiceItems[i] as SectionItem;
+          }
+      }
+      return null;
+  }
+
+  useEffect(() => {
+      setTotalAmount(calculateTotalAmount());
+  }, [invoiceItems]);
+
+  const handleSaveBill = () => {
+    if (!visitId || !visitData) {
+      toast.error("Visit data not available");
+      return;
+    }
+
+    // Prepare sections data
+    const sections = invoiceItems
+      .filter(item => item.type === 'section')
+      .map(item => item as SectionItem);
+
+    // Prepare line items data
+    const lineItems: any[] = [];
+    invoiceItems.forEach(item => {
+      if (item.type === 'main') {
+        item.subItems.forEach(subItem => {
+          lineItems.push({
+            ...subItem,
+            parentDescription: item.description
+          });
+        });
+      }
+    });
+
+    const billDataToSave = {
+      patient_id: visitData.patient_id,
+      bill_no: patientData.billNo,
+      claim_id: patientData.claimId,
+      date: patientData.billDate,
+      category: patientData.category,
+      total_amount: totalAmount,
+      sections,
+      line_items: lineItems
+    };
+
+    saveBill(billDataToSave);
+    toast.success("Bill saved successfully!");
+  };
+
+  if (isLoading || isBillLoading) {
+      return (
+      <div className="flex h-screen items-center justify-center">
+        <p className="text-xl">Loading Bill Data...</p>
+          </div>
+    )
+  }
+
+  if (isError) {
+      return (
+      <div className="flex h-screen items-center justify-center">
+        <p className="text-xl text-red-500">
+          Error loading bill: {(error as Error).message}
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex h-screen bg-gray-50">
+      {/* Left Sidebar */}
+      <div className={`${isLeftSidebarCollapsed ? 'w-12' : 'flex-1'} bg-white border-r border-gray-200 flex flex-col transition-all duration-300`}>
+        <div className="p-4 border-b border-gray-200">
+          <div className="flex items-center justify-between mb-2">
+            {!isLeftSidebarCollapsed && (
+              <div>
+                <h3 className="font-semibold text-lg text-blue-600">Patient Details</h3>
+                <p className="text-sm text-gray-600">Diagnoses and Complications</p>
+              </div>
+            )}
+            <Button
+              variant="ghost"
+              size="sm"
+              className="p-1 h-8 w-8 hover:bg-blue-100 ml-auto"
+              onClick={() => setIsLeftSidebarCollapsed(!isLeftSidebarCollapsed)}
+            >
+              {isLeftSidebarCollapsed ? (
+                <ChevronRight className="h-4 w-4" />
+              ) : (
+                <ChevronLeft className="h-4 w-4" />
+              )}
+            </Button>
+          </div>
+
+          {/* Debug Button */}
+          {!isLeftSidebarCollapsed && (
+            <Button
+              size="sm"
+              className="w-full bg-red-600 text-white mb-3"
+              onClick={async () => {
+                console.log('=== MANUAL DEBUG FETCH TRIGGERED ===');
+                console.log('Current state:', {
+                  billData: billData,
+                  visitId: visitId,
+                  savedDiagnoses: savedDiagnoses.length,
+                  savedSurgeries: savedSurgeries.length,
+                  savedComplications: savedComplications.length,
+                  savedLabs: savedLabs.length,
+                  savedRadiology: savedRadiology.length,
+                  savedMedications: savedMedications.length
+                });
+
+                if (billData?.id) {
+                  console.log('Fetching diagnoses and surgeries...');
+                  await fetchSavedDiagnoses(billData.id);
+                  await fetchSavedSurgeries(billData.id);
+                }
+
+                if (visitId) {
+                  console.log('Fetching complications, labs, radiology, medications...');
+                  await fetchSavedComplications(visitId);
+                  await fetchSavedLabs(visitId);
+                  await fetchSavedRadiology(visitId);
+                  await fetchSavedMedications(visitId);
+                }
+
+                console.log('=== MANUAL DEBUG FETCH COMPLETED ===');
+              }}
+            >
+              🐛 Debug: Fetch All Data
+            </Button>
+          )}
+        </div>
+
+        {!isLeftSidebarCollapsed && (
+          <div className="flex-1 overflow-y-auto">
+            {/* Patient Billing History */}
+            <div className="p-4 border-b border-gray-200">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="w-6 h-6 bg-blue-100 rounded flex items-center justify-center">
+                <span className="text-blue-600 text-xs font-bold">📋</span>
+              </div>
+              <h4 className="font-semibold text-gray-900">Patient Billing History</h4>
+            </div>
+            <div className="text-sm text-gray-600 space-y-1">
+              <p><span className="font-medium">Previously saved billing records for this patient</span></p>
+              <div className="mt-2 space-y-1">
+                <div>
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium">Diagnosis:</span>
+                    <button
+                      onClick={() => {
+                        const billId = billData?.id;
+                        if (billId) {
+                          console.log('Manual refresh - Bill ID:', billId);
+                          fetchSavedDiagnoses(billId);
+                        } else {
+                          console.log('No bill ID available for refresh');
+                        }
+                      }}
+                      className="text-xs text-blue-600 hover:text-blue-800"
+                    >
+                      Refresh
+                    </button>
+                  </div>
+                  {savedDiagnoses.length > 0 ? (
+                    <div className="mt-1 space-y-1">
+                      {savedDiagnoses.map((diagnosis) => (
+                        <div key={diagnosis.id} className="text-sm">
+                          <span className={diagnosis.is_primary ? "font-semibold text-blue-600" : ""}>
+                            {diagnosis.name}
+                            {diagnosis.is_primary && " (Primary)"}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <span className="text-gray-500"> Not specified</span>
+                  )}
+                  <div className="text-xs text-gray-400 mt-1">
+                    Bill ID: {billData?.id || 'No bill ID'}
+                  </div>
+                </div>
+                <p><span className="font-medium">Date:</span> {patientData.billDate ? format(new Date(patientData.billDate), 'dd/MM/yyyy, HH:mm:ss') : ''}</p>
+                <div>
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium">Surgery:</span>
+                    <button
+                      onClick={() => {
+                        const billId = billData?.id;
+                        if (billId) {
+                          console.log('Manual surgery refresh - Bill ID:', billId);
+                          fetchSavedSurgeries(billId);
+                        } else {
+                          console.log('No bill ID available for surgery refresh');
+                        }
+                      }}
+                      className="text-xs text-green-600 hover:text-green-800"
+                    >
+                      Refresh
+                    </button>
+                  </div>
+                  {savedSurgeries.length > 0 ? (
+                    <div className="mt-1 space-y-1">
+                      {savedSurgeries.map((surgery) => (
+                        <div key={surgery.id} className="text-sm">
+                          <span className={surgery.is_primary ? "font-semibold text-green-600" : ""}>
+                            {surgery.name} ({surgery.code})
+                            {surgery.is_primary && " (Primary)"}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <span className="text-gray-500"> None</span>
+                  )}
+                </div>
+                <div>
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium">Complications:</span>
+                    <button
+                      onClick={() => {
+                        if (visitId) {
+                          console.log('Manual complications refresh - Visit ID:', visitId);
+                          fetchSavedComplications(visitId);
+                        } else {
+                          console.log('No visit ID available for complications refresh');
+                        }
+                      }}
+                      className="text-xs text-orange-600 hover:text-orange-800"
+                    >
+                      Refresh
+                    </button>
+                  </div>
+                  {savedComplications.length > 0 ? (
+                    <div className="mt-1 space-y-1">
+                      {savedComplications.map((complication) => (
+                        <div key={complication.id} className="text-sm">
+                          <span className={complication.is_primary ? "font-semibold text-orange-600" : ""}>
+                            {complication.name}
+                            {complication.is_primary && " (Primary)"}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <span className="text-gray-500"> None</span>
+                  )}
+                </div>
+
+                {/* Labs Display */}
+                <div className="mt-3">
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium">Labs:</span>
+                    <button
+                      onClick={() => {
+                        if (visitId) {
+                          console.log('Manual labs refresh - Visit ID:', visitId);
+                          fetchSavedLabs(visitId);
+                        } else {
+                          console.log('No visit ID available for labs refresh');
+                        }
+                      }}
+                      className="text-xs text-blue-600 hover:text-blue-800"
+                    >
+                      Refresh
+                    </button>
+                  </div>
+                  {savedLabs.length > 0 ? (
+                    <div className="mt-1 space-y-1">
+                      {savedLabs.map((lab) => (
+                        <div key={lab.id} className="text-sm">
+                          <span className="text-blue-600">
+                            {lab.name}
+                          </span>
+                          {lab.description && (
+                            <div className="text-xs text-gray-500 ml-2">
+                              {lab.description}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <span className="text-gray-500"> None</span>
+                  )}
+                </div>
+
+                {/* Radiology Display */}
+                <div className="mt-3">
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium">Radiology:</span>
+                    <button
+                      onClick={() => {
+                        if (visitId) {
+                          console.log('Manual radiology refresh - Visit ID:', visitId);
+                          fetchSavedRadiology(visitId);
+                        } else {
+                          console.log('No visit ID available for radiology refresh');
+                        }
+                      }}
+                      className="text-xs text-purple-600 hover:text-purple-800"
+                    >
+                      Refresh
+                    </button>
+                  </div>
+                  {savedRadiology.length > 0 ? (
+                    <div className="mt-1 space-y-1">
+                      {savedRadiology.map((radiology) => (
+                        <div key={radiology.id} className="text-sm">
+                          <span className="text-purple-600">
+                            {radiology.name}
+                          </span>
+                          {radiology.description && (
+                            <div className="text-xs text-gray-500 ml-2">
+                              {radiology.description}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <span className="text-gray-500"> None</span>
+                  )}
+                </div>
+
+                {/* Medications Display */}
+                <div className="mt-3">
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium">Medications:</span>
+                    <button
+                      onClick={() => {
+                        if (visitId) {
+                          console.log('Manual medications refresh - Visit ID:', visitId);
+                          fetchSavedMedications(visitId);
+                        } else {
+                          console.log('No visit ID available for medications refresh');
+                        }
+                      }}
+                      className="text-xs text-green-600 hover:text-green-800"
+                    >
+                      Refresh
+                    </button>
+                  </div>
+                  {savedMedications.length > 0 ? (
+                    <div className="mt-1 space-y-1">
+                      {savedMedications.map((medication) => (
+                        <div key={medication.id} className="text-sm">
+                          <span className="text-green-600">
+                            {medication.name}
+                          </span>
+                          {medication.description && (
+                            <div className="text-xs text-gray-500 ml-2">
+                              {medication.description}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <span className="text-gray-500"> None</span>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Diagnosis Section */}
+          <div className="p-4 border-b border-gray-200">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="w-6 h-6 bg-blue-100 rounded flex items-center justify-center">
+                <span className="text-blue-600 text-xs font-bold">🔍</span>
+              </div>
+              <h4 className="font-semibold text-blue-600">Diagnosis</h4>
+            </div>
+            <p className="text-sm text-gray-600 mb-3">Search and add diagnosis, view related complications</p>
+
+            {/* Selected Diagnoses */}
+            {selectedDiagnoses.length > 0 && (
+              <div className="mb-3 space-y-2">
+                {selectedDiagnoses.map((diagnosis) => (
+                  <div key={diagnosis.id} className="flex items-center justify-between bg-blue-50 p-2 rounded border">
+                    <div>
+                      <div className="font-medium text-sm text-blue-800">{diagnosis.name}</div>
+                      {diagnosis.description && (
+                        <div className="text-xs text-blue-600">{diagnosis.description}</div>
+                      )}
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 w-6 p-0 text-blue-600 hover:text-red-600"
+                      onClick={() => setSelectedDiagnoses(prev => prev.filter(d => d.id !== diagnosis.id))}
+                    >
+                      <X className="h-3 w-3" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="relative">
+              <Input
+                placeholder="Search diagnoses by name, ICD code, or category..."
+                className="pl-10 text-sm"
+                value={diagnosisSearchTerm}
+                onChange={(e) => setDiagnosisSearchTerm(e.target.value)}
+              />
+              <div className="absolute left-3 top-1/2 transform -translate-y-1/2">
+                <span className="text-gray-400 text-sm">🔍</span>
+              </div>
+
+              {/* Diagnosis Dropdown */}
+              {diagnosisSearchTerm && availableDiagnoses.length > 0 && (
+                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-md shadow-lg z-50 max-h-40 overflow-y-auto">
+                  {availableDiagnoses.map((diagnosis) => (
+                    <div
+                      key={diagnosis.id}
+                      className="p-2 hover:bg-gray-100 cursor-pointer border-b border-gray-100 last:border-b-0"
+                      onClick={() => {
+                        if (!selectedDiagnoses.find(d => d.id === diagnosis.id)) {
+                          setSelectedDiagnoses(prev => [...prev, diagnosis]);
+                        }
+                        setDiagnosisSearchTerm("");
+                      }}
+                    >
+                      <div className="font-medium text-sm">{diagnosis.name}</div>
+                      {diagnosis.description && (
+                        <div className="text-xs text-gray-500">{diagnosis.description}</div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="mt-2 space-y-2">
+              <Button variant="outline" size="sm" className="w-full">
+                <Plus className="h-4 w-4 mr-2" />
+                Add New
+              </Button>
+              {selectedDiagnoses.length > 0 && (
+                <div className="space-y-2">
+                  <Button
+                    size="sm"
+                    className="w-full bg-blue-600 text-white"
+                    onClick={() => {
+                      // Use actual bill ID if exists, otherwise we'll create a new bill in the function
+                      const billId = billData?.id;
+                      console.log('Save button clicked - billData:', billData);
+                      console.log('Save button clicked - visitId:', visitId);
+                      console.log('Save button clicked - final billId:', billId || visitId || "temp-bill-id");
+                      saveDiagnosesToBill(billId || visitId || "temp-bill-id");
+                    }}
+                  >
+                    Save Diagnoses to Bill
+                  </Button>
+
+                  <Button
+                    className="w-full bg-green-600 text-white"
+                    onClick={() => {
+                      const billId = billData?.id;
+                      console.log('Test fetch button clicked - Bill ID:', billId);
+                      if (billId) {
+                        fetchSavedDiagnoses(billId);
+                      } else {
+                        console.log('No bill ID available for test fetch');
+                      }
+                    }}
+                  >
+                    Test Fetch Saved Diagnoses
+                  </Button>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* CGHS Surgery Section */}
+          <div className="p-4 border-b border-gray-200">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="w-6 h-6 bg-green-100 rounded flex items-center justify-center">
+                <span className="text-green-600 text-xs font-bold">⚕️</span>
+              </div>
+              <h4 className="font-semibold text-green-600">CGHS SURGERY</h4>
+            </div>
+            <p className="text-sm text-gray-600 mb-3">Select CGHS surgeries for the patient</p>
+
+            {/* Selected Surgeries */}
+            {selectedSurgeries.length > 0 && (
+              <div className="mb-3 space-y-2">
+                {selectedSurgeries.map((surgery) => (
+                  <div key={surgery.id} className="flex items-center justify-between bg-green-50 p-2 rounded border">
+                    <div>
+                      <div className="font-medium text-sm text-green-800">{surgery.name}</div>
+                      <div className="text-xs text-green-600">Code: {surgery.code}</div>
+                      {surgery.NABH_NABL_Rate && (
+                        <div className="text-xs text-green-600">NABH Rate: ₹{surgery.NABH_NABL_Rate}</div>
+                      )}
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 w-6 p-0 text-green-600 hover:text-red-600"
+                      onClick={() => setSelectedSurgeries(prev => prev.filter(s => s.id !== surgery.id))}
+                    >
+                      <X className="h-3 w-3" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="relative">
+              <Input
+                placeholder="Search surgeries by name or code..."
+                className="pl-10 text-sm"
+                value={surgerySearchTerm}
+                onChange={(e) => setSurgerySearchTerm(e.target.value)}
+              />
+              <div className="absolute left-3 top-1/2 transform -translate-y-1/2">
+                <span className="text-gray-400 text-sm">🔍</span>
+              </div>
+
+              {/* Surgery Dropdown */}
+              {surgerySearchTerm && availableSurgeries.length > 0 && (
+                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-md shadow-lg z-50 max-h-40 overflow-y-auto">
+                  {availableSurgeries.map((surgery) => (
+                    <div
+                      key={surgery.id}
+                      className="p-2 hover:bg-gray-100 cursor-pointer border-b border-gray-100 last:border-b-0"
+                      onClick={() => {
+                        if (!selectedSurgeries.find(s => s.id === surgery.id)) {
+                          setSelectedSurgeries(prev => [...prev, surgery]);
+                        }
+                        setSurgerySearchTerm("");
+                      }}
+                    >
+                      <div className="font-medium text-sm">{surgery.name}</div>
+                      <div className="text-xs text-gray-500">Code: {surgery.code}</div>
+                      {surgery.NABH_NABL_Rate && (
+                        <div className="text-xs text-green-600">NABH Rate: ₹{surgery.NABH_NABL_Rate}</div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Save Surgeries Button */}
+            {selectedSurgeries.length > 0 && (
+              <div className="mt-3 px-4 pb-4 space-y-2">
+                <Button
+                  size="sm"
+                  className="w-full bg-green-600 text-white"
+                  onClick={() => {
+                    // Use actual bill ID if exists, otherwise we'll create a new bill in the function
+                    const billId = billData?.id;
+                    console.log('Surgery save button clicked - billData:', billData);
+                    console.log('Surgery save button clicked - visitId:', visitId);
+                    console.log('Surgery save button clicked - final billId:', billId || visitId || "temp-bill-id");
+                    saveSurgeriesToBill(billId || visitId || "temp-bill-id");
+                  }}
+                >
+                  Save Surgeries to Bill
+                </Button>
+
+                <Button
+                  className="w-full bg-purple-600 text-white"
+                  onClick={() => {
+                    const billId = billData?.id;
+                    console.log('Test surgery fetch button clicked - Bill ID:', billId);
+                    if (billId) {
+                      fetchSavedSurgeries(billId);
+                    } else {
+                      console.log('No bill ID available for test surgery fetch');
+                    }
+                  }}
+                >
+                  Test Fetch Saved Surgeries
+                </Button>
+              </div>
+            )}
+          </div>
+
+          {/* Complications Section */}
+          <div className="p-4 border-b border-gray-200">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="w-6 h-6 bg-orange-100 rounded flex items-center justify-center">
+                <span className="text-orange-600 text-xs font-bold">⚠️</span>
+              </div>
+              <h4 className="font-semibold text-orange-600">Complications mapped to diagnosis</h4>
+            </div>
+            <p className="text-sm text-gray-600 mb-3">Monitor and manage potential complications</p>
+
+            {/* Complications Search */}
+            <div className="relative mb-3">
+              <Input
+                placeholder="Search complications..."
+                className="pl-10 text-sm"
+                value={complicationSearchTerm}
+                onChange={(e) => setComplicationSearchTerm(e.target.value)}
+              />
+              <div className="absolute left-3 top-1/2 transform -translate-y-1/2">
+                <span className="text-gray-400 text-sm">🔍</span>
+              </div>
+            </div>
+
+            {/* Complications Dropdown */}
+            {complicationSearchTerm.length >= 2 && (
+              <div className="mb-3 max-h-40 overflow-y-auto border border-gray-200 rounded-md bg-white shadow-sm">
+                {filteredComplications.map((complication) => (
+                  <div
+                    key={complication.id}
+                    className="p-2 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-b-0"
+                    onClick={() => {
+                      if (!selectedComplications.find(s => s.id === complication.id)) {
+                        setSelectedComplications([...selectedComplications, complication]);
+                        setComplicationSearchTerm("");
+                      }
+                    }}
+                  >
+                    <div className="font-medium text-sm">{complication.name}</div>
+                    <div className="text-xs text-gray-500">ID: {complication.id}</div>
+                  </div>
+                ))}
+                {filteredComplications.length === 0 && (
+                  <div className="p-2 text-sm text-gray-500">No complications found</div>
+                )}
+              </div>
+            )}
+
+            {/* Selected Complications */}
+            {selectedComplications.length > 0 && (
+              <div className="mb-3">
+                <h5 className="text-sm font-medium text-gray-700 mb-2">Selected Complications:</h5>
+                <div className="space-y-2">
+                  {selectedComplications.map((complication, index) => (
+                    <div key={complication.id} className="flex items-center justify-between p-2 bg-orange-50 rounded border border-orange-200">
+                      <div>
+                        <div className="font-medium text-sm">{complication.name}</div>
+                        <div className="text-xs text-gray-500">
+                          {index === 0 && <span className="text-orange-600 font-medium">Primary • </span>}
+                          ID: {complication.id}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => {
+                          setSelectedComplications(selectedComplications.filter(s => s.id !== complication.id));
+                        }}
+                        className="text-red-500 hover:text-red-700 text-sm font-bold"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Save Complications Button */}
+            {selectedComplications.length > 0 && (
+              <div className="mt-3 space-y-2">
+                <Button
+                  size="sm"
+                  className="w-full bg-orange-600 text-white"
+                  onClick={() => {
+                    console.log('Complications save button clicked - visitId:', visitId);
+                    console.log('Complications save button clicked - selectedComplications:', selectedComplications);
+                    if (visitId) {
+                      saveComplicationsToVisit(visitId);
+                    } else {
+                      toast.error('No visit ID available to save complications');
+                    }
+                  }}
+                >
+                  Save Complications to Visit
+                </Button>
+
+                <Button
+                  className="w-full bg-yellow-600 text-white"
+                  onClick={() => {
+                    console.log('Test complications fetch button clicked - Visit ID:', visitId);
+                    if (visitId) {
+                      fetchSavedComplications(visitId);
+                    } else {
+                      console.log('No visit ID available for test complications fetch');
+                    }
+                  }}
+                >
+                  Test Fetch Saved Complications
+                </Button>
+              </div>
+            )}
+          </div>
+
+          {/* Labs Section */}
+          <div className="p-4 border-b border-gray-200">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="w-6 h-6 bg-blue-100 rounded flex items-center justify-center">
+                <span className="text-blue-600 text-xs font-bold">🧪</span>
+              </div>
+              <h4 className="font-semibold text-blue-600">Labs</h4>
+            </div>
+            <p className="text-sm text-gray-600 mb-3">Laboratory services and tests</p>
+
+            {/* Labs Search */}
+            <div className="relative mb-3">
+              <Input
+                placeholder="Search lab services..."
+                className="pl-10 text-sm"
+                value={labSearchTerm}
+                onChange={(e) => setLabSearchTerm(e.target.value)}
+              />
+              <div className="absolute left-3 top-1/2 transform -translate-y-1/2">
+                <span className="text-gray-400 text-sm">🔍</span>
+              </div>
+            </div>
+
+            {/* Labs Dropdown */}
+            {labSearchTerm.length >= 2 && (
+              <div className="mb-3 max-h-40 overflow-y-auto border border-gray-200 rounded-md bg-white shadow-sm">
+                {filteredLabs.map((lab) => (
+                  <div
+                    key={lab.id}
+                    className="p-2 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-b-0"
+                    onClick={() => {
+                      if (!selectedLabs.find(s => s.id === lab.id)) {
+                        setSelectedLabs([...selectedLabs, lab]);
+                        setLabSearchTerm("");
+                      }
+                    }}
+                  >
+                    <div className="font-medium text-sm">{lab.name}</div>
+                    <div className="text-xs text-gray-500">
+                      {lab.description || 'No description available'}
+                    </div>
+                  </div>
+                ))}
+                {filteredLabs.length === 0 && (
+                  <div className="p-2 text-sm text-gray-500">No lab services found</div>
+                )}
+              </div>
+            )}
+
+            {/* Selected Labs */}
+            {selectedLabs.length > 0 && (
+              <div className="mb-3">
+                <h5 className="text-sm font-medium text-gray-700 mb-2">Selected Lab Services:</h5>
+                <div className="space-y-2">
+                  {selectedLabs.map((lab) => (
+                    <div key={lab.id} className="flex items-center justify-between p-2 bg-blue-50 rounded border border-blue-200">
+                      <div>
+                        <div className="font-medium text-sm">{lab.name}</div>
+                        <div className="text-xs text-gray-500">
+                          {lab.description || 'No description available'}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => {
+                          setSelectedLabs(selectedLabs.filter(s => s.id !== lab.id));
+                        }}
+                        className="text-red-500 hover:text-red-700 text-sm font-bold"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Save Labs Button */}
+            {selectedLabs.length > 0 && (
+              <div className="mt-3 space-y-2">
+                <Button
+                  size="sm"
+                  className="w-full bg-blue-600 text-white"
+                  onClick={() => {
+                    console.log('Labs save button clicked - selectedLabs:', selectedLabs);
+                    console.log('Labs save button clicked - visitId:', visitId);
+                    if (visitId) {
+                      saveLabsToVisit(visitId);
+                    } else {
+                      toast.error('No visit ID available to save labs');
+                    }
+                  }}
+                >
+                  Save Labs to Visit
+                </Button>
+
+                <Button
+                  className="w-full bg-cyan-600 text-white"
+                  onClick={() => {
+                    console.log('Test labs fetch button clicked - Visit ID:', visitId);
+                    if (visitId) {
+                      fetchSavedLabs(visitId);
+                    } else {
+                      console.log('No visit ID available for test labs fetch');
+                    }
+                  }}
+                >
+                  Test Fetch Saved Labs
+                </Button>
+              </div>
+            )}
+          </div>
+
+          {/* Radiology Section */}
+          <div className="p-4 border-b border-gray-200">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="w-6 h-6 bg-purple-100 rounded flex items-center justify-center">
+                <span className="text-purple-600 text-xs font-bold">📷</span>
+              </div>
+              <h4 className="font-semibold text-purple-600">Radiology</h4>
+            </div>
+            <p className="text-sm text-gray-600 mb-3">Imaging and radiology services</p>
+
+            {/* Radiology Search */}
+            <div className="relative mb-3">
+              <Input
+                placeholder="Search radiology services..."
+                className="pl-10 text-sm"
+                value={radiologySearchTerm}
+                onChange={(e) => setRadiologySearchTerm(e.target.value)}
+              />
+              <div className="absolute left-3 top-1/2 transform -translate-y-1/2">
+                <span className="text-gray-400 text-sm">🔍</span>
+              </div>
+            </div>
+
+            {/* Radiology Dropdown */}
+            {radiologySearchTerm.length >= 2 && (
+              <div className="mb-3 max-h-40 overflow-y-auto border border-gray-200 rounded-md bg-white shadow-sm">
+                {filteredRadiology.map((radiology) => (
+                  <div
+                    key={radiology.id}
+                    className="p-2 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-b-0"
+                    onClick={() => {
+                      if (!selectedRadiology.find(s => s.id === radiology.id)) {
+                        setSelectedRadiology([...selectedRadiology, radiology]);
+                        setRadiologySearchTerm("");
+                      }
+                    }}
+                  >
+                    <div className="font-medium text-sm">{radiology.name}</div>
+                    <div className="text-xs text-gray-500">
+                      {radiology.description || 'No description available'}
+                    </div>
+                  </div>
+                ))}
+                {filteredRadiology.length === 0 && (
+                  <div className="p-2 text-sm text-gray-500">No radiology services found</div>
+                )}
+              </div>
+            )}
+
+            {/* Selected Radiology */}
+            {selectedRadiology.length > 0 && (
+              <div className="mb-3">
+                <h5 className="text-sm font-medium text-gray-700 mb-2">Selected Radiology Services:</h5>
+                <div className="space-y-2">
+                  {selectedRadiology.map((radiology) => (
+                    <div key={radiology.id} className="flex items-center justify-between p-2 bg-purple-50 rounded border border-purple-200">
+                      <div>
+                        <div className="font-medium text-sm">{radiology.name}</div>
+                        <div className="text-xs text-gray-500">
+                          {radiology.description || 'No description available'}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => {
+                          setSelectedRadiology(selectedRadiology.filter(s => s.id !== radiology.id));
+                        }}
+                        className="text-red-500 hover:text-red-700 text-sm font-bold"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Save Radiology Button */}
+            {selectedRadiology.length > 0 && (
+              <div className="mt-3 space-y-2">
+                <Button
+                  size="sm"
+                  className="w-full bg-purple-600 text-white"
+                  onClick={() => {
+                    console.log('Radiology save button clicked - selectedRadiology:', selectedRadiology);
+                    console.log('Radiology save button clicked - visitId:', visitId);
+                    if (visitId) {
+                      saveRadiologyToVisit(visitId);
+                    } else {
+                      toast.error('No visit ID available to save radiology');
+                    }
+                  }}
+                >
+                  Save Radiology to Visit
+                </Button>
+
+                <Button
+                  className="w-full bg-indigo-600 text-white"
+                  onClick={() => {
+                    console.log('Test radiology fetch button clicked - Visit ID:', visitId);
+                    if (visitId) {
+                      fetchSavedRadiology(visitId);
+                    } else {
+                      console.log('No visit ID available for test radiology fetch');
+                    }
+                  }}
+                >
+                  Test Fetch Saved Radiology
+                </Button>
+              </div>
+            )}
+          </div>
+
+          {/* Medications Section */}
+          <div className="p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="w-6 h-6 bg-green-100 rounded flex items-center justify-center">
+                <span className="text-green-600 text-xs font-bold">💊</span>
+              </div>
+              <h4 className="font-semibold text-green-600">Medications</h4>
+            </div>
+            <p className="text-sm text-gray-600 mb-3">All medications for patient</p>
+
+            <div className="space-y-2 mb-3">
+              <div className="bg-gray-50 p-2 rounded text-sm">
+                <div className="flex justify-between items-center">
+                  <span className="font-medium">Paracetamol</span>
+                  <span className="text-xs text-gray-500">1 day</span>
+                </div>
+                <p className="text-xs text-gray-600">Dosage: 500mg every 8 hours</p>
+              </div>
+
+              <div className="bg-gray-50 p-2 rounded text-sm">
+                <div className="flex justify-between items-center">
+                  <span className="font-medium">Amoxicillin</span>
+                  <span className="text-xs text-gray-500">1 day</span>
+                </div>
+                <p className="text-xs text-gray-600">Dosage: 500mg three times daily</p>
+              </div>
+            </div>
+
+            {/* Medications Search */}
+            <div className="relative mb-3">
+              <Input
+                placeholder="Search medications..."
+                className="pl-10 text-sm"
+                value={medicationSearchTerm}
+                onChange={(e) => setMedicationSearchTerm(e.target.value)}
+              />
+              <div className="absolute left-3 top-1/2 transform -translate-y-1/2">
+                <span className="text-gray-400 text-sm">🔍</span>
+              </div>
+            </div>
+
+            {/* Medications Dropdown */}
+            {medicationSearchTerm.length >= 2 && (
+              <div className="mb-3 max-h-40 overflow-y-auto border border-gray-200 rounded-md bg-white shadow-sm">
+                {filteredMedications.map((medication) => (
+                  <div
+                    key={medication.id}
+                    className="p-2 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-b-0"
+                    onClick={() => {
+                      if (!selectedMedications.find(s => s.id === medication.id)) {
+                        setSelectedMedications([...selectedMedications, medication]);
+                        setMedicationSearchTerm("");
+                      }
+                    }}
+                  >
+                    <div className="font-medium text-sm">{medication.name}</div>
+                    <div className="text-xs text-gray-500">
+                      {medication.description || 'No description available'}
+                    </div>
+                  </div>
+                ))}
+                {filteredMedications.length === 0 && (
+                  <div className="p-2 text-sm text-gray-500">No medications found</div>
+                )}
+              </div>
+            )}
+
+            {/* Selected Medications */}
+            {selectedMedications.length > 0 && (
+              <div className="mb-3">
+                <h5 className="text-sm font-medium text-gray-700 mb-2">Selected Medications:</h5>
+                <div className="space-y-2">
+                  {selectedMedications.map((medication) => (
+                    <div key={medication.id} className="flex items-center justify-between p-2 bg-green-50 rounded border border-green-200">
+                      <div>
+                        <div className="font-medium text-sm">{medication.name}</div>
+                        <div className="text-xs text-gray-500">
+                          {medication.description || 'No description available'}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => {
+                          setSelectedMedications(selectedMedications.filter(s => s.id !== medication.id));
+                        }}
+                        className="text-red-500 hover:text-red-700 text-sm font-bold"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Save Medications Button */}
+            {selectedMedications.length > 0 && (
+              <div className="mt-3 space-y-2">
+                <Button
+                  size="sm"
+                  className="w-full bg-green-600 text-white"
+                  onClick={() => {
+                    console.log('Medications save button clicked - selectedMedications:', selectedMedications);
+                    console.log('Medications save button clicked - visitId:', visitId);
+                    if (visitId) {
+                      saveMedicationsToVisit(visitId);
+                    } else {
+                      toast.error('No visit ID available to save medications');
+                    }
+                  }}
+                >
+                  Save Medications to Visit
+                </Button>
+
+                <Button
+                  className="w-full bg-teal-600 text-white"
+                  onClick={() => {
+                    console.log('Test medications fetch button clicked - Visit ID:', visitId);
+                    if (visitId) {
+                      fetchSavedMedications(visitId);
+                    } else {
+                      console.log('No visit ID available for test medications fetch');
+                    }
+                  }}
+                >
+                  Test Fetch Saved Medications
+                </Button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Middle Section - Service Selection */}
+      <div className={`${isMiddleSectionCollapsed ? 'w-12' : 'flex-1'} bg-white border-r border-gray-200 flex flex-col transition-all duration-300`}>
+        {/* Service Selection Header */}
+        <div className="p-4 border-b border-gray-200">
+          <div className="flex items-center justify-between">
+            {!isMiddleSectionCollapsed && (
+              <div>
+                <h3 className="font-semibold text-lg text-blue-600 mb-2">Service Selection</h3>
+                <p className="text-sm text-gray-600">Search and select services for billing</p>
+              </div>
+            )}
+            <Button
+              variant="ghost"
+              size="sm"
+              className="p-1 h-8 w-8 hover:bg-blue-100 ml-auto"
+              onClick={() => setIsMiddleSectionCollapsed(!isMiddleSectionCollapsed)}
+            >
+              {isMiddleSectionCollapsed ? (
+                <ChevronRight className="h-4 w-4" />
+              ) : (
+                <ChevronLeft className="h-4 w-4" />
+              )}
+            </Button>
+          </div>
+        </div>
+
+        {!isMiddleSectionCollapsed && (
+          <>
+            {/* Service Type Tabs */}
+            <div className="p-4 border-b border-gray-200">
+          <div className="flex flex-wrap gap-1 text-xs">
+            {[
+              "Clinical services",
+              "Laboratory services",
+              "Radiology",
+              "Pharmacy",
+              "Implant",
+              "Blood",
+              "Surgery",
+              "Mandatory services",
+              "Physiotherapy",
+              "Consultation",
+              "Surgery for internal report and payslips",
+              "Inpatient cost",
+              "Private",
+              "Accommodation charges"
+            ].map((tab) => (
+              <Button
+                key={tab}
+                variant={activeServiceTab === tab ? "default" : "outline"}
+                size="sm"
+                className={`text-xs px-2 py-1 h-6 ${
+                  activeServiceTab === tab
+                    ? "bg-blue-600 text-white"
+                    : "bg-white text-gray-700 border-gray-300"
+                }`}
+                onClick={() => setActiveServiceTab(tab)}
+              >
+                {tab}
+              </Button>
+            ))}
+          </div>
+        </div>
+
+        {/* Search and Add Section */}
+        <div className="p-4 border-b border-gray-200">
+          <div className="space-y-3">
+            {activeServiceTab === "Pharmacy" ? (
+              <div className="grid grid-cols-4 gap-2 text-xs font-medium text-gray-700">
+                <div>Medicine Name</div>
+                <div>Administration Time</div>
+                <div>Quantity</div>
+                <div>Instructions</div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-4 gap-2 text-xs font-medium text-gray-700">
+                <div>Service Name</div>
+                <div>External Requisition</div>
+                <div>Amount(Rs.)</div>
+                <div>Description</div>
+              </div>
+            )}
+
+            {activeServiceTab === "Pharmacy" ? (
+              <div className="grid grid-cols-4 gap-2">
+                <Input
+                  placeholder="Search Medicine"
+                  className="text-xs h-8"
+                  value={serviceSearchTerm}
+                  onChange={(e) => setServiceSearchTerm(e.target.value)}
+                />
+                <select className="text-xs h-8 border border-gray-300 rounded px-2">
+                  <option value="">Select Time</option>
+                  <option value="MORNING">MORNING</option>
+                  <option value="AFTERNOON">AFTERNOON</option>
+                  <option value="EVENING">EVENING</option>
+                  <option value="NIGHT">NIGHT</option>
+                  <option value="BREAKFAST_TIME">BREAKFAST TIME</option>
+                  <option value="LUNCH_TIME">LUNCH TIME</option>
+                  <option value="DINNER_TIME">DINNER TIME</option>
+                  <option value="HS">HS</option>
+                  <option value="SOS">SOS</option>
+                </select>
+                <Input
+                  placeholder="Quantity"
+                  className="text-xs h-8"
+                  type="number"
+                  min="1"
+                />
+                <Input
+                  placeholder="Instructions"
+                  className="text-xs h-8"
+                />
+              </div>
+            ) : (
+              <div className="grid grid-cols-4 gap-2">
+                <Input
+                  placeholder="Type To Search"
+                  className="text-xs h-8"
+                  value={serviceSearchTerm}
+                  onChange={(e) => setServiceSearchTerm(e.target.value)}
+                />
+                <select className="text-xs h-8 border border-gray-300 rounded px-2">
+                  <option>None</option>
+                  <option>Required</option>
+                  <option>Optional</option>
+                </select>
+                <Input
+                  placeholder="Amount"
+                  className="text-xs h-8"
+                />
+                <Input
+                  placeholder="Description"
+                  className="text-xs h-8"
+                />
+              </div>
+            )}
+
+            <Button size="sm" className="bg-blue-600 text-white text-xs px-4 py-1 h-7">
+              {activeServiceTab === "Laboratory services" ? "Add More Labs" :
+               activeServiceTab === "Radiology" ? "Add More Radiologies" :
+               activeServiceTab === "Pharmacy" ? "Add More Medicines" :
+               "Add More Services"}
+            </Button>
+
+            {/* Available Services Dropdown */}
+            {serviceSearchTerm && (
+              <div className="mt-2 border border-gray-300 rounded max-h-40 overflow-y-auto bg-white">
+                {activeServiceTab === "Laboratory services" && (
+                  <>
+                    {filteredLabServices.map((service) => (
+                      <div
+                        key={service.id}
+                        className="p-2 hover:bg-gray-100 cursor-pointer border-b border-gray-100 last:border-b-0"
+                        onClick={() => {
+                          addLabServiceToInvoice(service);
+                          setServiceSearchTerm("");
+                        }}
+                      >
+                        <div className="flex justify-between items-center">
+                          <div>
+                            <div className="font-medium text-sm">{service.name}</div>
+                            <div className="text-xs text-gray-500">Code: {service.code}</div>
+                          </div>
+                          <div className="text-sm font-medium">₹{service.amount}</div>
+                        </div>
+                      </div>
+                    ))}
+                    {filteredLabServices.length === 0 && (
+                      <div className="p-2 text-sm text-gray-500 text-center">
+                        No lab services found
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {activeServiceTab === "Radiology" && (
+                  <>
+                    {filteredRadiologyServices.map((service) => (
+                      <div
+                        key={service.id}
+                        className="p-2 hover:bg-gray-100 cursor-pointer border-b border-gray-100 last:border-b-0"
+                        onClick={() => {
+                          addRadiologyServiceToInvoice(service);
+                          setServiceSearchTerm("");
+                        }}
+                      >
+                        <div className="flex justify-between items-center">
+                          <div>
+                            <div className="font-medium text-sm">{service.name}</div>
+                            <div className="text-xs text-gray-500">Code: {service.code}</div>
+                            <div className="text-xs text-blue-600">External Req: {service.externalRequisition}</div>
+                          </div>
+                          <div className="text-sm font-medium">₹{service.amount}</div>
+                        </div>
+                      </div>
+                    ))}
+                    {filteredRadiologyServices.length === 0 && (
+                      <div className="p-2 text-sm text-gray-500 text-center">
+                        No radiology services found
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {activeServiceTab === "Pharmacy" && (
+                  <>
+                    {filteredPharmacyServices.map((service) => (
+                      <div
+                        key={service.id}
+                        className="p-2 hover:bg-gray-100 cursor-pointer border-b border-gray-100 last:border-b-0"
+                        onClick={() => {
+                          const now = new Date();
+                          setSelectedMedications(prev => [...prev, {
+                            ...service,
+                            id: Date.now() + Math.random(), // Unique ID for each selection
+                            date: now.toISOString().split('T')[0], // YYYY-MM-DD format for date input
+                            time: now.toTimeString().split(' ')[0].substring(0, 5), // HH:MM format for time input
+                            quantity: 1,
+                            instructions: '',
+                            administrationTime: '',
+                            externalRequisition: '-'
+                          }]);
+                          setServiceSearchTerm("");
+                        }}
+                      >
+                        <div className="flex justify-between items-center">
+                          <div className="flex-1">
+                            <div className="font-medium text-sm">{service.name}</div>
+                            <div className="text-xs text-gray-500">Code: {service.code} | Pack: {service.pack}</div>
+                            <div className="text-xs text-blue-600">Batch: {service.batchNo} | Stock: {service.stock} | Exp: {service.expiryDate}</div>
+                            <div className="text-xs text-green-600">MRP: ₹{service.mrp}</div>
+                          </div>
+                          <div className="text-sm font-medium">₹{service.amount}</div>
+                        </div>
+                      </div>
+                    ))}
+                    {filteredPharmacyServices.length === 0 && (
+                      <div className="p-2 text-sm text-gray-500 text-center">
+                        No pharmacy services found
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* Selected Medications Display for Pharmacy Tab */}
+            {activeServiceTab === "Pharmacy" && selectedMedications.length > 0 && (
+              <div className="mt-4 border border-gray-300 rounded">
+                <div className="bg-gray-100 p-2 text-xs font-medium text-gray-700 border-b">
+                  <div className="grid grid-cols-6 gap-2">
+                    <div>Date</div>
+                    <div>Service Name</div>
+                    <div>External Requisition</div>
+                    <div>Amount</div>
+                    <div>Action</div>
+                    <div>Print</div>
+                  </div>
+                </div>
+                <div className="max-h-40 overflow-y-auto">
+                  {selectedMedications.map((medication, index) => (
+                    <div key={medication.id} className={`grid grid-cols-6 gap-2 p-2 text-xs border-b last:border-b-0 ${
+                      index % 2 === 0 ? 'bg-green-100' : 'bg-red-100'
+                    }`}>
+                      <div className="flex flex-col gap-1">
+                        <Input
+                          type="date"
+                          value={medication.date}
+                          onChange={(e) => setSelectedMedications(prev =>
+                            prev.map(m => m.id === medication.id ? {...m, date: e.target.value} : m)
+                          )}
+                          className="h-6 text-xs"
+                        />
+                        <Input
+                          type="time"
+                          value={medication.time}
+                          onChange={(e) => setSelectedMedications(prev =>
+                            prev.map(m => m.id === medication.id ? {...m, time: e.target.value} : m)
+                          )}
+                          className="h-6 text-xs"
+                        />
+                      </div>
+                      <div>
+                        <Input
+                          type="text"
+                          value={medication.name}
+                          onChange={(e) => setSelectedMedications(prev =>
+                            prev.map(m => m.id === medication.id ? {...m, name: e.target.value} : m)
+                          )}
+                          className="h-6 text-xs"
+                        />
+                      </div>
+                      <div>
+                        <Input
+                          type="text"
+                          value={medication.externalRequisition || '-'}
+                          onChange={(e) => setSelectedMedications(prev =>
+                            prev.map(m => m.id === medication.id ? {...m, externalRequisition: e.target.value} : m)
+                          )}
+                          className="h-6 text-xs"
+                        />
+                      </div>
+                      <div>
+                        <Input
+                          type="number"
+                          value={medication.amount}
+                          onChange={(e) => setSelectedMedications(prev =>
+                            prev.map(m => m.id === medication.id ? {...m, amount: e.target.value} : m)
+                          )}
+                          className="h-6 text-xs"
+                        />
+                      </div>
+                      <div>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-5 w-5 p-0"
+                          onClick={() => setSelectedMedications(prev => prev.filter(m => m.id !== medication.id))}
+                        >
+                          <span className="text-xs">🗑️</span>
+                        </Button>
+                      </div>
+                      <div>
+                        <Button size="sm" variant="outline" className="h-5 w-5 p-0">
+                          <span className="text-xs">🖨️</span>
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="bg-gray-50 p-2 text-xs font-medium border-t">
+                  <div className="flex justify-between mb-2">
+                    <span>Total Amount</span>
+                    <span>Rs. {selectedMedications.reduce((sum, med) => sum + parseFloat(med.amount || 0), 0)}</span>
+                  </div>
+                  <Button
+                    size="sm"
+                    className="w-full bg-purple-600 text-white text-xs"
+                    onClick={() => {
+                      // Use actual bill ID if exists, otherwise we'll create a new bill in the function
+                      const billId = billData?.id;
+                      saveMedicationsToBill(billId || visitId || "temp-bill-id");
+                    }}
+                  >
+                    Save Medications to Bill
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+
+
+
+          </>
+        )}
+      </div>
+
+      {/* Main Content Area */}
+      <div className="flex-1 overflow-y-auto">
+        <div className="p-4 bg-gray-50 min-h-full font-sans">
+          <div className="max-w-7xl mx-auto bg-white shadow-lg p-6 printable-area">
+            {/* Header - Updated to match the design */}
+        <div className="text-center mb-6">
+          <div className="border-2 border-black p-2 mb-2">
+            <h1 className="text-2xl font-bold tracking-wider print:text-xl">FINAL BILL</h1>
+          </div>
+          <div className="border-2 border-black p-2 mb-2">
+            <h2 className="text-xl font-bold tracking-wider print:text-xl">ESIC</h2>
+          </div>
+          <div className="border-2 border-black p-2">
+            <h3 className="text-lg font-semibold tracking-wide print:text-xl print:font-bold">
+              CLAIM ID - 
+              <span className="screen-only ml-2">
+                <Input 
+                  type="text" 
+                  className="inline-block w-48 h-8 text-center font-bold" 
+                  value={patientData.claimId} 
+                  onChange={(e) => handlePatientDataChange('claimId', e.target.value)}
+                />
+              </span>
+              <span className="print-only ml-2 font-bold">{patientData.claimId || ''}</span>
+            </h3>
+          </div>
+        </div>
+
+        {/* Patient Info */}
+        <div className="flex justify-end text-sm -mb-4">
+            <div className="flex items-center space-x-2">
+                <span className="font-semibold">DATE:</span>
+                <span className="screen-only">
+                    <Input type="date" className="h-7 w-40" value={patientData.billDate} onChange={(e) => handlePatientDataChange('billDate', e.target.value)} />
+                </span>
+                <span className="print-only">{patientData.billDate ? format(new Date(patientData.billDate), 'dd/MM/yyyy') : ''}</span>
+            </div>
+        </div>
+        <div className="grid grid-cols-2 gap-x-12 text-sm mt-4 pb-4 border-0 patient-info-grid">
+            <div className="space-y-2">
+                 <div className="flex items-center">
+                   <span className="font-semibold w-40">BILL NO:</span>
+                   <span className="screen-only">
+                     <Input className="h-7 w-full" value={patientData.billNo} onChange={(e) => handlePatientDataChange('billNo', e.target.value)} />
+                   </span>
+                   <span className="print-only">{patientData.billNo || ''}</span>
+                 </div>
+                 <div className="flex items-center">
+                   <span className="font-semibold w-40">REGISTRATION NO:</span>
+                   <span className="screen-only">
+                     <Input className="h-7 w-full" value={patientData.registrationNo} onChange={(e) => handlePatientDataChange('registrationNo', e.target.value)} />
+                   </span>
+                   <span className="print-only">{patientData.registrationNo || ''}</span>
+                 </div>
+                 <div className="flex items-center">
+                   <span className="font-semibold w-40">NAME OF PATIENT:</span>
+                   <span className="screen-only">
+                     <Input className="h-7 w-full" value={patientData.name} onChange={(e) => handlePatientDataChange('name', e.target.value)} />
+                   </span>
+                   <span className="print-only">{patientData.name || ''}</span>
+                 </div>
+                 <div className="flex items-center">
+                   <span className="font-semibold w-40">AGE:</span>
+                   <span className="screen-only">
+                     <Input className="h-7 w-full" value={patientData.age} onChange={(e) => handlePatientDataChange('age', e.target.value)} />
+                   </span>
+                   <span className="print-only">{patientData.age || ''}</span>
+                 </div>
+                 <div className="flex items-center">
+                   <span className="font-semibold w-40">SEX:</span>
+                   <span className="screen-only">
+                     <Input className="h-7 w-full" value={patientData.sex} onChange={(e) => handlePatientDataChange('sex', e.target.value)} />
+                   </span>
+                   <span className="print-only">{patientData.sex || ''}</span>
+                 </div>
+                 <div className="flex items-center">
+                   <span className="font-semibold w-40">CONTACT NO.:</span>
+                   <span className="screen-only">
+                     <Input className="h-7 w-full" value={patientData.contactNo} onChange={(e) => handlePatientDataChange('contactNo', e.target.value)} />
+                   </span>
+                   <span className="print-only">{patientData.contactNo || ''}</span>
+                 </div>
+                 <div className="flex items-center">
+                   <span className="font-semibold w-40">ADDRESS:</span>
+                   <span className="screen-only">
+                     <Input className="h-7 w-full" value={patientData.address} onChange={(e) => handlePatientDataChange('address', e.target.value)} />
+                   </span>
+                   <span className="print-only">{patientData.address || ''}</span>
+                 </div>
+                 <div className="flex items-center">
+                   <span className="font-semibold w-40">NAME OF ESIC BENEFICIARY:</span>
+                   <span className="screen-only">
+                     <Input className="h-7 w-full" value={patientData.beneficiaryName} onChange={(e) => handlePatientDataChange('beneficiaryName', e.target.value)} />
+                   </span>
+                   <span className="print-only">{patientData.beneficiaryName || ''}</span>
+                 </div>
+                 <div className="flex items-center">
+                   <span className="font-semibold w-40">RELATION WITH IP:</span>
+                   <span className="screen-only">
+                     <Input className="h-7 w-full" value={patientData.relation} onChange={(e) => handlePatientDataChange('relation', e.target.value)} />
+                   </span>
+                   <span className="print-only">{patientData.relation || ''}</span>
+                 </div>
+            </div>
+              <div className="space-y-2">
+                <div className="flex items-center">
+                    <span className="font-semibold w-40">DATE OF ADMISSION:</span>
+                    <span className="screen-only">
+                      <Input type="date" className="h-7 w-full" value={patientData.dateOfAdmission} onChange={(e) => handlePatientDataChange('dateOfAdmission', e.target.value)} />
+                    </span>
+                    <span className="print-only">{patientData.dateOfAdmission ? format(new Date(patientData.dateOfAdmission), 'dd/MM/yyyy') : ''}</span>
+                </div>
+                <div className="flex items-center">
+                    <span className="font-semibold w-40">DATE OF DISCHARGE:</span>
+                    <span className="screen-only">
+                      <Input type="date" className="h-7 w-full" value={patientData.dateOfDischarge} onChange={(e) => handlePatientDataChange('dateOfDischarge', e.target.value)} />
+                    </span>
+                    <span className="print-only">{patientData.dateOfDischarge ? format(new Date(patientData.dateOfDischarge), 'dd/MM/yyyy')  : ''}</span>
+                </div>
+                 <div className="flex items-center">
+                   <span className="font-semibold w-40">IP NO.:</span>
+                   <span className="screen-only">
+                     <Input className="h-7 w-full" value={patientData.rank} onChange={(e) => handlePatientDataChange('rank', e.target.value)} />
+                   </span>
+                   <span className="print-only">{patientData.rank || ''}</span>
+                 </div>
+                 <div className="flex items-center">
+                   <span className="font-semibold w-40">SERVICE NO:</span>
+                   <span className="screen-only">
+                     <Input className="h-7 w-full" value={patientData.serviceNo} onChange={(e) => handlePatientDataChange('serviceNo', e.target.value)} />
+                   </span>
+                   <span className="print-only">{patientData.serviceNo || ''}</span>
+                 </div>
+                 <div className="flex items-center">
+                   <span className="font-semibold w-40">CATEGORY:</span>
+                   <span className="screen-only">
+                     <Input className="h-7 w-full bg-green-200" value={patientData.category} onChange={(e) => handlePatientDataChange('category', e.target.value)} />
+                   </span>
+                   <span className="print-only">{patientData.category || ''}</span>
+                 </div>
+                 <div>
+                    <span className="font-semibold block mb-1">DIAGNOSIS:</span>
+                    <span className="screen-only block">
+                      <Textarea className="mt-1" value={patientData.diagnosis} onChange={(e) => handlePatientDataChange('diagnosis', e.target.value)} />
+                    </span>
+                    <span className="print-only block mt-1">{patientData.diagnosis || ''}</span>
+                  </div>
+              </div>
+            </div>
+
+        {/* Invoice Table */}
+        <div className="mt-4">
+            <table className="w-full border-collapse border border-gray-400 text-sm">
+                <thead className="bg-gray-200 text-black">
+                    <tr>
+                        <th className="border border-gray-400 p-2 w-12">SR.NO</th>
+                        <th className="border border-gray-400 p-2">ITEM</th>
+                        <th className="border border-gray-400 p-2 w-28">CGHS NABH CODE No.</th>
+                        <th className="border border-gray-400 p-2 w-40">CGHS NABH RATE</th>
+                        <th className="border border-gray-400 p-2 w-16">QTY</th>
+                        <th className="border border-gray-400 p-2 w-28">AMOUNT</th>
+                        <th className="border border-gray-400 p-2 w-32 no-print">ACTIONS</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    {invoiceItems.map((item, mainIndex) => {
+                        if (item.type === 'section') {
+                          const isVisible = item.isOpen;
+                          if (!isVisible) return null;
+                          return (
+                            <tr className="bg-gray-100 font-bold" key={item.id}>
+                              <td colSpan={6} className="border border-gray-400 p-2">
+                                <p>{getSectionTitle(item)}</p>
+                                <div className="w-1/2 mt-1 screen-only">
+                                  <DateRangePicker
+                                    date={item.dates}
+                                    onDateChange={(newDate) => handleItemChange(item.id, null, 'dates', newDate)}
+                                  />
+                                </div>
+                                <span className="print-only text-sm">
+                                  {item.dates?.from && format(item.dates.from, 'dd/MM/yyyy')} to {item.dates?.to && format(item.dates.to, 'dd/MM/yyyy')}
+                                </span>
+                              </td>
+                              <td className="border border-gray-400 p-2 text-center no-print">
+                                <Button variant="ghost" size="sm" onClick={() => toggleSection(item.id)}>{item.isOpen ? 'v' : '>'}</Button>
+                              </td>
+                            </tr>
+                          );
+                        }
+                        // For main items
+                        const mainRows: JSX.Element[] = [];
+                        mainRows.push(
+                          <tr className="bg-gray-100 font-semibold" key={item.id + '-main'}>
+                            <td className="border border-gray-400 p-2">{item.srNo}</td>
+                            <td className="border border-gray-400 p-2" colSpan={5}>
+                              <span className="screen-only">
+                                <Input type="text" className="h-7 font-semibold" value={item.description} onChange={(e) => handleItemChange(item.id, null, 'description', e.target.value)} />
+                                {item.description.startsWith('Surgical Treatment') && (
+                                  <div className="mt-2">
+                                    <DateRangePicker
+                                      date={item.dates}
+                                      onDateChange={(newDate) => handleItemChange(item.id, null, 'dates', newDate)}
+                                    />
+                                  </div>
+                                )}
+                              </span>
+                              <span className="print-only font-semibold">{item.description}</span>
+                            </td>
+                            <td className="border border-gray-400 p-2 text-center no-print">
+                              <Button size="sm" className="bg-green-500 hover:bg-green-600 h-7" onClick={() => handleAddItem(item.id)}>
+                                <Plus className="h-4 w-4 mr-1"/> Add
+                              </Button>
+                            </td>
+                          </tr>
+                        );
+                        item.subItems.forEach((subItem) => {
+                          let finalAmount;
+                          if(subItem.type === 'surgical') {
+                            const surgicalItem = subItem as SurgicalSubItem;
+                            const primaryAdjOption = cghsAdjustmentOptions.find(o => o.value === surgicalItem.primaryAdjustment) || cghsAdjustmentOptions[0];
+                            const secondaryAdjOption = cghsAdjustmentOptions.find(o => o.value === surgicalItem.secondaryAdjustment) || cghsAdjustmentOptions[0];
+                            const primaryAdjAmount = (surgicalItem.baseAmount * primaryAdjOption.percentage) / 100;
+                            const amountAfterPrimary = surgicalItem.baseAmount + primaryAdjAmount;
+                            const secondaryAdjAmount = (amountAfterPrimary * secondaryAdjOption.percentage) / 100;
+                            finalAmount = amountAfterPrimary + secondaryAdjAmount;
+                          } else {
+                            const standardItem = subItem as StandardSubItem;
+                            finalAmount = standardItem.amount || 0;
+                          }
+                          mainRows.push(
+                            <tr key={subItem.id}>
+                              <td className="border border-gray-400 p-2 text-center">{subItem.srNo}</td>
+                              <td className="border border-gray-400 p-2">
+                                <div className="screen-only">
+                                  {subItem.type === 'surgical' ? (
+                                    <>
+                                      <Select
+                                        value={subItem.surgeryId || ''}
+                                        onValueChange={(value) => {
+                                          const selected = cghsSurgeries.find(s => s.id === value);
+                                          if (selected) {
+                                            handleSurgicalItemChange(item.id, subItem.id, 'surgeryId', selected.id);
+                                            handleSurgicalItemChange(item.id, subItem.id, 'description', selected.name);
+                                            handleSurgicalItemChange(item.id, subItem.id, 'baseAmount', selected.NABH_NABL_Rate);
+                                            handleSurgicalItemChange(item.id, subItem.id, 'amount', selected.NABH_NABL_Rate);
+                                            handleSurgicalItemChange(item.id, subItem.id, 'code', selected.code);
+                                          }
+                                        }}
+                                      >
+                                        <SelectTrigger className="h-8">
+                                          <SelectValue placeholder="Select Surgery" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          {cghsSurgeries.map(s => (
+                                            <SelectItem key={s.id} value={s.id}>
+                                              {s.name}
+                                            </SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+                                      {subItem.code && (
+                                        <div className="mt-1 text-xs text-gray-700">
+                                          Cost: ₹{cghsSurgeries.find(s => s.code === subItem.code)?.NABH_NABL_Rate ?? ''}
+                                        </div>
+                                      )}
+                                    </>
+                                  ) : subItem.description === 'Select Doctor' ? (
+                                    <Select onValueChange={(value) => handleItemChange(item.id, subItem.id, 'description', value)}>
+                                      <SelectTrigger className="h-8">
+                                        <SelectValue placeholder="Select Doctor" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {surgeons.map(d => <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>)}
+                                      </SelectContent>
+                                    </Select>
+                                  ) : ['Accommodation Charges', 'Pathology Charges', 'Medicine Charges'].includes(item.description) ? (
+                                    <p className="flex items-center h-8 text-sm">{subItem.description}</p>
+                                  ) : (
+                                    <Input type="text" className="h-8" value={subItem.description} onChange={(e) => handleItemChange(item.id, subItem.id, 'description', e.target.value)} />
+                                  )}
+                                  {subItem.type === 'surgical' && <SurgicalPricingAdjuster item={subItem} onUpdate={(field, value) => handleSurgicalItemChange(item.id, subItem.id, field, value)} />}
+                                </div>
+                                <div className="print-only">
+                                  {subItem.description}
+                                </div>
+                                {subItem.dates && (
+                                  <>
+                                    <div className="screen-only mt-1">
+                                      <DateRangePicker
+                                        date={subItem.dates}
+                                        onDateChange={(newDate) => handleItemChange(item.id, subItem.id, 'dates', newDate)}
+                                      />
+                                    </div>
+                                    <p className="print-only text-xs mt-1">
+                                      Dt.({subItem.dates?.from ? format(subItem.dates.from, 'dd/MM/yyyy') : ''} TO {subItem.dates?.to ? format(subItem.dates.to, 'dd/MM/yyyy') : ''})
+                                    </p>
+                                  </>
+                                )}
+                              </td>
+                              <td className="border border-gray-400 p-2">
+                                <span className="screen-only">
+                                  <Input type="text" className="h-8 w-full text-center" value={subItem.code || ''} onChange={(e) => handleItemChange(item.id, subItem.id, 'code', e.target.value)} />
+                                </span>
+                                <span className="print-only text-center block">{subItem.code || ''}</span>
+                              </td>
+                              <td className="border border-gray-400 p-2">
+                                {subItem.type === 'surgical' ? (
+                                  <>
+                                    <div className="text-xs space-y-1 p-1 border rounded bg-gray-50 screen-only">
+                                      <div className="flex justify-between"><span>ward10</span><span>-{((subItem as SurgicalSubItem).baseAmount * 0.1).toFixed(0)}</span></div>
+                                    </div>
+                                    <span className="print-only">-{((subItem as SurgicalSubItem).baseAmount * 0.1).toFixed(0)}</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <span className="screen-only">
+                                      <Input
+                                        type="number"
+                                        value={(subItem as StandardSubItem).rate}
+                                        onChange={(e) => handleItemChange(item.id, subItem.id, 'rate', parseFloat(e.target.value) || 0)}
+                                        className="w-24 h-8"
+                                      />
+                                    </span>
+                                    <span className="print-only text-center block">{(subItem as StandardSubItem).rate}</span>
+                                  </>
+                                )}
+                              </td>
+                              <td className="border border-gray-400 p-2">
+                                <span className="screen-only">
+                                  <Input
+                                    type="number"
+                                    value={subItem.qty}
+                                    onChange={(e) => handleItemChange(item.id, subItem.id, 'qty', parseInt(e.target.value, 10) || 0)}
+                                    className="w-16 h-8"
+                                  />
+                                </span>
+                                <span className="print-only text-center block">{subItem.qty}</span>
+                              </td>
+                              <td className="border border-gray-400 p-2 text-right font-semibold">
+                                {subItem.type === 'surgical'
+    ? ((subItem as SurgicalSubItem).baseAmount || 0).toFixed(2)
+    : ((subItem as StandardSubItem).amount || 0).toFixed(2)
+  }
+                              </td>
+                              <td className="border border-gray-400 p-1 no-print">
+                                <div className="flex items-center justify-center space-x-1">
+                                  <Button variant="outline" size="icon" className="h-7 w-7 bg-blue-100" onClick={() => moveItem(item.id, subItem.id, -1)}><ChevronUp className="h-4 w-4"/></Button>
+                                  <Button variant="outline" size="icon" className="h-7 w-7 bg-blue-100" onClick={() => moveItem(item.id, subItem.id, 1)}><ChevronDown className="h-4 w-4"/></Button>
+                                  <Button variant="destructive" size="icon" className="h-7 w-7" onClick={() => handleRemoveItem(item.id, subItem.id)}><Trash2 className="h-4 w-4"/></Button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        });
+                        if (item.description && item.description === 'Medicine Charges') {
+                          mainRows.push(
+                            <tr key={item.id + '-medicine-note'}>
+                              <td className="border-r border-gray-400 p-2 text-right font-semibold">Note:</td>
+                              <td className="border-l border-gray-400 p-2" colSpan={6}>
+                                <div className="screen-only">
+                                  <Textarea 
+                                    value={medicineNote} 
+                                    onChange={(e) => setMedicineNote(e.target.value)}
+                                    placeholder="Enter notes for medicines..."
+                                  />
+                                </div>
+                                <div className="print-only whitespace-pre-wrap">{medicineNote}</div>
+                              </td>
+                            </tr>
+                          );
+                        }
+                        if (item.description && item.description === 'Pathology Charges') {
+                          mainRows.push(
+                            <tr key={item.id + '-pathology-note'}>
+                              <td className="border-r border-gray-400 p-2 text-right font-semibold">Note:</td>
+                              <td className="border-l border-gray-400 p-2" colSpan={6}>
+                                <div className="screen-only">
+                                  <Textarea
+                                    value={pathologyNote}
+                                    onChange={(e) => setPathologyNote(e.target.value)}
+                                    placeholder="Enter notes for pathology..."
+                                  />
+                                </div>
+                                <div className="print-only whitespace-pre-wrap">{pathologyNote}</div>
+                              </td>
+                            </tr>
+                          );
+                        }
+                        return mainRows;
+                    })}
+                    </tbody>
+                    <tfoot>
+                        <tr className="bg-black text-white font-bold text-lg">
+                            <td className="p-3" colSpan={5}>TOTAL BILL AMOUNT</td>
+                            <td className="p-3 text-right" colSpan={2}>{totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                            </tr>
+                    </tfoot>
+                    </table>
+        </div>
+
+        {/* Amount in Words */}
+        {/* <div className="mt-4 p-3 bg-gray-100 font-semibold">
+          <span>Amount in Words: </span>
+          <span>{convertToWords(Math.round(totalAmount))}</span>
+        </div> */}
+
+        {/* Footer */}
+        <div className="mt-12 flex justify-between text-sm w-full footer-print-space">
+          <span className="font-bold">Bill Manager</span>
+          <span className="font-bold">Cashier</span>
+          <span className="font-bold">Cashier Med.Supdt</span>
+          <span className="font-bold">Authorised Signatory</span>
+        </div>
+
+        <div className="mt-8 flex justify-end space-x-4 no-print">
+          <Button onClick={handleSaveBill} disabled={isSaving}>
+            {isSaving ? 'Saving...' : 'Save Bill'}
+          </Button>
+          <Button variant="outline" onClick={() => window.print()}>Print</Button>
+        </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default FinalBill;
