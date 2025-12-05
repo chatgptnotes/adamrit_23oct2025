@@ -1,0 +1,46 @@
+
+export const labsOptions = [
+  'Complete Blood Count (CBC)',
+  'Basic Metabolic Panel (BMP)',
+  'Comprehensive Metabolic Panel (CMP)',
+  'Liver Function Tests (LFTs)',
+  'Kidney Function Tests',
+  'Lipid Panel',
+  'Thyroid Function Tests',
+  'Cardiac Enzymes',
+  'Coagulation Studies (PT/INR, PTT)',
+  'Inflammatory Markers (ESR, CRP)',
+  'Blood Cultures',
+  'Urine Analysis',
+  'Stool Studies',
+  'Arterial Blood Gas (ABG)',
+  'Tumor Markers',
+  'Hormone Levels',
+  'Drug Levels',
+  'Genetic Testing',
+  'HbA1c',
+  'Vitamin Levels (B12, D, etc.)'
+];
+
+export const radiologyOptions = [
+  'Chest X-ray',
+  'Abdominal X-ray',
+  'CT Scan - Head',
+  'CT Scan - Chest',
+  'CT Scan - Abdomen/Pelvis',
+  'MRI - Brain',
+  'MRI - Spine',
+  'MRI - Joint',
+  'Ultrasound - Abdominal',
+  'Ultrasound - Pelvic',
+  'Ultrasound - Cardiac (Echo)',
+  'Mammography',
+  'Bone Scan',
+  'PET Scan',
+  'Angiography',
+  'Fluoroscopy',
+  'DEXA Scan',
+  'Nuclear Medicine',
+  'Interventional Radiology',
+  'Barium Studies'
+];

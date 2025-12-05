@@ -1,0 +1,66 @@
+====================================
+PHYSIOTHERAPY BILL - SAVE TO VISITS
+SIMPLE CHECKLIST
+====================================
+
+□ 1. Open the physiotherapy bill page
+     URL: http://localhost:5173/physiotherapy-bill/IH25J03001
+
+□ 2. Open browser console
+     Press: F12
+     Click: Console tab
+
+□ 3. Fill in the bill
+     - hgfghc (code 8987, rate 40, qty 30)
+     - tytfyf (code 7778, rate 80, qty 40)
+     Total should be: 4400.00
+
+□ 4. Click "Save Bill" button
+     - Blue button at top right
+
+□ 5. Check console for success
+     Should see: "Bill summary saved to visits table successfully"
+     Should see: "Items saved successfully"
+     Should see: Green toast "Bill saved successfully!"
+
+□ 6. Check Supabase
+     - Go to: https://supabase.com/dashboard
+     - Table Editor → visits
+     - Find your visit (visit_id = IH25J03001)
+     - Check physiotherapy_bill_number column
+     - Should have: "OH2503001"
+
+□ 7. Refresh the page
+     Press F5
+
+□ 8. Verify data loaded
+     - Bill number: OH2503001
+     - Items: hgfghc, tytfyf
+     - Total: 4400.00
+     - All data should be there!
+
+====================================
+IF IT DOESN'T WORK
+====================================
+
+Check console for errors:
+
+ERROR: "column does not exist"
+→ Run: RUN_THIS_IN_SUPABASE.sql
+
+ERROR: "row-level security policy"
+→ Fix RLS permissions in Supabase
+
+ERROR: Nothing in console
+→ Check if button click is registered
+→ Check network tab for API calls
+
+====================================
+RESULT
+====================================
+
+✅ Data saves
+✅ Data persists after refresh
+✅ All items show correctly
+
+DONE! Feature complete.
