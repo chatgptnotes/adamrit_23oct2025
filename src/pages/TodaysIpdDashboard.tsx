@@ -2229,9 +2229,9 @@ const TodaysIpdDashboard = () => {
                 <TableHead className="font-semibold">ESIC UHID</TableHead>
                 <TableHead className="font-semibold">Bill</TableHead>
                 <TableHead className="font-semibold">Admission Notes</TableHead>
+                <TableHead className="font-semibold">Corporate</TableHead>
                 <TableHead className="font-semibold">Billing Executive</TableHead>
                 <TableHead className="font-semibold">Billing Status</TableHead>
-                <TableHead className="font-semibold">Corporate</TableHead>
                 <TableHead className="font-semibold">File Status</TableHead>
                 <TableHead className="font-semibold">Photos</TableHead>
                 <TableHead className="font-semibold">Sign</TableHead>
@@ -2441,13 +2441,13 @@ const TodaysIpdDashboard = () => {
                     </Button>
                   </TableCell>
                   <TableCell>
+                    {visit.patients?.corporate || '—'}
+                  </TableCell>
+                  <TableCell>
                     <BillingExecutiveInput visit={visit} isAdmin={isAdmin} />
                   </TableCell>
                   <TableCell>
                     <BillingStatusDropdown visit={visit} />
-                  </TableCell>
-                  <TableCell>
-                    {visit.patients?.corporate || '—'}
                   </TableCell>
                   <TableCell>
                     {isAdmin ? <FileStatusToggle visit={visit} /> : (

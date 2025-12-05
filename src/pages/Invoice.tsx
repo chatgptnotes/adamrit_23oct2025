@@ -1620,38 +1620,40 @@ const Invoice = () => {
                 {convertAmountToWords(visibleTotal)}
               </div>
             </div>
-            <div className="w-1/2">
-              <table className="w-full text-sm">
-                <tbody>
-                  <tr>
-                    <td className="border border-gray-400 p-2 bg-gray-100 font-medium">Amount Paid</td>
-                    <td className="border border-gray-400 p-2 text-right">Rs {invoiceData.amountPaid.toLocaleString()}.00</td>
-                  </tr>
-                  <tr>
-                    <td className="border border-gray-400 p-2 bg-gray-100 font-medium">Discount</td>
-                    <td className="border border-gray-400 p-2 text-right">Rs {currentDiscount.toLocaleString()}.00</td>
-                  </tr>
-                  <tr>
-                    <td className="border border-gray-400 p-2 bg-gray-100 font-medium">Balance</td>
-                    <td className="border border-gray-400 p-2 text-right">Rs {currentBalance >= 0 ? currentBalance.toLocaleString() : `(${Math.abs(currentBalance).toLocaleString()})`}.00</td>
-                  </tr>
-                </tbody>
-              </table>
+            {chargeFilter === 'all' && (
+              <div className="w-1/2">
+                <table className="w-full text-sm">
+                  <tbody>
+                    <tr>
+                      <td className="border border-gray-400 p-2 bg-gray-100 font-medium">Amount Paid</td>
+                      <td className="border border-gray-400 p-2 text-right">Rs {invoiceData.amountPaid.toLocaleString()}.00</td>
+                    </tr>
+                    <tr>
+                      <td className="border border-gray-400 p-2 bg-gray-100 font-medium">Discount</td>
+                      <td className="border border-gray-400 p-2 text-right">Rs {currentDiscount.toLocaleString()}.00</td>
+                    </tr>
+                    <tr>
+                      <td className="border border-gray-400 p-2 bg-gray-100 font-medium">Balance</td>
+                      <td className="border border-gray-400 p-2 text-right">Rs {currentBalance >= 0 ? currentBalance.toLocaleString() : `(${Math.abs(currentBalance).toLocaleString()})`}.00</td>
+                    </tr>
+                  </tbody>
+                </table>
 
-              {/* Remove Discount Button */}
-              <div className="mt-2">
-                <button
-                  onClick={() => setDiscountRemoved(!discountRemoved)}
-                  className={`px-3 py-1 text-white rounded text-xs transition-colors ${
-                    discountRemoved
-                      ? 'bg-green-500 hover:bg-green-600'
-                      : 'bg-red-500 hover:bg-red-600'
-                  }`}
-                >
-                  {discountRemoved ? 'Add Discount' : 'Remove Discount'}
-                </button>
+                {/* Remove Discount Button */}
+                <div className="mt-2">
+                  <button
+                    onClick={() => setDiscountRemoved(!discountRemoved)}
+                    className={`px-3 py-1 text-white rounded text-xs transition-colors ${
+                      discountRemoved
+                        ? 'bg-green-500 hover:bg-green-600'
+                        : 'bg-red-500 hover:bg-red-600'
+                    }`}
+                  >
+                    {discountRemoved ? 'Add Discount' : 'Remove Discount'}
+                  </button>
+                </div>
               </div>
-            </div>
+            )}
           </div>
 
           {/* Footer Information */}

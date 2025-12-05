@@ -22223,25 +22223,6 @@ Dr. Murali B K
                   </div>
                 )}
 
-                {/* Reason Of Discharge */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Reason Of Discharge <span className="text-red-600">*</span>
-                  </label>
-                  <select
-                    value={finalPaymentReason}
-                    onChange={(e) => setFinalPaymentReason(e.target.value)}
-                    disabled={isPatientDischarged}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors bg-white disabled:bg-gray-100 disabled:cursor-not-allowed"
-                  >
-                    <option value="">Please select</option>
-                    <option value="Recovered">Recovered</option>
-                    <option value="Discharge On Request">Discharge On Request</option>
-                    <option value="DAMA">DAMA</option>
-                    <option value="Death">Death</option>
-                  </select>
-                </div>
-
                 {/* Payment Remark */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">

@@ -13,8 +13,7 @@ const TodaysOpd = () => {
   const { hospitalConfig } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [corporateFilter, setCorporateFilter] = useState('');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
 
   // Fetch corporates from corporate table
   const { data: corporates = [] } = useQuery({
@@ -121,33 +120,23 @@ const TodaysOpd = () => {
     const matchesCorporate = !corporateFilter ||
       patient.patients?.corporate?.trim().toLowerCase() === corporateFilter.trim().toLowerCase();
 
-    // Date range filter
-    let matchesDateRange = true;
+    // Single date filter - show only entries for selected date
+    let matchesDate = true;
     const visitDate = new Date(patient.created_at || patient.visit_date);
+    visitDate.setHours(0, 0, 0, 0);
 
-    if (startDate || endDate) {
-      // Custom date range filter applied
-      visitDate.setHours(0, 0, 0, 0);
+    if (selectedDate) {
+      const selected = new Date(selectedDate);
+      selected.setHours(0, 0, 0, 0);
 
-      if (startDate) {
-        const start = new Date(startDate);
-        start.setHours(0, 0, 0, 0);
-        matchesDateRange = matchesDateRange && visitDate >= start;
-      }
+      const selectedEnd = new Date(selectedDate);
+      selectedEnd.setHours(23, 59, 59, 999);
 
-      if (endDate) {
-        const end = new Date(endDate);
-        end.setHours(23, 59, 59, 999);
-        matchesDateRange = matchesDateRange && visitDate <= end;
-      }
-    } else {
-      // Default: Show only last 24 hours
-      const twentyFourHoursAgo = new Date();
-      twentyFourHoursAgo.setHours(twentyFourHoursAgo.getHours() - 24);
-      matchesDateRange = visitDate >= twentyFourHoursAgo;
+      const visitDateTime = new Date(patient.created_at || patient.visit_date);
+      matchesDate = visitDateTime >= selected && visitDateTime <= selectedEnd;
     }
 
-    return matchesSearch && matchesCorporate && matchesDateRange;
+    return matchesSearch && matchesCorporate && matchesDate;
   });
 
   // Calculate statistics from filtered patients (to match displayed data)
@@ -195,16 +184,9 @@ const TodaysOpd = () => {
               <div>
                 <CardTitle className="text-2xl font-bold">OPD PATIENT DASHBOARD</CardTitle>
                 <p className="text-sm text-muted-foreground">Total OPD Patients: {statistics.total}</p>
-                {/* Date range display for print */}
+                {/* Date display for print */}
                 <p className="hidden print:block text-sm text-gray-700 mt-1">
-                  {startDate || endDate ? (
-                    <>
-                      From: {startDate ? new Date(startDate).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : 'Beginning'}
-                      {' '} To: {endDate ? new Date(endDate).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : 'Present'}
-                    </>
-                  ) : (
-                    'From: Last 24 Hours'
-                  )}
+                  Date: {selectedDate ? new Date(selectedDate).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : 'Today'}
                 </p>
               </div>
             </div>
@@ -219,20 +201,11 @@ const TodaysOpd = () => {
                 Print List
               </Button>
               <div className="flex items-center gap-2">
-                <label className="text-sm text-gray-600">From:</label>
+                <label className="text-sm text-gray-600">Date:</label>
                 <input
                   type="date"
-                  value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
-                  className="h-10 text-sm border border-gray-300 rounded-md px-3 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-              <div className="flex items-center gap-2">
-                <label className="text-sm text-gray-600">To:</label>
-                <input
-                  type="date"
-                  value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
+                  value={selectedDate}
+                  onChange={(e) => setSelectedDate(e.target.value)}
                   className="h-10 text-sm border border-gray-300 rounded-md px-3 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>

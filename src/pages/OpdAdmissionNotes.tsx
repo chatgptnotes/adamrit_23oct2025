@@ -563,12 +563,12 @@ const OpdAdmissionNotes = () => {
             body {
               print-color-adjust: exact;
               -webkit-print-color-adjust: exact;
-              font-size: 12pt;
+              font-size: 9pt;
             }
 
             @page {
               size: A4;
-              margin: 0.25cm 0.3cm;
+              margin: 0;
             }
 
             /* Hide screen elements */
@@ -579,7 +579,7 @@ const OpdAdmissionNotes = () => {
             /* Page container */
             .container {
               max-width: 100%;
-              padding: 0;
+              padding: 2.8cm 0 0.4cm 0 !important;
             }
 
             /* Card styling */
@@ -587,13 +587,14 @@ const OpdAdmissionNotes = () => {
               box-shadow: none !important;
               border: 2px solid #000 !important;
               border-radius: 0 !important;
+              margin-top: 2.8cm !important;
             }
 
             /* Header */
             .bg-gradient-to-r {
               background: white !important;
               border-bottom: 2px solid #000;
-              padding: 4px !important;
+              padding: 2px !important;
             }
 
             /* Hide icon in print */
@@ -605,11 +606,11 @@ const OpdAdmissionNotes = () => {
             .bg-gray-50 {
               background: white !important;
               border: 2px solid #000 !important;
-              padding: 4px !important;
-              margin-bottom: 4px;
+              padding: 2px !important;
+              margin-bottom: 2px;
               display: grid !important;
               grid-template-columns: 1fr 1fr !important;
-              gap: 2px 10px !important;
+              gap: 1px 8px !important;
             }
 
             /* Patient info items */
@@ -618,7 +619,7 @@ const OpdAdmissionNotes = () => {
             }
 
             .bg-gray-50 > div label {
-              font-size: 9pt !important;
+              font-size: 7pt !important;
               font-weight: 600 !important;
               color: #333 !important;
               display: block !important;
@@ -626,7 +627,7 @@ const OpdAdmissionNotes = () => {
             }
 
             .bg-gray-50 > div p {
-              font-size: 10pt !important;
+              font-size: 8pt !important;
               color: #000 !important;
               margin: 0 !important;
             }
@@ -635,27 +636,27 @@ const OpdAdmissionNotes = () => {
             label {
               font-weight: 600 !important;
               color: #000 !important;
-              font-size: 10pt !important;
+              font-size: 8pt !important;
             }
 
             /* Textareas for print - Compact but readable */
             textarea {
               border: 1px solid #000 !important;
-              min-height: 28px !important;
-              max-height: 32px !important;
+              min-height: 22px !important;
+              max-height: 26px !important;
               background: white !important;
-              padding: 2px 4px !important;
-              font-size: 10pt !important;
-              line-height: 1.3 !important;
+              padding: 1px 3px !important;
+              font-size: 8pt !important;
+              line-height: 1.2 !important;
               overflow: hidden !important;
             }
 
             /* Input fields */
             input {
               border: 1px solid #000 !important;
-              padding: 1px 3px !important;
+              padding: 1px 2px !important;
               background: white !important;
-              font-size: 10pt !important;
+              font-size: 8pt !important;
             }
 
             /* Footer section - Clear separator */
@@ -678,36 +679,36 @@ const OpdAdmissionNotes = () => {
 
             /* Text sizing for print */
             .text-sm {
-              font-size: 9pt !important;
+              font-size: 7pt !important;
             }
 
             .text-xs {
-              font-size: 8pt !important;
+              font-size: 6pt !important;
             }
 
             /* Footer specific labels */
             .border-t-2 .text-xs {
-              font-size: 8pt !important;
+              font-size: 6pt !important;
             }
 
             /* Footer specific text */
             .border-t-2 .text-sm {
-              font-size: 9pt !important;
+              font-size: 7pt !important;
             }
 
             /* Card content padding */
             .p-6 {
-              padding: 3px !important;
+              padding: 2px !important;
             }
 
             /* Two Column Layout - Critical for print */
             .print-two-column {
               display: grid !important;
               grid-template-columns: 45% 1px 54% !important;
-              gap: 6px !important;
+              gap: 4px !important;
               position: relative;
-              margin-top: 3px !important;
-              margin-bottom: 3px !important;
+              margin-top: 2px !important;
+              margin-bottom: 2px !important;
             }
 
             /* Left column styling */
@@ -735,10 +736,10 @@ const OpdAdmissionNotes = () => {
 
             /* Ensure RX textarea matches left column height */
             .print-two-column textarea {
-              min-height: 250px !important;
-              max-height: 270px !important;
+              min-height: 120px !important;
+              max-height: 150px !important;
               height: auto !important;
-              line-height: 1.4 !important;
+              line-height: 1.2 !important;
             }
 
             /* Footer section - 3 columns with clear separation */
@@ -759,40 +760,40 @@ const OpdAdmissionNotes = () => {
 
             /* Remove default margins and spacing - Optimized */
             .space-y-6 > * + * {
-              margin-top: 3px !important;
+              margin-top: 2px !important;
             }
 
             .space-y-2 > * + * {
-              margin-top: 2px !important;
+              margin-top: 1px !important;
             }
 
             .space-y-3 > * + * {
-              margin-top: 2px !important;
+              margin-top: 1px !important;
             }
 
             .space-y-1 > * + * {
-              margin-top: 1px !important;
+              margin-top: 0px !important;
             }
 
             /* Overall content spacing */
             .space-y-6 {
-              gap: 3px !important;
+              gap: 2px !important;
             }
 
             /* Header title compact */
             .bg-gradient-to-r {
-              padding: 3px !important;
+              padding: 2px !important;
             }
 
             /* Card title text size */
             .text-2xl {
-              font-size: 18pt !important;
+              font-size: 14pt !important;
               font-weight: bold !important;
             }
 
             /* Header subtitle */
             .text-sm.text-gray-600 {
-              font-size: 10pt !important;
+              font-size: 8pt !important;
             }
 
             /* Pathology section compact */
