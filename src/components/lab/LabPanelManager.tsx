@@ -45,8 +45,11 @@ import {
   Package,
   FlaskConical,
   Save,
-  X
+  X,
+  Download,
+  Upload
 } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import { useTestPanels, useLabSubspecialties } from '@/hooks/useLabData';
 import { useToast } from '@/hooks/use-toast';
 import { usePermissions } from '@/hooks/usePermissions';
@@ -751,6 +754,7 @@ const LabPanelManager: React.FC = () => {
             unit: config.unit || config.normal_unit || '',
             type: isTextType ? 'Text' : 'Numeric', // Load test type from lab_test_formulas
             textValue: isTextType ? (formulaData?.text_value || '') : '', // Load text value from lab_test_formulas
+            formula: formulaData?.formula || '', // Load formula from lab_test_formulas
             ageRanges: [],
             normalRanges: []
           };
@@ -1216,6 +1220,99 @@ const LabPanelManager: React.FC = () => {
     }
   };
 
+  // Export function - downloads all lab panel data as Excel
+  const handleExport = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('lab')
+        .select('*')
+        .not('name', 'is', null)
+        .neq('name', '')
+        .order('name', { ascending: true });
+
+      if (error) {
+        toast({ title: 'Export Failed', description: error.message, variant: 'destructive' });
+        return;
+      }
+
+      // Column keys matching the requested columns
+      const headers = ['name', 'Non-NABH_rates_in_rupee', 'CGHS_code', 'sub_specialty', 'speciality', 'NABH_rates_in_rupee', 'private', 'bhopal_nabh_rate', 'bhopal_non_nabh_rate'];
+      // Human-readable labels for Excel header row
+      const headerLabels = ['Name', 'Non-NABH Rate', 'CGHS Code', 'Sub Specialty', 'Specialty', 'NABH Rate', 'Private Rate', 'Bhopal NABH Rate', 'Bhopal Non-NABH Rate'];
+
+      // Prepare data for Excel - filter out empty rows and add Sr No
+      const excelData = data
+        .filter(row => row.name && typeof row.name === 'string' && row.name.trim().length > 0)
+        .map((row, index) => {
+          const obj: any = { 'Sr No': index + 1 }; // Add serial number
+          headers.forEach((h, i) => {
+            obj[headerLabels[i]] = (row as any)[h] ?? '';
+          });
+          return obj;
+        });
+
+      // Create workbook and worksheet
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.json_to_sheet(excelData);
+      XLSX.utils.book_append_sheet(wb, ws, 'Lab Panels');
+
+      // Download Excel file
+      XLSX.writeFile(wb, `lab_panels_export_${new Date().toISOString().split('T')[0]}.xlsx`);
+
+      toast({ title: 'Export Successful', description: `Exported ${excelData.length} records` });
+    } catch (err) {
+      toast({ title: 'Export Failed', description: 'An error occurred', variant: 'destructive' });
+    }
+  };
+
+  // Import function - uploads Excel/CSV file and adds records
+  const handleImport = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
+        const data = e.target?.result;
+        const workbook = XLSX.read(data, { type: 'binary' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const jsonData = XLSX.utils.sheet_to_json(worksheet);
+
+        // Map Excel headers to database columns
+        const records = jsonData.map((row: any) => ({
+          name: row['Name'] || row['name'] || '',
+          'Non-NABH_rates_in_rupee': row['Non-NABH Rate'] || row['Non-NABH_rates_in_rupee'] || null,
+          CGHS_code: row['CGHS Code'] || row['CGHS_code'] || null,
+          sub_specialty: row['Sub Specialty'] || row['sub_specialty'] || null,
+          speciality: row['Specialty'] || row['speciality'] || null,
+          'NABH_rates_in_rupee': row['NABH Rate'] || row['NABH_rates_in_rupee'] || null,
+          private: row['Private Rate'] || row['private'] || null,
+          bhopal_nabh_rate: row['Bhopal NABH Rate'] || row['bhopal_nabh_rate'] || null,
+          bhopal_non_nabh_rate: row['Bhopal Non-NABH Rate'] || row['bhopal_non_nabh_rate'] || null
+        })).filter((r: any) => r.name && r.name.trim());
+
+        if (records.length === 0) {
+          toast({ title: 'Import Failed', description: 'No valid records found in file', variant: 'destructive' });
+          return;
+        }
+
+        const { error } = await supabase.from('lab').insert(records);
+
+        if (error) {
+          toast({ title: 'Import Failed', description: error.message, variant: 'destructive' });
+        } else {
+          toast({ title: 'Import Successful', description: `Imported ${records.length} records` });
+          window.location.reload();
+        }
+      } catch (err) {
+        toast({ title: 'Import Failed', description: 'Invalid file format', variant: 'destructive' });
+      }
+    };
+    reader.readAsBinaryString(file);
+    event.target.value = '';
+  };
+
   // Show form builder if toggled
   if (showFormBuilder) {
     return (
@@ -1254,6 +1351,27 @@ const LabPanelManager: React.FC = () => {
           </div>
         </div>
         <div className="flex gap-2">
+          {canEditMasters && (
+            <Button
+              variant="outline"
+              onClick={handleExport}
+              className="flex items-center gap-2"
+            >
+              <Download className="h-4 w-4" />
+              Export
+            </Button>
+          )}
+          {canEditMasters && (
+            <label className="cursor-pointer">
+              <Button variant="outline" asChild className="flex items-center gap-2">
+                <span>
+                  <Upload className="h-4 w-4" />
+                  Import
+                </span>
+              </Button>
+              <input type="file" accept=".xlsx,.xls,.csv" onChange={handleImport} className="hidden" />
+            </label>
+          )}
           <Button
             variant="outline"
             onClick={() => setShowFormBuilder(true)}

@@ -726,6 +726,16 @@ const TestConfigurationSection: React.FC<TestConfigurationSectionProps> = ({
                   </Button>
                 </div>
 
+                {/* Show Formula if exists */}
+                {subTest.formula && (
+                  <div className="flex items-center gap-2 p-2 bg-blue-50 border border-blue-200 rounded-md">
+                    <span className="text-xs font-medium text-blue-700">Formula:</span>
+                    <code className="text-xs bg-blue-100 px-2 py-0.5 rounded text-blue-800">
+                      {subTest.formula}
+                    </code>
+                  </div>
+                )}
+
             {/* Age Range Headers */}
             {subTest.ageRanges.length > 0 && (
               <div className="grid grid-cols-12 gap-2 text-xs font-medium text-gray-600 px-2">
@@ -963,6 +973,16 @@ const TestConfigurationSection: React.FC<TestConfigurationSectionProps> = ({
                         Add Age Range
                       </Button>
                     </div>
+
+                    {/* Show Formula if exists for nested sub-test */}
+                    {nestedSubTest.formula && (
+                      <div className="flex items-center gap-2 p-2 bg-blue-50 border border-blue-200 rounded-md">
+                        <span className="text-xs font-medium text-blue-700">Formula:</span>
+                        <code className="text-xs bg-blue-100 px-2 py-0.5 rounded text-blue-800">
+                          {nestedSubTest.formula}
+                        </code>
+                      </div>
+                    )}
 
                     {nestedSubTest.ageRanges.map((ageRange) => (
                       <div key={ageRange.id} className="grid grid-cols-12 gap-2 items-center">

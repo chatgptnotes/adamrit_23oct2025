@@ -1425,7 +1425,7 @@ const TodaysIpdDashboard = () => {
 
   const filteredVisits = useMemo(() => {
     // First, filter the visits
-    const filtered = todaysVisits.filter(visit => {
+    const filtered = (todaysVisits || []).filter(visit => {
       const matchesSearch = visit.patients?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         visit.visit_id?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         visit.appointment_with?.toLowerCase().includes(searchTerm.toLowerCase());
@@ -1507,12 +1507,12 @@ const TodaysIpdDashboard = () => {
   }, [todaysVisits, searchTerm, billingExecutiveFilter, billingStatusFilter, bunchFilter, corporateFilter, fileStatusFilter, condonationSubmissionFilter, condonationIntimationFilter, extensionOfStayFilter, additionalApprovalsFilter, sortBy]);
 
   // Pagination calculations
-  const totalPages = Math.ceil(filteredVisits.length / itemsPerPage);
+  const totalPages = Math.ceil((filteredVisits?.length || 0) / itemsPerPage) || 1;
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
-  const paginatedVisits = filteredVisits.slice(startIndex, endIndex);
-  const startItem = startIndex + 1;
-  const endItem = Math.min(endIndex, filteredVisits.length);
+  const paginatedVisits = filteredVisits?.slice(startIndex, endIndex) || [];
+  const startItem = filteredVisits?.length > 0 ? startIndex + 1 : 0;
+  const endItem = Math.min(endIndex, filteredVisits?.length || 0);
 
   const formatTime = (dateString: string) => {
     return format(new Date(dateString), 'MMM dd, yyyy HH:mm');
@@ -2033,7 +2033,7 @@ const TodaysIpdDashboard = () => {
             <div>
               <h1 className="text-3xl font-bold text-primary">IPD PATIENT DASHBOARD</h1>
               <p className="text-muted-foreground">
-                {format(new Date(), 'EEEE, MMMM do, yyyy')} - {filteredVisits.length} visits scheduled
+                {format(new Date(), 'EEEE, MMMM do, yyyy')} - {filteredVisits?.length || 0} visits scheduled
               </p>
             </div>
           </div>
@@ -2165,7 +2165,7 @@ const TodaysIpdDashboard = () => {
               className="w-36 h-10 text-sm border border-gray-300 rounded-md px-3 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="">All Bunches</option>
-              {Array.from(new Set(todaysVisits.map(visit => visit.bunch_no).filter(Boolean))).sort().map((bunchNo) => (
+              {Array.from(new Set((todaysVisits || []).map(visit => visit.bunch_no).filter(Boolean))).sort().map((bunchNo) => (
                 <option key={bunchNo} value={bunchNo}>
                   Bunch {bunchNo}
                 </option>
@@ -2187,25 +2187,25 @@ const TodaysIpdDashboard = () => {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 no-print">
           <div className="bg-card p-4 rounded-lg border">
             <div className="text-2xl font-bold text-blue-600">
-              {todaysVisits.filter(v => v.status === 'scheduled' || !v.status).length}
+              {(todaysVisits || []).filter(v => v.status === 'scheduled' || !v.status).length}
             </div>
             <div className="text-sm text-muted-foreground">Scheduled</div>
           </div>
           <div className="bg-card p-4 rounded-lg border">
             <div className="text-2xl font-bold text-yellow-600">
-              {todaysVisits.filter(v => v.status === 'in-progress').length}
+              {(todaysVisits || []).filter(v => v.status === 'in-progress').length}
             </div>
             <div className="text-sm text-muted-foreground">In Progress</div>
           </div>
           <div className="bg-card p-4 rounded-lg border">
             <div className="text-2xl font-bold text-green-600">
-              {todaysVisits.filter(v => v.status === 'completed').length}
+              {(todaysVisits || []).filter(v => v.status === 'completed').length}
             </div>
             <div className="text-sm text-muted-foreground">Completed</div>
           </div>
           <div className="bg-card p-4 rounded-lg border">
             <div className="text-2xl font-bold text-primary">
-              {todaysVisits.length}
+              {(todaysVisits || []).length}
             </div>
             <div className="text-sm text-muted-foreground">Total Visits</div>
           </div>

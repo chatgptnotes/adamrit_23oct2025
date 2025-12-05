@@ -136,6 +136,10 @@ const TodaysOpd = () => {
       matchesDate = visitDateTime >= selected && visitDateTime <= selectedEnd;
     }
 
+    // If search term is entered, ignore date filter to show all visits for that patient
+    if (searchTerm.trim()) {
+      return matchesSearch && matchesCorporate;
+    }
     return matchesSearch && matchesCorporate && matchesDate;
   });
 

@@ -2,7 +2,9 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { HeartHandshake, AlertCircle, Plus, Edit, Eye, Trash2, X } from 'lucide-react';
+import { HeartHandshake, AlertCircle, Plus, Edit, Eye, Trash2, X, Download, Upload } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import * as XLSX from 'xlsx';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePermissions } from '@/hooks/usePermissions';
 import { supabase } from '@/integrations/supabase/client';
@@ -129,6 +131,99 @@ const ClinicalServices = () => {
     navigate('/clinical-service-create');
   };
 
+  // Export function - downloads all data as Excel
+  const handleExport = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('clinical_services')
+        .select('*')
+        .not('service_name', 'is', null)
+        .neq('service_name', '')
+        .order('service_name', { ascending: true });
+
+      if (error) {
+        toast.error('Failed to export data');
+        return;
+      }
+
+      // Column keys matching the requested columns
+      const headers = ['service_name', 'tpa_rate', 'private_rate', 'nabh_rate', 'non_nabh_rate', 'nabh_bhopal', 'non_nabh_bhopal', 'code'];
+      // Human-readable labels for Excel header row
+      const headerLabels = ['Service Name', 'TPA Rate', 'Private Rate', 'NABH Rate', 'Non-NABH Rate', 'NABH Bhopal', 'Non-NABH Bhopal', 'Code'];
+
+      // Prepare data for Excel - filter out empty rows and add Sr No
+      const excelData = data
+        .filter(row => row.service_name && typeof row.service_name === 'string' && row.service_name.trim().length > 0) // Only include rows with valid name
+        .map((row, index) => {
+          const obj: any = { 'Sr No': index + 1 }; // Add serial number
+          headers.forEach((h, i) => {
+            obj[headerLabels[i]] = (row as any)[h] ?? '';
+          });
+          return obj;
+        });
+
+      // Create workbook and worksheet
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.json_to_sheet(excelData);
+      XLSX.utils.book_append_sheet(wb, ws, 'Clinical Services');
+
+      // Download Excel file
+      XLSX.writeFile(wb, `clinical_services_export_${new Date().toISOString().split('T')[0]}.xlsx`);
+
+      toast.success(`Exported ${excelData.length} records`);
+    } catch (err) {
+      toast.error('Export failed');
+    }
+  };
+
+  // Import function - uploads Excel/CSV file and adds records
+  const handleImport = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
+        const data = e.target?.result;
+        const workbook = XLSX.read(data, { type: 'binary' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const jsonData = XLSX.utils.sheet_to_json(worksheet);
+
+        // Map Excel headers to database columns
+        const records = jsonData.map((row: any) => ({
+          service_name: row['Service Name'] || row['service_name'] || '',
+          tpa_rate: row['TPA Rate'] || row['tpa_rate'] || null,
+          private_rate: row['Private Rate'] || row['private_rate'] || null,
+          nabh_rate: row['NABH Rate'] || row['nabh_rate'] || null,
+          non_nabh_rate: row['Non-NABH Rate'] || row['non_nabh_rate'] || null,
+          nabh_bhopal: row['NABH Bhopal'] || row['nabh_bhopal'] || null,
+          non_nabh_bhopal: row['Non-NABH Bhopal'] || row['non_nabh_bhopal'] || null,
+          code: row['Code'] || row['code'] || null,
+          status: 'Active'
+        })).filter((r: any) => r.service_name && r.service_name.trim());
+
+        if (records.length === 0) {
+          toast.error('No valid records found in file');
+          return;
+        }
+
+        const { error } = await supabase.from('clinical_services').insert(records);
+
+        if (error) {
+          toast.error('Failed to import: ' + error.message);
+        } else {
+          toast.success(`Imported ${records.length} records`);
+          queryClient.invalidateQueries({ queryKey: ['clinical-services'] });
+        }
+      } catch (err) {
+        toast.error('Import failed - invalid file format');
+      }
+    };
+    reader.readAsBinaryString(file);
+    event.target.value = '';
+  };
+
   return (
     <div className="container mx-auto px-4 py-6">
       <div className="mb-6 flex justify-between items-start">
@@ -155,9 +250,28 @@ const ClinicalServices = () => {
         <CardHeader>
           <CardTitle className="flex items-center justify-between">
             <span>Clinical Services</span>
-            <span className="text-sm font-normal text-gray-500">
-              {isLoading ? 'Loading...' : `${clinicalServices?.length || 0} services`}
-            </span>
+            <div className="flex items-center gap-4">
+              <span className="text-sm font-normal text-gray-500">
+                {isLoading ? 'Loading...' : `${clinicalServices?.length || 0} services`}
+              </span>
+              {canEditMasters && (
+                <Button variant="outline" size="sm" onClick={handleExport}>
+                  <Download className="h-4 w-4 mr-2" />
+                  Export
+                </Button>
+              )}
+              {canEditMasters && (
+                <label className="cursor-pointer">
+                  <Button variant="outline" size="sm" asChild>
+                    <span>
+                      <Upload className="h-4 w-4 mr-2" />
+                      Import
+                    </span>
+                  </Button>
+                  <input type="file" accept=".xlsx,.xls,.csv" onChange={handleImport} className="hidden" />
+                </label>
+              )}
+            </div>
           </CardTitle>
         </CardHeader>
         <CardContent>

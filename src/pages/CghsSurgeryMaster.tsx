@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { FileText, AlertCircle, Plus, Edit, Eye, Trash2, X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { FileText, AlertCircle, Plus, Edit, Eye, Trash2, X, ChevronLeft, ChevronRight, Download, Upload } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePermissions } from '@/hooks/usePermissions';
 import { supabase } from '@/integrations/supabase/client';
@@ -261,6 +262,87 @@ const CghsSurgeryMaster = () => {
     setCurrentPage(1); // Reset to first page when searching
   };
 
+  // Export function - downloads all data as Excel
+  const handleExport = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('cghs_surgery')
+        .select('*')
+        .order('name', { ascending: true });
+
+      if (error) {
+        toast.error('Failed to export data');
+        return;
+      }
+
+      // Column keys matching the table display
+      const headers = ['name', 'code', 'category', 'NABH_NABL_Rate', 'Non_NABH_NABL_Rate', 'private', 'bhopal_nabh_rate', 'bhopal_non_nabh_rate'];
+      // Human-readable labels for Excel header row
+      const headerLabels = ['Name', 'Code', 'Category', 'NABH Rate', 'Non-NABH Rate', 'Private Rate', 'Bhopal NABH Rate', 'Bhopal Non-NABH Rate'];
+
+      // Prepare data for Excel - filter out empty rows and add Sr No
+      const excelData = data
+        .filter(row => row.name && row.name.trim()) // Only include rows with valid name
+        .map((row, index) => {
+          const obj: any = { 'Sr No': index + 1 }; // Add serial number
+          headers.forEach((h, i) => {
+            obj[headerLabels[i]] = (row as any)[h] || '';
+          });
+          return obj;
+        });
+
+      // Create workbook and worksheet
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.json_to_sheet(excelData);
+      XLSX.utils.book_append_sheet(wb, ws, 'CGHS Surgery');
+
+      // Download Excel file
+      XLSX.writeFile(wb, `cghs_surgery_export_${new Date().toISOString().split('T')[0]}.xlsx`);
+
+      toast.success(`Exported ${data.length} records`);
+    } catch (err) {
+      toast.error('Export failed');
+    }
+  };
+
+  // Import function - uploads CSV file and adds records
+  const handleImport = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
+        const text = e.target?.result as string;
+        const lines = text.split('\n');
+        const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
+
+        const records = lines.slice(1).filter(line => line.trim()).map(line => {
+          const values = line.match(/(".*?"|[^,]+)/g) || [];
+          const record: any = {};
+          headers.forEach((header, i) => {
+            const value = values[i]?.replace(/^"|"$/g, '').replace(/""/g, '"') || null;
+            record[header] = value === '' ? null : value;
+          });
+          return record;
+        });
+
+        const { error } = await supabase.from('cghs_surgery').insert(records);
+
+        if (error) {
+          toast.error('Failed to import: ' + error.message);
+        } else {
+          toast.success(`Imported ${records.length} records`);
+          queryClient.invalidateQueries({ queryKey: ['cghs-surgeries'] });
+        }
+      } catch (err) {
+        toast.error('Import failed - invalid file format');
+      }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+  };
+
   return (
     <div className="container mx-auto px-4 py-6">
       <div className="mb-6 flex justify-between items-start">
@@ -324,6 +406,23 @@ const CghsSurgeryMaster = () => {
                   </SelectContent>
                 </Select>
               </div>
+              {canEditMasters && (
+                <Button variant="outline" size="sm" onClick={handleExport}>
+                  <Download className="h-4 w-4 mr-2" />
+                  Export
+                </Button>
+              )}
+              {canEditMasters && (
+                <label className="cursor-pointer">
+                  <Button variant="outline" size="sm" asChild>
+                    <span>
+                      <Upload className="h-4 w-4 mr-2" />
+                      Import
+                    </span>
+                  </Button>
+                  <input type="file" accept=".csv" onChange={handleImport} className="hidden" />
+                </label>
+              )}
             </div>
           </CardTitle>
         </CardHeader>
