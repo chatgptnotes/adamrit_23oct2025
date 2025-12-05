@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useDebounce } from 'use-debounce';
 import { Badge } from '@/components/ui/badge';
-import { Eye, FileText, Search, Calendar, DollarSign, Trash2, FolderOpen, FolderX, CheckCircle, XCircle, Clock, MinusCircle, RotateCcw, Printer, Filter, MessageSquare, ClipboardList, ArrowUpDown, Circle } from 'lucide-react';
+import { Eye, FileText, Search, Calendar, DollarSign, Trash2, FolderOpen, FolderX, CheckCircle, XCircle, Clock, MinusCircle, RotateCcw, Printer, Filter, MessageSquare, ClipboardList, ArrowUpDown, Circle, ChevronLeft, ChevronRight } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -53,6 +53,8 @@ const TodaysIpdDashboard = () => {
   const [bunchNumberInputs, setBunchNumberInputs] = useState({});
   const [bunchFilter, setBunchFilter] = useState('');
   const [corporateFilter, setCorporateFilter] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
   const [referralLetterStatus, setReferralLetterStatus] = useState<Record<string, boolean>>({});
   const [commentDialogs, setCommentDialogs] = useState<Record<string, boolean>>({});
   const [commentTexts, setCommentTexts] = useState<Record<string, string>>({});
@@ -1504,6 +1506,14 @@ const TodaysIpdDashboard = () => {
     return sorted;
   }, [todaysVisits, searchTerm, billingExecutiveFilter, billingStatusFilter, bunchFilter, corporateFilter, fileStatusFilter, condonationSubmissionFilter, condonationIntimationFilter, extensionOfStayFilter, additionalApprovalsFilter, sortBy]);
 
+  // Pagination calculations
+  const totalPages = Math.ceil(filteredVisits.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedVisits = filteredVisits.slice(startIndex, endIndex);
+  const startItem = startIndex + 1;
+  const endItem = Math.min(endIndex, filteredVisits.length);
+
   const formatTime = (dateString: string) => {
     return format(new Date(dateString), 'MMM dd, yyyy HH:mm');
   };
@@ -2078,6 +2088,7 @@ const TodaysIpdDashboard = () => {
               onChange={(e) => {
                 console.log('Billing Executive selected:', e.target.value);
                 setBillingExecutiveFilter(e.target.value);
+                setCurrentPage(1);
               }}
               className="w-48 h-10 text-sm border border-gray-300 rounded-md px-3 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
@@ -2117,7 +2128,7 @@ const TodaysIpdDashboard = () => {
 
             <select
               value={billingStatusFilter}
-              onChange={(e) => setBillingStatusFilter(e.target.value)}
+              onChange={(e) => { setBillingStatusFilter(e.target.value); setCurrentPage(1); }}
               className="w-48 h-10 text-sm border border-gray-300 rounded-md px-3 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="">All Billing Status</option>
@@ -2138,7 +2149,7 @@ const TodaysIpdDashboard = () => {
             </select>
             <select
               value={corporateFilter}
-              onChange={(e) => setCorporateFilter(e.target.value)}
+              onChange={(e) => { setCorporateFilter(e.target.value); setCurrentPage(1); }}
               className="w-48 h-10 text-sm border border-gray-300 rounded-md px-3 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="">All Corporates</option>
@@ -2150,7 +2161,7 @@ const TodaysIpdDashboard = () => {
             </select>
             <select
               value={bunchFilter}
-              onChange={(e) => setBunchFilter(e.target.value)}
+              onChange={(e) => { setBunchFilter(e.target.value); setCurrentPage(1); }}
               className="w-36 h-10 text-sm border border-gray-300 rounded-md px-3 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="">All Bunches</option>
@@ -2165,7 +2176,7 @@ const TodaysIpdDashboard = () => {
               <Input
                 placeholder="Search visits..."
                 value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
                 className="pl-10 w-80"
               />
             </div>
@@ -2292,7 +2303,7 @@ const TodaysIpdDashboard = () => {
             </TableHeader>
 
             <TableBody>
-              {filteredVisits.map((visit) => (
+              {paginatedVisits.map((visit) => (
                 <TableRow key={visit.id} className="hover:bg-muted/50">
                   <TableCell>
                     {isAdmin ? (
@@ -2611,6 +2622,80 @@ const TodaysIpdDashboard = () => {
           </Table>
         </div>
 
+        {/* Pagination Controls */}
+        {filteredVisits.length > 0 && (
+          <div className="flex items-center justify-between px-4 py-3 bg-white border-t">
+            <div className="flex items-center gap-4">
+              <span className="text-sm text-gray-700">
+                Showing {startItem} to {endItem} of {filteredVisits.length} results
+              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-gray-700">Items per page:</span>
+                <select
+                  value={itemsPerPage}
+                  onChange={(e) => {
+                    setItemsPerPage(Number(e.target.value));
+                    setCurrentPage(1);
+                  }}
+                  className="h-8 w-20 text-sm border border-gray-300 rounded-md px-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value={10}>10</option>
+                  <option value={20}>20</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                </select>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage(currentPage - 1)}
+                disabled={currentPage === 1}
+                className="flex items-center gap-1"
+              >
+                <ChevronLeft className="h-4 w-4" />
+                Previous
+              </Button>
+              <div className="flex items-center gap-1">
+                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                  let pageNumber;
+                  if (totalPages <= 5) {
+                    pageNumber = i + 1;
+                  } else if (currentPage <= 3) {
+                    pageNumber = i + 1;
+                  } else if (currentPage >= totalPages - 2) {
+                    pageNumber = totalPages - 4 + i;
+                  } else {
+                    pageNumber = currentPage - 2 + i;
+                  }
+                  return (
+                    <Button
+                      key={pageNumber}
+                      variant={pageNumber === currentPage ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setCurrentPage(pageNumber)}
+                      className="w-8 h-8 p-0"
+                    >
+                      {pageNumber}
+                    </Button>
+                  );
+                })}
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage(currentPage + 1)}
+                disabled={currentPage === totalPages}
+                className="flex items-center gap-1"
+              >
+                Next
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        )}
+
         {filteredVisits.length === 0 && (
           <div className="text-center py-8 text-muted-foreground">
             <Calendar className="h-12 w-12 mx-auto mb-4 opacity-50" />
@@ -2633,7 +2718,7 @@ const TodaysIpdDashboard = () => {
         )}
 
         {/* Comment Dialogs */}
-        {filteredVisits.map((visit) => (
+        {paginatedVisits.map((visit) => (
           <Dialog
             key={`comment-dialog-${visit.id}`}
             open={commentDialogs[visit.id] || false}
