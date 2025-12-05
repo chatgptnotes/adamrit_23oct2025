@@ -1894,208 +1894,100 @@ const LabOrders = () => {
   });
 
   // Load sample taken status and included tests from database when data is loaded
+  // OPTIMIZED: Uses batch queries instead of individual queries per test
   useEffect(() => {
     if (labTestRows.length > 0) {
-      console.log('🔄 Loading sample taken status from visit_labs table...');
-      setIsCheckingSampleStatus(true); // Start checking
+      console.log('🔄 Loading sample taken status (OPTIMIZED BATCH QUERIES)...');
+      setIsCheckingSampleStatus(true);
 
       const checkLabResultsForSampleStatus = async () => {
-        const statusMap: Record<string, 'not_taken' | 'taken' | 'saved'> = {};
-        const includedTestIds: string[] = [];
+        try {
+          const statusMap: Record<string, 'not_taken' | 'taken' | 'saved'> = {};
+          const includedTestIds: string[] = [];
 
-        // FIRST: Check visit_labs table for saved sample status (from Save button)
-        console.log('🔍 Checking visit_labs table for collected samples...');
-        for (const testRow of labTestRows) {
-          try {
-            const { data: visitLabData, error: visitLabError } = await supabase
-              .from('visit_labs')
-              .select('id, status, collected_date')
-              .eq('id', testRow.id)
-              .single();
+          // BATCH QUERY 1: Get all visit_labs data in ONE query
+          const testIds = labTestRows.map(t => t.id);
+          console.log(`🔍 Batch fetching visit_labs for ${testIds.length} tests...`);
 
-            if (!visitLabError && visitLabData) {
-              // Check if sample is collected (status = 'collected')
-              if (visitLabData.status === 'collected' && visitLabData.collected_date) {
-                statusMap[testRow.id] = 'saved';
-                console.log(`✅ Sample collected for test ID ${testRow.id} on ${visitLabData.collected_date}`);
-              } else {
-                statusMap[testRow.id] = 'not_taken';
-                console.log(`⚪ Sample not collected for test ID ${testRow.id}`);
-              }
+          const { data: visitLabsData, error: visitLabsError } = await supabase
+            .from('visit_labs')
+            .select('id, status, collected_date')
+            .in('id', testIds);
+
+          if (visitLabsError) {
+            console.error('❌ Error batch fetching visit_labs:', visitLabsError);
+          }
+
+          // Create a map for quick lookup
+          const visitLabsMap = new Map(visitLabsData?.map(v => [v.id, v]) || []);
+          console.log(`✅ Fetched ${visitLabsData?.length || 0} visit_labs records`);
+
+          // Process visit_labs data
+          for (const testRow of labTestRows) {
+            const visitLabData = visitLabsMap.get(testRow.id);
+            if (visitLabData && visitLabData.status === 'collected' && visitLabData.collected_date) {
+              statusMap[testRow.id] = 'saved';
             } else {
-              console.log(`⚪ No visit_labs record found for test ID ${testRow.id}`);
               statusMap[testRow.id] = 'not_taken';
             }
-          } catch (error) {
-            console.error(`❌ Error checking visit_labs for test ID ${testRow.id}:`, error);
-            statusMap[testRow.id] = 'not_taken';
           }
-        }
 
-        // SECOND: Check lab_results table for entry mode status
+          // BATCH QUERY 2: Get all lab_results for relevant patients in ONE query
+          const patientNames = [...new Set(labTestRows.map(t => t.patient_name))];
+          console.log(`🔍 Batch fetching lab_results for ${patientNames.length} patients...`);
 
-        // First, let's get all data from lab_results table for debugging
-        console.log('🔍 === DEBUGGING LAB_RESULTS TABLE ===');
-        try {
-          const { data: allLabResults, error: allError } = await supabase
+          const { data: allLabResults, error: labResultsError } = await supabase
             .from('lab_results')
             .select('*')
-            .limit(50);
+            .in('patient_name', patientNames);
 
-          if (allError) {
-            console.error('❌ Error getting all lab_results:', allError);
-          } else {
-            console.log('📊 ALL LAB_RESULTS DATA:', allLabResults);
-            console.log('📊 Total records in lab_results:', allLabResults?.length || 0);
-
-            // Show unique patients in lab_results
-            const uniquePatients = [...new Set(allLabResults?.map(r => r.patient_name))];
-            console.log('👥 Unique patients in lab_results:', uniquePatients);
-
-            // Show unique test names in lab_results
-            const uniqueTests = [...new Set(allLabResults?.map(r => r.test_name))];
-            console.log('🧪 Unique test names in lab_results:', uniqueTests);
+          if (labResultsError) {
+            console.error('❌ Error batch fetching lab_results:', labResultsError);
           }
-        } catch (error) {
-          console.error('❌ Exception getting all lab_results:', error);
-        }
 
-        // Also show current labTestRows for comparison
-        console.log('📋 CURRENT LAB TEST ROWS:');
-        labTestRows.forEach((testRow, index) => {
-          console.log(`  ${index + 1}. Patient: ${testRow.patient_name}, Test: ${testRow.test_name}, ID: ${testRow.id}, Order: ${testRow.order_number}`);
-        });
-        console.log('🔍 === END DEBUGGING ===');
+          console.log(`✅ Fetched ${allLabResults?.length || 0} lab_results records`);
 
-        // Check lab_results table to see which tests actually have saved data
-        for (const testRow of labTestRows) {
-          try {
-            console.log(`🔍 Checking lab_results for Patient: ${testRow.patient_name}, Test: ${testRow.test_name} (ID: ${testRow.id})`);
+          // Process lab_results data in memory (no more queries needed!)
+          if (allLabResults && allLabResults.length > 0) {
+            for (const testRow of labTestRows) {
+              // Skip if already marked as saved from visit_labs
+              if (statusMap[testRow.id] === 'saved') continue;
 
-            // Enhanced query - try multiple approaches
-            let labResults = null;
-            let error = null;
-
-            // Method 1: Try exact patient name and test name match
-            const query1 = await supabase
-              .from('lab_results')
-              .select('*')
-              .eq('patient_name', testRow.patient_name)
-              .eq('test_name', testRow.test_name);
-
-            if (!query1.error && query1.data && query1.data.length > 0) {
-              labResults = query1.data;
-              console.log(`✅ METHOD 1: Found ${labResults.length} records by patient_name + test_name`);
-            } else {
-              console.log(`❌ METHOD 1: No data found by patient_name + test_name`);
-
-              // Method 2: Try patient name and test category
-              const query2 = await supabase
-                .from('lab_results')
-                .select('*')
-                .eq('patient_name', testRow.patient_name)
-                .eq('test_category', testRow.test_category);
-
-              if (!query2.error && query2.data && query2.data.length > 0) {
-                labResults = query2.data;
-                console.log(`✅ METHOD 2: Found ${labResults.length} records by patient_name + test_category`);
-              } else {
-                console.log(`❌ METHOD 2: No data found by patient_name + test_category`);
-
-                // Method 3: Try just patient name
-                const query3 = await supabase
-                  .from('lab_results')
-                  .select('*')
-                  .eq('patient_name', testRow.patient_name);
-
-                if (!query3.error && query3.data && query3.data.length > 0) {
-                  labResults = query3.data;
-                  console.log(`✅ METHOD 3: Found ${labResults.length} records by patient_name only`);
-                } else {
-                  console.log(`❌ METHOD 3: No data found by patient_name only`);
-                  error = query3.error;
-                }
-              }
-            }
-
-            if (error) {
-              console.error(`❌ Error checking lab_results for ${testRow.patient_name} - ${testRow.test_name}:`, error);
-              statusMap[testRow.id] = 'not_taken';
-              continue;
-            }
-
-            // Check if there are any results with actual values - BUT MUST BE SPECIFIC TO THIS TEST
-            let hasActualData = false;
-
-            if (labResults && labResults.length > 0) {
-              // For exact test name match (Method 1), any result with data is valid
-              if (labResults.some(r => r.test_name === testRow.test_name)) {
-                hasActualData = labResults.some(result =>
-                  result.test_name === testRow.test_name &&
-                  hasValidResultValue(result.result_value)
-                );
-                console.log(`🔍 EXACT TEST MATCH: Checking specific test "${testRow.test_name}"`);
-              }
-              // For test category match (Method 2), check if this specific test category has data
-              else if (labResults.some(r => r.test_category === testRow.test_category)) {
-                hasActualData = labResults.some(result =>
-                  result.test_category === testRow.test_category &&
-                  hasValidResultValue(result.result_value)
-                );
-                console.log(`🔍 CATEGORY MATCH: Checking category "${testRow.test_category}"`);
-              }
-              // For patient-only match (Method 3), check if any test matches this specific test or category
-              else {
-                // More strict check - only mark as saved if there's a related test
-                const relatedTests = labResults.filter(result =>
+              // Find matching lab results for this test
+              const matchingResults = allLabResults.filter(result =>
+                result.patient_name === testRow.patient_name && (
                   result.test_name === testRow.test_name ||
                   result.test_category === testRow.test_category ||
                   result.main_test_name === testRow.test_name ||
                   result.main_test_name === testRow.test_category
-                );
+                )
+              );
 
-                hasActualData = relatedTests.some(result => hasValidResultValue(result.result_value));
+              // Check if any matching result has valid data
+              const hasActualData = matchingResults.some(result => hasValidResultValue(result.result_value));
 
-                console.log(`🔍 PATIENT-WIDE MATCH: Found ${relatedTests.length} related tests for "${testRow.test_name}"`);
-                console.log(`🔍 Related tests:`, relatedTests.map(r => ({ test_name: r.test_name, test_category: r.test_category, main_test_name: r.main_test_name })));
-              }
-            }
-
-            // Only update status if not already marked as 'saved' from visit_labs check
-            if (statusMap[testRow.id] !== 'saved') {
               if (hasActualData) {
                 statusMap[testRow.id] = 'saved';
-                console.log(`✅ FINAL (lab_results): Patient ${testRow.patient_name} has saved data for SPECIFIC test ${testRow.test_name}`);
-              } else {
-                // Keep the status from visit_labs check (might be 'saved' or 'not_taken')
-                console.log(`⚪ FINAL (lab_results): No lab_results data for ${testRow.test_name}, keeping visit_labs status`);
               }
-            } else {
-              console.log(`✅ Status already 'saved' from visit_labs, skipping lab_results check`);
-            }
-
-          } catch (error) {
-            console.error(`❌ Exception checking lab_results for ${testRow.patient_name} - ${testRow.test_name}:`, error);
-            // Don't override visit_labs status on error
-            if (statusMap[testRow.id] !== 'saved') {
-              statusMap[testRow.id] = 'not_taken';
             }
           }
-        }
 
-        setTestSampleStatus(statusMap);
-        setIncludedTests(includedTestIds);
-        console.log('✅ Final status after checking visit_labs + lab_results:', {
-          sampleStatus: statusMap,
-          includedTests: includedTestIds.length,
-          testsWithSavedData: Object.keys(statusMap).filter(key => statusMap[key] === 'saved')
-        });
-        setIsCheckingSampleStatus(false); // Done checking
+          setTestSampleStatus(statusMap);
+          setIncludedTests(includedTestIds);
+          console.log('✅ Sample status loaded (2 batch queries instead of 100+):', {
+            totalTests: labTestRows.length,
+            savedCount: Object.values(statusMap).filter(s => s === 'saved').length
+          });
+        } catch (error) {
+          console.error('❌ Error in batch sample status check:', error);
+        } finally {
+          setIsCheckingSampleStatus(false);
+        }
       };
 
       checkLabResultsForSampleStatus();
     } else {
-      setIsCheckingSampleStatus(false); // No data to check
+      setIsCheckingSampleStatus(false);
     }
   }, [labTestRows]);
 
@@ -3128,7 +3020,15 @@ const LabOrders = () => {
             margin: 20px 0;
             text-decoration: underline;
           }
-          
+
+          .category-section {
+            page-break-before: always;
+          }
+
+          .category-section:first-child {
+            page-break-before: avoid;
+          }
+
           .test-section {
             margin-bottom: 30px;
           }
@@ -3237,38 +3137,6 @@ const LabOrders = () => {
       </head>
       <body>
 
-
-        <div class="patient-info">
-          <div>
-            <div><strong>Patient Name :</strong> ${patientInfo?.patient_name || 'N/A'}</div>
-            <div><strong>Patient ID :</strong> ${actualPatientId}</div>
-            <div><strong>Ref By :</strong> ${(() => {
-              const savedResult = savedLabResults[firstTestId];
-              return savedResult?.patient_info?.actual_ref_by || savedResult?.patient_info?.ref_by || patientInfo?.ordering_doctor || 'Not specified';
-            })()}</div>
-            <div><strong>Sample Received :</strong> ${reportDate} ${reportTime}</div>
-            <div><strong>Request No. :</strong> ${patientInfo?.order_number?.split('-').pop() || 'N/A'}</div>
-          </div>
-          <div>
-            <div><strong>Age/Sex :</strong> ${(() => {
-              const savedResult = savedLabResults[firstTestId];
-              const age = savedResult?.patient_info?.actual_age || patientInfo?.patient_age || 'N/A';
-              const gender = savedResult?.patient_info?.actual_gender || patientInfo?.patient_gender || 'N/A';
-              return `${age}Y ${gender}`;
-            })()}</div>
-            <div><strong>Visit ID :</strong> ${actualVisitId}</div>
-            <div><strong>Report Date :</strong> ${reportDate} ${reportTime}</div>
-            <div><strong>Consultant Name :</strong> ${(() => {
-              const savedResult = savedLabResults[firstTestId];
-              return savedResult?.patient_info?.actual_consultant || savedResult?.patient_info?.consultant_name || patientInfo?.ordering_doctor || 'Not specified';
-            })()}</div>
-            <div><strong>Provisional Diagnosis :</strong> ${(() => {
-              const savedResult = savedLabResults[firstTestId];
-              return savedResult?.patient_info?.actual_clinical_history || savedResult?.patient_info?.clinical_history || patientInfo?.clinical_history || 'Not Specified';
-            })()}</div>
-          </div>
-        </div>
-        
         <div class="results-content">
           ${(() => {
             // Group tests by category
@@ -3291,6 +3159,36 @@ const LabOrders = () => {
 
               return `
                 <div class="category-section" style="margin-bottom: 30px;">
+                  <div class="patient-info">
+                    <div>
+                      <div><strong>Patient Name :</strong> ${patientInfo?.patient_name || 'N/A'}</div>
+                      <div><strong>Patient ID :</strong> ${actualPatientId}</div>
+                      <div><strong>Ref By :</strong> ${(() => {
+                        const savedResult = savedLabResults[firstTestId];
+                        return savedResult?.patient_info?.actual_ref_by || savedResult?.patient_info?.ref_by || patientInfo?.ordering_doctor || 'Not specified';
+                      })()}</div>
+                      <div><strong>Sample Received :</strong> ${reportDate} ${reportTime}</div>
+                      <div><strong>Request No. :</strong> ${patientInfo?.order_number?.split('-').pop() || 'N/A'}</div>
+                    </div>
+                    <div>
+                      <div><strong>Age/Sex :</strong> ${(() => {
+                        const savedResult = savedLabResults[firstTestId];
+                        const age = savedResult?.patient_info?.actual_age || patientInfo?.patient_age || 'N/A';
+                        const gender = savedResult?.patient_info?.actual_gender || patientInfo?.patient_gender || 'N/A';
+                        return age + 'Y ' + gender;
+                      })()}</div>
+                      <div><strong>Visit ID :</strong> ${actualVisitId}</div>
+                      <div><strong>Report Date :</strong> ${reportDate} ${reportTime}</div>
+                      <div><strong>Consultant Name :</strong> ${(() => {
+                        const savedResult = savedLabResults[firstTestId];
+                        return savedResult?.patient_info?.actual_consultant || savedResult?.patient_info?.consultant_name || patientInfo?.ordering_doctor || 'Not specified';
+                      })()}</div>
+                      <div><strong>Provisional Diagnosis :</strong> ${(() => {
+                        const savedResult = savedLabResults[firstTestId];
+                        return savedResult?.patient_info?.actual_clinical_history || savedResult?.patient_info?.clinical_history || patientInfo?.clinical_history || 'Not Specified';
+                      })()}</div>
+                    </div>
+                  </div>
                   <div class="report-title">Report on ${category.toUpperCase()}</div>
 
                   ${!allTestsAreTextType ? `
@@ -3572,6 +3470,17 @@ const LabOrders = () => {
               }
             }).join('')
           }
+                  <div class="signature-section">
+                    <div class="signature-box">
+                      <img src="/Arun Agre.jpeg" alt="Signature" class="signature-image" />
+                      <div style="font-size: 12px; font-weight: bold;">
+                        DR. ARUN AGRE
+                      </div>
+                      <div style="font-size: 11px; margin-top: 2px;">
+                        MD (PATHOLOGY)
+                      </div>
+                    </div>
+                  </div>
                 </div>
               `;
             }).join('');
