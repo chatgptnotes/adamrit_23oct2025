@@ -2958,10 +2958,13 @@ const LabOrders = () => {
       <html>
       <head>
         <meta charset="UTF-8">
-        <title>Lab Report</title>
+        <title></title>
         <style>
           @page {
-            margin: 20mm;
+            margin-top: 3.4cm;
+            margin-bottom: 1cm;
+            margin-left: 1cm;
+            margin-right: 1cm;
             size: A4;
           }
           
@@ -3112,7 +3115,7 @@ const LabOrders = () => {
           }
           
           .signature-section {
-            margin-top: 40px;
+            margin-top: 150px;
             display: flex;
             justify-content: flex-end;
           }
@@ -3127,8 +3130,7 @@ const LabOrders = () => {
             height: auto;
             margin-bottom: 5px;
           }
-          
-          
+
           @media print {
             body { print-color-adjust: exact; }
             .no-print { display: none; }
