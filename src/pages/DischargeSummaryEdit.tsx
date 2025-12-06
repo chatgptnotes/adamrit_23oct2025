@@ -2960,7 +2960,7 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
 
   // Handle preview toggle with payment check
   const togglePreview = () => {
-    if (!patient?.has_final_payment) {
+    if (!patient?.bill_paid) {
       alert('⚠️ Final Payment Required\n\nPlease complete the final payment before previewing the discharge summary.');
       return;
     }
@@ -2969,7 +2969,7 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
 
   // Handle print with payment check
   const handlePrintWithCheck = () => {
-    if (!patient?.has_final_payment) {
+    if (!patient?.bill_paid) {
       alert('⚠️ Final Payment Required\n\nPlease complete the final payment before printing the discharge summary.');
       return;
     }
@@ -3125,14 +3125,14 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
                             size="sm"
                             onClick={togglePreview}
                             className="flex items-center gap-2"
-                            disabled={!patient?.has_final_payment}
+                            disabled={!patient?.bill_paid}
                           >
                             <Eye className="h-4 w-4" />
                             {showPreview ? 'Edit' : 'Preview'}
                           </Button>
                         </span>
                       </TooltipTrigger>
-                      {!patient?.has_final_payment && (
+                      {!patient?.bill_paid && (
                         <TooltipContent className="bg-red-600 text-white border-red-700 font-semibold">
                           <p className="flex items-center gap-2">
                             <span className="text-lg">⚠️</span>
@@ -3151,14 +3151,14 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
                             size="sm"
                             onClick={handlePrintWithCheck}
                             className="flex items-center gap-2"
-                            disabled={!patient?.has_final_payment}
+                            disabled={!patient?.bill_paid}
                           >
                             <Printer className="h-4 w-4" />
                             Print
                           </Button>
                         </span>
                       </TooltipTrigger>
-                      {!patient?.has_final_payment && (
+                      {!patient?.bill_paid && (
                         <TooltipContent className="bg-red-600 text-white border-red-700 font-semibold">
                           <p className="flex items-center gap-2">
                             <span className="text-lg">⚠️</span>
