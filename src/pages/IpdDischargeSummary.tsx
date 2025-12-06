@@ -875,19 +875,22 @@ const IpdDischargeSummary = () => {
           return null;
         }
 
-        // Get main discharge summary from ipd_discharge_summary table
+        // Get main discharge summary from ipd_discharge_summary table (get latest if multiple exist)
         const { data: summaryData, error: summaryError } = await supabase
           .from('ipd_discharge_summary')
           .select('*')
           .eq('visit_id', visitData.id)
-          .single();
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
 
         if (summaryError) {
-          if (summaryError.code === 'PGRST116') {
-            console.log('📋 No existing discharge summary found - creating new one');
-            return null;
-          }
           throw summaryError;
+        }
+
+        if (!summaryData) {
+          console.log('📋 No existing discharge summary found - creating new one');
+          return null;
         }
 
         console.log('📋 Found existing discharge summary:', summaryData.id);
@@ -1645,14 +1648,20 @@ ${surgeryInfo?.description || surgery?.notes || 'Standard surgical procedure per
         console.warn('⚠️ No patient_id in visitData');
       }
 
-      // Fetch discharge summary
+      // Fetch discharge summary (get latest if multiple exist)
       const { data: summaryData, error: summaryError } = await supabase
         .from('ipd_discharge_summary')
         .select('*')
         .eq('visit_id', visitData.id)
-        .single();
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
-      if (summaryError || !summaryData) {
+      if (summaryError) {
+        throw summaryError;
+      }
+
+      if (!summaryData) {
         toast({
           title: "Error",
           description: "No discharge summary found. Please save first.",
@@ -2339,23 +2348,25 @@ ${surgeryInfo?.description || surgery?.notes || 'Standard surgical procedure per
         return;
       }
 
-      // Get discharge summary from ipd_discharge_summary table
+      // Get discharge summary from ipd_discharge_summary table (get latest if multiple exist)
       const { data: summaryData, error: summaryError } = await supabase
         .from('ipd_discharge_summary')
         .select('*')
         .eq('visit_id', visitData.id)
-        .single();
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
       if (summaryError) {
-        if (summaryError.code === 'PGRST116') {
-          toast({
-            title: "No Data Found",
-            description: "No saved discharge summary found for this patient",
-            variant: "destructive"
-          });
-        } else {
-          throw summaryError;
-        }
+        throw summaryError;
+      }
+
+      if (!summaryData) {
+        toast({
+          title: "No Data Found",
+          description: "No saved discharge summary found for this patient",
+          variant: "destructive"
+        });
         return;
       }
 
