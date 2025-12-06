@@ -68,7 +68,7 @@ export const menuItems = [
     icon: ExternalLink,
   },
   {
-    title: "CGHS Surgery",
+    title: "Surgery",
     url: "/cghs-surgery-master",
     icon: Syringe,
   },
