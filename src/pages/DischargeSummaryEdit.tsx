@@ -286,14 +286,8 @@ export default function DischargeSummaryEdit() {
           .from('visits')
           .select(`
             *,
-            patients!inner (
-              id,
-              name,
-              gender,
-              age,
-              date_of_birth,
-              patients_id,
-              corporate
+            patients (
+              *
             )
           `)
           .eq('visit_id', visitId)
