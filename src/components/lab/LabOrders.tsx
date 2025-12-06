@@ -3532,19 +3532,7 @@ const LabOrders = () => {
             </p>
           </div>
         </div>
-        
-        <div class="signature-section">
-          <div class="signature-box">
-            <img src="/Arun Agre.jpeg" alt="Signature" class="signature-image" />
-            <div style="font-size: 12px; font-weight: bold;">
-              DR. ARUN AGRE
-            </div>
-            <div style="font-size: 11px; margin-top: 2px;">
-              MD (PATHOLOGY)
-            </div>
-          </div>
-        </div>
-        
+
       </body>
       </html>
     `;
