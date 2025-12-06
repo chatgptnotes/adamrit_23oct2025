@@ -3050,7 +3050,7 @@ const LabOrders = () => {
           .header-row {
             display: grid;
             grid-template-columns: 40% 25% 35%;
-            border-bottom: 2px solid #000;
+            border-bottom: 1px solid #ccc;
             padding: 8px 0;
             margin-bottom: 15px;
             font-weight: bold;
