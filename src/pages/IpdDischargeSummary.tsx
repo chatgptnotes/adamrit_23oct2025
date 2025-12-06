@@ -1593,7 +1593,7 @@ ${surgeryInfo?.description || surgery?.notes || 'Standard surgical procedure per
 
   const handlePrintPreview = async () => {
     // Check for final payment
-    if (!patientData?.has_final_payment) {
+    if (!patientData?.bill_paid) {
       alert('⚠️ Final Payment Required\n\nPlease complete the final payment before printing the discharge summary.');
       return;
     }
@@ -2875,13 +2875,13 @@ DD/MM/YYYY:-Test Category: Test1:Value1 unit, Test2:Value2 unit`);
                     <Button
                       onClick={handlePrintPreview}
                       className="bg-blue-600 hover:bg-blue-700"
-                      disabled={!patientData?.has_final_payment}
+                      disabled={!patientData?.bill_paid}
                     >
                       Print Preview
                     </Button>
                   </span>
                 </TooltipTrigger>
-                {!patientData?.has_final_payment && (
+                {!patientData?.bill_paid && (
                   <TooltipContent className="bg-red-600 text-white border-red-700 font-semibold">
                     <p className="flex items-center gap-2">
                       <span className="text-lg">⚠️</span>
@@ -3032,13 +3032,13 @@ DD/MM/YYYY:-Test Category: Test1:Value1 unit, Test2:Value2 unit`);
                   <Button
                     onClick={handlePrintPreview}
                     className="bg-blue-600 hover:bg-blue-700"
-                    disabled={!patientData?.has_final_payment}
+                    disabled={!patientData?.bill_paid}
                   >
                     Print Preview
                   </Button>
                 </span>
               </TooltipTrigger>
-              {!patientData?.has_final_payment && (
+              {!patientData?.bill_paid && (
                 <TooltipContent className="bg-red-600 text-white border-red-700 font-semibold">
                   <p className="flex items-center gap-2">
                     <span className="text-lg">⚠️</span>

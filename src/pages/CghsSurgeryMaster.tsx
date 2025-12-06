@@ -305,7 +305,7 @@ const CghsSurgeryMaster = () => {
     }
   };
 
-  // Import function - uploads CSV file and adds records
+  // Import function - uploads CSV or Excel file and adds records
   const handleImport = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -313,19 +313,47 @@ const CghsSurgeryMaster = () => {
     const reader = new FileReader();
     reader.onload = async (e) => {
       try {
-        const text = e.target?.result as string;
-        const lines = text.split('\n');
-        const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
+        let records: any[] = [];
+        const fileName = file.name.toLowerCase();
 
-        const records = lines.slice(1).filter(line => line.trim()).map(line => {
-          const values = line.match(/(".*?"|[^,]+)/g) || [];
-          const record: any = {};
-          headers.forEach((header, i) => {
-            const value = values[i]?.replace(/^"|"$/g, '').replace(/""/g, '"') || null;
-            record[header] = value === '' ? null : value;
+        if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
+          // Parse Excel file
+          const data = new Uint8Array(e.target?.result as ArrayBuffer);
+          const workbook = XLSX.read(data, { type: 'array' });
+          const sheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[sheetName];
+          const jsonData = XLSX.utils.sheet_to_json(worksheet);
+
+          // Map Excel headers to database columns
+          records = jsonData.map((row: any) => ({
+            name: row['Name'] || null,
+            code: row['Code'] || null,
+            category: row['Category'] || null,
+            NABH_NABL_Rate: row['NABH Rate'] || null,
+            Non_NABH_NABL_Rate: row['Non-NABH Rate'] || null,
+            private: row['Private Rate'] || null,
+            bhopal_nabh_rate: row['Bhopal NABH Rate'] || null,
+            bhopal_non_nabh_rate: row['Bhopal Non-NABH Rate'] || null,
+          }));
+        } else {
+          // Parse CSV file
+          const text = e.target?.result as string;
+          const lines = text.split('\n');
+          const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
+
+          records = lines.slice(1).filter(line => line.trim()).map(line => {
+            const values = line.match(/(".*?"|[^,]+)/g) || [];
+            const record: any = {};
+            headers.forEach((header, i) => {
+              const value = values[i]?.replace(/^"|"$/g, '').replace(/""/g, '"') || null;
+              record[header] = value === '' ? null : value;
+            });
+            return record;
           });
-          return record;
-        });
+        }
+
+        // Filter out empty records
+        records = records.filter(r => r.name && r.name.trim());
 
         const { error } = await supabase.from('cghs_surgery').insert(records);
 
@@ -339,7 +367,13 @@ const CghsSurgeryMaster = () => {
         toast.error('Import failed - invalid file format');
       }
     };
-    reader.readAsText(file);
+
+    // Read as ArrayBuffer for xlsx, as text for csv
+    if (file.name.toLowerCase().endsWith('.xlsx') || file.name.toLowerCase().endsWith('.xls')) {
+      reader.readAsArrayBuffer(file);
+    } else {
+      reader.readAsText(file);
+    }
     event.target.value = '';
   };
 
@@ -420,7 +454,7 @@ const CghsSurgeryMaster = () => {
                       Import
                     </span>
                   </Button>
-                  <input type="file" accept=".csv" onChange={handleImport} className="hidden" />
+                  <input type="file" accept=".csv,.xlsx,.xls" onChange={handleImport} className="hidden" />
                 </label>
               )}
             </div>

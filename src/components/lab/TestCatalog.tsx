@@ -1,5 +1,6 @@
 // Test Catalog Management Component
 import React, { useState } from 'react';
+import * as XLSX from 'xlsx';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -296,6 +297,55 @@ const TestCatalog: React.FC = () => {
     avgProcessingTime: labTests.reduce((sum, t) => sum + t.processing_time_hours, 0) / labTests.length
   };
 
+  // Export catalog to Excel
+  const handleExportCatalog = () => {
+    const exportData = labTests.map((test, index) => ({
+      'Sr No': index + 1,
+      'Test Name': test.test_name,
+      'Test Code': test.test_code,
+      'Category': test.category,
+      'Department': test.department,
+      'Test Type': test.test_type,
+      'Sample Type': test.sample_type,
+      'Sample Volume': test.sample_volume || '',
+      'Container Type': test.container_type || '',
+      'Processing Time (hrs)': test.processing_time_hours,
+      'Price': test.test_price,
+      'Outsourced': test.outsourced ? 'Yes' : 'No',
+      'Outsource Lab': test.outsource_lab || '',
+      'Status': test.is_active ? 'Active' : 'Inactive',
+    }));
+
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    XLSX.utils.book_append_sheet(wb, ws, 'Lab Tests');
+    XLSX.writeFile(wb, `lab_test_catalog_${new Date().toISOString().split('T')[0]}.xlsx`);
+  };
+
+  // Import tests from Excel/CSV
+  const handleImportTests = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = new Uint8Array(e.target?.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const jsonData = XLSX.utils.sheet_to_json(worksheet);
+
+        console.log('Imported data:', jsonData);
+        alert(`Imported ${jsonData.length} tests (mock - no database save)`);
+      } catch (err) {
+        alert('Import failed - invalid file format');
+      }
+    };
+    reader.readAsArrayBuffer(file);
+    event.target.value = '';
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -310,11 +360,16 @@ const TestCatalog: React.FC = () => {
           </div>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline">
-            <Upload className="h-4 w-4 mr-2" />
-            Import Tests
-          </Button>
-          <Button variant="outline">
+          <label className="cursor-pointer">
+            <Button variant="outline" asChild>
+              <span>
+                <Upload className="h-4 w-4 mr-2" />
+                Import Tests
+              </span>
+            </Button>
+            <input type="file" accept=".csv,.xlsx,.xls" onChange={handleImportTests} className="hidden" />
+          </label>
+          <Button variant="outline" onClick={handleExportCatalog}>
             <Download className="h-4 w-4 mr-2" />
             Export Catalog
           </Button>
