@@ -2943,7 +2943,7 @@ const FinalBill = () => {
           patient_id: visitData.patient_id, // Add patient_id explicitly
           amount: parseFloat(finalPaymentAmount),
           mode_of_payment: finalPaymentMode,
-          reason_of_discharge: finalPaymentReason,
+          reason_of_discharge: finalPaymentReason || 'N/A',
           payment_remark: finalPaymentRemark || `Being cash received towards from pt. ${patientData?.name || billData?.name || 'Patient'} against R. No.:`,
           payment_date: new Date().toISOString().split('T')[0], // Add payment_date as today's date
           bank_account_id: finalPaymentSelectedBank || null,
@@ -2977,8 +2977,8 @@ const FinalBill = () => {
         .from('visits')
         .update({
           discharge_date: currentDate, // Set discharge date to today (DATE format: YYYY-MM-DD)
-          discharge_mode: finalPaymentReason.toLowerCase().includes('death') ? 'death' :
-                         finalPaymentReason.toLowerCase().includes('dama') ? 'dama' : 'recovery',
+          discharge_mode: finalPaymentReason?.toLowerCase().includes('death') ? 'death' :
+                         finalPaymentReason?.toLowerCase().includes('dama') ? 'dama' : 'recovery',
           bill_paid: true,
           is_discharged: true, // Enable discharge summary button
           status: 'discharged' // Set status to discharged so patient appears in Discharged Patients dashboard
@@ -22177,6 +22177,26 @@ Dr. Murali B K
                     <option value="CHEQUE">Cheque</option>
                     <option value="DD">Demand Draft</option>
                     <option value="CREDIT">Credit</option>
+                  </select>
+                </div>
+
+                {/* Reason of Discharge */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Reason of Discharge <span className="text-red-600">*</span>
+                  </label>
+                  <select
+                    value={finalPaymentReason}
+                    onChange={(e) => setFinalPaymentReason(e.target.value)}
+                    disabled={isPatientDischarged}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors bg-white disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  >
+                    <option value="">Please select</option>
+                    <option value="Recovery">Recovery</option>
+                    <option value="Death">Death</option>
+                    <option value="DAMA">DAMA (Discharge Against Medical Advice)</option>
+                    <option value="Referred to Ayushman">Referred to Ayushman</option>
+                    <option value="Absconded">Absconded</option>
                   </select>
                 </div>
 
