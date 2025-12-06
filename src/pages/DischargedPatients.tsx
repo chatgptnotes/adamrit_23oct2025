@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -18,7 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuCheckboxItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
-import { Loader2, Search, Users, Calendar, Clock, UserCheck, Shield, AlertTriangle, Filter, RotateCcw } from "lucide-react";
+import { Loader2, Search, Users, Calendar, Clock, UserCheck, Shield, AlertTriangle, Filter, RotateCcw, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
 import { useNavigate } from 'react-router-dom';
 import { toast } from "@/hooks/use-toast";
 import { CascadingBillingStatusDropdown } from '@/components/shared/CascadingBillingStatusDropdown';
@@ -78,6 +78,10 @@ const DischargedPatients = () => {
   const [corporateFilter, setCorporateFilter] = useState<string>('all');
   const [sortBy, setSortBy] = useState<string>('discharge_date');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage] = useState(10);
 
   // State for undischarge functionality
   const [isUndischargeDialogOpen, setIsUndischargeDialogOpen] = useState(false);
@@ -212,6 +216,38 @@ const DischargedPatients = () => {
       visit.patients?.insurance_person_no?.toLowerCase().includes(searchLower)
     );
   }) || [];
+
+  // Pagination calculations
+  const totalCount = filteredVisits.length;
+  const totalPages = Math.ceil(totalCount / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedVisits = filteredVisits.slice(startIndex, endIndex);
+
+  // Pagination helper functions
+  const goToFirstPage = () => setCurrentPage(1);
+  const goToLastPage = () => setCurrentPage(totalPages);
+  const goToPreviousPage = () => setCurrentPage(Math.max(1, currentPage - 1));
+  const goToNextPage = () => setCurrentPage(Math.min(totalPages, currentPage + 1));
+
+  const getPageNumbers = () => {
+    const pages: number[] = [];
+    const maxVisiblePages = 5;
+    let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
+    const endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+    if (endPage - startPage < maxVisiblePages - 1) {
+      startPage = Math.max(1, endPage - maxVisiblePages + 1);
+    }
+    for (let i = startPage; i <= endPage; i++) {
+      pages.push(i);
+    }
+    return pages;
+  };
+
+  // Reset page to 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, statusFilter, patientTypeFilter, billingStatusFilter, corporateFilter, sortBy, sortOrder]);
 
   // Undischarge mutation
   const undischargeMutation = useMutation({
@@ -529,7 +565,7 @@ const DischargedPatients = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredVisits?.map((visit) => (
+                  {paginatedVisits.map((visit) => (
                     <TableRow key={visit.id} className="hover:bg-muted/50">
                       <TableCell>
                         <div>
@@ -625,6 +661,42 @@ const DischargedPatients = () => {
                   ))}
                 </TableBody>
               </Table>
+
+              {/* Pagination Controls */}
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between px-6 py-4 border-t">
+                  <div className="flex items-center gap-2 text-sm text-gray-600">
+                    <span>Showing {startIndex + 1} to {Math.min(endIndex, totalCount)} of {totalCount} patients</span>
+                    <span className="text-gray-400">|</span>
+                    <span>Page {currentPage} of {totalPages}</span>
+                  </div>
+
+                  <div className="flex items-center gap-1">
+                    <Button variant="outline" size="sm" onClick={goToFirstPage} disabled={currentPage === 1}>
+                      <ChevronsLeft className="h-4 w-4" />
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={goToPreviousPage} disabled={currentPage === 1}>
+                      <ChevronLeft className="h-4 w-4" />
+                    </Button>
+                    {getPageNumbers().map((pageNum) => (
+                      <Button
+                        key={pageNum}
+                        variant={currentPage === pageNum ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setCurrentPage(pageNum)}
+                      >
+                        {pageNum}
+                      </Button>
+                    ))}
+                    <Button variant="outline" size="sm" onClick={goToNextPage} disabled={currentPage === totalPages}>
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={goToLastPage} disabled={currentPage === totalPages}>
+                      <ChevronsRight className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </CardContent>
