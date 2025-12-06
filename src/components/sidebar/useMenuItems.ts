@@ -61,7 +61,7 @@ export const useMenuItems = (props: AppSidebarProps): MenuItem[] => {
             return isFeatureEnabled(hospitalType, 'hasAyushmanConsultants');
           case "Ayushman Anaesthetists":
             return isFeatureEnabled(hospitalType, 'hasAyushmanAnaesthetists');
-          case "CGHS Surgery":
+          case "Surgery":
             return isFeatureEnabled(hospitalType, 'hasCghsSurgery');
           default:
             return true; // Show other items by default
@@ -77,7 +77,7 @@ export const useMenuItems = (props: AppSidebarProps): MenuItem[] => {
                item.title === "Patients" ? patientsCount :
                item.title === "Users" ? usersCount :
                item.title === "Complications" ? complicationsCount :
-               item.title === "CGHS Surgery" ? cghsSurgeryCount :
+               item.title === "Surgery" ? cghsSurgeryCount :
                item.title === "Lab" ? labCount :
                item.title === "Radiology" ? radiologyCount :
                item.title === "Medications" ? medicationCount :
