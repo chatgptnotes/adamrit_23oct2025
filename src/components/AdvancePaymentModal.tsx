@@ -59,37 +59,15 @@ const paymentModes = [
 ];
 
 const billingExecutives = [
-  'Dr.B.K.Murali',
-  'Ruby',
-  'Shrikant',
-  'Gaurav',
-  'Dr. Swapnil',
-  'Dr.Sachin',
-  'Dr.Shiraj',
-  'Dr. Sharad',
-  'Shashank',
-  'Shweta',
-  'Suraj',
-  'Nitin',
-  'Sonali',
-  'Ruchika',
-  'Pragati',
-  'Rachana',
-  'Kashish',
-  'Aman',
-  'Dolly',
-  'Ruchi',
-  'Gayatri',
-  'Noor',
+  'Chetna',
+  'Arpit',
+  'Akshay',
+  'Shohib',
   'Nisha',
   'Diksha',
-  'Ayush',
-  'Kiran',
-  'Pratik',
-  'Azhar',
-  'Tejas',
-  'Abhishek',
-  'Chandrprakash'
+  'Pragati',
+  'Jagruti',
+  'Abhishekh'
 ];
 
 // UUID validation helper function

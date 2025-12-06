@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
 import { format } from 'date-fns';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
@@ -32,6 +33,8 @@ const Invoice = () => {
   const [hideLabRadiology, setHideLabRadiology] = useState(false);
   const navigate = useNavigate();
   const { visitId } = useParams<{ visitId: string }>();
+  const { hospitalConfig } = useAuth();
+  const hospitalName = hospitalConfig?.name === 'ayushman' ? 'Ayushman Hospital' : 'Hope Hospital';
 
   // Fetch patient and visit data
   const { data: visitData, isLoading } = useQuery({
@@ -1463,7 +1466,7 @@ const Invoice = () => {
 
             <!-- Hospital Footer -->
             <div class="hospital-footer">
-              <div class="hospital-name">Ayushman Hospital</div>
+              <div class="hospital-name">${hospitalName}</div>
               <div class="signatures">
                 <div class="signature-item">Bill Manager</div>
                 <div class="signature-item">Cashier</div>
@@ -1668,7 +1671,7 @@ const Invoice = () => {
 
             {/* Hospital Name and Signatures */}
             <div className="text-center border-t border-gray-300 pt-4">
-              <h2 className="text-lg font-bold mb-4">Ayushman Hospital</h2>
+              <h2 className="text-lg font-bold mb-4">{hospitalName}</h2>
               <div className="flex justify-between text-center">
                 <div>
                   <div className="mb-2">Bill Manager</div>

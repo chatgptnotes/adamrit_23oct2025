@@ -20976,38 +20976,15 @@ Dr. Murali B K
                         <SelectValue placeholder="Please Select" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="dr_bk_murali">Dr.B.K.Murali</SelectItem>
-                        <SelectItem value="ruby">Ruby</SelectItem>
-                        <SelectItem value="shrikant">Shrikant</SelectItem>
-                        <SelectItem value="gaurav">Gaurav</SelectItem>
-                        <SelectItem value="dr_swapnil">Dr. Swapnil</SelectItem>
-                        <SelectItem value="dr_sachin">Dr.Sachin</SelectItem>
-                        <SelectItem value="dr_shiraj">Dr.Shiraj</SelectItem>
-                        <SelectItem value="dr_sharad">Dr. Sharad</SelectItem>
-                        <SelectItem value="shashank">Shashank</SelectItem>
-                        <SelectItem value="shweta">Shweta</SelectItem>
-                        <SelectItem value="suraj">Suraj</SelectItem>
-                        <SelectItem value="nitin">Nitin</SelectItem>
-                        <SelectItem value="sonali">Sonali</SelectItem>
-                        <SelectItem value="ruchika">Ruchika</SelectItem>
-                        <SelectItem value="pragati">Pragati</SelectItem>
-                        <SelectItem value="rachana">Rachana</SelectItem>
-                        <SelectItem value="kashish">Kashish</SelectItem>
-                        <SelectItem value="aman">Aman</SelectItem>
-                        <SelectItem value="dolly">Dolly</SelectItem>
-                        <SelectItem value="ruchi">Ruchi</SelectItem>
-                        <SelectItem value="gayatri">Gayatri</SelectItem>
-                        <SelectItem value="noor">Noor</SelectItem>
+                        <SelectItem value="chetna">Chetna</SelectItem>
+                        <SelectItem value="arpit">Arpit</SelectItem>
+                        <SelectItem value="akshay">Akshay</SelectItem>
+                        <SelectItem value="shohib">Shohib</SelectItem>
                         <SelectItem value="nisha">Nisha</SelectItem>
                         <SelectItem value="diksha">Diksha</SelectItem>
-                        <SelectItem value="ayush">Ayush</SelectItem>
-                        <SelectItem value="kiran">Kiran</SelectItem>
-                        <SelectItem value="pratik">Pratik</SelectItem>
-                        <SelectItem value="azhar">Azhar</SelectItem>
-                        <SelectItem value="tejas">Tejas</SelectItem>
-                        <SelectItem value="abhishek">Abhishek</SelectItem>
-                        <SelectItem value="chandraprakash">Chandraprakash</SelectItem>
-                        <SelectItem value="madhuri">Madhuri</SelectItem>
+                        <SelectItem value="pragati">Pragati</SelectItem>
+                        <SelectItem value="jagruti">Jagruti</SelectItem>
+                        <SelectItem value="abhishekh">Abhishekh</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -21167,38 +21144,15 @@ Dr. Murali B K
                           <SelectValue placeholder="Please Select" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="dr_bk_murali">Dr.B.K.Murali</SelectItem>
-                          <SelectItem value="ruby">Ruby</SelectItem>
-                          <SelectItem value="shrikant">Shrikant</SelectItem>
-                          <SelectItem value="gaurav">Gaurav</SelectItem>
-                          <SelectItem value="dr_swapnil">Dr. Swapnil</SelectItem>
-                          <SelectItem value="dr_sachin">Dr.Sachin</SelectItem>
-                          <SelectItem value="dr_shiraj">Dr.Shiraj</SelectItem>
-                          <SelectItem value="dr_sharad">Dr. Sharad</SelectItem>
-                          <SelectItem value="shashank">Shashank</SelectItem>
-                          <SelectItem value="shweta">Shweta</SelectItem>
-                          <SelectItem value="suraj">Suraj</SelectItem>
-                          <SelectItem value="nitin">Nitin</SelectItem>
-                          <SelectItem value="sonali">Sonali</SelectItem>
-                          <SelectItem value="ruchika">Ruchika</SelectItem>
-                          <SelectItem value="pragati">Pragati</SelectItem>
-                          <SelectItem value="rachana">Rachana</SelectItem>
-                          <SelectItem value="kashish">Kashish</SelectItem>
-                          <SelectItem value="aman">Aman</SelectItem>
-                          <SelectItem value="dolly">Dolly</SelectItem>
-                          <SelectItem value="ruchi">Ruchi</SelectItem>
-                          <SelectItem value="gayatri">Gayatri</SelectItem>
-                          <SelectItem value="noor">Noor</SelectItem>
+                          <SelectItem value="chetna">Chetna</SelectItem>
+                          <SelectItem value="arpit">Arpit</SelectItem>
+                          <SelectItem value="akshay">Akshay</SelectItem>
+                          <SelectItem value="shohib">Shohib</SelectItem>
                           <SelectItem value="nisha">Nisha</SelectItem>
                           <SelectItem value="diksha">Diksha</SelectItem>
-                          <SelectItem value="ayush">Ayush</SelectItem>
-                          <SelectItem value="kiran">Kiran</SelectItem>
-                          <SelectItem value="pratik">Pratik</SelectItem>
-                          <SelectItem value="azhar">Azhar</SelectItem>
-                          <SelectItem value="tejas">Tejas</SelectItem>
-                          <SelectItem value="abhishek">Abhishek</SelectItem>
-                          <SelectItem value="chandraprakash">Chandraprakash</SelectItem>
-                          <SelectItem value="madhuri">Madhuri</SelectItem>
+                          <SelectItem value="pragati">Pragati</SelectItem>
+                          <SelectItem value="jagruti">Jagruti</SelectItem>
+                          <SelectItem value="abhishekh">Abhishekh</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -22195,7 +22149,9 @@ Dr. Murali B K
                     <option value="Recovery">Recovery</option>
                     <option value="Death">Death</option>
                     <option value="DAMA">DAMA (Discharge Against Medical Advice)</option>
-                    <option value="Referred to Ayushman">Referred to Ayushman</option>
+                    <option value={hospitalConfig?.name === 'ayushman' ? 'Referred to Hope' : 'Referred to Ayushman'}>
+                      {hospitalConfig?.name === 'ayushman' ? 'Referred to Hope' : 'Referred to Ayushman'}
+                    </option>
                     <option value="Absconded">Absconded</option>
                   </select>
                 </div>
