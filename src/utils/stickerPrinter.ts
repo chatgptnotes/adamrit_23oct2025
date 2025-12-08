@@ -104,12 +104,12 @@ export const printSticker = (data: StickerData): void => {
 
           .sticker-name {
             font-weight: bold;
-            font-size: 9pt;
+            font-size: 10pt;
             margin-bottom: 1mm;
           }
 
           .sticker-row {
-            font-size: 6pt;
+            font-size: 8pt;
             line-height: 1.2;
             word-wrap: break-word;
           }

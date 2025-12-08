@@ -1797,11 +1797,10 @@ const AddPanelForm: React.FC<AddPanelFormProps> = ({ onSubmit }) => {
           </div>
 
           <div>
-            <Label>Test Code *</Label>
+            <Label>Test Code</Label>
             <Input
               value={formData.testCode}
               onChange={(e) => setFormData({...formData, testCode: e.target.value})}
-              required
               placeholder="Enter test code"
             />
           </div>
@@ -2618,11 +2617,10 @@ const EditPanelForm: React.FC<EditPanelFormProps> = ({ panel, onSubmit }) => {
           </div>
 
           <div>
-            <Label>Test Code *</Label>
+            <Label>Test Code</Label>
             <Input
               value={formData.testCode}
               onChange={(e) => setFormData({...formData, testCode: e.target.value})}
-              required
               placeholder="Enter test code"
             />
           </div>
