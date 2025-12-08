@@ -38,6 +38,7 @@ import { ColumnPickerModal } from '@/components/print/ColumnPickerModal';
 import { PrintPreview } from '@/components/print/PrintPreview';
 import { usePrintColumns } from '@/hooks/usePrintColumns';
 import { IPD_PRINT_COLUMNS, IPD_PRINT_PRESETS, generateIPDFilterSummary } from '@/config/ipdPrintColumns';
+import { printSticker } from '@/utils/stickerPrinter';
 import '@/styles/print.css';
 
 const TodaysIpdDashboard = () => {
@@ -1170,7 +1171,9 @@ const TodaysIpdDashboard = () => {
             name,
             patients_id,
             hospital_name,
-            corporate
+            corporate,
+            age,
+            gender
           )
         `)
         .eq('patient_type', 'IPD')
@@ -2253,6 +2256,7 @@ const TodaysIpdDashboard = () => {
                 <TableHead className="font-semibold">Extension of Stay</TableHead>
                 <TableHead className="font-semibold">Additional Approvals</TableHead>
                 <TableHead className="font-semibold">Visit Type</TableHead>
+                <TableHead className="font-semibold">Stickers</TableHead>
                 <TableHead className="font-semibold">Doctor</TableHead>
                 <TableHead className="font-semibold">Diagnosis</TableHead>
                 <TableHead className="font-semibold">Admission Date</TableHead>
@@ -2290,6 +2294,7 @@ const TodaysIpdDashboard = () => {
                 <TableHead>
                   <ColumnFilter options={additionalApprovalsOptions} selected={additionalApprovalsFilter} onChange={setAdditionalApprovalsFilter} />
                 </TableHead>
+                <TableHead></TableHead>
                 <TableHead></TableHead>
                 <TableHead></TableHead>
                 <TableHead></TableHead>
@@ -2501,6 +2506,24 @@ const TodaysIpdDashboard = () => {
                     <Badge variant="outline" className="capitalize">
                       {visit.visit_type}
                     </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => printSticker({
+                        patientName: visit.patients?.name || 'N/A',
+                        uhid: visit.esic_uh_id || visit.patients?.patients_id || 'N/A',
+                        visitId: visit.visit_id || 'N/A',
+                        age: visit.patients?.age || 'N/A',
+                        gender: visit.patients?.gender || 'N/A',
+                        consultant: visit.appointment_with || 'N/A',
+                        department: visit.visit_type || 'General',
+                        tariff: visit.patients?.corporate || 'Private'
+                      })}
+                    >
+                      Print Sticker
+                    </Button>
                   </TableCell>
                   <TableCell>
                     {visit.appointment_with}
