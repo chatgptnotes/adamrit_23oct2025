@@ -9,6 +9,7 @@ import { VisitRegistrationForm } from '@/components/VisitRegistrationForm';
 import { supabase } from '@/integrations/supabase/client';
 import { useDebounce } from 'use-debounce';
 import { useAuth } from '@/contexts/AuthContext';
+import { printSticker } from '@/utils/stickerPrinter';
 
 interface Patient {
   id: string;
@@ -1161,6 +1162,7 @@ Verified by: [To be verified by doctor]`;
             <TableHead className="text-center font-medium">Admit To Hospital</TableHead>
             <TableHead className="text-center font-medium">Admission Notes</TableHead>
             <TableHead className="text-center font-medium">Physiotherapy Bill</TableHead>
+            <TableHead className="text-center font-medium">Stickers</TableHead>
             <TableHead className="text-center font-medium">OPD Summary</TableHead>
             <TableHead className="text-center font-medium">Actions</TableHead>
           </TableRow>
@@ -1258,6 +1260,24 @@ Verified by: [To be verified by doctor]`;
                   title="View/Add Physiotherapy Bill"
                 >
                   <Activity className="h-4 w-4 text-teal-600" />
+                </Button>
+              </TableCell>
+              <TableCell className="text-center">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => printSticker({
+                    patientName: patient.patients?.name || 'N/A',
+                    uhid: patient.patients?.patients_id || 'N/A',
+                    visitId: patient.visit_id || 'N/A',
+                    age: patient.patients?.age?.toString() || 'N/A',
+                    gender: patient.patients?.gender || 'N/A',
+                    consultant: patient.appointment_with || 'N/A',
+                    department: patient.visit_type || 'OPD',
+                    tariff: patient.patients?.corporate || 'Private'
+                  })}
+                >
+                  Print Sticker
                 </Button>
               </TableCell>
               <TableCell className="text-center">
