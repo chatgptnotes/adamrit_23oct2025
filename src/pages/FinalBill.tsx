@@ -710,8 +710,9 @@ const FinalBill = () => {
     };
 
     const fetchAnaesthetists = async () => {
+      const tableName = hospitalConfig?.name === 'hope' ? 'hope_anaesthetists' : 'ayushman_anaesthetists';
       const { data, error } = await supabase
-        .from('ayushman_anaesthetists')
+        .from(tableName)
         .select('name, specialty');
 
       if (error) {
@@ -730,7 +731,7 @@ const FinalBill = () => {
 
     fetchSurgeons();
     fetchAnaesthetists();
-  }, []);
+  }, [hospitalConfig]);
 
   // Fetch bill preparation data when component mounts
   useEffect(() => {
