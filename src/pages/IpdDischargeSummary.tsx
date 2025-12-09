@@ -1247,8 +1247,9 @@ ${surgeryInfo?.description || surgery?.notes || 'Standard surgical procedure per
           console.log('🔍 Populated examination data');
         }
 
-        // Populate surgery details
-        if (surgery) {
+        // Populate surgery details ONLY if OT Notes data is not available
+        // OT Notes takes priority as it's the source of truth for surgery data
+        if (surgery && !otNotesData) {
           setSurgeryDetails({
             date: surgery.surgery_date ? format(new Date(surgery.surgery_date), "yyyy-MM-dd'T'HH:mm") : '',
             procedurePerformed: surgery.procedure_performed || '',
@@ -1258,7 +1259,9 @@ ${surgeryInfo?.description || surgery?.notes || 'Standard surgical procedure per
             implant: surgery.implant || '',
             description: surgery.description || ''
           });
-          console.log('🏥 Populated surgery details');
+          console.log('🏥 Populated surgery details from saved discharge summary (no OT notes available)');
+        } else if (surgery && otNotesData) {
+          console.log('🏥 Skipping saved surgery details - using fresh OT notes data instead');
         }
 
         console.log('✅ Form populated with existing discharge summary data');
@@ -1267,7 +1270,7 @@ ${surgeryInfo?.description || surgery?.notes || 'Standard surgical procedure per
         console.error('❌ Error populating form with existing data:', error);
       }
     }
-  }, [existingDischargeSummary]);
+  }, [existingDischargeSummary, otNotesData]);
 
 
   const addMedicationRow = () => {
