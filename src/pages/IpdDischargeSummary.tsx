@@ -2254,7 +2254,7 @@ ${surgeryInfo?.description || surgery?.notes || 'Standard surgical procedure per
         </tr>
         <tr>
           <td style="width: 30%; font-weight: bold; background-color: #f0f0f0;">Description</td>
-          <td>${summaryData.procedures_performed.description || ''}</td>
+          <td style="white-space: pre-wrap;">${(summaryData.procedures_performed.description || '').replace(/\n/g, '<br>').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')}</td>
         </tr>
         <tr>
           <td style="width: 30%; font-weight: bold; background-color: #f0f0f0;">IMPLANT:</td>
