@@ -1937,7 +1937,6 @@ ${surgeryInfo?.description || surgery?.notes || 'Standard surgical procedure per
     const medicationsHTML = medications.map((med: any) => `
       <tr>
         <td>${med.name || ''}</td>
-        <td>${med.unit || ''}</td>
         <td>${med.route || 'P.O'}</td>
         <td>${med.dose || ''}</td>
         <td>${med.days || ''} DAYS</td>
@@ -2193,7 +2192,6 @@ ${surgeryInfo?.description || surgery?.notes || 'Standard surgical procedure per
       <thead>
         <tr>
           <th>Medication Name</th>
-          <th>Strength</th>
           <th>Route</th>
           <th>Dosage</th>
           <th>Duration</th>
