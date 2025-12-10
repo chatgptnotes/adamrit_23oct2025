@@ -46,6 +46,8 @@ const TodaysIpdDashboard = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [showEditPatientDialog, setShowEditPatientDialog] = useState(false);
   const [selectedPatientForEdit, setSelectedPatientForEdit] = useState(null);
+  const [selectedPatientForView, setSelectedPatientForView] = useState<any>(null);
+  const [viewDialogOpen, setViewDialogOpen] = useState(false);
   const [srNo, setSrNo] = useState('');
   const [billingExecutiveInputs, setBillingExecutiveInputs] = useState({});
   const [billingExecutiveFilter, setBillingExecutiveFilter] = useState('');
@@ -1173,7 +1175,10 @@ const TodaysIpdDashboard = () => {
             hospital_name,
             corporate,
             age,
-            gender
+            gender,
+            phone,
+            emergency_contact_name,
+            emergency_contact_mobile
           )
         `)
         .eq('patient_type', 'IPD')
@@ -2567,7 +2572,12 @@ const TodaysIpdDashboard = () => {
                        <Button
                          variant="ghost"
                          size="sm"
-                         className="h-8 w-8 p-0"
+                         className="h-8 w-8 p-0 hover:bg-blue-50"
+                         onClick={() => {
+                           setSelectedPatientForView(visit);
+                           setViewDialogOpen(true);
+                         }}
+                         title="View Patient Details"
                        >
                          <Eye className="h-4 w-4 text-blue-600" />
                        </Button>
@@ -2783,6 +2793,137 @@ const TodaysIpdDashboard = () => {
             </DialogContent>
           </Dialog>
         ))}
+
+        {/* View Visit Dialog - Shows visit registration information in read-only format */}
+        {selectedPatientForView && (
+          <Dialog open={viewDialogOpen} onOpenChange={setViewDialogOpen}>
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle className="text-xl font-semibold text-blue-600">
+                  Visit Information
+                </DialogTitle>
+              </DialogHeader>
+
+              <div className="space-y-4">
+                {/* Patient Information */}
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <h3 className="font-semibold text-gray-700 mb-2">Patient Details</h3>
+                  <div className="grid grid-cols-2 gap-2 text-sm">
+                    <div>
+                      <span className="font-medium text-gray-600">Name:</span> {selectedPatientForView.patients?.name || 'N/A'}
+                    </div>
+                    <div>
+                      <span className="font-medium text-gray-600">Patient ID:</span> {selectedPatientForView.patients?.patients_id || 'N/A'}
+                    </div>
+                    <div>
+                      <span className="font-medium text-gray-600">Gender:</span> {selectedPatientForView.patients?.gender || 'N/A'}
+                    </div>
+                    <div>
+                      <span className="font-medium text-gray-600">Age:</span> {selectedPatientForView.patients?.age || 'N/A'} years
+                    </div>
+                  </div>
+                </div>
+
+                {/* Visit Information */}
+                <div className="bg-blue-50 p-4 rounded-lg">
+                  <h3 className="font-semibold text-blue-700 mb-2">Visit Details</h3>
+                  <div className="grid grid-cols-2 gap-2 text-sm">
+                    <div>
+                      <span className="font-medium text-gray-600">Visit ID:</span> <span className="text-blue-600 font-mono">{selectedPatientForView.visit_id}</span>
+                    </div>
+                    <div>
+                      <span className="font-medium text-gray-600">Visit Date:</span> {selectedPatientForView.visit_date ? new Date(selectedPatientForView.visit_date).toLocaleDateString() : 'N/A'}
+                    </div>
+                    <div>
+                      <span className="font-medium text-gray-600">Visit Type:</span> {selectedPatientForView.visit_type || 'N/A'}
+                    </div>
+                    <div>
+                      <span className="font-medium text-gray-600">Patient Type:</span> <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded-full text-xs">{selectedPatientForView.patient_type || 'IPD'}</span>
+                    </div>
+                    <div className="col-span-2">
+                      <span className="font-medium text-gray-600">Doctor/Appointment With:</span> {selectedPatientForView.appointment_with || 'Not specified'}
+                    </div>
+                    <div className="col-span-2">
+                      <span className="font-medium text-gray-600">Reason for Visit:</span> {selectedPatientForView.reason_for_visit || 'N/A'}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Contact Information */}
+                <div className="bg-yellow-50 p-4 rounded-lg">
+                  <h3 className="font-semibold text-yellow-700 mb-2">Contact Information</h3>
+                  <div className="grid grid-cols-2 gap-2 text-sm">
+                    <div>
+                      <span className="font-medium text-gray-600">Phone:</span> {selectedPatientForView.patients?.phone || 'N/A'}
+                    </div>
+                    <div>
+                      <span className="font-medium text-gray-600">Emergency Contact:</span> {selectedPatientForView.patients?.emergency_contact_name || 'N/A'}
+                    </div>
+                    <div className="col-span-2">
+                      <span className="font-medium text-gray-600">Emergency Mobile:</span> {selectedPatientForView.patients?.emergency_contact_mobile || 'N/A'}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Additional Information */}
+                <div className="bg-green-50 p-4 rounded-lg">
+                  <h3 className="font-semibold text-green-700 mb-2">Additional Information</h3>
+                  <div className="space-y-2 text-sm">
+                    <div>
+                      <span className="font-medium text-gray-600">Status:</span>
+                      <span className={`ml-2 px-2 py-1 rounded-full text-xs ${
+                        selectedPatientForView.status === 'completed' ? 'bg-green-100 text-green-700' :
+                        selectedPatientForView.status === 'in_progress' ? 'bg-yellow-100 text-yellow-700' :
+                        selectedPatientForView.status === 'scheduled' ? 'bg-blue-100 text-blue-700' :
+                        'bg-gray-100 text-gray-700'
+                      }`}>
+                        {selectedPatientForView.status || 'N/A'}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="font-medium text-gray-600">Diagnosis:</span> {selectedPatientForView.diagnosis || 'General'}
+                    </div>
+                    <div>
+                      <span className="font-medium text-gray-600">Relation with Employee:</span> {selectedPatientForView.relation_with_employee || 'N/A'}
+                    </div>
+                    <div>
+                      <span className="font-medium text-gray-600">Claim ID:</span> {selectedPatientForView.claim_id || 'N/A'}
+                    </div>
+                    <div>
+                      <span className="font-medium text-gray-600">Referring Doctor:</span> {selectedPatientForView.referring_doctor || 'N/A'}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Timestamps */}
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <h3 className="font-semibold text-gray-700 mb-2">Record Information</h3>
+                  <div className="grid grid-cols-2 gap-2 text-sm">
+                    <div>
+                      <span className="font-medium text-gray-600">Created At:</span> {selectedPatientForView.created_at ? new Date(selectedPatientForView.created_at).toLocaleString() : 'N/A'}
+                    </div>
+                    <div>
+                      <span className="font-medium text-gray-600">Updated At:</span> {selectedPatientForView.updated_at ? new Date(selectedPatientForView.updated_at).toLocaleString() : 'N/A'}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex justify-end gap-2 pt-4 border-t">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setViewDialogOpen(false);
+                      setSelectedPatientForView(null);
+                    }}
+                  >
+                    Close
+                  </Button>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
+        )}
 
         {/* Print Column Picker Modal */}
         <ColumnPickerModal

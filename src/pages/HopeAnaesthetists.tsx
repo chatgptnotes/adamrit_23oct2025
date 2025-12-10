@@ -5,10 +5,12 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Search, Syringe, Trash2, Edit } from 'lucide-react';
+import { Plus, Search, Syringe, Trash2, Edit, Download, Upload } from 'lucide-react';
 import { AddItemDialog } from '@/components/AddItemDialog';
 import { useToast } from '@/hooks/use-toast';
 import { usePermissions } from '@/hooks/usePermissions';
+import { toast as sonnerToast } from 'sonner';
+import * as XLSX from 'xlsx';
 
 interface HopeAnaesthetist {
   name: string;
@@ -186,6 +188,87 @@ const HopeAnaesthetists = () => {
     }
   };
 
+  // Export function - downloads all anaesthetists as Excel
+  const handleExport = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('hope_anaesthetists')
+        .select('*')
+        .order('name', { ascending: true });
+
+      if (error) {
+        sonnerToast.error('Failed to export data');
+        return;
+      }
+
+      const headers = ['name', 'specialty', 'general_rate', 'spinal_rate', 'contact_info'];
+      const headerLabels = ['Name', 'Specialty', 'General Rate', 'Spinal Rate', 'Contact Info'];
+
+      const excelData = data
+        .filter(row => row.name && row.name.trim())
+        .map((row, index) => {
+          const obj: any = { 'Sr No': index + 1 };
+          headers.forEach((h, i) => {
+            obj[headerLabels[i]] = (row as any)[h] || '';
+          });
+          return obj;
+        });
+
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.json_to_sheet(excelData);
+      XLSX.utils.book_append_sheet(wb, ws, 'Hope Anaesthetists');
+      XLSX.writeFile(wb, `hope_anaesthetists_export_${new Date().toISOString().split('T')[0]}.xlsx`);
+
+      sonnerToast.success(`Exported ${data.length} records`);
+    } catch (err) {
+      sonnerToast.error('Export failed');
+    }
+  };
+
+  // Import function - uploads Excel file and adds records
+  const handleImport = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
+        const data = new Uint8Array(e.target?.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const jsonData = XLSX.utils.sheet_to_json(worksheet);
+
+        const records = jsonData.map((row: any) => ({
+          name: row['Name'] || row['name'] || null,
+          specialty: row['Specialty'] || row['specialty'] || null,
+          general_rate: row['General Rate'] || row['general_rate'] || null,
+          spinal_rate: row['Spinal Rate'] || row['spinal_rate'] || null,
+          contact_info: row['Contact Info'] || row['contact_info'] || null,
+        })).filter((r: any) => r.name && r.name.trim());
+
+        if (records.length === 0) {
+          sonnerToast.error('No valid records found in file');
+          return;
+        }
+
+        const { error } = await supabase.from('hope_anaesthetists').insert(records);
+
+        if (error) {
+          sonnerToast.error('Failed to import: ' + error.message);
+        } else {
+          sonnerToast.success(`Imported ${records.length} records`);
+          queryClient.invalidateQueries({ queryKey: ['hope-anaesthetists'] });
+        }
+      } catch (err) {
+        sonnerToast.error('Import failed - invalid file format');
+      }
+    };
+
+    reader.readAsArrayBuffer(file);
+    event.target.value = '';
+  };
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-6">
@@ -229,10 +312,25 @@ const HopeAnaesthetists = () => {
               className="pl-10"
             />
           </div>
-          <Button onClick={() => setIsAddDialogOpen(true)}>
-            <Plus className="h-4 w-4 mr-2" />
-            Add Hope Anaesthetist
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={handleExport}>
+              <Download className="h-4 w-4 mr-2" />
+              Export
+            </Button>
+            <label className="cursor-pointer">
+              <Button variant="outline" size="sm" asChild>
+                <span>
+                  <Upload className="h-4 w-4 mr-2" />
+                  Import
+                </span>
+              </Button>
+              <input type="file" accept=".csv,.xlsx,.xls" onChange={handleImport} className="hidden" />
+            </label>
+            <Button onClick={() => setIsAddDialogOpen(true)}>
+              <Plus className="h-4 w-4 mr-2" />
+              Add Hope Anaesthetist
+            </Button>
+          </div>
         </div>
 
         <div className="grid gap-4">
