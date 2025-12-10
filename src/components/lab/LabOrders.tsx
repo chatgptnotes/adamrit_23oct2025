@@ -2415,6 +2415,7 @@ const LabOrders = () => {
 
   // Lab Results Form Handlers
   // Function to calculate formulas for sub-tests
+  // Multi-pass calculation for chain formulas (e.g., A/G Ratio depends on Globulin which depends on Protein - Albumin)
   const calculateFormulas = (currentFormData: any, currentTestRow: any) => {
     if (!currentTestRow || !currentTestRow.sub_tests) {
       console.log('⚠️ No test row or sub-tests found for formula calculation');
@@ -2426,77 +2427,110 @@ const LabOrders = () => {
 
     const calculatedValues: any = {};
 
-    currentTestRow.sub_tests.forEach((subTest: any) => {
-      // Check if this sub-test has a formula
-      if (subTest.formula && subTest.formula.trim()) {
-        console.log(`📐 Processing formula for "${subTest.name}": ${subTest.formula}`);
-        let formula = subTest.formula;
-        let canCalculate = true;
-        let hasEmptyDependency = false;
+    // Multi-pass calculation - merge calculated values back into form data for chain formulas
+    let mergedFormData = { ...currentFormData };
+    let changesMade = true;
+    let iterations = 0;
+    const maxIterations = 10; // Prevent infinite loops
 
-        // Replace test names in formula with actual values
-        currentTestRow.sub_tests.forEach((st: any) => {
-          const subTestKey = `${currentTestRow.id}_subtest_${st.id}`;
-          const subTestValue = currentFormData[subTestKey]?.result_value;
+    while (changesMade && iterations < maxIterations) {
+      changesMade = false;
+      iterations++;
+      console.log(`\n🔄 Formula calculation pass ${iterations}...`);
 
-          console.log(`  🔍 Checking "${st.name}" (key: ${subTestKey}), value: "${subTestValue}"`);
+      currentTestRow.sub_tests.forEach((subTest: any) => {
+        // Check if this sub-test has a formula
+        if (subTest.formula && subTest.formula.trim()) {
+          console.log(`📐 Processing formula for "${subTest.name}": ${subTest.formula}`);
+          let formula = subTest.formula;
+          let canCalculate = true;
+          let hasEmptyDependency = false;
 
-          // Check if this test name is used in the formula
-          if (formula.includes(st.name)) {
-            if (!subTestValue || subTestValue.trim() === '') {
-              // Dependency is empty or cleared
-              console.log(`    🗑️ "${st.name}" in formula is EMPTY - will clear calculated value`);
-              hasEmptyDependency = true;
-              canCalculate = false;
-            } else if (!isNaN(parseFloat(subTestValue))) {
-              // Replace test name with its value (case-sensitive, whole word match)
-              const regex = new RegExp(`\\b${st.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'g');
-              const beforeReplace = formula;
-              formula = formula.replace(regex, subTestValue);
-              if (beforeReplace !== formula) {
-                console.log(`    ✅ Replaced "${st.name}" with ${subTestValue}`);
-                console.log(`    Formula now: ${formula}`);
+          // Replace test names in formula with actual values
+          // Use mergedFormData which includes previously calculated values from earlier passes
+          currentTestRow.sub_tests.forEach((st: any) => {
+            const subTestKey = `${currentTestRow.id}_subtest_${st.id}`;
+            const subTestValue = mergedFormData[subTestKey]?.result_value;
+
+            if (iterations === 1) {
+              console.log(`  🔍 Checking "${st.name}" (key: ${subTestKey}), value: "${subTestValue}"`);
+            }
+
+            // Check if this test name is used in the formula
+            if (formula.includes(st.name)) {
+              if (!subTestValue || subTestValue.toString().trim() === '') {
+                // Dependency is empty or cleared
+                if (iterations === 1) {
+                  console.log(`    🗑️ "${st.name}" in formula is EMPTY - will clear calculated value`);
+                }
+                hasEmptyDependency = true;
+                canCalculate = false;
+              } else if (!isNaN(parseFloat(subTestValue))) {
+                // Replace test name with its value (case-sensitive, whole word match)
+                const regex = new RegExp(`\\b${st.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'g');
+                const beforeReplace = formula;
+                formula = formula.replace(regex, subTestValue.toString());
+                if (beforeReplace !== formula && iterations === 1) {
+                  console.log(`    ✅ Replaced "${st.name}" with ${subTestValue}`);
+                  console.log(`    Formula now: ${formula}`);
+                }
+              } else {
+                // Value exists but is not a valid number
+                if (iterations === 1) {
+                  console.log(`    ⚠️ "${st.name}" has invalid numeric value: ${subTestValue}`);
+                }
+                canCalculate = false;
               }
-            } else {
-              // Value exists but is not a valid number
-              console.log(`    ⚠️ "${st.name}" has invalid numeric value: ${subTestValue}`);
-              canCalculate = false;
+            }
+          });
+
+          const subTestKey = `${currentTestRow.id}_subtest_${subTest.id}`;
+
+          // If any dependency is empty/cleared, clear the calculated value
+          if (hasEmptyDependency) {
+            if (iterations === 1) {
+              console.log(`  🗑️ Clearing calculated value for "${subTest.name}" - dependency deleted`);
+            }
+            calculatedValues[subTestKey] = '';  // Set to empty string to clear
+            return; // Skip to next sub-test
+          }
+
+          // Only calculate if all required values are available
+          if (canCalculate) {
+            try {
+              console.log(`  🎯 Final formula to evaluate: ${formula}`);
+              // Safely evaluate the formula
+              const result = eval(formula);
+              console.log(`  📊 Evaluation result: ${result}`);
+              if (!isNaN(result) && isFinite(result)) {
+                const newValue = result.toFixed(2);
+                const previousValue = mergedFormData[subTestKey]?.result_value;
+
+                // Only update if value changed (for chain calculation detection)
+                if (previousValue !== newValue) {
+                  calculatedValues[subTestKey] = newValue;
+                  // Update mergedFormData so dependent formulas can use this value in next pass
+                  mergedFormData[subTestKey] = { ...mergedFormData[subTestKey], result_value: newValue };
+                  changesMade = true; // Trigger another pass for chain calculations
+                  console.log(`  ✅ Formula calculated for ${subTest.name}: ${subTest.formula} = ${newValue}`);
+                  console.log(`  💾 Will save to key: ${subTestKey}`);
+                }
+              } else {
+                console.log(`  ❌ Result is NaN or Infinite: ${result}`);
+              }
+            } catch (error) {
+              console.error(`  ❌ Error calculating formula for ${subTest.name}:`, error);
+            }
+          } else {
+            if (iterations === 1) {
+              console.log(`  ⏸️ Cannot calculate yet - missing or invalid values`);
             }
           }
-        });
-
-        const subTestKey = `${currentTestRow.id}_subtest_${subTest.id}`;
-
-        // If any dependency is empty/cleared, clear the calculated value
-        if (hasEmptyDependency) {
-          console.log(`  🗑️ Clearing calculated value for "${subTest.name}" - dependency deleted`);
-          calculatedValues[subTestKey] = '';  // Set to empty string to clear
-          return; // Skip to next sub-test
         }
+      });
+    }
 
-        // Only calculate if all required values are available
-        if (canCalculate) {
-          try {
-            console.log(`  🎯 Final formula to evaluate: ${formula}`);
-            // Safely evaluate the formula
-            const result = eval(formula);
-            console.log(`  📊 Evaluation result: ${result}`);
-            if (!isNaN(result) && isFinite(result)) {
-              calculatedValues[subTestKey] = result.toFixed(2);
-              console.log(`  ✅ Formula calculated for ${subTest.name}: ${subTest.formula} = ${result.toFixed(2)}`);
-              console.log(`  💾 Will save to key: ${subTestKey}`);
-            } else {
-              console.log(`  ❌ Result is NaN or Infinite: ${result}`);
-            }
-          } catch (error) {
-            console.error(`  ❌ Error calculating formula for ${subTest.name}:`, error);
-          }
-        } else {
-          console.log(`  ⏸️ Cannot calculate yet - missing or invalid values`);
-        }
-      }
-    });
-
+    console.log(`🏁 Formula calculations complete after ${iterations} pass(es)\n`);
     return calculatedValues;
   };
 
