@@ -25,7 +25,7 @@ const PatientProfile = () => {
         .from('patients')
         .select(`
           *,
-          diagnoses!inner(name)
+          diagnoses(name)
         `)
         .eq('id', patientId)
         .single();

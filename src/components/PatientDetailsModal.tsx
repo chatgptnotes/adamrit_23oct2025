@@ -410,6 +410,37 @@ export const PatientDetailsModal: React.FC<PatientDetailsModalProps> = ({
                   </div>
                 </div>
               </div>
+
+              {/* Contact Information */}
+              <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                <h3 className="text-lg font-semibold text-blue-700 mb-3">Contact Information</h3>
+                <div className="grid grid-cols-1 gap-2">
+                  <div className="flex justify-between">
+                    <span className="text-sm font-medium text-gray-600">Phone:</span>
+                    <span className="text-sm">{patientDetails?.phone || '-'}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-sm font-medium text-gray-600">Emergency Contact:</span>
+                    <span className="text-sm">{patientDetails?.emergency_contact_name || '-'}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-sm font-medium text-gray-600">Emergency Mobile:</span>
+                    <span className="text-sm">{patientDetails?.emergency_contact_mobile || '-'}</span>
+                  </div>
+                  {patientDetails?.second_emergency_contact_name && (
+                    <div className="flex justify-between">
+                      <span className="text-sm font-medium text-gray-600">Second Emergency Contact:</span>
+                      <span className="text-sm">{patientDetails?.second_emergency_contact_name}</span>
+                    </div>
+                  )}
+                  {patientDetails?.second_emergency_contact_mobile && (
+                    <div className="flex justify-between">
+                      <span className="text-sm font-medium text-gray-600">Second Emergency Mobile:</span>
+                      <span className="text-sm">{patientDetails?.second_emergency_contact_mobile}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         )}
