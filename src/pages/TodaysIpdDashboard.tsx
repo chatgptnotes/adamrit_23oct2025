@@ -1172,6 +1172,7 @@ const TodaysIpdDashboard = () => {
             id,
             name,
             patients_id,
+            insurance_person_no,
             hospital_name,
             corporate,
             age,
@@ -1585,26 +1586,59 @@ const TodaysIpdDashboard = () => {
   const handleEditPatientClick = (visit) => {
     const patient = visit.patients;
     if (patient) {
+      // Parse remark2 to extract individual fields
+      let hopeSurgeon = '';
+      let hopeConsultants = '';
+      let surgeon = '';
+      let consultant = '';
+      let sanctionStatus = '';
+
+      console.log('🔍 Edit Patient - visit.remark2:', visit.remark2);
+
+      if (visit.remark2) {
+        const remarks = visit.remark2.split('; ');
+        remarks.forEach(remark => {
+          if (remark.startsWith('Hope Surgeon: ')) {
+            hopeSurgeon = remark.replace('Hope Surgeon: ', '');
+          } else if (remark.startsWith('Hope Consultants: ')) {
+            hopeConsultants = remark.replace('Hope Consultants: ', '');
+          } else if (remark.startsWith('ESIC Surgeons: ')) {
+            surgeon = remark.replace('ESIC Surgeons: ', '');
+          } else if (remark.startsWith('Referee: ')) {
+            consultant = remark.replace('Referee: ', '');
+          } else if (remark.startsWith('Surgery Status: ')) {
+            sanctionStatus = remark.replace('Surgery Status: ', '');
+          }
+        });
+      }
+
+      console.log('🔍 Extracted hopeSurgeon:', hopeSurgeon);
+      console.log('🔍 Extracted hopeConsultants:', hopeConsultants);
+      console.log('🔍 Extracted surgeon:', surgeon);
+      console.log('🔍 Extracted consultant:', consultant);
+
       const patientForEdit = {
         id: patient.id,
         patientUuid: patient.id,
         name: patient.name,
         patients_id: patient.patients_id,
-        primaryDiagnosis: '',
-        complications: '',
-        surgery: '',
+        insurance_person_no: patient.insurance_person_no || '',
+        primaryDiagnosis: visit.reason_for_visit || '',
+        complications: visit.remark1 || '',
+        surgery: visit.sst_treatment || '',
         labs: '',
         radiology: '',
         labsRadiology: '',
         antibiotics: '',
         otherMedications: '',
-        surgeon: '',
-        consultant: '',
-        hopeSurgeon: '',
-        hopeConsultants: '',
-        admissionDate: '',
-        surgeryDate: '',
-        dischargeDate: '',
+        surgeon: surgeon,
+        consultant: consultant,
+        hopeSurgeon: hopeSurgeon,
+        hopeConsultants: hopeConsultants,
+        sanctionStatus: sanctionStatus,
+        admissionDate: visit.admission_date || '',
+        surgeryDate: visit.surgery_date || '',
+        dischargeDate: visit.discharge_date || '',
         visitId: visit.id
       };
       setSelectedPatientForEdit(patientForEdit);
