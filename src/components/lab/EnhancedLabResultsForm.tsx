@@ -50,6 +50,38 @@ const EnhancedLabResultsForm: React.FC<EnhancedLabResultsFormProps> = ({
   const [authenticatedResult, setAuthenticatedResult] = useState(false);
   const [showEntryMode, setShowEntryMode] = useState(false);
 
+  // Helper function to find correct normal range based on patient gender
+  const findNormalRangeForGender = (
+    normalRanges: Array<{gender?: string; min_value: number; max_value: number; unit?: string}> | undefined,
+    patientGender: string,
+    unit: string
+  ): string => {
+    if (!normalRanges || normalRanges.length === 0) {
+      return `Consult reference values ${unit}`;
+    }
+
+    // First try to find exact gender match (Male/Female)
+    const genderMatch = normalRanges.find(
+      nr => nr.gender?.toLowerCase() === patientGender.toLowerCase()
+    );
+
+    if (genderMatch) {
+      return `${genderMatch.min_value} - ${genderMatch.max_value} ${genderMatch.unit || unit}`;
+    }
+
+    // Fallback to 'Both' if no gender-specific range found
+    const bothMatch = normalRanges.find(
+      nr => nr.gender?.toLowerCase() === 'both'
+    );
+
+    if (bothMatch) {
+      return `${bothMatch.min_value} - ${bothMatch.max_value} ${bothMatch.unit || unit}`;
+    }
+
+    // Final fallback: use first available range
+    return `${normalRanges[0].min_value} - ${normalRanges[0].max_value} ${normalRanges[0].unit || unit}`;
+  };
+
   useEffect(() => {
     if (selectedTest) {
       console.log('Selected test changed to:', selectedTest);
@@ -77,7 +109,7 @@ const EnhancedLabResultsForm: React.FC<EnhancedLabResultsFormProps> = ({
         subTestId: subTest.id,
         subTestName: subTest.sub_test_name,
         observedValue: '',
-        normalRange: `Consult reference values ${subTest.unit}`,
+        normalRange: findNormalRangeForGender(subTest.normal_ranges, patient.gender, subTest.unit),
         status: '',
         comments: '',
         abnormal: false,
@@ -93,9 +125,7 @@ const EnhancedLabResultsForm: React.FC<EnhancedLabResultsFormProps> = ({
             subTestId: `${subTest.id}_nested_${idx}`,
             subTestName: `  ${nested.name}`, // Indent nested sub-tests
             observedValue: '',
-            normalRange: nested.normal_ranges && nested.normal_ranges.length > 0
-              ? `${nested.normal_ranges[0].min_value} - ${nested.normal_ranges[0].max_value} ${nested.unit}`
-              : `Consult reference values ${nested.unit}`,
+            normalRange: findNormalRangeForGender(nested.normal_ranges, patient.gender, nested.unit),
             status: '',
             comments: '',
             abnormal: false

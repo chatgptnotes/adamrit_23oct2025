@@ -97,6 +97,50 @@ interface PatientWithVisit {
   insurancePersonNo?: string;
 }
 
+// Helper function to find correct normal range based on patient gender
+const findNormalRangeForGender = (
+  normalRanges: Array<{gender?: string; min_value: number; max_value: number; unit?: string}> | undefined,
+  patientGender: string,
+  defaultUnit: string
+): { min: number; max: number; unit: string } | null => {
+  if (!normalRanges || normalRanges.length === 0) {
+    return null;
+  }
+
+  // First try to find exact gender match (Male/Female)
+  const genderMatch = normalRanges.find(
+    nr => nr.gender?.toLowerCase() === patientGender?.toLowerCase()
+  );
+
+  if (genderMatch) {
+    return {
+      min: genderMatch.min_value,
+      max: genderMatch.max_value,
+      unit: genderMatch.unit || defaultUnit
+    };
+  }
+
+  // Fallback to 'Both' if no gender-specific range found
+  const bothMatch = normalRanges.find(
+    nr => nr.gender?.toLowerCase() === 'both'
+  );
+
+  if (bothMatch) {
+    return {
+      min: bothMatch.min_value,
+      max: bothMatch.max_value,
+      unit: bothMatch.unit || defaultUnit
+    };
+  }
+
+  // Final fallback: use first available range
+  return {
+    min: normalRanges[0].min_value,
+    max: normalRanges[0].max_value,
+    unit: normalRanges[0].unit || defaultUnit
+  };
+};
+
 // Utility function to parse JSON result_value and extract actual observed value
 const parseResultValue = (resultValue) => {
   try {
@@ -756,19 +800,30 @@ const LabOrders = () => {
         const formulaData = formulasMap.get(subTestName);
 
         // Get unit from normal_ranges JSONB array if available, otherwise use normal_unit column
-        const parentUnit = bestMatch.normal_ranges?.[0]?.unit || bestMatch.normal_unit || bestMatch.unit || '';
-        const parentMinValue = bestMatch.normal_ranges?.[0]?.min_value ?? bestMatch.min_value;
-        const parentMaxValue = bestMatch.normal_ranges?.[0]?.max_value ?? bestMatch.max_value;
+        // Use gender-specific range lookup instead of just [0]
+        const parentRangeData = findNormalRangeForGender(bestMatch.normal_ranges, patientGender || 'Both', bestMatch.normal_unit || bestMatch.unit || '');
+
+        // DEBUG: Log what's happening with gender-specific ranges
+        console.log(`🔍 Parent sub-test: ${subTestName}`);
+        console.log(`   normal_ranges:`, bestMatch.normal_ranges);
+        console.log(`   patientGender:`, patientGender);
+        console.log(`   parentRangeData result:`, parentRangeData);
+
+        const parentUnit = parentRangeData?.unit || bestMatch.normal_unit || bestMatch.unit || '';
+        const parentMinValue = parentRangeData?.min ?? bestMatch.min_value;
+        const parentMaxValue = parentRangeData?.max ?? bestMatch.max_value;
+        // Skip displaying "unit" placeholder text
+        const parentDisplayUnit = parentUnit && parentUnit.toLowerCase() !== 'unit' ? parentUnit : '';
 
         // Add parent sub-test
         const parentSubTest = {
           id: bestMatch.id,
           name: subTestName,
           unit: parentUnit,
-          range: `${parentMinValue} - ${parentMaxValue} ${parentUnit}`,
+          range: `${parentMinValue} - ${parentMaxValue}${parentDisplayUnit ? ' ' + parentDisplayUnit : ''}`,
           minValue: parentMinValue,
           maxValue: parentMaxValue,
-          gender: bestMatch.normal_ranges?.[0]?.gender || bestMatch.gender,
+          gender: patientGender || 'Both',
           minAge: bestMatch.min_age,
           maxAge: bestMatch.max_age,
           allRanges: ranges,
@@ -794,23 +849,31 @@ const LabOrders = () => {
             // Get unit from nested sub-test or from normal_ranges (calculate FIRST)
             const nestedUnit = nested.unit || nested.normal_ranges?.[0]?.unit || '%';
 
-            // Get normal range from nested sub-test (use nestedUnit)
+            // Get normal range from nested sub-test using gender-specific lookup
             let nestedRange = 'Consult reference values';
+            let nestedMinValue = 0;
+            let nestedMaxValue = 0;
             if (nested.normal_ranges && nested.normal_ranges.length > 0) {
-              const nr = nested.normal_ranges[0];
-              nestedRange = `${nr.min_value} - ${nr.max_value} ${nestedUnit}`;
+              const nestedRangeData = findNormalRangeForGender(nested.normal_ranges, patientGender || 'Both', nestedUnit);
+              if (nestedRangeData) {
+                // Skip displaying "unit" placeholder text
+                const displayUnit = nestedRangeData.unit && nestedRangeData.unit.toLowerCase() !== 'unit' ? nestedRangeData.unit : '';
+                nestedRange = `${nestedRangeData.min} - ${nestedRangeData.max}${displayUnit ? ' ' + displayUnit : ''}`;
+                nestedMinValue = nestedRangeData.min;
+                nestedMaxValue = nestedRangeData.max;
+              }
             }
 
-            console.log(`    ↳ Nested: ${nested.name}, unit: ${nestedUnit}, range: ${nestedRange}`);
+            console.log(`    ↳ Nested: ${nested.name}, unit: ${nestedUnit}, range: ${nestedRange}, patientGender: ${patientGender}`);
 
             processedSubTests.push({
               id: `${bestMatch.id}_nested_${idx}`,
               name: `  ${nested.name}`, // Indent nested sub-tests
               unit: nestedUnit,
               range: nestedRange,
-              minValue: nested.normal_ranges?.[0]?.min_value || 0,
-              maxValue: nested.normal_ranges?.[0]?.max_value || 0,
-              gender: nested.normal_ranges?.[0]?.gender || 'Both',
+              minValue: nestedMinValue,
+              maxValue: nestedMaxValue,
+              gender: patientGender || 'Both',
               minAge: nested.age_ranges?.[0]?.min_age || 0,
               maxAge: nested.age_ranges?.[0]?.max_age || 100,
               isNested: true,

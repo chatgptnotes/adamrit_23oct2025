@@ -12,7 +12,7 @@ export interface AgeRange {
 export interface NormalRange {
   id: string;
   ageRange: string;
-  gender: 'Male' | 'Female' | 'Both';
+  gender: 'Male' | 'Female' | 'Both' | 'Child';
   minValue: string;
   maxValue: string;
   unit: string;
