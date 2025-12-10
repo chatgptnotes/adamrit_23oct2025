@@ -11,7 +11,7 @@ export interface TestConfig {
   max_age: number;
   age_unit: 'Days' | 'Months' | 'Years';
   age_description: string | null;
-  gender: 'Male' | 'Female' | 'Both';
+  gender: 'Male' | 'Female' | 'Both' | 'Child';
   min_value: number;
   max_value: number;
   normal_unit: string | null;

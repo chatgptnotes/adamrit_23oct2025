@@ -32,7 +32,7 @@ export interface AgeRange {
 export interface NormalRange {
   id: string;
   ageRange: string;
-  gender: 'Male' | 'Female' | 'Both';
+  gender: 'Male' | 'Female' | 'Both' | 'Child';
   minValue: string;
   maxValue: string;
   unit: string;
@@ -878,6 +878,7 @@ const TestConfigurationSection: React.FC<TestConfigurationSectionProps> = ({
                       <SelectItem value="Both">Both</SelectItem>
                       <SelectItem value="Male">Male</SelectItem>
                       <SelectItem value="Female">Female</SelectItem>
+                      <SelectItem value="Child">Child</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -1101,6 +1102,7 @@ const TestConfigurationSection: React.FC<TestConfigurationSectionProps> = ({
                               <SelectItem value="Both">Both</SelectItem>
                               <SelectItem value="Male">Male</SelectItem>
                               <SelectItem value="Female">Female</SelectItem>
+                              <SelectItem value="Child">Child</SelectItem>
                             </SelectContent>
                           </Select>
                         </div>
