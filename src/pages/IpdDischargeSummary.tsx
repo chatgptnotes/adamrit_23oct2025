@@ -248,7 +248,13 @@ const IpdDischargeSummary = () => {
   const [stayNotesTemplates, setStayNotesTemplates] = useState([
     {
       name: 'discharge_summary',
-      content: `Ignore all previous instructions.You are a medical specialist, Make a professionally written Discharge summary that will show off the power of chatgpt.: Make up facts..Add findings which are not provided to you. Come up with creative complaints, events during the stay in hospital and relevant examination findings, add medications to be given on discharge in indIan BRANDS. The entire document should be a minimum of 800 words. Use headings, subheadings, bullet points, and bold to organize the information. The person who will read the summary is another doctor. Advice appropriate precautions to be taken at home after discharge. Also advice to return to hospital in case of any or all the complications of surgery performed or medical treatment taken which was noticed after discharge. List the symptoms and signs of these complications.Do not mention the name, sex or age of the patient. Add the sentence at the end :URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT:-7030974619, 9373111709. If a surgery was performed, Come up with creative note which should be a minimum of 6 rows in a table . OPERATION NOTES should be in a table form only if a surgery was performed. It has to contain the date and time of surgery in first row, The second row should contain the title as in the message. The third row has to contain the name of surgeon. The fourth row has to contain the name of anaesthetist. Fifth row has to contain the type of anaesthesia, sixth row should detailed description of the surgery.The person who is going to read what you share will be a doctor.In the begining make a list of Medications with detailed instructions like once a day, twice a day ot thrice a day. This patient does not have comoprbidities other than that is mentioned.The medication should be at the begining of summary and in table form with columns for name , strength, route , dosage and the number of days to be taken. Another line in hindi to be added in the column of dosage in addition to english. The diagnosis should be in the begining of the summary before the medication table`
+      content: `You are a medical specialist. Write a brief, professional surgical/medical summary in 5-8 lines only. Include:
+1. Procedure performed
+2. Key findings
+3. Patient's condition post-procedure
+4. Any complications (if none, state "uneventful recovery")
+
+Keep it concise and professional. Do not use tables, bullet points, or extensive formatting. Do not mention patient name, age, or gender. Write in paragraph form only. Maximum 100 words.`
     }
   ]);
   const [newTemplateName, setNewTemplateName] = useState('');
@@ -2204,12 +2210,24 @@ ${surgeryInfo?.description || surgery?.notes || 'Standard surgical procedure per
   </div>
   ` : ''}
 
-  ${summaryData.chief_complaints ? `
-  <div class="section">
-    <div class="section-subtitle">CLINICAL HISTORY:</div>
-    <div class="section-content">${summaryData.chief_complaints.replace(/\n/g, '<br>')}</div>
-  </div>
-  ` : ''}
+  ${(() => {
+    if (!summaryData.ot_notes) return '';
+    // Extract only CLINICAL HISTORY section from ot_notes
+    let clinicalHistory = summaryData.ot_notes;
+
+    // Remove "CLINICAL HISTORY:" header if present at start
+    clinicalHistory = clinicalHistory.replace(/^CLINICAL HISTORY:\s*/i, '');
+
+    // Extract only up to the next section marker
+    const sectionMarkers = /(\n\s*\||\nEXAMINATION|\nMEDICATION|\nOPERATION|\nADVICE|\n\*\*)/i;
+    const match = clinicalHistory.search(sectionMarkers);
+    if (match > 0) {
+      clinicalHistory = clinicalHistory.substring(0, match).trim();
+    }
+
+    if (!clinicalHistory) return '';
+    return '<div class="section"><div class="section-subtitle">CLINICAL HISTORY:</div><div class="section-content">' + clinicalHistory.replace(/\n/g, '<br>') + '</div></div>';
+  })()}
 
   ${summaryData.vital_signs ? `
   <div class="section">
@@ -3636,6 +3654,66 @@ DD/MM/YYYY:-Test Category: Test1:Value1 unit, Test2:Value2 unit`);
                 size="sm"
                 variant="outline"
                 className="bg-purple-50 border-purple-200 text-purple-700 hover:bg-purple-100"
+                onClick={async (e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+
+                  try {
+                    toast({
+                      title: "Processing",
+                      description: "Generating description with AI...",
+                    });
+
+                    // Build context from surgery details
+                    const prompt = `You are a medical specialist. Write a brief, professional surgical summary in 5-8 lines only for:
+Procedure: ${surgeryDetails.procedurePerformed || 'Not specified'}
+Surgeon: ${surgeryDetails.surgeon || 'Not specified'}
+Anesthesia: ${surgeryDetails.anesthesia || 'Not specified'}
+
+Include: procedure performed, key findings, patient's condition post-procedure, complications (if none, state "uneventful recovery").
+Keep it concise - maximum 100 words. Write in paragraph form only. No tables or bullet points.`;
+
+                    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+                      method: 'POST',
+                      headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${import.meta.env.VITE_OPENAI_API_KEY}`
+                      },
+                      body: JSON.stringify({
+                        model: 'gpt-4',
+                        messages: [
+                          { role: 'user', content: prompt }
+                        ],
+                        temperature: 0.7,
+                        max_tokens: 300
+                      })
+                    });
+
+                    if (!response.ok) {
+                      throw new Error(`OpenAI API error: ${response.statusText}`);
+                    }
+
+                    const data = await response.json();
+                    const generatedDescription = data.choices[0]?.message?.content;
+
+                    if (generatedDescription) {
+                      setSurgeryDetails({...surgeryDetails, description: generatedDescription});
+                      toast({
+                        title: "Success",
+                        description: "Description generated successfully!",
+                      });
+                    } else {
+                      throw new Error('No response from AI');
+                    }
+                  } catch (error) {
+                    console.error('AI Generation Error:', error);
+                    toast({
+                      title: "Error",
+                      description: `Failed to generate description: ${error instanceof Error ? error.message : 'Unknown error'}`,
+                      variant: "destructive"
+                    });
+                  }
+                }}
               >
                 🤖 AI Generate
               </Button>
@@ -3899,7 +3977,7 @@ Enter surgical procedure description here...`}
                               messages: [
                                 {
                                   role: 'system',
-                                  content: 'You are a medical documentation assistant. When creating tables, ALWAYS use markdown table format with proper alignment. Ensure tables have clear borders using pipes (|) and dashes (-). Format tables exactly like this:\n\n| Column 1 | Column 2 | Column 3 |\n|----------|----------|----------|\n| Data 1   | Data 2   | Data 3   |\n\nMake sure each table has a header row, a separator row with dashes, and data rows. Keep table formatting clean and consistent.\n\nIMPORTANT INSTRUCTIONS:\n1. Do NOT include any PATIENT DETAILS section or table - patient information is already displayed at the top of the document\n2. At the end of the ADVICE section, always add this line: "Follow up after 7 days/SOS."\n3. Do NOT include the emergency contact line (URGENT CARE/EMERGENCY CARE IS AVAILABLE...) in the ADVICE section, as it will be added separately at the bottom of the document\n4. Start directly with the Operation Notes table if surgery was performed, or with MEDICATIONS if no surgery'
+                                  content: 'You are a medical documentation assistant. When creating tables, ALWAYS use markdown table format with proper alignment. Ensure tables have clear borders using pipes (|) and dashes (-). Format tables exactly like this:\n\n| Column 1 | Column 2 | Column 3 |\n|----------|----------|----------|\n| Data 1   | Data 2   | Data 3   |\n\nMake sure each table has a header row, a separator row with dashes, and data rows. Keep table formatting clean and consistent.\n\nIMPORTANT INSTRUCTIONS:\n1. Do NOT include any PATIENT DETAILS section or table - patient information is already displayed at the top of the document\n2. At the end of the ADVICE section, always add this line: "Follow up after 7 days/SOS."\n3. Do NOT include the emergency contact line (URGENT CARE/EMERGENCY CARE IS AVAILABLE...) in the ADVICE section, as it will be added separately at the bottom of the document\n4. Start directly with the Operation Notes table if surgery was performed, or with MEDICATIONS if no surgery\n5. When you see "CASE SUMMARY / PRESENTING COMPLAINTS:", expand the brief symptoms/complaints into a proper 4-5 line CLINICAL HISTORY paragraph. Write it as a professional medical narrative describing the patient presenting symptoms, duration, progression, and relevant history. Do not just copy the text verbatim - elaborate and format it professionally.'
                                 },
                                 {
                                   role: 'user',
