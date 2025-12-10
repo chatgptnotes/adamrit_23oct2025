@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { toast as sonnerToast } from 'sonner';
+import * as XLSX from 'xlsx';
 import { AyushmanConsultant } from './types';
 
 export const useAyushmanConsultants = () => {
@@ -164,6 +166,90 @@ export const useAyushmanConsultants = () => {
     }
   };
 
+  // Export function - downloads all consultants as Excel
+  const handleExport = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('ayushman_consultants')
+        .select('*')
+        .order('name', { ascending: true });
+
+      if (error) {
+        sonnerToast.error('Failed to export data');
+        return;
+      }
+
+      const headers = ['name', 'specialty', 'department', 'contact_info', 'tpa_rate', 'non_nabh_rate', 'nabh_rate', 'private_rate'];
+      const headerLabels = ['Name', 'Specialty', 'Department', 'Contact Info', 'TPA Rate', 'Non-NABH Rate', 'NABH Rate', 'Private Rate'];
+
+      const excelData = data
+        .filter(row => row.name && row.name.trim())
+        .map((row, index) => {
+          const obj: any = { 'Sr No': index + 1 };
+          headers.forEach((h, i) => {
+            obj[headerLabels[i]] = (row as any)[h] || '';
+          });
+          return obj;
+        });
+
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.json_to_sheet(excelData);
+      XLSX.utils.book_append_sheet(wb, ws, 'Ayushman Consultants');
+      XLSX.writeFile(wb, `ayushman_consultants_export_${new Date().toISOString().split('T')[0]}.xlsx`);
+
+      sonnerToast.success(`Exported ${data.length} records`);
+    } catch (err) {
+      sonnerToast.error('Export failed');
+    }
+  };
+
+  // Import function - uploads Excel file and adds records
+  const handleImport = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
+        const data = new Uint8Array(e.target?.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const jsonData = XLSX.utils.sheet_to_json(worksheet);
+
+        const records = jsonData.map((row: any) => ({
+          name: row['Name'] || row['name'] || null,
+          specialty: row['Specialty'] || row['specialty'] || null,
+          department: row['Department'] || row['department'] || null,
+          contact_info: row['Contact Info'] || row['contact_info'] || null,
+          tpa_rate: row['TPA Rate'] || row['tpa_rate'] || null,
+          non_nabh_rate: row['Non-NABH Rate'] || row['non_nabh_rate'] || null,
+          nabh_rate: row['NABH Rate'] || row['nabh_rate'] || null,
+          private_rate: row['Private Rate'] || row['private_rate'] || null,
+        })).filter((r: any) => r.name && r.name.trim());
+
+        if (records.length === 0) {
+          sonnerToast.error('No valid records found in file');
+          return;
+        }
+
+        const { error } = await supabase.from('ayushman_consultants').insert(records);
+
+        if (error) {
+          sonnerToast.error('Failed to import: ' + error.message);
+        } else {
+          sonnerToast.success(`Imported ${records.length} records`);
+          queryClient.invalidateQueries({ queryKey: ['ayushman-consultants'] });
+        }
+      } catch (err) {
+        sonnerToast.error('Import failed - invalid file format');
+      }
+    };
+
+    reader.readAsArrayBuffer(file);
+    event.target.value = '';
+  };
+
   return {
     searchTerm,
     setSearchTerm,
@@ -179,6 +265,8 @@ export const useAyushmanConsultants = () => {
     handleAdd,
     handleEdit,
     handleUpdate,
-    handleDelete
+    handleDelete,
+    handleExport,
+    handleImport
   };
 };

@@ -143,29 +143,46 @@ const EnhancedLabResultsForm: React.FC<EnhancedLabResultsFormProps> = ({
       return updatedResults;
     }
 
-    // Create a map of test name to value AND index for easy lookup
-    const valueMap = new Map<string, { value: number | null, index: number }>();
-    updatedResults.forEach((result, resultIndex) => {
-      const cleanName = result.subTestName.trim();
-      const numValue = parseFloat(result.observedValue);
+    // Multi-pass calculation for chain formulas (e.g., A/G Ratio depends on Globulin which depends on Protein - Albumin)
+    let changesMade = true;
+    let iterations = 0;
+    const maxIterations = 10; // Prevent infinite loops
 
-      // Store value OR null if empty (to detect deletions)
-      if (!isNaN(numValue) && result.observedValue !== '') {
-        valueMap.set(cleanName, { value: numValue, index: resultIndex });
-        valueMap.set(cleanName.toLowerCase(), { value: numValue, index: resultIndex });
-        console.log(`  📍 Stored value for "${cleanName}" (index ${resultIndex}): ${numValue}`);
-      } else if (result.observedValue === '' || result.observedValue.trim() === '') {
-        // Empty value - mark as null for deletion detection
-        valueMap.set(cleanName, { value: null, index: resultIndex });
-        valueMap.set(cleanName.toLowerCase(), { value: null, index: resultIndex });
-        console.log(`  🗑️ Empty value for "${cleanName}" (index ${resultIndex})`);
+    while (changesMade && iterations < maxIterations) {
+      changesMade = false;
+      iterations++;
+      console.log(`\n🔄 Formula calculation pass ${iterations}...`);
+
+      // Create a map of test name to value AND index for easy lookup
+      // Rebuild each iteration to pick up newly calculated values
+      const valueMap = new Map<string, { value: number | null, index: number }>();
+      updatedResults.forEach((result, resultIndex) => {
+        const cleanName = result.subTestName.trim();
+        const numValue = parseFloat(result.observedValue);
+
+        // Store value OR null if empty (to detect deletions)
+        if (!isNaN(numValue) && result.observedValue !== '') {
+          valueMap.set(cleanName, { value: numValue, index: resultIndex });
+          valueMap.set(cleanName.toLowerCase(), { value: numValue, index: resultIndex });
+          if (iterations === 1) {
+            console.log(`  📍 Stored value for "${cleanName}" (index ${resultIndex}): ${numValue}`);
+          }
+        } else if (result.observedValue === '' || result.observedValue.trim() === '') {
+          // Empty value - mark as null for deletion detection
+          valueMap.set(cleanName, { value: null, index: resultIndex });
+          valueMap.set(cleanName.toLowerCase(), { value: null, index: resultIndex });
+          if (iterations === 1) {
+            console.log(`  🗑️ Empty value for "${cleanName}" (index ${resultIndex})`);
+          }
+        }
+      });
+
+      if (iterations === 1) {
+        console.log('📊 Value map:', Object.fromEntries(valueMap));
       }
-    });
 
-    console.log('📊 Value map:', Object.fromEntries(valueMap));
-
-    // Check each result with formula
-    resultsWithFormulas.forEach((resultWithFormula) => {
+      // Check each result with formula
+      resultsWithFormulas.forEach((resultWithFormula) => {
       const subTestData = (resultWithFormula as any)._subTestData;
       if (subTestData && subTestData.formula && subTestData.formula.trim()) {
         console.log(`\n📐 Processing formula for "${subTestData.sub_test_name}":`);
@@ -257,9 +274,13 @@ const EnhancedLabResultsForm: React.FC<EnhancedLabResultsFormProps> = ({
 
               if (!isNaN(result) && isFinite(result)) {
                 const calculatedValue = result.toFixed(2);
-                console.log(`  ✅ Formula calculated: ${originalFormula} = ${calculatedValue}`);
-                console.log(`  ✅ Updating result at index ${targetIndex}`);
-                updatedResults[targetIndex].observedValue = calculatedValue;
+                const previousValue = updatedResults[targetIndex].observedValue;
+                if (previousValue !== calculatedValue) {
+                  console.log(`  ✅ Formula calculated: ${originalFormula} = ${calculatedValue}`);
+                  console.log(`  ✅ Updating result at index ${targetIndex} (was: ${previousValue})`);
+                  updatedResults[targetIndex].observedValue = calculatedValue;
+                  changesMade = true; // Trigger another pass for chain calculations
+                }
               } else {
                 console.log(`  ❌ Invalid calculation result: ${result}`);
               }
@@ -275,7 +296,9 @@ const EnhancedLabResultsForm: React.FC<EnhancedLabResultsFormProps> = ({
       }
     });
 
-    console.log('🏁 Formula calculations complete\n');
+    } // End while loop
+
+    console.log(`🏁 Formula calculations complete after ${iterations} pass(es)\n`);
     return updatedResults;
   };
 

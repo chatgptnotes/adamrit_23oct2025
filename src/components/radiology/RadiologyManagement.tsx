@@ -5,6 +5,8 @@ import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePermissions } from '@/hooks/usePermissions';
 import { supabase } from '@/integrations/supabase/client';
+import * as XLSX from 'xlsx';
+import { toast } from 'sonner';
 import { 
   FileText, 
   TestTube, 
@@ -23,6 +25,7 @@ import {
   Scan,
   Eye,
   Download,
+  Upload,
   Settings,
   Bell,
   Search,
@@ -219,6 +222,129 @@ const RadiologyManagement: React.FC = () => {
   const handleSubSpecialityClick = () => {
     console.log('Button clicked! Opening form...');
     setShowSubSpecialityForm(true);
+  };
+
+  // Export function - downloads all radiology data as Excel
+  const handleExport = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('radiology')
+        .select('*')
+        .order('name', { ascending: true });
+
+      if (error) {
+        toast.error('Failed to export data');
+        return;
+      }
+
+      // Column keys matching the database
+      const headers = ['name', 'category', 'NABH_NABL_Rate', 'Non_NABH_NABL_Rate', 'private', 'bhopal_nabh', 'bhopal_non_nabh'];
+      // Human-readable labels for Excel header row
+      const headerLabels = ['Test Name', 'Sub-Speciality', 'NABH Rate', 'Non-NABH Rate', 'Private Rate', 'NABH Bhopal Rate', 'Non-NABH Bhopal Rate'];
+
+      // Prepare data for Excel - filter out empty rows and add Sr No
+      const excelData = data
+        .filter(row => row.name && row.name.trim())
+        .map((row, index) => {
+          const obj: any = { 'Sr No': index + 1 };
+          headers.forEach((h, i) => {
+            obj[headerLabels[i]] = (row as any)[h] || '';
+          });
+          return obj;
+        });
+
+      // Create workbook and worksheet
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.json_to_sheet(excelData);
+      XLSX.utils.book_append_sheet(wb, ws, 'Radiology');
+
+      // Download Excel file
+      XLSX.writeFile(wb, `radiology_export_${new Date().toISOString().split('T')[0]}.xlsx`);
+
+      toast.success(`Exported ${data.length} records`);
+    } catch (err) {
+      toast.error('Export failed');
+    }
+  };
+
+  // Import function - uploads Excel file and adds records
+  const handleImportExcel = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
+        let records: any[] = [];
+        const fileName = file.name.toLowerCase();
+
+        if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
+          // Parse Excel file
+          const data = new Uint8Array(e.target?.result as ArrayBuffer);
+          const workbook = XLSX.read(data, { type: 'array' });
+          const sheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[sheetName];
+          const jsonData = XLSX.utils.sheet_to_json(worksheet);
+
+          // Map Excel headers to database columns
+          records = jsonData.map((row: any) => ({
+            name: row['Test Name'] || null,
+            category: row['Sub-Speciality'] || null,
+            NABH_NABL_Rate: row['NABH Rate'] || null,
+            Non_NABH_NABL_Rate: row['Non-NABH Rate'] || null,
+            private: row['Private Rate'] || null,
+            bhopal_nabh: row['NABH Bhopal Rate'] || null,
+            bhopal_non_nabh: row['Non-NABH Bhopal Rate'] || null,
+          }));
+        } else {
+          // Parse CSV file
+          const text = e.target?.result as string;
+          const lines = text.split('\n');
+          const csvHeaders = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
+
+          records = lines.slice(1).filter(line => line.trim()).map(line => {
+            const values = line.match(/(".*?"|[^,]+)/g) || [];
+            const record: any = {};
+            csvHeaders.forEach((header, i) => {
+              const value = values[i]?.replace(/^"|"$/g, '').replace(/""/g, '"') || null;
+              record[header] = value === '' ? null : value;
+            });
+            return {
+              name: record['Test Name'] || null,
+              category: record['Sub-Speciality'] || null,
+              NABH_NABL_Rate: record['NABH Rate'] || null,
+              Non_NABH_NABL_Rate: record['Non-NABH Rate'] || null,
+              private: record['Private Rate'] || null,
+              bhopal_nabh: record['NABH Bhopal Rate'] || null,
+              bhopal_non_nabh: record['Non-NABH Bhopal Rate'] || null,
+            };
+          });
+        }
+
+        // Filter out empty records
+        records = records.filter(r => r.name && r.name.trim());
+
+        const { error } = await supabase.from('radiology').insert(records);
+
+        if (error) {
+          toast.error('Failed to import: ' + error.message);
+        } else {
+          toast.success(`Imported ${records.length} records`);
+          // Refresh the radiology tests list
+          loadRadiologyTests();
+        }
+      } catch (err) {
+        toast.error('Import failed - invalid file format');
+      }
+    };
+
+    // Read as ArrayBuffer for xlsx, as text for csv
+    if (file.name.toLowerCase().endsWith('.xlsx') || file.name.toLowerCase().endsWith('.xls')) {
+      reader.readAsArrayBuffer(file);
+    } else {
+      reader.readAsText(file);
+    }
+    event.target.value = '';
   };
 
   const handleSubSpecialitySubmit = async (specialityName: string) => {
@@ -901,11 +1027,21 @@ const RadiologyManagement: React.FC = () => {
             <div className="flex items-center gap-2">
               <Button
                 variant="outline"
-                className="bg-blue-600 text-white hover:bg-blue-700"
-                onClick={handleImportData}
+                size="sm"
+                onClick={handleExport}
               >
-                Import Data
+                <Download className="h-4 w-4 mr-2" />
+                Export
               </Button>
+              <label className="cursor-pointer">
+                <Button variant="outline" size="sm" asChild>
+                  <span>
+                    <Upload className="h-4 w-4 mr-2" />
+                    Import
+                  </span>
+                </Button>
+                <input type="file" accept=".csv,.xlsx,.xls" onChange={handleImportExcel} className="hidden" />
+              </label>
               <Button
                 variant="outline"
                 className="bg-blue-600 text-white hover:bg-blue-700"
@@ -913,12 +1049,12 @@ const RadiologyManagement: React.FC = () => {
               >
                 Radiology Sub Speciality
               </Button>
-                             <Button
-                 className="bg-blue-600 text-white hover:bg-blue-700"
-                 onClick={() => setActiveView('addTestForm')}
-               >
-                 Add Test
-               </Button>
+              <Button
+                className="bg-blue-600 text-white hover:bg-blue-700"
+                onClick={() => setActiveView('addTestForm')}
+              >
+                Add Test
+              </Button>
             </div>
           </div>
 
