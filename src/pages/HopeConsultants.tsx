@@ -16,7 +16,9 @@ const HopeConsultants = () => {
     filteredConsultants,
     handleAdd,
     handleEdit,
-    handleDelete
+    handleDelete,
+    handleExport,
+    handleImport
   } = useHopeConsultants();
 
   if (isLoading) {
@@ -38,6 +40,8 @@ const HopeConsultants = () => {
           searchTerm={searchTerm}
           onSearchChange={setSearchTerm}
           onAddClick={() => setIsAddDialogOpen(true)}
+          onExport={handleExport}
+          onImport={handleImport}
         />
 
         <HopeConsultantsList

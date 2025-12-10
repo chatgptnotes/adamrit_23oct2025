@@ -15,7 +15,9 @@ const AyushmanConsultants = () => {
     filteredConsultants,
     handleAdd,
     handleEdit,
-    handleDelete
+    handleDelete,
+    handleExport,
+    handleImport
   } = useAyushmanConsultants();
 
   if (isLoading) {
@@ -37,6 +39,8 @@ const AyushmanConsultants = () => {
           searchTerm={searchTerm}
           onSearchChange={setSearchTerm}
           onAddClick={() => setIsAddDialogOpen(true)}
+          onExport={handleExport}
+          onImport={handleImport}
         />
 
         <AyushmanConsultantsList
