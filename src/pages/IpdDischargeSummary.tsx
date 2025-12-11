@@ -1052,7 +1052,8 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
     } else if (!investigations || investigations === 'Investigation details will be populated here...' || investigations.includes('Lab and radiology investigations will be populated here')) {
       setInvestigations('Lab and radiology investigations will be populated here when data is available.');
     }
-  }, [labResultsData, radiologyData, investigations]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [labResultsData, radiologyData]);  // Removed 'investigations' to prevent overwriting manual fetch data
 
   // Update surgery details when data is loaded (combine visit_surgeries + ot_notes data)
   useEffect(() => {
@@ -2199,8 +2200,11 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
     // Remove "CLINICAL HISTORY:" header if present at start
     clinicalHistory = clinicalHistory.replace(/^CLINICAL HISTORY:\s*/i, '');
 
-    // Extract only up to the next section marker
-    const sectionMarkers = /(\n\s*\||\nEXAMINATION|\nMEDICATION|\nOPERATION|\nADVICE|\n\*\*)/i;
+    // Remove markdown ## headers (e.g., "## Clinical History")
+    clinicalHistory = clinicalHistory.replace(/^##\s*.*?\n/gm, '');
+
+    // Extract only up to the next section marker (handles ##, ** and : formats, plus "Upon/On examination" text)
+    const sectionMarkers = /(\n\s*\||\n##\s*Examination|\n\*\*EXAMINATION|\nEXAMINATION:|\nUpon examination|\nOn examination|\nMEDICATION|\nADVICE:|\n\*\*ADVICE|\n##\s*Advice|\nOperation Notes)/i;
     const match = clinicalHistory.search(sectionMarkers);
     if (match > 0) {
       clinicalHistory = clinicalHistory.substring(0, match).trim();
@@ -2212,11 +2216,27 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
 
   ${(() => {
     if (!summaryData.ot_notes) return '';
-    // Extract EXAMINATION section from ot_notes
+    // Extract EXAMINATION section from ot_notes (handles ##, **, : formats and "Upon examination" text)
     const content = summaryData.ot_notes;
-    const examMatch = content.match(/EXAMINATION:?\s*([\s\S]*?)(?=\n\s*(?:MEDICATIONS|OPERATION|ADVICE|\*\*|$))/i);
+    // Try ## Examination format first, then **EXAMINATION**, then EXAMINATION:, then "Upon/On examination"
+    let examMatch = content.match(/##\s*Examination\s*([\s\S]*?)(?=\n\s*(?:##\s*Operation|##\s*Advice|Operation Notes|\*\*|$))/i);
+    if (!examMatch) {
+      examMatch = content.match(/\*\*EXAMINATION\*\*\s*([\s\S]*?)(?=\n\s*(?:\*\*ADVICE|\*\*OPERATION|ADVICE:|Operation Notes|$))/i);
+    }
+    if (!examMatch) {
+      examMatch = content.match(/EXAMINATION:?\s*([\s\S]*?)(?=\n\s*(?:MEDICATIONS|OPERATION|ADVICE:|\*\*|$))/i);
+    }
+    if (!examMatch) {
+      // Try to capture "Upon examination" or "On examination" text directly
+      examMatch = content.match(/(Upon examination[\s\S]*?)(?=\n\s*(?:##\s*Operation|Operation Notes|ADVICE:|$))/i);
+      if (!examMatch) {
+        examMatch = content.match(/(On examination[\s\S]*?)(?=\n\s*(?:##\s*Operation|Operation Notes|ADVICE:|$))/i);
+      }
+    }
     if (examMatch && examMatch[1]) {
-      const examination = examMatch[1].trim();
+      let examination = examMatch[1].trim();
+      // Remove markdown ## headers
+      examination = examination.replace(/^##\s*.*?\n/gm, '');
       return '<div class="section"><div class="section-subtitle">EXAMINATION:</div><div class="section-content">' + examination.replace(/\n/g, '<br>') + '</div></div>';
     }
     return '';
@@ -2510,10 +2530,40 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
 
       let data, error;
 
-      if (visitUUID) {
-        console.log('🧪 Fetching LATEST lab results for visit UUID:', visitUUID);
+      // First try with TEXT visit_id (e.g., "IH25L06010") - this is how LabOrders saves results
+      console.log('🧪 Fetching lab results for TEXT visit_id:', visitId);
 
-        const result = await supabase
+      let result = await supabase
+        .from('lab_results')
+        .select(`
+          id,
+          visit_id,
+          test_name,
+          test_category,
+          result_value,
+          result_unit,
+          main_test_name,
+          created_at,
+          updated_at
+        `)
+        .eq('visit_id', visitId)
+        .order('created_at', { ascending: false })
+        .order('updated_at', { ascending: false });
+
+      data = result.data;
+      error = result.error;
+
+      console.log('✅ Lab results fetched with TEXT visit_id:', {
+        count: data?.length,
+        firstResult: data?.[0],
+        error
+      });
+
+      // If no results with text visit_id, try with UUID as fallback
+      if ((!data || data.length === 0) && visitUUID) {
+        console.log('🧪 No results with text visit_id, trying UUID:', visitUUID);
+
+        result = await supabase
           .from('lab_results')
           .select(`
             id,
@@ -2533,26 +2583,18 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
         data = result.data;
         error = result.error;
 
-        console.log('✅ Lab results fetched:', {
+        console.log('✅ Lab results fetched with UUID:', {
           count: data?.length,
           firstResult: data?.[0],
           error
         });
-
-        // Log first few results to see what we got
-        if (data && data.length > 0) {
-          console.log('📋 First 3 results:', data.slice(0, 3));
-        }
-      } else {
-        console.log('⚠️ No visit UUID found, cannot fetch lab results');
-        data = [];
       }
 
-      // If no results for this visit ID, try to get any recent lab results to show example format
-      if (!data || data.length === 0) {
-        console.log('No results for visit ID, trying to get sample data...');
+      // If still no results, try by patient_name (fallback since visit_id may not be linked)
+      if ((!data || data.length === 0) && patientData?.patients?.name) {
+        console.log('🧪 No results with visit_id, trying by patient_name:', patientData.patients.name);
 
-        const { data: sampleData } = await supabase
+        result = await supabase
           .from('lab_results')
           .select(`
             id,
@@ -2563,32 +2605,29 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
             result_unit,
             main_test_name,
             created_at,
-            patient_name
+            updated_at
           `)
-          .order('created_at', { ascending: false })
-          .limit(5);
+          .ilike('patient_name', `%${patientData.patients.name}%`)
+          .order('created_at', { ascending: false });
 
-        if (sampleData && sampleData.length > 0) {
-          const sampleResult = sampleData[0];
-          const sampleFormat = `${format(new Date(sampleResult.created_at), 'dd/MM/yyyy')}:-${sampleResult.main_test_name || 'Sample Test'}: ${sampleResult.test_name}:${sampleResult.result_value || 'Sample Value'}${sampleResult.result_unit ? ' ' + sampleResult.result_unit : ''}`;
+        data = result.data;
+        error = result.error;
 
-          setInvestigations(`No lab results found for visit ID: ${visitId}
+        console.log('✅ Lab results fetched by patient_name:', {
+          count: data?.length,
+          firstResult: data?.[0],
+          error
+        });
+      }
 
-Sample format (from other patients):
-${sampleFormat}
+      // Log first few results to see what we got
+      if (data && data.length > 0) {
+        console.log('📋 First 3 results:', data.slice(0, 3));
+      }
 
-You can manually enter lab results in this format:
-DD/MM/YYYY:-Test Category: Test1:Value1 unit, Test2:Value2 unit
-
-Example:
-26/09/2024:-KFT (Kidney Function Test): Blood Urea:39.3 mg/dl, Creatinine:1.03 mg/dl, Sr. Sodium:147 mmol/L`);
-
-          toast({
-            title: "No Data for This Visit",
-            description: `No lab results found for visit ${visitId}. Sample format provided.`,
-          });
-          return;
-        }
+      // Note: Don't return early here - continue to check visit_labs and radiology tables
+      if (!data || data.length === 0) {
+        console.log('No lab_results found, will check visit_labs table next...');
       }
 
       // Process lab results
@@ -2650,6 +2689,114 @@ Example:
           .join('\n\n');
 
         combinedResults.push(formattedLabResults);
+      }
+
+      // Track visit_labs count for toast message
+      let visitLabsCount = 0;
+
+      // Track which tests already have detailed results from lab_results
+      const testsWithResults = new Set<string>();
+      if (data && data.length > 0) {
+        data.forEach((result: any) => {
+          const mainTestName = result.main_test_name || result.test_category;
+          if (mainTestName) {
+            testsWithResults.add(mainTestName.toLowerCase());
+          }
+        });
+        console.log('📋 Tests with detailed results:', Array.from(testsWithResults));
+      }
+
+      // Also fetch from visit_labs table (where Lab Dashboard stores results)
+      if (visitUUID) {
+        console.log('🧪 Fetching from visit_labs for visit UUID:', visitUUID);
+
+        // Step 1: Simple query without join to verify data exists
+        const { data: visitLabsData, error: visitLabsError } = await supabase
+          .from('visit_labs')
+          .select('*')
+          .eq('visit_id', visitUUID)
+          .order('created_at', { ascending: false });
+
+        console.log('✅ visit_labs raw query result:', {
+          count: visitLabsData?.length || 0,
+          error: visitLabsError,
+          data: visitLabsData
+        });
+
+        if (visitLabsData && visitLabsData.length > 0) {
+          // Update count for toast message
+          visitLabsCount = visitLabsData.length;
+
+          // Step 2: Fetch lab details separately
+          const labIds = [...new Set(visitLabsData.map((vl: any) => vl.lab_id).filter(Boolean))];
+          console.log('🔬 Fetching lab details for IDs:', labIds);
+
+          const { data: labDetails, error: labError } = await supabase
+            .from('lab')
+            .select('id, name, category, description')
+            .in('id', labIds);
+
+          console.log('🔬 Lab details result:', { labDetails, labError });
+
+          // Create a lookup map
+          const labMap: Record<string, any> = {};
+          labDetails?.forEach((l: any) => {
+            labMap[l.id] = l;
+          });
+
+          // Enrich visitLabsData with lab info
+          const enrichedData = visitLabsData.map((vl: any) => ({
+            ...vl,
+            lab: labMap[vl.lab_id] || null
+          }));
+
+          // Group by date and TEST NAME (for detailed results format)
+          // Skip tests that already have detailed results from lab_results
+          const groupedVisitLabs = enrichedData.reduce((acc: any, item: any) => {
+            const date = format(new Date(item.ordered_date || item.created_at), 'dd/MM/yyyy');
+            const testName = item.lab?.name || 'Unknown Test';
+
+            // Skip if this test already has detailed results from lab_results
+            if (testsWithResults.has(testName.toLowerCase())) {
+              console.log(`⏭️ Skipping ${testName} - already has detailed results`);
+              return acc;
+            }
+
+            const key = `${date}-${testName}`;
+
+            if (!acc[key]) {
+              acc[key] = {
+                date,
+                testName,
+                resultValue: item.result_value || null,
+                status: item.status
+              };
+            } else if (item.result_value && !acc[key].resultValue) {
+              // Update with result value if we didn't have one
+              acc[key].resultValue = item.result_value;
+            }
+
+            return acc;
+          }, {});
+
+          const formattedVisitLabs = Object.values(groupedVisitLabs)
+            .map((group: any) => {
+              if (group.resultValue) {
+                // Has results - show test name with detailed values
+                return `${group.date}:-${group.testName}: ${group.resultValue}`;
+              } else {
+                // No results yet - show test name with status
+                return `${group.date}:-${group.testName} (${group.status || 'ordered'})`;
+              }
+            })
+            .join('\n');
+
+          // Don't include visit_labs status in discharge summary - only show actual lab results with values
+          // if (formattedVisitLabs) {
+          //   console.log('📋 Formatted visit_labs data:', formattedVisitLabs);
+          //   combinedResults.push(formattedVisitLabs);
+          // }
+        }
       }
 
       // Now fetch radiology data
@@ -2729,9 +2876,24 @@ Example:
         combinedResults.push(formattedRadiologyResults);
       }
 
-      // Combine all results
+      // Combine all results - only add RADIOLOGY separator before actual radiology data
       if (combinedResults.length > 0) {
-        const finalResults = combinedResults.join('\n\n--- RADIOLOGY ---\n\n');
+        let labResultsSection = '';
+        let radiologySection = '';
+
+        // Check if last item contains radiology data (radiology is always pushed last)
+        if (radiologyResults.length > 0 && combinedResults.length > 1) {
+          // Last item is radiology, everything else is lab data
+          labResultsSection = combinedResults.slice(0, -1).join('\n\n');
+          radiologySection = combinedResults[combinedResults.length - 1];
+        } else {
+          // No radiology or only one item - join all as lab data
+          labResultsSection = combinedResults.join('\n\n');
+        }
+
+        const finalResults = radiologySection
+          ? `${labResultsSection}\n\n--- RADIOLOGY ---\n\n${radiologySection}`
+          : labResultsSection;
 
         // IMPORTANT: Clean any JSON that might still be in the text
         console.log('🧹 Auto-cleaning fetched data before displaying...');
@@ -2740,7 +2902,7 @@ Example:
 
         setInvestigations(cleanedResults);
 
-        const labCount = data?.length || 0;
+        const labCount = (data?.length || 0) + visitLabsCount;
         const radiologyCount = radiologyResults.length;
 
         toast({
@@ -3532,7 +3694,17 @@ DD/MM/YYYY:-Test Category: Test1:Value1 unit, Test2:Value2 unit`);
       {/* Investigations */}
       <Card>
         <CardHeader>
-          <CardTitle>Investigations:</CardTitle>
+          <CardTitle className="flex items-center justify-between">
+            <span>Investigations:</span>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleFetchInvestigations}
+              disabled={isInvestigationsLoading}
+            >
+              {isInvestigationsLoading ? 'Loading...' : 'Fetch Lab & Radiology Data'}
+            </Button>
+          </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex items-center space-x-2">
