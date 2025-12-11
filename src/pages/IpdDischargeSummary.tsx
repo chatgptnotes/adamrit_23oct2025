@@ -1913,6 +1913,18 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
     return html;
   };
 
+  // Helper function to detect placeholder/example investigation text
+  const isPlaceholderInvestigations = (text: string): boolean => {
+    if (!text) return true;
+    const placeholderIndicators = [
+      'No investigations found in database',
+      'You can manually enter investigations in this format',
+      'DD/MM/YYYY:-Test Category: Test1:Value1 unit',
+      'Example:',
+    ];
+    return placeholderIndicators.some(indicator => text.includes(indicator));
+  };
+
   // Function to generate formatted print HTML
   const generatePrintHTML = (summaryData: any, patientInfo: any, visitIdString: string, labResults?: any) => {
     const currentDate = format(new Date(), 'dd/MM/yyyy');
@@ -2299,14 +2311,19 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
     return '';
   })()}
 
-  ${labResults?.formattedResults || summaryData.lab_investigations?.investigations_text ? `
-  <div class="section">
-    <div class="section-subtitle">INVESTIGATIONS</div>
-    <div class="section-content">
-      ${labResults?.formattedResults ? labResults.formattedResults.replace(/\n/g, '<br>') : (summaryData.lab_investigations?.investigations_text ? cleanJSONFromText(summaryData.lab_investigations.investigations_text).replace(/\n/g, '<br>') : '')}
-    </div>
-  </div>
-  ` : ''}
+  ${(() => {
+    const investigationsText = summaryData.lab_investigations?.investigations_text;
+    const hasRealLabResults = labResults?.formattedResults && !isPlaceholderInvestigations(labResults.formattedResults);
+    const hasRealInvestigationsText = investigationsText && !isPlaceholderInvestigations(investigationsText);
+
+    if (!hasRealLabResults && !hasRealInvestigationsText) return '';
+
+    return `
+    <div class="section">
+      <div class="section-subtitle">INVESTIGATIONS</div>
+      <div class="section-content">${hasRealLabResults ? labResults.formattedResults.replace(/\n/g, '<br>') : cleanJSONFromText(investigationsText).replace(/\n/g, '<br>')}</div>
+    </div>`;
+  })()}
 
   ${summaryData.review_on_date || summaryData.resident_on_discharge ? `
   <table class="review-table">
