@@ -1082,26 +1082,7 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
           anesthetist: anesthetist,
           anesthesia: anesthesia,
           implant: implant,
-          description: otNotesData?.description || `**Surgical Operation Record**
-
-**Patient Information:**
-- Name: ${patientData?.patients?.name || 'Patient'}
-- Age: ${patientData?.patients?.age || 'N/A'}
-- Gender: ${patientData?.patients?.gender || 'N/A'}
-
-**Date of Surgery:** ${surgeryDate ? format(surgeryDate, 'MMMM dd, yyyy') : 'N/A'}
-
-**Surgery Details:**
-- Procedure: ${procedurePerformed || 'N/A'}
-- Code: ${surgeryInfo?.code || 'N/A'}
-- Rate: ₹${surgeryInfo?.NABH_NABL_Rate || otNotesData?.surgery_rate || 'N/A'}
-- Status: ${surgery?.sanction_status || otNotesData?.surgery_status || 'N/A'}
-- Surgeon: ${surgeon || 'N/A'}
-- Anesthetist: ${anesthetist || 'N/A'}
-- Anesthesia Type: ${anesthesia || 'N/A'}
-- Implant: ${implant || 'N/A'}
-
-${surgeryInfo?.description || surgery?.notes || 'Standard surgical procedure performed successfully.'}`
+          description: '' // Keep empty - user will generate via AI Generate button
         });
 
         console.log('✅ Surgery details updated with data from:', {
@@ -1263,7 +1244,7 @@ ${surgeryInfo?.description || surgery?.notes || 'Standard surgical procedure per
             anesthetist: surgery.anesthetist || '',
             anesthesia: surgery.anesthesia_type || '',
             implant: surgery.implant || '',
-            description: surgery.description || ''
+            description: '' // Keep empty - user will generate via AI Generate button
           });
           console.log('🏥 Populated surgery details from saved discharge summary (no OT notes available)');
         } else if (surgery && otNotesData) {
@@ -2193,7 +2174,7 @@ ${surgeryInfo?.description || surgery?.notes || 'Standard surgical procedure per
 
   ${medications.length > 0 ? `
   <div class="section">
-    <div class="section-subtitle">**MEDICATIONS (TREATMENT ON DISCHARGE):**</div>
+    <div class="section-subtitle">MEDICATIONS (TREATMENT ON DISCHARGE):</div>
     <table>
       <thead>
         <tr>
@@ -2229,23 +2210,21 @@ ${surgeryInfo?.description || surgery?.notes || 'Standard surgical procedure per
     return '<div class="section"><div class="section-subtitle">CLINICAL HISTORY:</div><div class="section-content">' + clinicalHistory.replace(/\n/g, '<br>') + '</div></div>';
   })()}
 
-  ${summaryData.vital_signs ? `
-  <div class="section">
-    <div class="section-subtitle">EXAMINATION:</div>
-    <div class="section-content">
-      On physical examination, patient was found to be stably maintaining vitals.
-      ${summaryData.vital_signs.temperature ? `Temperature of ${summaryData.vital_signs.temperature}°F, ` : ''}
-      ${summaryData.vital_signs.pulse_rate ? `pulse rate of ${summaryData.vital_signs.pulse_rate}/min, ` : ''}
-      ${summaryData.vital_signs.blood_pressure ? `blood pressure of ${summaryData.vital_signs.blood_pressure} were recorded. ` : ''}
-      ${summaryData.vital_signs.spo2 ? `Oxygen saturation was at ${summaryData.vital_signs.spo2}% in room air.` : ''}
-      ${summaryData.vital_signs.examination_details ? `<br><br>${summaryData.vital_signs.examination_details}` : ''}
-    </div>
-  </div>
-  ` : ''}
+  ${(() => {
+    if (!summaryData.ot_notes) return '';
+    // Extract EXAMINATION section from ot_notes
+    const content = summaryData.ot_notes;
+    const examMatch = content.match(/EXAMINATION:?\s*([\s\S]*?)(?=\n\s*(?:MEDICATIONS|OPERATION|ADVICE|\*\*|$))/i);
+    if (examMatch && examMatch[1]) {
+      const examination = examMatch[1].trim();
+      return '<div class="section"><div class="section-subtitle">EXAMINATION:</div><div class="section-content">' + examination.replace(/\n/g, '<br>') + '</div></div>';
+    }
+    return '';
+  })()}
 
   ${summaryData.procedures_performed && (summaryData.procedures_performed.surgery_date || summaryData.procedures_performed.procedure_performed) ? `
   <div class="section">
-    <div class="section-subtitle">**Operation Notes**</div>
+    <div class="section-subtitle">Operation Notes</div>
     <table>
       <tbody>
         <tr>
@@ -2281,12 +2260,24 @@ ${surgeryInfo?.description || surgery?.notes || 'Standard surgical procedure per
   </div>
   ` : ''}
 
-  ${summaryData.discharge_advice ? `
-  <div class="section">
-    <div class="section-subtitle">**ADVICE:**</div>
-    <div class="section-content">${summaryData.discharge_advice.replace(/\n/g, '<br>')}</div>
-  </div>
-  ` : ''}
+  ${(() => {
+    // First try to extract ADVICE from ot_notes
+    if (summaryData.ot_notes) {
+      const content = summaryData.ot_notes;
+      const adviceMatch = content.match(/ADVICE:?\s*([\s\S]*?)$/i);
+      if (adviceMatch && adviceMatch[1]) {
+        const advice = adviceMatch[1].trim();
+        if (advice) {
+          return '<div class="section"><div class="section-subtitle">ADVICE:</div><div class="section-content">' + advice.replace(/\n/g, '<br>') + '</div></div>';
+        }
+      }
+    }
+    // Fallback to original discharge_advice field
+    if (summaryData.discharge_advice) {
+      return '<div class="section"><div class="section-subtitle">ADVICE:</div><div class="section-content">' + summaryData.discharge_advice.replace(/\n/g, '<br>') + '</div></div>';
+    }
+    return '';
+  })()}
 
   ${labResults?.formattedResults || summaryData.lab_investigations?.investigations_text ? `
   <div class="section">
@@ -3977,7 +3968,7 @@ Enter surgical procedure description here...`}
                               messages: [
                                 {
                                   role: 'system',
-                                  content: 'You are a medical documentation assistant. When creating tables, ALWAYS use markdown table format with proper alignment. Ensure tables have clear borders using pipes (|) and dashes (-). Format tables exactly like this:\n\n| Column 1 | Column 2 | Column 3 |\n|----------|----------|----------|\n| Data 1   | Data 2   | Data 3   |\n\nMake sure each table has a header row, a separator row with dashes, and data rows. Keep table formatting clean and consistent.\n\nIMPORTANT INSTRUCTIONS:\n1. Do NOT include any PATIENT DETAILS section or table - patient information is already displayed at the top of the document\n2. At the end of the ADVICE section, always add this line: "Follow up after 7 days/SOS."\n3. Do NOT include the emergency contact line (URGENT CARE/EMERGENCY CARE IS AVAILABLE...) in the ADVICE section, as it will be added separately at the bottom of the document\n4. Start directly with the Operation Notes table if surgery was performed, or with MEDICATIONS if no surgery\n5. When you see "CASE SUMMARY / PRESENTING COMPLAINTS:", expand the brief symptoms/complaints into a proper 4-5 line CLINICAL HISTORY paragraph. Write it as a professional medical narrative describing the patient presenting symptoms, duration, progression, and relevant history. Do not just copy the text verbatim - elaborate and format it professionally.'
+                                  content: 'You are a medical documentation assistant. When creating tables, ALWAYS use markdown table format with proper alignment. Ensure tables have clear borders using pipes (|) and dashes (-). Format tables exactly like this:\n\n| Column 1 | Column 2 | Column 3 |\n|----------|----------|----------|\n| Data 1   | Data 2   | Data 3   |\n\nMake sure each table has a header row, a separator row with dashes, and data rows. Keep table formatting clean and consistent.\n\nIMPORTANT INSTRUCTIONS:\n1. Do NOT include any PATIENT DETAILS section or table - patient information is already displayed at the top of the document\n2. At the end of the ADVICE section, always add this line: "Follow up after 7 days/SOS."\n3. Do NOT include the emergency contact line (URGENT CARE/EMERGENCY CARE IS AVAILABLE...) in the ADVICE section, as it will be added separately at the bottom of the document\n4. Start directly with the Operation Notes table if surgery was performed, or with MEDICATIONS if no surgery\n5. When you see "CASE SUMMARY / PRESENTING COMPLAINTS:", expand the brief symptoms/complaints into a proper 4-5 line CLINICAL HISTORY paragraph. Write it as a professional medical narrative describing the patient presenting symptoms, duration, progression, and relevant history. Do not just copy the text verbatim - elaborate and format it professionally.\n6. When you see "EXAMINATION / VITAL SIGNS" or vital signs data, expand it into a proper 4-5 line EXAMINATION paragraph. Write it as a professional medical narrative describing the physical examination findings, vital signs interpretation, general condition, and relevant clinical observations. Do not just list vital signs - elaborate them into a professional medical examination summary.'
                                 },
                                 {
                                   role: 'user',
