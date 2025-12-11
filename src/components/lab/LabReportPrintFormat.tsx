@@ -89,7 +89,7 @@ const LabReportPrintFormat: React.FC<LabReportPrintFormatProps> = ({
 
             {/* Patient Info - Could be added if needed */}
             <div className="mb-8">
-              <div className="grid grid-cols-2 gap-4 text-sm">
+              <div className="grid grid-cols-2 gap-4 text-base">
                 <div>
                   <strong>Patient Name:</strong> {patientName}
                 </div>
@@ -106,7 +106,7 @@ const LabReportPrintFormat: React.FC<LabReportPrintFormatProps> = ({
             </div>
 
             {/* Table Header */}
-            <div className="border-t-2 border-b-2 border-black">
+            <div className="border-t border-b border-gray-400">
               <div className="grid grid-cols-3 py-3 font-bold text-center">
                 <div className="border-r border-black">INVESTIGATION</div>
                 <div className="border-r border-black">OBSERVED VALUE</div>

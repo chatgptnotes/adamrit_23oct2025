@@ -71,7 +71,9 @@ interface LabTestRow {
   ordering_doctor: string;
   clinical_history?: string;
   sample_status: 'not_taken' | 'taken' | 'saved';
-  visit_id?: string;  // Add visit_id field
+  visit_id?: string;  // Actual UUID from visits table for foreign key
+  visit_id_text?: string; // Text visit ID for display (e.g., "IH25L06010")
+  lab_id?: string; // Lab UUID for foreign key
   patient_id?: string; // Add patient_id field
 }
 
@@ -1016,11 +1018,16 @@ const LabOrders = () => {
 
   // NEW: Reset form saved state when new tests are selected
   useEffect(() => {
-    if (selectedTestsForEntry.length > 0) {
+    // Wait for testSubTests to be populated before loading results
+    const firstTestName = selectedTestsForEntry[0]?.test_name;
+    const hasSubTests = firstTestName && Object.keys(testSubTests).length > 0 && testSubTests[firstTestName]?.length > 0;
+
+    if (selectedTestsForEntry.length > 0 && hasSubTests) {
       // Reset form saved state for new test selection
       setIsFormSaved(false);
       setAuthenticatedResult(false);
       console.log('🔄 Reset form saved state for new test selection');
+      console.log('✅ testSubTests is ready, proceeding to load existing results');
       const loadExistingLabResults = async () => {
         console.log('🔍 Loading existing lab results for selected tests...');
         const firstTest = selectedTestsForEntry[0];
@@ -1056,6 +1063,82 @@ const LabOrders = () => {
             error: error?.message,
             firstResult: existingResults?.[0]
           });
+
+          // FALLBACK: If no results found by visit_id, try by patient_name AND main_test_name
+          if ((!existingResults || existingResults.length === 0) && firstTest.patient_name && firstTest.test_name) {
+            console.log('🔄 Fallback: Trying to fetch by patient_name and main_test_name...');
+            console.log('🔄 Searching for patient_name:', firstTest.patient_name, 'main_test_name:', firstTest.test_name);
+
+            const { data: fallbackResults, error: fallbackError } = await supabase
+              .from('lab_results')
+              .select('*')
+              .eq('patient_name', firstTest.patient_name)
+              .eq('main_test_name', firstTest.test_name)
+              .order('created_at', { ascending: false });
+
+            if (!fallbackError && fallbackResults && fallbackResults.length > 0) {
+              existingResults = fallbackResults;
+              console.log('✅ Fallback query succeeded:', fallbackResults.length, 'results found');
+            } else {
+              console.log('⚠️ Fallback query returned no results, error:', fallbackError?.message);
+
+              // Try with ilike for case-insensitive match
+              const { data: ilikeResults, error: ilikeError } = await supabase
+                .from('lab_results')
+                .select('*')
+                .eq('patient_name', firstTest.patient_name)
+                .ilike('main_test_name', `%${firstTest.test_name}%`)
+                .order('created_at', { ascending: false });
+
+              if (!ilikeError && ilikeResults && ilikeResults.length > 0) {
+                existingResults = ilikeResults;
+                console.log('✅ iLike query succeeded:', ilikeResults.length, 'results found');
+              }
+            }
+          }
+
+          // FALLBACK 2: Try by patient_name only if still no results
+          if ((!existingResults || existingResults.length === 0) && firstTest.patient_name) {
+            console.log('🔄 Fallback 2: Trying to fetch by patient_name only...');
+            const { data: patientResults, error: patientError } = await supabase
+              .from('lab_results')
+              .select('*')
+              .eq('patient_name', firstTest.patient_name)
+              .order('created_at', { ascending: false });
+
+            console.log('🔄 Fallback 2: Got', patientResults?.length || 0, 'results for patient:', firstTest.patient_name);
+            console.log('🔄 Fallback 2: Looking for test_name:', firstTest.test_name, 'or category:', firstTest.test_category);
+
+            if (!patientError && patientResults && patientResults.length > 0) {
+              // Log all main_test_names for debugging
+              const uniqueMainTests = [...new Set(patientResults.map(r => r.main_test_name))];
+              console.log('🔄 Fallback 2: Available main_test_names in results:', uniqueMainTests);
+
+              // Filter results for the specific test - more flexible matching
+              const filteredResults = patientResults.filter(r => {
+                const testNameLower = firstTest.test_name?.toLowerCase() || '';
+                const mainTestLower = r.main_test_name?.toLowerCase() || '';
+                const categoryLower = r.test_category?.toLowerCase() || '';
+                const firstTestCategoryLower = firstTest.test_category?.toLowerCase() || '';
+
+                // Flexible matching - partial match also works
+                return mainTestLower === testNameLower ||
+                       categoryLower === firstTestCategoryLower ||
+                       mainTestLower.includes(testNameLower.split('(')[0].trim().toLowerCase()) ||
+                       testNameLower.includes(mainTestLower.split('(')[0].trim().toLowerCase()) ||
+                       mainTestLower.includes('kft') && testNameLower.includes('kidney') ||
+                       mainTestLower.includes('lft') && testNameLower.includes('liver') ||
+                       mainTestLower.includes('cbc') && testNameLower.includes('blood');
+              });
+
+              console.log('🔄 Fallback 2: Filtered to', filteredResults.length, 'matching results');
+
+              if (filteredResults.length > 0) {
+                existingResults = filteredResults;
+                console.log('✅ Fallback 2 query succeeded:', filteredResults.length, 'results found');
+              }
+            }
+          }
 
           // Load existing results to populate form
           console.log('📝 Loading existing results to populate form with saved data');
@@ -1325,11 +1408,34 @@ const LabOrders = () => {
 
               if (foundData) {
                 directMappedData[expectedKey] = foundData;
+                // Also store by sub-test name for easier lookup during render
+                directMappedData[subTest.name] = foundData;
+                directMappedData[subTest.name.trim()] = foundData;
+                directMappedData[subTest.name.toLowerCase()] = foundData;
                 console.log(`   🎯 MAPPED: ${expectedKey} -> `, foundData);
               } else {
                 console.log(`   ❌ No data found for ${expectedKey}`);
               }
             });
+
+            // Also add direct name-based keys from existingResults for quick lookup
+            if (existingResults && existingResults.length > 0) {
+              existingResults.forEach(result => {
+                const parsedResult = parseResultValue(result.result_value);
+                const formData = {
+                  result_value: parsedResult.value,
+                  result_unit: result.result_unit || '',
+                  reference_range: result.reference_range || '',
+                  comments: result.comments || '',
+                  is_abnormal: result.is_abnormal || false,
+                  result_status: result.result_status || 'Preliminary'
+                };
+                // Store by test_name directly
+                directMappedData[result.test_name] = formData;
+                directMappedData[result.test_name.toLowerCase()] = formData;
+                console.log(`   🔑 Added direct key: "${result.test_name}" with value: "${parsedResult.value}"`);
+              });
+            }
 
             console.log('🔧 Direct mapping completed. Final mapped data:', directMappedData);
             console.log('🔧 === END DIRECT KEY MAPPING SOLUTION ===');
@@ -1383,7 +1489,7 @@ const LabOrders = () => {
 
       loadExistingLabResults();
     }
-  }, [selectedTestsForEntry]);
+  }, [selectedTestsForEntry, testSubTests]);
 
   // Sample save mutation
   const saveSamplesMutation = useMutation({
@@ -1502,6 +1608,67 @@ const LabOrders = () => {
           // Create and save to lab_results table
           console.log('6️⃣ Preparing to save in lab_results table');
 
+          // Handle file upload if a file is present
+          let fileData = {
+            file_name: null as string | null,
+            file_path: null as string | null,
+            file_url: null as string | null,
+            file_size: null as number | null,
+            file_type: null as string | null
+          };
+
+          if (result.file instanceof File) {
+            console.log('📎 Uploading file:', result.file.name);
+
+            // Validate file type
+            const allowedTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'];
+            if (!allowedTypes.includes(result.file.type)) {
+              console.warn('⚠️ Invalid file type, skipping upload:', result.file.type);
+            } else if (result.file.size > 10 * 1024 * 1024) {
+              console.warn('⚠️ File too large (>10MB), skipping upload');
+            } else {
+              try {
+                // Generate unique file path
+                const timestamp = Date.now();
+                const fileExtension = result.file.name.split('.').pop() || 'pdf';
+                const sanitizedTestName = (result.test_name || 'test').replace(/[^a-zA-Z0-9]/g, '_');
+                const fileName = `${sanitizedTestName}_${timestamp}.${fileExtension}`;
+                const visitIdForPath = originalTestRow.visit_id || originalTestRow.order_id || 'no_visit';
+                const filePath = `${visitIdForPath}/${fileName}`;
+
+                // Upload to Supabase Storage
+                const { data: uploadData, error: uploadError } = await supabase.storage
+                  .from('lab-files')
+                  .upload(filePath, result.file, {
+                    cacheControl: '3600',
+                    upsert: false
+                  });
+
+                if (uploadError) {
+                  console.error('❌ File upload failed:', uploadError);
+                  // Continue without file - don't fail the entire save
+                } else {
+                  // Get public URL
+                  const { data: urlData } = supabase.storage
+                    .from('lab-files')
+                    .getPublicUrl(filePath);
+
+                  fileData = {
+                    file_name: result.file.name,
+                    file_path: filePath,
+                    file_url: urlData.publicUrl,
+                    file_size: result.file.size,
+                    file_type: result.file.type
+                  };
+
+                  console.log('✅ File uploaded successfully:', fileData);
+                }
+              } catch (fileUploadError) {
+                console.error('❌ File upload error:', fileUploadError);
+                // Continue without file
+              }
+            }
+          }
 
           // Skip table creation - try direct insert to lab_results table
 
@@ -1545,12 +1712,19 @@ const LabOrders = () => {
             patient_age: originalTestRow.patient_age || null,
             patient_gender: originalTestRow.patient_gender || 'Unknown',
 
-            // Foreign keys for proper data linking
-            visit_id: originalTestRow.visit_id || originalTestRow.order_id || null,
-            lab_id: originalTestRow.test_id || originalTestRow.lab_id || null
+            // Foreign keys for proper data linking (UUIDs)
+            visit_id: originalTestRow.visit_id || null, // Actual visits table UUID
+            lab_id: originalTestRow.lab_id || originalTestRow.test_id || null, // Lab table UUID
+
+            // File upload fields
+            file_name: fileData.file_name,
+            file_path: fileData.file_path,
+            file_url: fileData.file_url,
+            file_size: fileData.file_size,
+            file_type: fileData.file_type
           };
 
-          // Remove any undefined values to prevent schema errors
+          // Remove any undefined or null values to prevent schema errors
           Object.keys(labResultsData).forEach(key => {
             if (labResultsData[key] === undefined) {
               delete labResultsData[key];
@@ -1936,7 +2110,7 @@ const LabOrders = () => {
          patient_phone: entry.visits?.patients?.phone,
          patient_age: entry.visits?.patients?.age,
          patient_gender: entry.visits?.patients?.gender,
-         order_number: entry.visit_id, // Using visit_id as order number
+         order_number: entry.visits?.visit_id || entry.visit_id, // Using visit_id text as order number
          test_name: entry.lab?.name || 'Unknown Test',
          test_category: entry.lab?.category || 'LAB',
          test_method: entry.lab?.test_method || 'Standard Method',
@@ -1945,7 +2119,9 @@ const LabOrders = () => {
          ordering_doctor: entry.visits?.appointment_with || 'Dr. Unknown',
          clinical_history: entry.visits?.reason_for_visit,
          sample_status: entry.collected_date ? 'taken' : 'not_taken' as const,
-         visit_id: entry.visits?.visit_id, // Visit ID text field
+         visit_id: entry.visits?.id, // Actual UUID from visits table for foreign key
+         visit_id_text: entry.visits?.visit_id, // Text visit ID for display (e.g., "IH25L06010")
+         lab_id: entry.lab_id, // Lab UUID for foreign key
          patient_id: entry.visits?.patient_id // Add patient_id from visits table
        })) || [];
 
@@ -2031,10 +2207,22 @@ const LabOrders = () => {
 
               if (hasActualData) {
                 statusMap[testRow.id] = 'saved';
+                // Auto-include saved tests in the Incl. checkbox
+                if (!includedTestIds.includes(testRow.id)) {
+                  includedTestIds.push(testRow.id);
+                }
               }
             }
           }
 
+          // Also auto-include tests that were marked as 'saved' from visit_labs
+          for (const testRow of labTestRows) {
+            if (statusMap[testRow.id] === 'saved' && !includedTestIds.includes(testRow.id)) {
+              includedTestIds.push(testRow.id);
+            }
+          }
+
+          console.log('✅ Auto-included saved tests:', includedTestIds.length);
           setTestSampleStatus(statusMap);
           setIncludedTests(includedTestIds);
           console.log('✅ Sample status loaded (2 batch queries instead of 100+):', {
@@ -2856,6 +3044,91 @@ const LabOrders = () => {
     console.log('🖨️ Preview & Print clicked, isFormSaved:', isFormSaved);
 
     try {
+      // FIRST: Save the results before printing (if not already saved)
+      if (!isFormSaved) {
+        console.log('📝 Saving results before print...');
+
+        // Prepare results data for saving - same logic as handleSaveLabResults
+        const resultsData: any[] = [];
+
+        selectedTestsForEntry.forEach(testRow => {
+          const mainTestFormData = labResultsForm[testRow.id];
+          const alternativeKeys = [testRow.order_id, testRow.test_id, `test_${testRow.id}`, testRow.lab_id];
+
+          let foundFormData = mainTestFormData;
+          let usedKey = testRow.id;
+
+          if (!foundFormData) {
+            for (const altKey of alternativeKeys) {
+              if (altKey && labResultsForm[altKey]) {
+                foundFormData = labResultsForm[altKey];
+                usedKey = altKey;
+                break;
+              }
+            }
+          }
+
+          if (foundFormData && (foundFormData.result_value?.trim() || foundFormData.comments?.trim())) {
+            const referenceRange = calculatedRanges[usedKey] || foundFormData.reference_range || '';
+            resultsData.push({
+              order_id: testRow.order_id || testRow.id,
+              test_id: testRow.test_id || testRow.id,
+              test_name: testRow.test_name,
+              test_category: testRow.test_category || 'GENERAL',
+              result_value: foundFormData.result_value || '',
+              result_unit: foundFormData.result_unit || '',
+              reference_range: referenceRange,
+              comments: foundFormData.comments || '',
+              is_abnormal: foundFormData.is_abnormal || false,
+              result_status: authenticatedResult ? 'Final' : 'Preliminary'
+            });
+          }
+
+          // Also check for sub-tests
+          const subTests = testSubTests[testRow.test_name] || [];
+          subTests.forEach(subTest => {
+            const subTestKey = `${testRow.id}_subtest_${subTest.id}`;
+            const subTestFormData = labResultsForm[subTestKey];
+
+            if (subTestFormData && (subTestFormData.result_value?.trim() || subTestFormData.comments?.trim())) {
+              const referenceRange = calculatedRanges[subTestKey] || subTestFormData.reference_range || '';
+              resultsData.push({
+                order_id: testRow.order_id || testRow.id,
+                test_id: testRow.test_id || testRow.id,
+                test_name: subTest.name,
+                test_category: testRow.test_category || 'GENERAL',
+                result_value: subTestFormData.result_value || '',
+                result_unit: subTestFormData.result_unit || subTest.unit || '',
+                reference_range: referenceRange,
+                comments: subTestFormData.comments || '',
+                is_abnormal: subTestFormData.is_abnormal || false,
+                result_status: authenticatedResult ? 'Final' : 'Preliminary'
+              });
+            }
+          });
+        });
+
+        // Filter valid results
+        const validResults = resultsData.filter(result => hasValidResultValue(result.result_value));
+
+        if (validResults.length > 0) {
+          try {
+            await saveLabResultsMutation.mutateAsync(validResults);
+            console.log('✅ Results saved before print');
+            toast({
+              title: "Results Saved",
+              description: "Lab results saved successfully before printing.",
+            });
+          } catch (saveError) {
+            console.error('❌ Error saving results before print:', saveError);
+            toast({
+              title: "Save Warning",
+              description: "Could not save results. Proceeding with print.",
+              variant: "destructive"
+            });
+          }
+        }
+      }
       // Get the correct patient ID - try multiple fields
       const patientInfo = selectedTestsForEntry[0];
       const patientId = patientInfo.patient_id || patientInfo.id || patientInfo.patient?.id;
@@ -2899,9 +3172,47 @@ const LabOrders = () => {
       const printContent = await generatePrintContent(resultsToUse || []);
       console.log('📄 Generated print content length:', printContent.length);
 
-      // Open print preview
-      const printWindow = window.open('', '_blank');
-      if (printWindow) {
+      // Open print preview - try multiple methods to avoid popup blocker
+      let printWindow = window.open('', '_blank', 'width=800,height=600,scrollbars=yes,resizable=yes');
+
+      if (!printWindow) {
+        // Try alternative method - open in same tab with about:blank
+        printWindow = window.open('about:blank', '_blank');
+      }
+
+      if (!printWindow) {
+        // Final fallback - use iframe for printing
+        console.log('⚠️ Popup blocked, using iframe fallback');
+        const iframe = document.createElement('iframe');
+        iframe.style.position = 'fixed';
+        iframe.style.right = '0';
+        iframe.style.bottom = '0';
+        iframe.style.width = '0';
+        iframe.style.height = '0';
+        iframe.style.border = 'none';
+        document.body.appendChild(iframe);
+
+        const iframeDoc = iframe.contentWindow?.document;
+        if (iframeDoc) {
+          iframeDoc.open();
+          iframeDoc.write(printContent);
+          iframeDoc.close();
+
+          setTimeout(() => {
+            iframe.contentWindow?.focus();
+            iframe.contentWindow?.print();
+            // Remove iframe after print dialog closes
+            setTimeout(() => {
+              document.body.removeChild(iframe);
+            }, 1000);
+          }, 500);
+
+          toast({
+            title: "Print Started",
+            description: "Report is being prepared for printing.",
+          });
+        }
+      } else {
         printWindow.document.write(printContent);
         printWindow.document.close();
         setTimeout(() => {
@@ -2912,12 +3223,6 @@ const LabOrders = () => {
         toast({
           title: "Print Started",
           description: "Report is being prepared for printing.",
-        });
-      } else {
-        toast({
-          title: "Print Error",
-          description: "Unable to open print window. Please check your browser settings.",
-          variant: "destructive"
         });
       }
     } catch (error) {
@@ -3193,22 +3498,6 @@ const LabOrders = () => {
           .abnormal {
             color: #d32f2f;
             font-weight: bold;
-          }
-          
-          .method-section {
-            margin: 20px 0;
-            font-size: 11px;
-          }
-          
-          .interpretation-section {
-            margin: 20px 0;
-            font-size: 11px;
-          }
-          
-          .interpretation-title {
-            font-weight: bold;
-            text-decoration: underline;
-            margin-bottom: 10px;
           }
           
           .signature-section {
@@ -3586,49 +3875,6 @@ const LabOrders = () => {
           })()}
         </div>
         
-        <div class="method-section">
-          <strong>Method :</strong> Competitive Chemi Luminescent Immuno Assay
-        </div>
-        
-        <div class="interpretation-section">
-          <div class="interpretation-title">INTERPRETATION :</div>
-          <div>
-            ${selectedTestsForEntry.map(testRow => {
-              let commentsHtml = '';
-
-              // Check main test comments
-              const mainFormData = savedLabResults[testRow.id] || labResultsForm[testRow.id];
-              if (mainFormData?.comments) {
-                commentsHtml += `<p><strong>${testRow.test_name}:</strong> ${mainFormData.comments}</p>`;
-              }
-
-              // Check sub-test comments
-              const subTests = testSubTests[testRow.test_name] || [];
-              subTests.forEach(subTest => {
-                const subTestKey = `${testRow.id}_subtest_${subTest.id}`;
-                const subTestFormData = savedLabResults[subTestKey] || labResultsForm[subTestKey];
-                if (subTestFormData?.comments) {
-                  commentsHtml += `<p><strong>${subTest.name}:</strong> ${subTestFormData.comments}</p>`;
-                }
-              });
-
-              return commentsHtml;
-            }).join('')}
-            
-            <p>
-              1) Results should be correlated with clinical findings and other diagnostic investigations.
-            </p>
-            <p>
-              2) Any significant changes in values require clinical correlation or repeat testing with fresh sample.
-            </p>
-            <p>
-              3) Critical values have been immediately communicated to the requesting physician.
-            </p>
-            <p>
-              4) Reference ranges may vary based on methodology, age, and clinical conditions.
-            </p>
-          </div>
-        </div>
 
       </body>
       </html>
@@ -4075,7 +4321,7 @@ const LabOrders = () => {
                     <TableRow key={testRow.id} className="hover:bg-gray-50">
                       <TableCell></TableCell>
                       <TableCell></TableCell>
-                      <TableCell className="font-medium">{testRow.visit_id || testRow.order_number}</TableCell>
+                      <TableCell className="font-medium">{testRow.visit_id_text || testRow.order_number}</TableCell>
                       <TableCell>
                         <Badge variant="secondary">{testRow.test_category}</Badge>
                       </TableCell>
@@ -4612,7 +4858,7 @@ const LabOrders = () => {
                   <div><strong>Age/Sex:</strong> {selectedTestsForEntry[0]?.patient_age} / {selectedTestsForEntry[0]?.patient_gender}</div>
                   <div><strong>Type:</strong> OPD / BSNL</div>
                   <div><strong>Ref By:</strong> {selectedTestsForEntry[0]?.ordering_doctor}</div>
-                  <div><strong>Visit ID:</strong> {selectedTestsForEntry[0]?.visit_id || selectedTestsForEntry[0]?.order_number}</div>
+                  <div><strong>Visit ID:</strong> {selectedTestsForEntry[0]?.visit_id_text || selectedTestsForEntry[0]?.order_number}</div>
                   <div><strong>Date:</strong> {formatDate(selectedTestsForEntry[0]?.order_date || '')}</div>
                 </div>
               </div>
@@ -4878,6 +5124,30 @@ const LabOrders = () => {
                         }
 
                         // Final fallback to default structure
+                        if (!subTestFormData || !subTestFormData.result_value) {
+                          // ULTIMATE FALLBACK: Check savedLabResults for any key that matches sub-test name
+                          const allSavedKeys = Object.keys(savedLabResults);
+                          const allFormKeys = Object.keys(labResultsForm);
+
+                          // Try exact name match first
+                          for (const key of [...allSavedKeys, ...allFormKeys]) {
+                            const keyLower = key.toLowerCase();
+                            const subTestNameLower = subTest.name.trim().toLowerCase();
+                            const data = savedLabResults[key] || labResultsForm[key];
+
+                            if (data?.result_value && (
+                              key === subTest.name.trim() ||
+                              keyLower === subTestNameLower ||
+                              keyLower.includes(subTestNameLower) ||
+                              subTestNameLower.includes(keyLower.split('_').pop() || '')
+                            )) {
+                              subTestFormData = data;
+                              console.log(`🎯 ULTIMATE FALLBACK: Found data for "${subTest.name}" in key "${key}":`, data.result_value);
+                              break;
+                            }
+                          }
+                        }
+
                         if (!subTestFormData) {
                           subTestFormData = {
                             result_value: '',
@@ -5064,6 +5334,7 @@ const LabOrders = () => {
                     className="hidden"
                     multiple
                     accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                    onChange={handleFileUpload}
                   />
                   <button
                     type="button"
@@ -5073,7 +5344,11 @@ const LabOrders = () => {
                   >
                     Choose File
                   </button>
-                  <span className="text-sm text-gray-500">No file chosen</span>
+                  <span className="text-sm text-gray-500">
+                    {uploadedFiles.length > 0
+                      ? uploadedFiles.map(f => f.name).join(', ')
+                      : 'No file chosen'}
+                  </span>
                 </div>
               </div>
 

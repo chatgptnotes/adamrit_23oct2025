@@ -6,7 +6,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, FileUp, Save, Eye, Printer, Download, ArrowLeft, Plus, List } from 'lucide-react';
+import { Loader2, FileUp, Save, Eye, Printer, Download, ArrowLeft, Plus, List, X, FileText, Image } from 'lucide-react';
 import { useLabTestConfig, TestResult } from '@/hooks/useLabTestConfig';
 
 interface Patient {
@@ -383,7 +383,33 @@ const EnhancedLabResultsForm: React.FC<EnhancedLabResultsFormProps> = ({
 
   const handleFileChange = (index: number, file: File | undefined) => {
     const updatedResults = [...testResults];
-    updatedResults[index].file = file;
+
+    if (file) {
+      // Validate file type and size
+      const allowedTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'];
+      if (!allowedTypes.includes(file.type)) {
+        alert('Only PDF and image files (JPEG, PNG) are allowed');
+        return;
+      }
+      if (file.size > 10 * 1024 * 1024) {
+        alert('File size must be less than 10MB');
+        return;
+      }
+
+      updatedResults[index].file = file;
+      updatedResults[index].fileName = file.name;
+      updatedResults[index].fileSize = file.size;
+      updatedResults[index].fileType = file.type;
+    } else {
+      // Clear file data when file is removed
+      updatedResults[index].file = undefined;
+      updatedResults[index].fileName = undefined;
+      updatedResults[index].filePath = undefined;
+      updatedResults[index].fileUrl = undefined;
+      updatedResults[index].fileSize = undefined;
+      updatedResults[index].fileType = undefined;
+    }
+
     setTestResults(updatedResults);
   };
 
@@ -637,6 +663,7 @@ const EnhancedLabResultsForm: React.FC<EnhancedLabResultsFormProps> = ({
                                 type="file"
                                 id={`file-${index}`}
                                 className="hidden"
+                                accept=".pdf,.jpg,.jpeg,.png"
                                 onChange={(e) => handleFileChange(index, e.target.files?.[0])}
                               />
                               <Button
@@ -645,12 +672,45 @@ const EnhancedLabResultsForm: React.FC<EnhancedLabResultsFormProps> = ({
                                 onClick={() => document.getElementById(`file-${index}`)?.click()}
                                 className="text-xs"
                               >
+                                <FileUp className="h-3 w-3 mr-1" />
                                 Choose File
                               </Button>
                               {result.file ? (
-                                <span className="text-xs text-green-600">{result.file.name}</span>
+                                <div className="flex items-center space-x-2">
+                                  {result.file.type === 'application/pdf' ? (
+                                    <FileText className="h-4 w-4 text-red-500" />
+                                  ) : (
+                                    <Image className="h-4 w-4 text-blue-500" />
+                                  )}
+                                  <span className="text-xs text-green-600 truncate max-w-[150px]" title={result.file.name}>
+                                    {result.file.name}
+                                  </span>
+                                  <span className="text-xs text-gray-400">
+                                    ({(result.file.size / 1024).toFixed(1)} KB)
+                                  </span>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleFileChange(index, undefined)}
+                                    className="h-6 w-6 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
+                                  >
+                                    <X className="h-3 w-3" />
+                                  </Button>
+                                </div>
+                              ) : result.fileUrl ? (
+                                <div className="flex items-center space-x-2">
+                                  <FileText className="h-4 w-4 text-blue-500" />
+                                  <a
+                                    href={result.fileUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-xs text-blue-600 hover:underline truncate max-w-[150px]"
+                                  >
+                                    {result.fileName || 'View File'}
+                                  </a>
+                                </div>
                               ) : (
-                                <span className="text-xs text-gray-500">No file chosen</span>
+                                <span className="text-xs text-gray-500">No file chosen (PDF, JPG, PNG - max 10MB)</span>
                               )}
                             </div>
                           </div>

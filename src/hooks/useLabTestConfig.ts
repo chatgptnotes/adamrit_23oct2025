@@ -33,6 +33,12 @@ export interface TestResult {
   comments: string;
   abnormal: boolean;
   file?: File;
+  // File metadata fields (persisted to database)
+  fileName?: string;
+  filePath?: string;
+  fileUrl?: string;
+  fileSize?: number;
+  fileType?: string;
 }
 
 export const useLabTestConfig = () => {
