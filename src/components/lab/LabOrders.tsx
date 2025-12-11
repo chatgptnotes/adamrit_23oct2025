@@ -99,7 +99,7 @@ interface PatientWithVisit {
 
 // Helper function to find correct normal range based on patient gender
 const findNormalRangeForGender = (
-  normalRanges: Array<{gender?: string; min_value: number; max_value: number; unit?: string}> | undefined,
+  normalRanges: Array<{ gender?: string; min_value: number; max_value: number; unit?: string }> | undefined,
   patientGender: string,
   defaultUnit: string
 ): { min: number; max: number; unit: string } | null => {
@@ -200,7 +200,7 @@ const LabOrders = () => {
     }
     return hospitalFilter;
   }, [hospitalConfig.name]);
-  
+
   // Sample taken and included states (now for individual tests)
   const [sampleTakenTests, setSampleTakenTests] = useState<string[]>([]);
   const [includedTests, setIncludedTests] = useState<string[]>([]);
@@ -515,7 +515,7 @@ const LabOrders = () => {
       });
     }
   };
-  
+
   // Track test sample status
   const [testSampleStatus, setTestSampleStatus] = useState<Record<string, 'not_taken' | 'taken' | 'saved'>>({});
 
@@ -532,7 +532,7 @@ const LabOrders = () => {
     is_abnormal: boolean;
     result_status: 'Preliminary' | 'Final';
   }>>({});
-  
+
   // NEW: State for saved results (for print preview)
   const [savedLabResults, setSavedLabResults] = useState<Record<string, {
     result_value: string;
@@ -545,10 +545,10 @@ const LabOrders = () => {
     patient_info: any;
     authenticated: boolean;
   }>>({});
-  
+
   // NEW: Track if current form has been saved
   const [isFormSaved, setIsFormSaved] = useState(false);
-  
+
   const [authenticatedResult, setAuthenticatedResult] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
 
@@ -559,7 +559,7 @@ const LabOrders = () => {
   const [isCreateOrderOpen, setIsCreateOrderOpen] = useState(false);
   const [isViewOrderOpen, setIsViewOrderOpen] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<LabOrder | null>(null);
-  
+
   // Form states for new order
   const [selectedPatient, setSelectedPatient] = useState<PatientWithVisit | null>(null);
   const [orderForm, setOrderForm] = useState({
@@ -579,7 +579,7 @@ const LabOrders = () => {
   const calculateReferenceRange = useCallback(async (testName: string, patientAge: number, patientGender: string) => {
     try {
       console.log('🔍 Calculating reference range for:', { testName, patientAge, patientGender });
-      
+
       // Fetch lab test config data
       const { data: labConfigData, error: labError } = await supabase
         .from('lab_test_config')
@@ -628,7 +628,7 @@ const LabOrders = () => {
   const getDefaultReferenceRange = useCallback((testName: string, patientAge: number, patientGender: string) => {
     const testNameLower = testName.toLowerCase();
     const isMale = patientGender.toLowerCase() === 'male';
-    
+
     // Common lab test reference ranges
     const commonRanges: Record<string, string | ((age: number, isMale: boolean) => string)> = {
       'complete blood count': 'See individual parameters',
@@ -900,7 +900,7 @@ const LabOrders = () => {
 
     // Normalize patient gender for comparison
     const normalizedPatientGender = patientGender?.toLowerCase() === 'male' ? 'Male' :
-                                   patientGender?.toLowerCase() === 'female' ? 'Female' : 'Both';
+      patientGender?.toLowerCase() === 'female' ? 'Female' : 'Both';
 
     // First, try to find exact age and gender match
     let bestMatch = ranges.find(range =>
@@ -1293,7 +1293,7 @@ const LabOrders = () => {
               for (const dataKey of matchingResultKeys) {
                 // Check if this data key or data content matches our sub-test
                 if (dataKey.includes(subTest.name) ||
-                    dataKey.toLowerCase().includes(subTest.name.toLowerCase())) {
+                  dataKey.toLowerCase().includes(subTest.name.toLowerCase())) {
                   foundData = loadedFormData[dataKey];
                   console.log(`   ✅ Found matching data by key name: ${dataKey}`, foundData);
                   break;
@@ -1304,7 +1304,7 @@ const LabOrders = () => {
               if (!foundData && existingResults) {
                 for (const result of existingResults) {
                   if (result.test_name === subTest.name ||
-                      result.test_name.toLowerCase() === subTest.name.toLowerCase()) {
+                    result.test_name.toLowerCase() === subTest.name.toLowerCase()) {
                     // Parse JSON result_value to get actual observed value
                     const parsedFoundResult = parseResultValue(result.result_value);
                     const actualFoundValue = parsedFoundResult.value;
@@ -1445,10 +1445,10 @@ const LabOrders = () => {
     mutationFn: async (resultsData: any[]) => {
       console.log('🔍 Starting lab results save process...', resultsData);
       const results = [];
-      
+
       for (const result of resultsData) {
         console.log('📝 Processing result:', result);
-        
+
         try {
           // Use the original test row data from selectedTestsForEntry to get visit and patient info
           const originalTestRow = selectedTestsForEntry.find(t =>
@@ -1683,16 +1683,16 @@ const LabOrders = () => {
           };
 
           console.log('📋 Final result with patient info:', resultWithPatientInfo);
-          
+
           results.push(resultWithPatientInfo);
           console.log('🎉 Result processed successfully!');
-          
+
         } catch (error) {
           console.error('💥 Error processing result:', error);
           throw error; // Re-throw to trigger onError
         }
       }
-      
+
       console.log('🚀 All results processed successfully:', results);
       return results;
     },
@@ -1700,7 +1700,7 @@ const LabOrders = () => {
       // NEW: Store saved results for print preview with enhanced patient data
       const savedResults: typeof savedLabResults = {};
       const patientInfo = selectedTestsForEntry[0];
-      
+
       // Save both main test data and sub-test data
       selectedTestsForEntry.forEach(testRow => {
         // Save main test data
@@ -1741,21 +1741,21 @@ const LabOrders = () => {
           }
         });
       });
-      
+
       setSavedLabResults(savedResults);
       setIsFormSaved(true);
-      
+
       toast({
         title: "Lab Results Saved Successfully",
         description: `${results.length} test result(s) have been saved. You can now print the report.`,
       });
-      
+
       // DON'T reset form immediately - keep it visible with saved data
       // setLabResultsForm({});
       // setAuthenticatedResult(false);
       // setUploadedFiles([]);
       // setIsEntryModeOpen(false);
-      
+
       // Refresh the lab orders data
       queryClient.invalidateQueries({ queryKey: ['lab-test-rows'] });
       queryClient.invalidateQueries({ queryKey: ['lab-orders'] });
@@ -1927,27 +1927,27 @@ const LabOrders = () => {
         });
       });
 
-             // Transform data to match LabTestRow interface
-       const testRows: LabTestRow[] = data?.map((entry) => ({
-         id: entry.id,
-         order_id: entry.visit_id,
-         test_id: entry.lab_id,
-         patient_name: entry.visits?.patients?.name || 'Unknown Patient',
-         patient_phone: entry.visits?.patients?.phone,
-         patient_age: entry.visits?.patients?.age,
-         patient_gender: entry.visits?.patients?.gender,
-         order_number: entry.visit_id, // Using visit_id as order number
-         test_name: entry.lab?.name || 'Unknown Test',
-         test_category: entry.lab?.category || 'LAB',
-         test_method: entry.lab?.test_method || 'Standard Method',
-         order_date: entry.ordered_date || entry.created_at,
-         order_status: entry.status || 'ordered',
-         ordering_doctor: entry.visits?.appointment_with || 'Dr. Unknown',
-         clinical_history: entry.visits?.reason_for_visit,
-         sample_status: entry.collected_date ? 'taken' : 'not_taken' as const,
-         visit_id: entry.visits?.visit_id, // Visit ID text field
-         patient_id: entry.visits?.patient_id // Add patient_id from visits table
-       })) || [];
+      // Transform data to match LabTestRow interface
+      const testRows: LabTestRow[] = data?.map((entry) => ({
+        id: entry.id,
+        order_id: entry.visit_id,
+        test_id: entry.lab_id,
+        patient_name: entry.visits?.patients?.name || 'Unknown Patient',
+        patient_phone: entry.visits?.patients?.phone,
+        patient_age: entry.visits?.patients?.age,
+        patient_gender: entry.visits?.patients?.gender,
+        order_number: entry.visit_id, // Using visit_id as order number
+        test_name: entry.lab?.name || 'Unknown Test',
+        test_category: entry.lab?.category || 'LAB',
+        test_method: entry.lab?.test_method || 'Standard Method',
+        order_date: entry.ordered_date || entry.created_at,
+        order_status: entry.status || 'ordered',
+        ordering_doctor: entry.visits?.appointment_with || 'Dr. Unknown',
+        clinical_history: entry.visits?.reason_for_visit,
+        sample_status: entry.collected_date ? 'taken' : 'not_taken' as const,
+        visit_id: entry.visits?.visit_id, // Visit ID text field
+        patient_id: entry.visits?.patient_id // Add patient_id from visits table
+      })) || [];
 
       return testRows;
     },
@@ -2102,16 +2102,16 @@ const LabOrders = () => {
     }
     return orders;
   }, [] as LabOrder[]);
-  
+
   const ordersLoading = testRowsLoading || testRowsFetching || isCheckingSampleStatus;
 
   // Check which orders already have samples collected
   const orderHasSample = (orderId: string) => {
     const order = labOrders.find(o => o.id === orderId);
-    return order?.order_status === 'Sample_Collected' || 
-           order?.order_status === 'In_Progress' || 
-           order?.order_status === 'Results_Ready' ||
-           order?.order_status === 'Completed';
+    return order?.order_status === 'Sample_Collected' ||
+      order?.order_status === 'In_Progress' ||
+      order?.order_status === 'Results_Ready' ||
+      order?.order_status === 'Completed';
   };
 
   // Create order mutation - creates proper lab_order first, then visit_labs entries
@@ -2248,7 +2248,7 @@ const LabOrders = () => {
       clinicalHistory: patient.reasonForVisit || '',
       provisionalDiagnosis: safeArrayAccess(patient, 'primary_diagnosis') || ''
     }));
-    
+
     // Store patient data for later use in print
     console.log('Selected patient data:', {
       name: patient.name,
@@ -2261,9 +2261,9 @@ const LabOrders = () => {
 
   const filteredOrders = labOrders.filter(order => {
     const matchesSearch = order.patient_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         order.order_number.toLowerCase().includes(searchTerm.toLowerCase());
+      order.order_number.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === 'All' || order.order_status === statusFilter;
-    
+
     return matchesSearch && matchesStatus;
   });
 
@@ -2276,8 +2276,8 @@ const LabOrders = () => {
   const filteredTestRows = labTestRows.filter(testRow => {
     // Patient search
     const matchesSearch = testRow.patient_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         testRow.order_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         testRow.test_name.toLowerCase().includes(searchTerm.toLowerCase());
+      testRow.order_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      testRow.test_name.toLowerCase().includes(searchTerm.toLowerCase());
 
     // Status filter
     const matchesStatus = statusFilter === 'All' || testRow.order_status === statusFilter;
@@ -2311,7 +2311,7 @@ const LabOrders = () => {
 
     // ReqNo filter
     const matchesReqNo = !reqNoSearch || (testRow.visit_id && testRow.visit_id.toLowerCase().includes(reqNoSearch.toLowerCase())) ||
-                         testRow.order_number.toLowerCase().includes(reqNoSearch.toLowerCase());
+      testRow.order_number.toLowerCase().includes(reqNoSearch.toLowerCase());
 
     // Consultant filter
     const matchesConsultant = consultantFilter === 'All' || testRow.ordering_doctor === consultantFilter;
@@ -2326,8 +2326,8 @@ const LabOrders = () => {
     const matchesBarCode = !barCodeSearch;
 
     return matchesSearch && matchesStatus && matchesDateFrom && matchesDateTo &&
-           matchesCategory && matchesService && matchesReqNo && matchesConsultant &&
-           matchesVisit && matchesWard && matchesBarCode;
+      matchesCategory && matchesService && matchesReqNo && matchesConsultant &&
+      matchesVisit && matchesWard && matchesBarCode;
   });
 
   // Group filtered tests by patient
@@ -2399,11 +2399,11 @@ const LabOrders = () => {
     const maxVisiblePages = 5;
     let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
     const endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
-    
+
     if (endPage - startPage < maxVisiblePages - 1) {
       startPage = Math.max(1, endPage - maxVisiblePages + 1);
     }
-    
+
     for (let i = startPage; i <= endPage; i++) {
       pages.push(i);
     }
@@ -2411,8 +2411,8 @@ const LabOrders = () => {
   };
 
   const handleTestSelect = (testId: string) => {
-    setSelectedTests(prev => 
-      prev.includes(testId) 
+    setSelectedTests(prev =>
+      prev.includes(testId)
         ? prev.filter(id => id !== testId)
         : [...prev, testId]
     );
@@ -2622,7 +2622,7 @@ const LabOrders = () => {
         console.log('🔄 Triggering formula calculation after value change');
         console.log('📊 Test row test_name:', currentTestRow.test_name);
         console.log('📊 Sub-tests available:', testRowWithSubTests.sub_tests.length);
-        console.log('📊 Sub-tests with formulas:', testRowWithSubTests.sub_tests.filter((st: any) => st.formula).map((st: any) => ({name: st.name, formula: st.formula})));
+        console.log('📊 Sub-tests with formulas:', testRowWithSubTests.sub_tests.filter((st: any) => st.formula).map((st: any) => ({ name: st.name, formula: st.formula })));
 
         const calculatedValues = calculateFormulas(updated, testRowWithSubTests);
 
@@ -3097,8 +3097,8 @@ const LabOrders = () => {
             grid-template-columns: 1fr 1fr;
             gap: 20px;
             margin-bottom: 20px;
-            font-size: 11px;
-            border: 2px solid #000;
+            font-size: 14px;
+            border: 1px solid #ddd;
             padding: 15px;
             border-radius: 5px;
           }
@@ -3115,7 +3115,7 @@ const LabOrders = () => {
           
           .report-title {
             text-align: center;
-            font-size: 16px;
+            font-size: 18px;
             font-weight: bold;
             margin: 20px 0;
             text-decoration: underline;
@@ -3134,7 +3134,7 @@ const LabOrders = () => {
           }
           
           .test-header {
-            font-size: 14px;
+            font-size: 16px;
             font-weight: bold;
             margin-bottom: 10px;
             text-decoration: underline;
@@ -3151,7 +3151,7 @@ const LabOrders = () => {
             padding: 8px 0;
             margin-bottom: 15px;
             font-weight: bold;
-            font-size: 12px;
+            font-size: 13px;
           }
 
           .header-col-1, .header-col-2, .header-col-3 {
@@ -3168,7 +3168,7 @@ const LabOrders = () => {
 
           .main-test-header {
             font-weight: bold;
-            font-size: 14px;
+            font-size: 16px;
             margin-bottom: 5px;
             border-bottom: 1px solid #ddd;
             padding-bottom: 4px;
@@ -3178,7 +3178,7 @@ const LabOrders = () => {
             display: grid;
             grid-template-columns: 40% 25% 35%;
             padding: 4px 0;
-            font-size: 13px;
+            font-size: 14px;
           }
 
           .test-name {
@@ -3215,6 +3215,7 @@ const LabOrders = () => {
             margin-top: 150px;
             display: flex;
             justify-content: flex-end;
+            padding-right: 50px;
           }
 
           .signature-box {
@@ -3238,57 +3239,57 @@ const LabOrders = () => {
 
         <div class="results-content">
           ${(() => {
-            // Group tests by category
-            const testsByCategory = selectedTestsForEntry.reduce((acc, test) => {
-              const category = test.test_category || 'GENERAL';
-              if (!acc[category]) {
-                acc[category] = [];
-              }
-              acc[category].push(test);
-              return acc;
-            }, {});
+        // Group tests by category
+        const testsByCategory = selectedTestsForEntry.reduce((acc, test) => {
+          const category = test.test_category || 'GENERAL';
+          if (!acc[category]) {
+            acc[category] = [];
+          }
+          acc[category].push(test);
+          return acc;
+        }, {});
 
-            // Generate content for each category
-            return Object.entries(testsByCategory).map(([category, testsInCategory]) => {
-              // Check if tests in this category are all text type
-              const allTestsAreTextType = testsInCategory.every(testRow => {
-                const subTests = testSubTests[testRow.test_name] || [];
-                return subTests.length > 0 && subTests.every(st => st.test_type === 'Text');
-              });
+        // Generate content for each category
+        return Object.entries(testsByCategory).map(([category, testsInCategory]) => {
+          // Check if tests in this category are all text type
+          const allTestsAreTextType = testsInCategory.every(testRow => {
+            const subTests = testSubTests[testRow.test_name] || [];
+            return subTests.length > 0 && subTests.every(st => st.test_type === 'Text');
+          });
 
-              return `
+          return `
                 <div class="category-section" style="margin-bottom: 30px;">
                   <div class="patient-info">
                     <div>
                       <div><strong>Patient Name :</strong> ${patientInfo?.patient_name || 'N/A'}</div>
                       <div><strong>Patient ID :</strong> ${actualPatientId}</div>
                       <div><strong>Ref By :</strong> ${(() => {
-                        const savedResult = savedLabResults[firstTestId];
-                        return savedResult?.patient_info?.actual_ref_by || savedResult?.patient_info?.ref_by || patientInfo?.ordering_doctor || 'Not specified';
-                      })()}</div>
+              const savedResult = savedLabResults[firstTestId];
+              return savedResult?.patient_info?.actual_ref_by || savedResult?.patient_info?.ref_by || patientInfo?.ordering_doctor || 'Not specified';
+            })()}</div>
                       <div><strong>Sample Received :</strong> ${reportDate} ${reportTime}</div>
                       <div><strong>Request No. :</strong> ${patientInfo?.order_number?.split('-').pop() || 'N/A'}</div>
                     </div>
                     <div>
                       <div><strong>Age/Sex :</strong> ${(() => {
-                        const savedResult = savedLabResults[firstTestId];
-                        const age = savedResult?.patient_info?.actual_age || patientInfo?.patient_age || 'N/A';
-                        const gender = savedResult?.patient_info?.actual_gender || patientInfo?.patient_gender || 'N/A';
-                        return age + 'Y ' + gender;
-                      })()}</div>
+              const savedResult = savedLabResults[firstTestId];
+              const age = savedResult?.patient_info?.actual_age || patientInfo?.patient_age || 'N/A';
+              const gender = savedResult?.patient_info?.actual_gender || patientInfo?.patient_gender || 'N/A';
+              return age + 'Y ' + gender;
+            })()}</div>
                       <div><strong>Visit ID :</strong> ${actualVisitId}</div>
                       <div><strong>Report Date :</strong> ${reportDate} ${reportTime}</div>
                       <div><strong>Consultant Name :</strong> ${(() => {
-                        const savedResult = savedLabResults[firstTestId];
-                        return savedResult?.patient_info?.actual_consultant || savedResult?.patient_info?.consultant_name || patientInfo?.ordering_doctor || 'Not specified';
-                      })()}</div>
+              const savedResult = savedLabResults[firstTestId];
+              return savedResult?.patient_info?.actual_consultant || savedResult?.patient_info?.consultant_name || patientInfo?.ordering_doctor || 'Not specified';
+            })()}</div>
                       <div><strong>Provisional Diagnosis :</strong> ${(() => {
-                        const savedResult = savedLabResults[firstTestId];
-                        return savedResult?.patient_info?.actual_clinical_history || savedResult?.patient_info?.clinical_history || patientInfo?.clinical_history || 'Not Specified';
-                      })()}</div>
+              const savedResult = savedLabResults[firstTestId];
+              return savedResult?.patient_info?.actual_clinical_history || savedResult?.patient_info?.clinical_history || patientInfo?.clinical_history || 'Not Specified';
+            })()}</div>
                     </div>
                   </div>
-                  <div class="report-title">Report on ${category.toUpperCase()}</div>
+                  <div class="report-title">REPORT ON ${category.toUpperCase()}</div>
 
                   ${!allTestsAreTextType ? `
                     <div class="header-row">
@@ -3299,21 +3300,21 @@ const LabOrders = () => {
                   ` : ''}
 
           ${false ? // Force fallback to form data for debugging
-            // Parse test results from patient_name JSON field
-            fetchedLabResults.map(result => {
-              try {
-                // Extract JSON data from patient_name field
-                const patientNameParts = result.patient_name.split(' - Test Results: ');
-                if (patientNameParts.length > 1) {
-                  const testData = JSON.parse(patientNameParts[1]);
+              // Parse test results from patient_name JSON field
+              fetchedLabResults.map(result => {
+                try {
+                  // Extract JSON data from patient_name field
+                  const patientNameParts = result.patient_name.split(' - Test Results: ');
+                  if (patientNameParts.length > 1) {
+                    const testData = JSON.parse(patientNameParts[1]);
 
-                  const displayValue = testData.result_value ?
-                    `${testData.result_value} ${testData.result_unit || ''}`.trim() :
-                    '';
+                    const displayValue = testData.result_value ?
+                      `${testData.result_value} ${testData.result_unit || ''}`.trim() :
+                      '';
 
-                  const referenceRange = testData.reference_range || '';
+                    const referenceRange = testData.reference_range || '';
 
-                  return `
+                    return `
                     <div class="main-test-section">
                       <div class="main-test-header">${testData.main_test.toUpperCase()}</div>
                       <div class="test-row">
@@ -3323,187 +3324,189 @@ const LabOrders = () => {
                       </div>
                     </div>
                   `;
+                  }
+                } catch (e) {
+                  console.log('Error parsing test results data:', e);
                 }
-              } catch (e) {
-                console.log('Error parsing test results data:', e);
-              }
-              return '';
-            }).join('')
-          :
-            // Fallback to form data with sub-tests
-            testsInCategory.map(testRow => {
-              console.log('🔄 Processing test row for print:', testRow.test_name);
-              const subTests = testSubTests[testRow.test_name] || [];
-              console.log('📊 Sub-tests for', testRow.test_name, ':', subTests);
+                return '';
+              }).join('')
+              :
+              // Fallback to form data with sub-tests
+              testsInCategory.map(testRow => {
+                console.log('🔄 Processing test row for print:', testRow.test_name);
+                const subTests = testSubTests[testRow.test_name] || [];
+                console.log('📊 Sub-tests for', testRow.test_name, ':', subTests);
 
-              // Also check for ANY form data keys that might contain data for this test
-              const allFormKeys = Object.keys(labResultsForm);
-              console.log('🔍 All available form keys:', allFormKeys);
-              const relevantKeys = allFormKeys.filter(key => key.includes(testRow.id.toString()));
-              console.log('📋 Relevant keys for test', testRow.test_name, ':', relevantKeys);
+                // Also check for ANY form data keys that might contain data for this test
+                const allFormKeys = Object.keys(labResultsForm);
+                console.log('🔍 All available form keys:', allFormKeys);
+                const relevantKeys = allFormKeys.filter(key => key.includes(testRow.id.toString()));
+                console.log('📋 Relevant keys for test', testRow.test_name, ':', relevantKeys);
 
-              // Try both sub-tests approach and direct key approach
-              let hasSubTestData = subTests.length > 0;
-              let hasDirectData = relevantKeys.length > 0;
+                // Try both sub-tests approach and direct key approach
+                let hasSubTestData = subTests.length > 0;
+                let hasDirectData = relevantKeys.length > 0;
 
-              console.log('📊 Has sub-test data:', hasSubTestData, 'Has direct data:', hasDirectData);
+                console.log('📊 Has sub-test data:', hasSubTestData, 'Has direct data:', hasDirectData);
 
-              if (hasSubTestData) {
-                // Check if all sub-tests are Text type
-                const allTextType = subTests.every(st => st.test_type === 'Text');
+                if (hasSubTestData) {
+                  // Check if all sub-tests are Text type
+                  const allTextType = subTests.every(st => st.test_type === 'Text');
 
-                if (allTextType) {
-                  // TEXT TYPE FORMAT - Simple list without table
-                  const textTestRows = subTests.map(subTest => {
-                    const subTestKey = `${testRow.id}_subtest_${subTest.id}`;
-                    let subTestFormData = savedLabResults[subTestKey] || labResultsForm[subTestKey];
+                  if (allTextType) {
+                    // TEXT TYPE FORMAT - Simple list without table
+                    const textTestRows = subTests.map(subTest => {
+                      const subTestKey = `${testRow.id}_subtest_${subTest.id}`;
+                      let subTestFormData = savedLabResults[subTestKey] || labResultsForm[subTestKey];
 
-                    // Try alternative keys
-                    if (!subTestFormData || !subTestFormData.result_value) {
-                      const alternativeKeys = [
-                        `${testRow.id}_subtest_main`,
-                        `${testRow.id}`,
-                        testRow.id.toString(),
-                        subTest.name,
-                        `${testRow.id}_${subTest.name}`,
-                        `${testRow.test_name}_${subTest.name}`
-                      ];
+                      // Try alternative keys
+                      if (!subTestFormData || !subTestFormData.result_value) {
+                        const alternativeKeys = [
+                          `${testRow.id}_subtest_main`,
+                          `${testRow.id}`,
+                          testRow.id.toString(),
+                          subTest.name,
+                          `${testRow.id}_${subTest.name}`,
+                          `${testRow.test_name}_${subTest.name}`
+                        ];
 
-                      for (const altKey of alternativeKeys) {
-                        const altData = savedLabResults[altKey] || labResultsForm[altKey];
-                        if (altData && altData.result_value) {
-                          subTestFormData = altData;
-                          break;
+                        for (const altKey of alternativeKeys) {
+                          const altData = savedLabResults[altKey] || labResultsForm[altKey];
+                          if (altData && altData.result_value) {
+                            subTestFormData = altData;
+                            break;
+                          }
                         }
                       }
-                    }
 
-                    const displayValue = subTestFormData?.result_value || subTest.text_value || 'Not Available';
+                      const displayValue = subTestFormData?.result_value || subTest.text_value || 'Not Available';
 
-                    return `
-                      <div style="margin: 15px 0;">
-                        <div style="font-weight: bold; font-size: 14px; margin-bottom: 5px;">
+                      return `
+                      <div style="margin: 15px 0; position: relative;">
+                        <div style="font-weight: bold; font-size: 15px; position: absolute; left: 20px; top: 0;">
                           ${subTest.name.trim()}
                         </div>
-                        <div style="margin-left: 20px; font-size: 14px;">
-                          : ${displayValue}
+                        <div style="text-align: center; width: 100%;">
+                           <span style="font-weight: bold; font-size: 15px;">
+                             : ${displayValue}
+                           </span>
                         </div>
                         ${testRow.test_method ? `
                           <div style="margin-left: 20px; margin-top: 5px; font-size: 12px;">
-                            <span style="font-weight: bold;">Method</span> ${testRow.test_method}
+                            <span style="font-weight: bold;">Method</span> ${testRow.test_method.replace('KIT :', '<br/>KIT :')}
                           </div>
                         ` : ''}
                       </div>
                     `;
-                  }).join('');
+                    }).join('');
 
-                  return `
+                    return `
                     <div class="main-test-section" style="margin: 20px 0;">
                       <div class="main-test-header" style="font-size: 16px; font-weight: bold; margin-bottom: 10px;">${testRow.test_name.toUpperCase()}</div>
                       ${textTestRows}
                     </div>
                   `;
-                } else {
-                  // NUMERIC TYPE FORMAT - Table format (existing logic)
-                  const subTestRows = subTests.map(subTest => {
-                    const subTestKey = `${testRow.id}_subtest_${subTest.id}`;
-                    console.log('🔑 Looking for sub-test data with key:', subTestKey);
+                  } else {
+                    // NUMERIC TYPE FORMAT - Table format (existing logic)
+                    const subTestRows = subTests.map(subTest => {
+                      const subTestKey = `${testRow.id}_subtest_${subTest.id}`;
+                      console.log('🔑 Looking for sub-test data with key:', subTestKey);
 
-                    // Try multiple approaches to find the data
-                    let subTestFormData = savedLabResults[subTestKey] || labResultsForm[subTestKey];
+                      // Try multiple approaches to find the data
+                      let subTestFormData = savedLabResults[subTestKey] || labResultsForm[subTestKey];
 
-                    // If not found, try alternative keys
-                    if (!subTestFormData || !subTestFormData.result_value) {
-                      const alternativeKeys = [
-                        `${testRow.id}_subtest_main`,
-                        `${testRow.id}`,
-                        testRow.id.toString(),
-                        subTest.name,
-                        `${testRow.id}_${subTest.name}`,
-                        `${testRow.test_name}_${subTest.name}`
-                      ];
+                      // If not found, try alternative keys
+                      if (!subTestFormData || !subTestFormData.result_value) {
+                        const alternativeKeys = [
+                          `${testRow.id}_subtest_main`,
+                          `${testRow.id}`,
+                          testRow.id.toString(),
+                          subTest.name,
+                          `${testRow.id}_${subTest.name}`,
+                          `${testRow.test_name}_${subTest.name}`
+                        ];
 
-                      for (const altKey of alternativeKeys) {
-                        const altData = savedLabResults[altKey] || labResultsForm[altKey];
-                        if (altData && altData.result_value) {
-                          subTestFormData = altData;
-                          console.log('✅ Found data with alternative key:', altKey, altData);
-                          break;
+                        for (const altKey of alternativeKeys) {
+                          const altData = savedLabResults[altKey] || labResultsForm[altKey];
+                          if (altData && altData.result_value) {
+                            subTestFormData = altData;
+                            console.log('✅ Found data with alternative key:', altKey, altData);
+                            break;
+                          }
                         }
                       }
-                    }
 
-                    // Fallback to empty data
-                    if (!subTestFormData) {
-                      subTestFormData = {
-                        result_value: '',
-                        result_unit: '',
-                        reference_range: '',
-                        comments: '',
-                        is_abnormal: false,
-                        result_status: 'Preliminary'
-                      };
-                    }
+                      // Fallback to empty data
+                      if (!subTestFormData) {
+                        subTestFormData = {
+                          result_value: '',
+                          result_unit: '',
+                          reference_range: '',
+                          comments: '',
+                          is_abnormal: false,
+                          result_status: 'Preliminary'
+                        };
+                      }
 
-                    console.log('📝 Final sub-test form data:', subTestFormData);
+                      console.log('📝 Final sub-test form data:', subTestFormData);
 
-                    const displayValue = subTestFormData.result_value ?
-                      `${subTestFormData.result_value} ${subTest.unit || ''}`.trim() :
-                      'Not Available';
+                      const displayValue = subTestFormData.result_value ?
+                        `${subTestFormData.result_value} ${subTest.unit || ''}`.trim() :
+                        'Not Available';
 
-                    const referenceRange = subTest.range || calculatedRanges[subTestKey] || 'Not Specified';
+                      const referenceRange = subTest.range || calculatedRanges[subTestKey] || 'Not Specified';
 
-                    // Check if this is a nested sub-test
-                    const isNested = subTest.isNested || (subTest.name && subTest.name.startsWith('  '));
-                    // Sub-tests = bold, Nested sub-tests = faint/light
-                    const nameStyle = isNested ? 'font-weight: 300; color: #666;' : 'font-weight: bold;';
+                      // Check if this is a nested sub-test
+                      const isNested = subTest.isNested || (subTest.name && subTest.name.startsWith('  '));
+                      // Sub-tests = bold, Nested sub-tests = faint/light
+                      const nameStyle = isNested ? 'font-weight: 300; color: #666;' : 'font-weight: bold;';
 
-                    return `
+                      return `
                       <div class="test-row">
                         <div class="test-name" style="${nameStyle}">${subTest.name.trim()}</div>
                         <div class="test-value ${subTestFormData.is_abnormal ? 'abnormal' : ''}">${displayValue}</div>
                         <div class="test-range">${referenceRange}</div>
                       </div>
                     `;
-                  }).join('');
+                    }).join('');
 
-                  return `
+                    return `
                     <div class="main-test-section">
                       <div class="main-test-header">${testRow.test_name.toUpperCase()}</div>
                       ${subTestRows}
                     </div>
                   `;
-                }
-              } else if (hasDirectData) {
-                // Display data from any relevant form keys found
-                const directDataRows = relevantKeys.map(key => {
-                  const formData = labResultsForm[key] || savedLabResults[key];
-                  if (formData && formData.result_value) {
-                    console.log('📊 Found direct data in key:', key, formData);
-                    return `
+                  }
+                } else if (hasDirectData) {
+                  // Display data from any relevant form keys found
+                  const directDataRows = relevantKeys.map(key => {
+                    const formData = labResultsForm[key] || savedLabResults[key];
+                    if (formData && formData.result_value) {
+                      console.log('📊 Found direct data in key:', key, formData);
+                      return `
                       <div class="test-row">
                         <div class="test-name">${testRow.test_name} (from ${key})</div>
                         <div class="test-value">${formData.result_value} ${formData.result_unit || ''}</div>
                         <div class="test-range">${formData.reference_range || 'Consult reference values'}</div>
                       </div>
                     `;
-                  }
-                  return '';
-                }).filter(row => row !== '').join('');
+                    }
+                    return '';
+                  }).filter(row => row !== '').join('');
 
-                if (directDataRows) {
-                  return `
+                  if (directDataRows) {
+                    return `
                     <div class="main-test-section">
                       <div class="main-test-header">${testRow.test_name.toUpperCase()}</div>
                       ${directDataRows}
                     </div>
                   `;
-                }
+                  }
 
-                // Fallback to main test data
-                const mainFormData = savedLabResults[testRow.id] || labResultsForm[testRow.id];
-                if (mainFormData && mainFormData.result_value) {
-                  return `
+                  // Fallback to main test data
+                  const mainFormData = savedLabResults[testRow.id] || labResultsForm[testRow.id];
+                  if (mainFormData && mainFormData.result_value) {
+                    return `
                     <div class="main-test-section">
                       <div class="main-test-header">${testRow.test_name.toUpperCase()}</div>
                       <div class="test-row">
@@ -3513,50 +3516,50 @@ const LabOrders = () => {
                       </div>
                     </div>
                   `;
-                }
-              } else {
-                // Display single test without sub-tests
-                let formData = savedLabResults[testRow.id] || labResultsForm[testRow.id];
+                  }
+                } else {
+                  // Display single test without sub-tests
+                  let formData = savedLabResults[testRow.id] || labResultsForm[testRow.id];
 
-                // If no data found, try alternative keys
-                if (!formData || !formData.result_value) {
-                  const alternativeKeys = [
-                    testRow.id.toString(),
-                    `${testRow.id}_main`,
-                    `${testRow.id}_subtest_main`,
-                    testRow.test_name,
-                    testRow.test_category
-                  ];
+                  // If no data found, try alternative keys
+                  if (!formData || !formData.result_value) {
+                    const alternativeKeys = [
+                      testRow.id.toString(),
+                      `${testRow.id}_main`,
+                      `${testRow.id}_subtest_main`,
+                      testRow.test_name,
+                      testRow.test_category
+                    ];
 
-                  for (const altKey of alternativeKeys) {
-                    const altData = savedLabResults[altKey] || labResultsForm[altKey];
-                    if (altData && altData.result_value) {
-                      formData = altData;
-                      console.log('✅ Found single test data with key:', altKey, altData);
-                      break;
+                    for (const altKey of alternativeKeys) {
+                      const altData = savedLabResults[altKey] || labResultsForm[altKey];
+                      if (altData && altData.result_value) {
+                        formData = altData;
+                        console.log('✅ Found single test data with key:', altKey, altData);
+                        break;
+                      }
                     }
                   }
-                }
 
-                // Fallback to empty data
-                if (!formData) {
-                  formData = {
-                    result_value: '',
-                    result_unit: '',
-                    reference_range: '',
-                    comments: '',
-                    is_abnormal: false,
-                    result_status: 'Preliminary'
-                  };
-                }
+                  // Fallback to empty data
+                  if (!formData) {
+                    formData = {
+                      result_value: '',
+                      result_unit: '',
+                      reference_range: '',
+                      comments: '',
+                      is_abnormal: false,
+                      result_status: 'Preliminary'
+                    };
+                  }
 
-                const displayValue = formData.result_value ?
-                  `${formData.result_value} ${formData.result_unit || ''}`.trim() :
-                  'Not Available';
+                  const displayValue = formData.result_value ?
+                    `${formData.result_value} ${formData.result_unit || ''}`.trim() :
+                    'Not Available';
 
-                const referenceRange = calculatedRanges[testRow.id] || formData.reference_range || 'Not Specified';
+                  const referenceRange = calculatedRanges[testRow.id] || formData.reference_range || 'Not Specified';
 
-                return `
+                  return `
                   <div class="main-test-section">
                     <div class="main-test-header">${testRow.test_name.toUpperCase()}</div>
                     <div class="test-row">
@@ -3566,69 +3569,27 @@ const LabOrders = () => {
                     </div>
                   </div>
                 `;
-              }
-            }).join('')
-          }
+                }
+              }).join('')
+            }
                   <div class="signature-section">
                     <div class="signature-box">
                       <img src="/Arun Agre.jpeg" alt="Signature" class="signature-image" />
-                      <div style="font-size: 12px; font-weight: bold;">
+                      <div style="font-size: 14px; font-weight: bold;">
                         DR. ARUN AGRE
                       </div>
-                      <div style="font-size: 11px; margin-top: 2px;">
+                      <div style="font-size: 13px; margin-top: 2px;">
                         MD (PATHOLOGY)
                       </div>
                     </div>
                   </div>
                 </div>
               `;
-            }).join('');
-          })()}
+        }).join('');
+      })()}
         </div>
         
-        <div class="method-section">
-          <strong>Method :</strong> Competitive Chemi Luminescent Immuno Assay
-        </div>
-        
-        <div class="interpretation-section">
-          <div class="interpretation-title">INTERPRETATION :</div>
-          <div>
-            ${selectedTestsForEntry.map(testRow => {
-              let commentsHtml = '';
 
-              // Check main test comments
-              const mainFormData = savedLabResults[testRow.id] || labResultsForm[testRow.id];
-              if (mainFormData?.comments) {
-                commentsHtml += `<p><strong>${testRow.test_name}:</strong> ${mainFormData.comments}</p>`;
-              }
-
-              // Check sub-test comments
-              const subTests = testSubTests[testRow.test_name] || [];
-              subTests.forEach(subTest => {
-                const subTestKey = `${testRow.id}_subtest_${subTest.id}`;
-                const subTestFormData = savedLabResults[subTestKey] || labResultsForm[subTestKey];
-                if (subTestFormData?.comments) {
-                  commentsHtml += `<p><strong>${subTest.name}:</strong> ${subTestFormData.comments}</p>`;
-                }
-              });
-
-              return commentsHtml;
-            }).join('')}
-            
-            <p>
-              1) Results should be correlated with clinical findings and other diagnostic investigations.
-            </p>
-            <p>
-              2) Any significant changes in values require clinical correlation or repeat testing with fresh sample.
-            </p>
-            <p>
-              3) Critical values have been immediately communicated to the requesting physician.
-            </p>
-            <p>
-              4) Reference ranges may vary based on methodology, age, and clinical conditions.
-            </p>
-          </div>
-        </div>
 
       </body>
       </html>
@@ -3657,31 +3618,31 @@ const LabOrders = () => {
 
     // Generate report content
     const reportContent = await generatePrintContent([]);
-    
+
     // Create blob and download HTML
     const blob = new Blob([reportContent], { type: 'text/html;charset=utf-8' });
     const url = window.URL.createObjectURL(blob);
     const link = document.createElement('a');
-    
+
     const patientInfo = selectedTestsForEntry[0];
     const dateStr = new Date().toISOString().split('T')[0];
     const timeStr = new Date().toTimeString().split(' ')[0].replace(/:/g, '-');
     const fileName = `Lab_Report_${patientInfo?.patient_name?.replace(/\s+/g, '_') || 'Patient'}_${dateStr}_${timeStr}.html`;
-    
+
     link.href = url;
     link.download = fileName;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     window.URL.revokeObjectURL(url);
-    
+
     // Also create a print version for PDF
     setTimeout(() => {
       const printWindow = window.open('', '_blank');
       if (printWindow) {
         printWindow.document.write(reportContent);
         printWindow.document.close();
-        
+
         toast({
           title: "Files Ready for Download",
           description: `HTML report downloaded. Print window opened for PDF save.`,
@@ -3929,7 +3890,7 @@ const LabOrders = () => {
                 />
               </div>
             </div>
-            
+
             <div>
               <Label>Status Filter</Label>
               <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -4061,112 +4022,112 @@ const LabOrders = () => {
                 </TableRow>
               ) : (
                 paginatedPatientGroups.map(([patientKey, patientGroup], patientIndex) => (
-                <React.Fragment key={patientKey}>
-                  {/* Patient Header Row */}
-                  <TableRow className="bg-blue-50 hover:bg-blue-100">
-                    <TableCell className="font-bold">{startIndex + patientIndex + 1}</TableCell>
-                    <TableCell colSpan={9} className="font-bold text-blue-900">
-                      {patientGroup.patient.name}
-                    </TableCell>
-                  </TableRow>
+                  <React.Fragment key={patientKey}>
+                    {/* Patient Header Row */}
+                    <TableRow className="bg-blue-50 hover:bg-blue-100">
+                      <TableCell className="font-bold">{startIndex + patientIndex + 1}</TableCell>
+                      <TableCell colSpan={9} className="font-bold text-blue-900">
+                        {patientGroup.patient.name}
+                      </TableCell>
+                    </TableRow>
 
-                  {/* Individual Test Rows for this Patient */}
-                  {patientGroup.tests.map((testRow, testIndex) => (
-                    <TableRow key={testRow.id} className="hover:bg-gray-50">
-                      <TableCell></TableCell>
-                      <TableCell></TableCell>
-                      <TableCell className="font-medium">{testRow.visit_id || testRow.order_number}</TableCell>
-                      <TableCell>
-                        <Badge variant="secondary">{testRow.test_category}</Badge>
-                      </TableCell>
-                      <TableCell>
-                        <div className="max-w-xs">
-                          <div className="font-medium">{testRow.test_name}</div>
-                        </div>
-                      </TableCell>
-                      <TableCell>{formatDate(testRow.order_date)}</TableCell>
-                      <TableCell className="text-sm text-gray-700">
-                        {testRow.ordering_doctor || 'N/A'}
-                      </TableCell>
-                      <TableCell>
-                        <Badge className={getStatusColor(testRow.order_status)}>
-                          {testRow.order_status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
+                    {/* Individual Test Rows for this Patient */}
+                    {patientGroup.tests.map((testRow, testIndex) => (
+                      <TableRow key={testRow.id} className="hover:bg-gray-50">
+                        <TableCell></TableCell>
+                        <TableCell></TableCell>
+                        <TableCell className="font-medium">{testRow.visit_id || testRow.order_number}</TableCell>
+                        <TableCell>
+                          <Badge variant="secondary">{testRow.test_category}</Badge>
+                        </TableCell>
+                        <TableCell>
+                          <div className="max-w-xs">
+                            <div className="font-medium">{testRow.test_name}</div>
+                          </div>
+                        </TableCell>
+                        <TableCell>{formatDate(testRow.order_date)}</TableCell>
+                        <TableCell className="text-sm text-gray-700">
+                          {testRow.ordering_doctor || 'N/A'}
+                        </TableCell>
+                        <TableCell>
+                          <Badge className={getStatusColor(testRow.order_status)}>
+                            {testRow.order_status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <Checkbox
+                              checked={sampleTakenTests.includes(testRow.id) || testSampleStatus[testRow.id] === 'saved'}
+                              disabled={
+                                testSampleStatus[testRow.id] === 'saved' ||
+                                (selectedPatientForSampling !== null && selectedPatientForSampling !== getPatientKey(testRow)) ||
+                                (isEntryModeOpen && !selectedTestsForEntry.some(t => getPatientKey(t) === getPatientKey(testRow))) ||
+                                (getSelectedPatientFromIncludedTests() !== null && getSelectedPatientFromIncludedTests() !== getPatientKey(testRow))
+                              }
+                              onCheckedChange={(checked) => {
+                                const currentPatientKey = getPatientKey(testRow);
+
+                                if (checked) {
+                                  // If this is the first sample selection, set this patient as selected
+                                  if (selectedPatientForSampling === null) {
+                                    setSelectedPatientForSampling(currentPatientKey);
+                                  }
+                                  setSampleTakenTests(prev => [...prev, testRow.id]);
+                                  setTestSampleStatus(prev => ({ ...prev, [testRow.id]: 'taken' }));
+                                } else {
+                                  setSampleTakenTests(prev => prev.filter(id => id !== testRow.id));
+                                  setTestSampleStatus(prev => ({ ...prev, [testRow.id]: 'not_taken' }));
+                                  setIncludedTests(prev => prev.filter(id => id !== testRow.id));
+
+                                  // If no more samples are selected for this patient, clear the selected patient
+                                  const remainingSamplesForPatient = sampleTakenTests.filter(id => {
+                                    const testForId = filteredTestRows.find(t => t.id === id);
+                                    return testForId && getPatientKey(testForId) === currentPatientKey && id !== testRow.id;
+                                  });
+
+                                  if (remainingSamplesForPatient.length === 0) {
+                                    setSelectedPatientForSampling(null);
+                                  }
+                                }
+                              }}
+                            />
+                            {testSampleStatus[testRow.id] === 'saved' && (
+                              <span className="text-xs text-green-600 font-medium">✓ Saved</span>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
                           <Checkbox
-                            checked={sampleTakenTests.includes(testRow.id) || testSampleStatus[testRow.id] === 'saved'}
+                            checked={includedTests.includes(testRow.id)}
                             disabled={
-                              testSampleStatus[testRow.id] === 'saved' ||
+                              testSampleStatus[testRow.id] !== 'saved' ||
                               (selectedPatientForSampling !== null && selectedPatientForSampling !== getPatientKey(testRow)) ||
                               (isEntryModeOpen && !selectedTestsForEntry.some(t => getPatientKey(t) === getPatientKey(testRow))) ||
                               (getSelectedPatientFromIncludedTests() !== null && getSelectedPatientFromIncludedTests() !== getPatientKey(testRow))
                             }
                             onCheckedChange={(checked) => {
-                              const currentPatientKey = getPatientKey(testRow);
+                              console.log('📝 Updating "Incl" status for test (local only):', testRow.id, checked);
 
+                              // Only update local state - no database saving
                               if (checked) {
-                                // If this is the first sample selection, set this patient as selected
-                                if (selectedPatientForSampling === null) {
-                                  setSelectedPatientForSampling(currentPatientKey);
-                                }
-                                setSampleTakenTests(prev => [...prev, testRow.id]);
-                                setTestSampleStatus(prev => ({ ...prev, [testRow.id]: 'taken' }));
+                                setIncludedTests(prev => [...prev, testRow.id]);
                               } else {
-                                setSampleTakenTests(prev => prev.filter(id => id !== testRow.id));
-                                setTestSampleStatus(prev => ({ ...prev, [testRow.id]: 'not_taken' }));
                                 setIncludedTests(prev => prev.filter(id => id !== testRow.id));
-
-                                // If no more samples are selected for this patient, clear the selected patient
-                                const remainingSamplesForPatient = sampleTakenTests.filter(id => {
-                                  const testForId = filteredTestRows.find(t => t.id === id);
-                                  return testForId && getPatientKey(testForId) === currentPatientKey && id !== testRow.id;
-                                });
-
-                                if (remainingSamplesForPatient.length === 0) {
-                                  setSelectedPatientForSampling(null);
-                                }
                               }
+
+                              console.log('✅ Updated "Incl" status locally (no database save)');
                             }}
                           />
-                          {testSampleStatus[testRow.id] === 'saved' && (
-                            <span className="text-xs text-green-600 font-medium">✓ Saved</span>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Checkbox
-                          checked={includedTests.includes(testRow.id)}
-                          disabled={
-                            testSampleStatus[testRow.id] !== 'saved' ||
-                            (selectedPatientForSampling !== null && selectedPatientForSampling !== getPatientKey(testRow)) ||
-                            (isEntryModeOpen && !selectedTestsForEntry.some(t => getPatientKey(t) === getPatientKey(testRow))) ||
-                            (getSelectedPatientFromIncludedTests() !== null && getSelectedPatientFromIncludedTests() !== getPatientKey(testRow))
-                          }
-                          onCheckedChange={(checked) => {
-                            console.log('📝 Updating "Incl" status for test (local only):', testRow.id, checked);
-
-                            // Only update local state - no database saving
-                            if (checked) {
-                              setIncludedTests(prev => [...prev, testRow.id]);
-                            } else {
-                              setIncludedTests(prev => prev.filter(id => id !== testRow.id));
-                            }
-
-                            console.log('✅ Updated "Incl" status locally (no database save)');
-                          }}
-                        />
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </React.Fragment>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </React.Fragment>
                 ))
               )}
             </TableBody>
           </Table>
         </CardContent>
-        
+
         {/* Pagination Controls */}
         {totalPages > 1 && (
           <div className="flex items-center justify-between px-6 py-4 border-t">
@@ -4179,7 +4140,7 @@ const LabOrders = () => {
                 Page {currentPage} of {totalPages}
               </span>
             </div>
-            
+
             <div className="flex items-center gap-1">
               {/* First Page */}
               <Button
@@ -4191,7 +4152,7 @@ const LabOrders = () => {
               >
                 ««
               </Button>
-              
+
               {/* Previous Page */}
               <Button
                 variant="outline"
@@ -4202,7 +4163,7 @@ const LabOrders = () => {
               >
                 ‹
               </Button>
-              
+
               {/* Page Numbers */}
               {getPageNumbers().map((pageNum) => (
                 <Button
@@ -4215,7 +4176,7 @@ const LabOrders = () => {
                   {pageNum}
                 </Button>
               ))}
-              
+
               {/* Next Page */}
               <Button
                 variant="outline"
@@ -4226,7 +4187,7 @@ const LabOrders = () => {
               >
                 ›
               </Button>
-              
+
               {/* Last Page */}
               <Button
                 variant="outline"
@@ -4345,7 +4306,7 @@ const LabOrders = () => {
           <DialogHeader>
             <DialogTitle>Create New Lab Order</DialogTitle>
           </DialogHeader>
-          
+
           <div className="space-y-6">
             {/* Patient Selection */}
             <div className="space-y-2">
@@ -4380,7 +4341,7 @@ const LabOrders = () => {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label>Priority</Label>
-                <Select value={orderForm.priority} onValueChange={(value) => 
+                <Select value={orderForm.priority} onValueChange={(value) =>
                   setOrderForm(prev => ({ ...prev, priority: value }))
                 }>
                   <SelectTrigger>
@@ -4545,14 +4506,14 @@ const LabOrders = () => {
           <DialogHeader>
             <DialogTitle>Order Details</DialogTitle>
           </DialogHeader>
-          
+
           {selectedOrder && (
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div><strong>Order Number:</strong> {selectedOrder.order_number}</div>
                 <div><strong>Patient:</strong> {selectedOrder.patient_name}</div>
                 <div><strong>Order Date:</strong> {formatDate(selectedOrder.order_date)}</div>
-                <div><strong>Status:</strong> 
+                <div><strong>Status:</strong>
                   <Badge className={`ml-2 ${getStatusColor(selectedOrder.order_status)}`}>
                     {selectedOrder.order_status}
                   </Badge>
@@ -4602,7 +4563,7 @@ const LabOrders = () => {
           <DialogHeader className="pb-4 border-b">
             <DialogTitle className="text-lg font-semibold">Lab Results Entry Form</DialogTitle>
           </DialogHeader>
-          
+
           {selectedTestsForEntry.length > 0 && (
             <div className="space-y-4">
               {/* Header Info Section */}
@@ -4771,8 +4732,8 @@ const LabOrders = () => {
                                     for (const key of allKeys) {
                                       const data = savedLabResults[key] || labResultsForm[key];
                                       if (data?.result_value &&
-                                          (key.includes(testRow.test_name) ||
-                                           key.toLowerCase().includes(testRow.test_name.toLowerCase()))) {
+                                        (key.includes(testRow.test_name) ||
+                                          key.toLowerCase().includes(testRow.test_name.toLowerCase()))) {
                                         mainTestFormData = data;
                                         break;
                                       }
@@ -4869,7 +4830,7 @@ const LabOrders = () => {
                               const data = savedLabResults[key] || labResultsForm[key];
                               // Check if this key contains the subtest name or if it's a direct name match
                               if ((key.toLowerCase().includes(subTest.name.trim().toLowerCase()) ||
-                                   key === subTest.name.trim()) && data?.result_value) {
+                                key === subTest.name.trim()) && data?.result_value) {
                                 subTestFormData = data;
                                 break;
                               }
@@ -5056,72 +5017,72 @@ const LabOrders = () => {
                 </div>
 
                 {/* Main File Upload Section */}
-              <div className="border-t pt-4">
-                <div className="flex items-center space-x-4">
-                  <input
-                    type="file"
-                    id="main-file-upload"
-                    className="hidden"
-                    multiple
-                    accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => document.getElementById('main-file-upload')?.click()}
-                    className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
-                    disabled={isFormSaved}
+                <div className="border-t pt-4">
+                  <div className="flex items-center space-x-4">
+                    <input
+                      type="file"
+                      id="main-file-upload"
+                      className="hidden"
+                      multiple
+                      accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => document.getElementById('main-file-upload')?.click()}
+                      className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+                      disabled={isFormSaved}
+                    >
+                      Choose File
+                    </button>
+                    <span className="text-sm text-gray-500">No file chosen</span>
+                  </div>
+                </div>
+
+                {/* Action Buttons - Bottom Row */}
+                <div className="flex justify-center gap-3 pt-4 border-t bg-gray-50 -mx-6 -mb-6 p-6 rounded-b-lg">
+                  <Button
+                    className="bg-blue-600 hover:bg-blue-700 text-white px-8"
+                    onClick={handleSaveLabResults}
+                    disabled={saveLabResultsMutation.isPending || isFormSaved}
                   >
-                    Choose File
-                  </button>
-                  <span className="text-sm text-gray-500">No file chosen</span>
+                    {saveLabResultsMutation.isPending ? 'Saving...' : (isFormSaved ? '✓ Saved' : 'Save')}
+                  </Button>
+
+                  <Button
+                    variant="outline"
+                    className="px-8"
+                    onClick={() => {
+                      // Only close the dialog - keep saved data intact
+                      handleEntryFormClose(false);
+                    }}
+                  >
+                    Back
+                  </Button>
+
+
+                  <Button
+                    variant="outline"
+                    className="px-8"
+                    onClick={() => {
+                      // Print without saving - uses current form data
+                      handlePreviewAndPrint();
+                    }}
+                    disabled={selectedTestsForEntry.length === 0}
+                    title="Print report with current entered values (saved or unsaved)"
+                  >
+                    Preview & Print
+                  </Button>
+
+                  <Button
+                    variant="outline"
+                    className="px-8"
+                    onClick={handleDownloadFiles}
+                    disabled={!isFormSaved}
+                  >
+                    Download Files
+                  </Button>
                 </div>
               </div>
-
-              {/* Action Buttons - Bottom Row */}
-              <div className="flex justify-center gap-3 pt-4 border-t bg-gray-50 -mx-6 -mb-6 p-6 rounded-b-lg">
-                <Button
-                  className="bg-blue-600 hover:bg-blue-700 text-white px-8"
-                  onClick={handleSaveLabResults}
-                  disabled={saveLabResultsMutation.isPending || isFormSaved}
-                >
-                  {saveLabResultsMutation.isPending ? 'Saving...' : (isFormSaved ? '✓ Saved' : 'Save')}
-                </Button>
-
-                <Button
-                  variant="outline"
-                  className="px-8"
-                  onClick={() => {
-                    // Only close the dialog - keep saved data intact
-                    handleEntryFormClose(false);
-                  }}
-                >
-                  Back
-                </Button>
-
-
-                <Button
-                  variant="outline"
-                  className="px-8"
-                  onClick={() => {
-                    // Print without saving - uses current form data
-                    handlePreviewAndPrint();
-                  }}
-                  disabled={selectedTestsForEntry.length === 0}
-                  title="Print report with current entered values (saved or unsaved)"
-                >
-                  Preview & Print
-                </Button>
-
-                <Button
-                  variant="outline"
-                  className="px-8"
-                  onClick={handleDownloadFiles}
-                  disabled={!isFormSaved}
-                >
-                  Download Files
-                </Button>
-              </div>
-            </div>
 
             </div>
           )}
