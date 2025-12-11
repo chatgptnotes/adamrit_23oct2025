@@ -245,20 +245,19 @@ const IpdDischargeSummary = () => {
 
   // OT Notes States
   const [stayNotes, setStayNotes] = useState('');
-  const [stayNotesTemplates, setStayNotesTemplates] = useState([
-    {
-      name: 'discharge_summary',
-      content: `You are a medical specialist. Write a brief, professional surgical/medical summary in 5-8 lines only. Include:
+  const [stayNotesTemplates, setStayNotesTemplates] = useState<Array<{id?: string, name: string, content: string, display_order?: number}>>([]);
+  const [templatesLoading, setTemplatesLoading] = useState(true);
+  const [newTemplateName, setNewTemplateName] = useState('');
+  const [newTemplateContent, setNewTemplateContent] = useState('');
+
+  // Default template content for fallback
+  const defaultTemplateContent = `You are a medical specialist. Write a brief, professional surgical/medical summary in 5-8 lines only. Include:
 1. Procedure performed
 2. Key findings
 3. Patient's condition post-procedure
 4. Any complications (if none, state "uneventful recovery")
 
-Keep it concise and professional. Do not use tables, bullet points, or extensive formatting. Do not mention patient name, age, or gender. Write in paragraph form only. Maximum 100 words.`
-    }
-  ]);
-  const [newTemplateName, setNewTemplateName] = useState('');
-  const [newTemplateContent, setNewTemplateContent] = useState('');
+Keep it concise and professional. Do not use tables, bullet points, or extensive formatting. Do not mention patient name, age, or gender. Write in paragraph form only. Maximum 100 words.`;
 
   // New states for Advice and Case Summary
   const [advice, setAdvice] = useState('');
@@ -268,6 +267,40 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
   const [editingTemplateContent, setEditingTemplateContent] = useState('');
   const [showAddTemplate, setShowAddTemplate] = useState(false);
 
+  // Fetch OT Notes templates from database on mount
+  useEffect(() => {
+    const fetchTemplates = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('ot_notes_templates')
+          .select('*')
+          .order('display_order', { ascending: true });
+
+        if (error) throw error;
+
+        if (data && data.length > 0) {
+          setStayNotesTemplates(data);
+        } else {
+          // Fallback to default if no templates in DB
+          setStayNotesTemplates([{
+            name: 'discharge_summary',
+            content: defaultTemplateContent
+          }]);
+        }
+      } catch (error) {
+        console.error('Error fetching templates:', error);
+        // Fallback to default on error
+        setStayNotesTemplates([{
+          name: 'discharge_summary',
+          content: defaultTemplateContent
+        }]);
+      } finally {
+        setTemplatesLoading(false);
+      }
+    };
+
+    fetchTemplates();
+  }, []);
 
   // Treatment During Hospital Stay States
   const [treatmentCondition, setTreatmentCondition] = useState('Satisfactory');
@@ -1291,20 +1324,37 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
   };
 
   // Template management functions
-  const addNewTemplate = () => {
+  const addNewTemplate = async () => {
     if (newTemplateName.trim() && newTemplateContent.trim()) {
-      const newTemplate = {
-        name: newTemplateName.trim(),
-        content: newTemplateContent.trim()
-      };
-      setStayNotesTemplates([...stayNotesTemplates, newTemplate]);
-      setNewTemplateName('');
-      setNewTemplateContent('');
-      setShowAddTemplate(false);
-      toast({
-        title: "Success",
-        description: "Template added successfully",
-      });
+      try {
+        const { data, error } = await supabase
+          .from('ot_notes_templates')
+          .insert({
+            name: newTemplateName.trim(),
+            content: newTemplateContent.trim(),
+            display_order: stayNotesTemplates.length
+          })
+          .select()
+          .single();
+
+        if (error) throw error;
+
+        setStayNotesTemplates([...stayNotesTemplates, data]);
+        setNewTemplateName('');
+        setNewTemplateContent('');
+        setShowAddTemplate(false);
+        toast({
+          title: "Success",
+          description: "Template saved successfully!",
+        });
+      } catch (error) {
+        console.error('Error saving template:', error);
+        toast({
+          title: "Error",
+          description: "Failed to save template",
+          variant: "destructive"
+        });
+      }
     } else {
       toast({
         title: "Error",
@@ -1320,21 +1370,48 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
     setEditingTemplateContent(stayNotesTemplates[index].content);
   };
 
-  const saveEditTemplate = () => {
+  const saveEditTemplate = async () => {
     if (editingTemplateIndex !== null && editingTemplateName.trim() && editingTemplateContent.trim()) {
-      const updatedTemplates = [...stayNotesTemplates];
-      updatedTemplates[editingTemplateIndex] = {
-        name: editingTemplateName.trim(),
-        content: editingTemplateContent.trim()
-      };
-      setStayNotesTemplates(updatedTemplates);
-      setEditingTemplateIndex(null);
-      setEditingTemplateName('');
-      setEditingTemplateContent('');
-      toast({
-        title: "Success",
-        description: "Template updated successfully",
-      });
+      try {
+        const template = stayNotesTemplates[editingTemplateIndex];
+
+        if (template.id) {
+          // Update existing template in database
+          const { error } = await supabase
+            .from('ot_notes_templates')
+            .update({
+              name: editingTemplateName.trim(),
+              content: editingTemplateContent.trim(),
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', template.id);
+
+          if (error) throw error;
+        }
+
+        // Update local state
+        const updatedTemplates = [...stayNotesTemplates];
+        updatedTemplates[editingTemplateIndex] = {
+          ...template,
+          name: editingTemplateName.trim(),
+          content: editingTemplateContent.trim()
+        };
+        setStayNotesTemplates(updatedTemplates);
+        setEditingTemplateIndex(null);
+        setEditingTemplateName('');
+        setEditingTemplateContent('');
+        toast({
+          title: "Success",
+          description: "Template updated successfully!",
+        });
+      } catch (error) {
+        console.error('Error updating template:', error);
+        toast({
+          title: "Error",
+          description: "Failed to update template",
+          variant: "destructive"
+        });
+      }
     } else {
       toast({
         title: "Error",
@@ -1350,27 +1427,73 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
     setEditingTemplateContent('');
   };
 
-  const deleteTemplate = (index: number) => {
-    const updatedTemplates = stayNotesTemplates.filter((_, i) => i !== index);
-    setStayNotesTemplates(updatedTemplates);
-    toast({
-      title: "Success",
-      description: "Template deleted successfully",
-    });
+  const deleteTemplate = async (index: number) => {
+    try {
+      const template = stayNotesTemplates[index];
+
+      if (template.id) {
+        const { error } = await supabase
+          .from('ot_notes_templates')
+          .delete()
+          .eq('id', template.id);
+
+        if (error) throw error;
+      }
+
+      const updatedTemplates = stayNotesTemplates.filter((_, i) => i !== index);
+      setStayNotesTemplates(updatedTemplates);
+      toast({
+        title: "Success",
+        description: "Template deleted successfully!",
+      });
+    } catch (error) {
+      console.error('Error deleting template:', error);
+      toast({
+        title: "Error",
+        description: "Failed to delete template",
+        variant: "destructive"
+      });
+    }
   };
 
-  const moveTemplateUp = (index: number) => {
+  const moveTemplateUp = async (index: number) => {
     if (index > 0) {
       const updatedTemplates = [...stayNotesTemplates];
-      [updatedTemplates[index], updatedTemplates[index - 1]] = [updatedTemplates[index - 1], updatedTemplates[index]];
+      [updatedTemplates[index - 1], updatedTemplates[index]] = [updatedTemplates[index], updatedTemplates[index - 1]];
+
+      // Update display_order in database
+      try {
+        if (updatedTemplates[index - 1].id && updatedTemplates[index].id) {
+          await Promise.all([
+            supabase.from('ot_notes_templates').update({ display_order: index - 1 }).eq('id', updatedTemplates[index - 1].id),
+            supabase.from('ot_notes_templates').update({ display_order: index }).eq('id', updatedTemplates[index].id)
+          ]);
+        }
+      } catch (error) {
+        console.error('Error reordering templates:', error);
+      }
+
       setStayNotesTemplates(updatedTemplates);
     }
   };
 
-  const moveTemplateDown = (index: number) => {
+  const moveTemplateDown = async (index: number) => {
     if (index < stayNotesTemplates.length - 1) {
       const updatedTemplates = [...stayNotesTemplates];
       [updatedTemplates[index], updatedTemplates[index + 1]] = [updatedTemplates[index + 1], updatedTemplates[index]];
+
+      // Update display_order in database
+      try {
+        if (updatedTemplates[index].id && updatedTemplates[index + 1].id) {
+          await Promise.all([
+            supabase.from('ot_notes_templates').update({ display_order: index }).eq('id', updatedTemplates[index].id),
+            supabase.from('ot_notes_templates').update({ display_order: index + 1 }).eq('id', updatedTemplates[index + 1].id)
+          ]);
+        }
+      } catch (error) {
+        console.error('Error reordering templates:', error);
+      }
+
       setStayNotesTemplates(updatedTemplates);
     }
   };
@@ -2249,6 +2372,20 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
       let examination = examMatch[1].trim();
       // Remove markdown ## headers
       examination = examination.replace(/^##\s*.*?\n/gm, '');
+
+      // Remove investigation-related content from examination section
+      // Remove INVESTIGATIONS: section and everything after it
+      examination = examination.replace(/INVESTIGATIONS:[\s\S]*/i, '');
+      // Remove markdown tables (| Test | Result | format)
+      examination = examination.replace(/\|[\s\S]*?\|[-]+\|[\s\S]*?(?=\n\n|$)/g, '');
+      // Remove lines starting with | (table rows)
+      examination = examination.replace(/^\|.*\|.*$/gm, '');
+      // Remove lines containing common lab test patterns
+      examination = examination.replace(/^.*\b(A\/G Ratio|Globulin|Albumin|Protein|Alkaline Phosphatase|SGPT|SGOT|ALT|AST|Bilirubin|Creatinine|Urea|Hemoglobin|WBC|RBC|Platelet)\b.*$/gim, '');
+      // Clean up multiple blank lines
+      examination = examination.replace(/\n{3,}/g, '\n\n').trim();
+
+      if (!examination) return '';
       return '<div class="section"><div class="section-subtitle">EXAMINATION:</div><div class="section-content">' + examination.replace(/\n/g, '<br>') + '</div></div>';
     }
     return '';
