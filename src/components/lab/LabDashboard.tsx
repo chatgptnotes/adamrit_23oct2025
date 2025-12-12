@@ -1,5 +1,6 @@
 // Enterprise Lab Management Dashboard
-import React, { useState } from 'react';
+import React from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -38,8 +39,14 @@ import LabReportPrintFormat from './LabReportPrintFormat';
 import { useLabDashboard } from '@/hooks/useLabData';
 
 const LabDashboard: React.FC = () => {
-  const [selectedTab, setSelectedTab] = useState('overview');
-  
+  // Persist selected tab in URL so it survives page refresh
+  const [searchParams, setSearchParams] = useSearchParams();
+  const selectedTab = searchParams.get('tab') || 'overview';
+
+  const setSelectedTab = (tab: string) => {
+    setSearchParams({ tab });
+  };
+
   // Use real data from backend
   const { dashboardData, loading, error, refetch } = useLabDashboard();
 
