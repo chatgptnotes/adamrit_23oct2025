@@ -77,20 +77,7 @@ export async function saveTestWithNestedSubTests(
       main_test_name: params.mainTestName,
       test_name: params.testName,
       test_category: params.testCategory || 'GENERAL',
-      result_value: params.resultValue ? JSON.stringify({
-        value: params.resultValue,
-        timestamp: new Date().toISOString(),
-        entry_time: new Date().toLocaleString('en-IN', {
-          timeZone: 'Asia/Kolkata',
-          year: 'numeric',
-          month: '2-digit',
-          day: '2-digit',
-          hour: '2-digit',
-          minute: '2-digit',
-          second: '2-digit'
-        }),
-        session_id: `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-      }) : null,
+      result_value: params.resultValue || null,
       result_unit: params.resultUnit || '',
       reference_range: params.referenceRange || '',
       comments: params.comments || '',
