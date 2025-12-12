@@ -84,7 +84,7 @@ const LabReportPrintFormat: React.FC<LabReportPrintFormatProps> = ({
           <CardContent className="p-8">
             {/* Header */}
             <div className="text-center mb-8">
-              <h1 className="text-2xl font-bold underline mb-4">{reportType}</h1>
+              <h1 className="text-2xl font-bold underline mb-4 uppercase">{reportType}</h1>
             </div>
 
             {/* Patient Info - Could be added if needed */}
@@ -120,15 +120,19 @@ const LabReportPrintFormat: React.FC<LabReportPrintFormatProps> = ({
                 {/* Qualitative Test Format (Simple - Second Screenshot Style) */}
                 {test.testType === 'qualitative' ? (
                   <div>
-                    {/* Test Heading */}
-                    <div className="font-bold text-base mb-3">{test.name}</div>
-
-                    {/* Test Name and Result in Single Row */}
-                    <div className="flex items-center justify-start gap-4 pl-4">
-                      <div className="italic text-sm flex-grow">{test.name}</div>
-                      <div className="font-bold border-2 border-black px-6 py-1 text-sm">
-                        {test.observedValue}
-                      </div>
+                    <div className="grid grid-cols-3 items-center">
+                       {/* Test Name */}
+                       <div className="font-bold text-base pl-4">{test.name}</div>
+                       
+                       {/* Result - Centered having rounded border */}
+                       <div className="flex justify-center">
+                         <div className="font-bold border-2 border-black rounded-full px-8 py-1 text-sm inline-block">
+                          : {test.observedValue}
+                         </div>
+                       </div>
+                       
+                       {/* Empty third column for alignment with header */}
+                       <div></div>
                     </div>
                   </div>
                 ) : (
@@ -146,23 +150,26 @@ const LabReportPrintFormat: React.FC<LabReportPrintFormatProps> = ({
                 {/* Description */}
                 {test.description && (
                   <div className="pt-2 pb-2">
-                    <p className="text-sm leading-relaxed text-justify pl-4">
-                      {test.description}
-                    </p>
+                    <div className="flex">
+                      <div className="w-24 font-bold text-sm pl-4">Method</div>
+                      <p className="text-sm leading-relaxed text-justify flex-1">
+                        {test.description}
+                      </p>
+                    </div>
                   </div>
                 )}
 
                 {/* Comments Section (if needed) */}
                 {test.testType === 'qualitative' && (
                   <div className="pl-4 pt-2">
-                    <div className="text-xs text-gray-600">Comments</div>
+                    {/* <div className="text-xs text-gray-600">Comments</div> */}
                   </div>
                 )}
               </div>
             ))}
 
             {/* Footer with Doctor Signature */}
-            <div className="mt-16 flex justify-end">
+            <div className="mt-16 flex justify-end pr-16">
               <div className="text-center">
                 {/* Signature Space */}
                 <div className="mb-4">

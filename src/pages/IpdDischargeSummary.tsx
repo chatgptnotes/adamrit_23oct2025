@@ -245,20 +245,19 @@ const IpdDischargeSummary = () => {
 
   // OT Notes States
   const [stayNotes, setStayNotes] = useState('');
-  const [stayNotesTemplates, setStayNotesTemplates] = useState([
-    {
-      name: 'discharge_summary',
-      content: `You are a medical specialist. Write a brief, professional surgical/medical summary in 5-8 lines only. Include:
+  const [stayNotesTemplates, setStayNotesTemplates] = useState<Array<{id?: string, name: string, content: string, display_order?: number}>>([]);
+  const [templatesLoading, setTemplatesLoading] = useState(true);
+  const [newTemplateName, setNewTemplateName] = useState('');
+  const [newTemplateContent, setNewTemplateContent] = useState('');
+
+  // Default template content for fallback
+  const defaultTemplateContent = `You are a medical specialist. Write a brief, professional surgical/medical summary in 5-8 lines only. Include:
 1. Procedure performed
 2. Key findings
 3. Patient's condition post-procedure
 4. Any complications (if none, state "uneventful recovery")
 
-Keep it concise and professional. Do not use tables, bullet points, or extensive formatting. Do not mention patient name, age, or gender. Write in paragraph form only. Maximum 100 words.`
-    }
-  ]);
-  const [newTemplateName, setNewTemplateName] = useState('');
-  const [newTemplateContent, setNewTemplateContent] = useState('');
+Keep it concise and professional. Do not use tables, bullet points, or extensive formatting. Do not mention patient name, age, or gender. Write in paragraph form only. Maximum 100 words.`;
 
   // New states for Advice and Case Summary
   const [advice, setAdvice] = useState('');
@@ -268,6 +267,40 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
   const [editingTemplateContent, setEditingTemplateContent] = useState('');
   const [showAddTemplate, setShowAddTemplate] = useState(false);
 
+  // Fetch OT Notes templates from database on mount
+  useEffect(() => {
+    const fetchTemplates = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('ot_notes_templates')
+          .select('*')
+          .order('display_order', { ascending: true });
+
+        if (error) throw error;
+
+        if (data && data.length > 0) {
+          setStayNotesTemplates(data);
+        } else {
+          // Fallback to default if no templates in DB
+          setStayNotesTemplates([{
+            name: 'discharge_summary',
+            content: defaultTemplateContent
+          }]);
+        }
+      } catch (error) {
+        console.error('Error fetching templates:', error);
+        // Fallback to default on error
+        setStayNotesTemplates([{
+          name: 'discharge_summary',
+          content: defaultTemplateContent
+        }]);
+      } finally {
+        setTemplatesLoading(false);
+      }
+    };
+
+    fetchTemplates();
+  }, []);
 
   // Treatment During Hospital Stay States
   const [treatmentCondition, setTreatmentCondition] = useState('Satisfactory');
@@ -1052,7 +1085,8 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
     } else if (!investigations || investigations === 'Investigation details will be populated here...' || investigations.includes('Lab and radiology investigations will be populated here')) {
       setInvestigations('Lab and radiology investigations will be populated here when data is available.');
     }
-  }, [labResultsData, radiologyData, investigations]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [labResultsData, radiologyData]);  // Removed 'investigations' to prevent overwriting manual fetch data
 
   // Update surgery details when data is loaded (combine visit_surgeries + ot_notes data)
   useEffect(() => {
@@ -1082,26 +1116,7 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
           anesthetist: anesthetist,
           anesthesia: anesthesia,
           implant: implant,
-          description: otNotesData?.description || `**Surgical Operation Record**
-
-**Patient Information:**
-- Name: ${patientData?.patients?.name || 'Patient'}
-- Age: ${patientData?.patients?.age || 'N/A'}
-- Gender: ${patientData?.patients?.gender || 'N/A'}
-
-**Date of Surgery:** ${surgeryDate ? format(surgeryDate, 'MMMM dd, yyyy') : 'N/A'}
-
-**Surgery Details:**
-- Procedure: ${procedurePerformed || 'N/A'}
-- Code: ${surgeryInfo?.code || 'N/A'}
-- Rate: ₹${surgeryInfo?.NABH_NABL_Rate || otNotesData?.surgery_rate || 'N/A'}
-- Status: ${surgery?.sanction_status || otNotesData?.surgery_status || 'N/A'}
-- Surgeon: ${surgeon || 'N/A'}
-- Anesthetist: ${anesthetist || 'N/A'}
-- Anesthesia Type: ${anesthesia || 'N/A'}
-- Implant: ${implant || 'N/A'}
-
-${surgeryInfo?.description || surgery?.notes || 'Standard surgical procedure performed successfully.'}`
+          description: '' // Keep empty - user will generate via AI Generate button
         });
 
         console.log('✅ Surgery details updated with data from:', {
@@ -1263,7 +1278,7 @@ ${surgeryInfo?.description || surgery?.notes || 'Standard surgical procedure per
             anesthetist: surgery.anesthetist || '',
             anesthesia: surgery.anesthesia_type || '',
             implant: surgery.implant || '',
-            description: surgery.description || ''
+            description: '' // Keep empty - user will generate via AI Generate button
           });
           console.log('🏥 Populated surgery details from saved discharge summary (no OT notes available)');
         } else if (surgery && otNotesData) {
@@ -1309,20 +1324,37 @@ ${surgeryInfo?.description || surgery?.notes || 'Standard surgical procedure per
   };
 
   // Template management functions
-  const addNewTemplate = () => {
+  const addNewTemplate = async () => {
     if (newTemplateName.trim() && newTemplateContent.trim()) {
-      const newTemplate = {
-        name: newTemplateName.trim(),
-        content: newTemplateContent.trim()
-      };
-      setStayNotesTemplates([...stayNotesTemplates, newTemplate]);
-      setNewTemplateName('');
-      setNewTemplateContent('');
-      setShowAddTemplate(false);
-      toast({
-        title: "Success",
-        description: "Template added successfully",
-      });
+      try {
+        const { data, error } = await supabase
+          .from('ot_notes_templates')
+          .insert({
+            name: newTemplateName.trim(),
+            content: newTemplateContent.trim(),
+            display_order: stayNotesTemplates.length
+          })
+          .select()
+          .single();
+
+        if (error) throw error;
+
+        setStayNotesTemplates([...stayNotesTemplates, data]);
+        setNewTemplateName('');
+        setNewTemplateContent('');
+        setShowAddTemplate(false);
+        toast({
+          title: "Success",
+          description: "Template saved successfully!",
+        });
+      } catch (error) {
+        console.error('Error saving template:', error);
+        toast({
+          title: "Error",
+          description: "Failed to save template",
+          variant: "destructive"
+        });
+      }
     } else {
       toast({
         title: "Error",
@@ -1338,21 +1370,48 @@ ${surgeryInfo?.description || surgery?.notes || 'Standard surgical procedure per
     setEditingTemplateContent(stayNotesTemplates[index].content);
   };
 
-  const saveEditTemplate = () => {
+  const saveEditTemplate = async () => {
     if (editingTemplateIndex !== null && editingTemplateName.trim() && editingTemplateContent.trim()) {
-      const updatedTemplates = [...stayNotesTemplates];
-      updatedTemplates[editingTemplateIndex] = {
-        name: editingTemplateName.trim(),
-        content: editingTemplateContent.trim()
-      };
-      setStayNotesTemplates(updatedTemplates);
-      setEditingTemplateIndex(null);
-      setEditingTemplateName('');
-      setEditingTemplateContent('');
-      toast({
-        title: "Success",
-        description: "Template updated successfully",
-      });
+      try {
+        const template = stayNotesTemplates[editingTemplateIndex];
+
+        if (template.id) {
+          // Update existing template in database
+          const { error } = await supabase
+            .from('ot_notes_templates')
+            .update({
+              name: editingTemplateName.trim(),
+              content: editingTemplateContent.trim(),
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', template.id);
+
+          if (error) throw error;
+        }
+
+        // Update local state
+        const updatedTemplates = [...stayNotesTemplates];
+        updatedTemplates[editingTemplateIndex] = {
+          ...template,
+          name: editingTemplateName.trim(),
+          content: editingTemplateContent.trim()
+        };
+        setStayNotesTemplates(updatedTemplates);
+        setEditingTemplateIndex(null);
+        setEditingTemplateName('');
+        setEditingTemplateContent('');
+        toast({
+          title: "Success",
+          description: "Template updated successfully!",
+        });
+      } catch (error) {
+        console.error('Error updating template:', error);
+        toast({
+          title: "Error",
+          description: "Failed to update template",
+          variant: "destructive"
+        });
+      }
     } else {
       toast({
         title: "Error",
@@ -1368,27 +1427,73 @@ ${surgeryInfo?.description || surgery?.notes || 'Standard surgical procedure per
     setEditingTemplateContent('');
   };
 
-  const deleteTemplate = (index: number) => {
-    const updatedTemplates = stayNotesTemplates.filter((_, i) => i !== index);
-    setStayNotesTemplates(updatedTemplates);
-    toast({
-      title: "Success",
-      description: "Template deleted successfully",
-    });
+  const deleteTemplate = async (index: number) => {
+    try {
+      const template = stayNotesTemplates[index];
+
+      if (template.id) {
+        const { error } = await supabase
+          .from('ot_notes_templates')
+          .delete()
+          .eq('id', template.id);
+
+        if (error) throw error;
+      }
+
+      const updatedTemplates = stayNotesTemplates.filter((_, i) => i !== index);
+      setStayNotesTemplates(updatedTemplates);
+      toast({
+        title: "Success",
+        description: "Template deleted successfully!",
+      });
+    } catch (error) {
+      console.error('Error deleting template:', error);
+      toast({
+        title: "Error",
+        description: "Failed to delete template",
+        variant: "destructive"
+      });
+    }
   };
 
-  const moveTemplateUp = (index: number) => {
+  const moveTemplateUp = async (index: number) => {
     if (index > 0) {
       const updatedTemplates = [...stayNotesTemplates];
-      [updatedTemplates[index], updatedTemplates[index - 1]] = [updatedTemplates[index - 1], updatedTemplates[index]];
+      [updatedTemplates[index - 1], updatedTemplates[index]] = [updatedTemplates[index], updatedTemplates[index - 1]];
+
+      // Update display_order in database
+      try {
+        if (updatedTemplates[index - 1].id && updatedTemplates[index].id) {
+          await Promise.all([
+            supabase.from('ot_notes_templates').update({ display_order: index - 1 }).eq('id', updatedTemplates[index - 1].id),
+            supabase.from('ot_notes_templates').update({ display_order: index }).eq('id', updatedTemplates[index].id)
+          ]);
+        }
+      } catch (error) {
+        console.error('Error reordering templates:', error);
+      }
+
       setStayNotesTemplates(updatedTemplates);
     }
   };
 
-  const moveTemplateDown = (index: number) => {
+  const moveTemplateDown = async (index: number) => {
     if (index < stayNotesTemplates.length - 1) {
       const updatedTemplates = [...stayNotesTemplates];
       [updatedTemplates[index], updatedTemplates[index + 1]] = [updatedTemplates[index + 1], updatedTemplates[index]];
+
+      // Update display_order in database
+      try {
+        if (updatedTemplates[index].id && updatedTemplates[index + 1].id) {
+          await Promise.all([
+            supabase.from('ot_notes_templates').update({ display_order: index }).eq('id', updatedTemplates[index].id),
+            supabase.from('ot_notes_templates').update({ display_order: index + 1 }).eq('id', updatedTemplates[index + 1].id)
+          ]);
+        }
+      } catch (error) {
+        console.error('Error reordering templates:', error);
+      }
+
       setStayNotesTemplates(updatedTemplates);
     }
   };
@@ -1931,6 +2036,18 @@ ${surgeryInfo?.description || surgery?.notes || 'Standard surgical procedure per
     return html;
   };
 
+  // Helper function to detect placeholder/example investigation text
+  const isPlaceholderInvestigations = (text: string): boolean => {
+    if (!text) return true;
+    const placeholderIndicators = [
+      'No investigations found in database',
+      'You can manually enter investigations in this format',
+      'DD/MM/YYYY:-Test Category: Test1:Value1 unit',
+      'Example:',
+    ];
+    return placeholderIndicators.some(indicator => text.includes(indicator));
+  };
+
   // Function to generate formatted print HTML
   const generatePrintHTML = (summaryData: any, patientInfo: any, visitIdString: string, labResults?: any) => {
     const currentDate = format(new Date(), 'dd/MM/yyyy');
@@ -2193,7 +2310,7 @@ ${surgeryInfo?.description || surgery?.notes || 'Standard surgical procedure per
 
   ${medications.length > 0 ? `
   <div class="section">
-    <div class="section-subtitle">**MEDICATIONS (TREATMENT ON DISCHARGE):**</div>
+    <div class="section-subtitle">MEDICATIONS (TREATMENT ON DISCHARGE):</div>
     <table>
       <thead>
         <tr>
@@ -2218,8 +2335,11 @@ ${surgeryInfo?.description || surgery?.notes || 'Standard surgical procedure per
     // Remove "CLINICAL HISTORY:" header if present at start
     clinicalHistory = clinicalHistory.replace(/^CLINICAL HISTORY:\s*/i, '');
 
-    // Extract only up to the next section marker
-    const sectionMarkers = /(\n\s*\||\nEXAMINATION|\nMEDICATION|\nOPERATION|\nADVICE|\n\*\*)/i;
+    // Remove markdown ## headers (e.g., "## Clinical History")
+    clinicalHistory = clinicalHistory.replace(/^##\s*.*?\n/gm, '');
+
+    // Extract only up to the next section marker (handles ##, ** and : formats, plus "Upon/On examination" text)
+    const sectionMarkers = /(\n\s*\||\n##\s*Examination|\n\*\*EXAMINATION|\nEXAMINATION:|\nUpon examination|\nOn examination|\nMEDICATION|\nADVICE:|\n\*\*ADVICE|\n##\s*Advice|\nOperation Notes)/i;
     const match = clinicalHistory.search(sectionMarkers);
     if (match > 0) {
       clinicalHistory = clinicalHistory.substring(0, match).trim();
@@ -2229,23 +2349,51 @@ ${surgeryInfo?.description || surgery?.notes || 'Standard surgical procedure per
     return '<div class="section"><div class="section-subtitle">CLINICAL HISTORY:</div><div class="section-content">' + clinicalHistory.replace(/\n/g, '<br>') + '</div></div>';
   })()}
 
-  ${summaryData.vital_signs ? `
-  <div class="section">
-    <div class="section-subtitle">EXAMINATION:</div>
-    <div class="section-content">
-      On physical examination, patient was found to be stably maintaining vitals.
-      ${summaryData.vital_signs.temperature ? `Temperature of ${summaryData.vital_signs.temperature}°F, ` : ''}
-      ${summaryData.vital_signs.pulse_rate ? `pulse rate of ${summaryData.vital_signs.pulse_rate}/min, ` : ''}
-      ${summaryData.vital_signs.blood_pressure ? `blood pressure of ${summaryData.vital_signs.blood_pressure} were recorded. ` : ''}
-      ${summaryData.vital_signs.spo2 ? `Oxygen saturation was at ${summaryData.vital_signs.spo2}% in room air.` : ''}
-      ${summaryData.vital_signs.examination_details ? `<br><br>${summaryData.vital_signs.examination_details}` : ''}
-    </div>
-  </div>
-  ` : ''}
+  ${(() => {
+    if (!summaryData.ot_notes) return '';
+    // Extract EXAMINATION section from ot_notes (handles ##, **, : formats and "Upon examination" text)
+    const content = summaryData.ot_notes;
+    // Try ## Examination format first, then **EXAMINATION**, then EXAMINATION:, then "Upon/On examination"
+    let examMatch = content.match(/##\s*Examination\s*([\s\S]*?)(?=\n\s*(?:##\s*Operation|##\s*Advice|Operation Notes|\*\*|$))/i);
+    if (!examMatch) {
+      examMatch = content.match(/\*\*EXAMINATION\*\*\s*([\s\S]*?)(?=\n\s*(?:\*\*ADVICE|\*\*OPERATION|ADVICE:|Operation Notes|$))/i);
+    }
+    if (!examMatch) {
+      examMatch = content.match(/EXAMINATION:?\s*([\s\S]*?)(?=\n\s*(?:MEDICATIONS|OPERATION|ADVICE:|\*\*|$))/i);
+    }
+    if (!examMatch) {
+      // Try to capture "Upon examination" or "On examination" text directly
+      examMatch = content.match(/(Upon examination[\s\S]*?)(?=\n\s*(?:##\s*Operation|Operation Notes|ADVICE:|$))/i);
+      if (!examMatch) {
+        examMatch = content.match(/(On examination[\s\S]*?)(?=\n\s*(?:##\s*Operation|Operation Notes|ADVICE:|$))/i);
+      }
+    }
+    if (examMatch && examMatch[1]) {
+      let examination = examMatch[1].trim();
+      // Remove markdown ## headers
+      examination = examination.replace(/^##\s*.*?\n/gm, '');
+
+      // Remove investigation-related content from examination section
+      // Remove INVESTIGATIONS: section and everything after it
+      examination = examination.replace(/INVESTIGATIONS:[\s\S]*/i, '');
+      // Remove markdown tables (| Test | Result | format)
+      examination = examination.replace(/\|[\s\S]*?\|[-]+\|[\s\S]*?(?=\n\n|$)/g, '');
+      // Remove lines starting with | (table rows)
+      examination = examination.replace(/^\|.*\|.*$/gm, '');
+      // Remove lines containing common lab test patterns
+      examination = examination.replace(/^.*\b(A\/G Ratio|Globulin|Albumin|Protein|Alkaline Phosphatase|SGPT|SGOT|ALT|AST|Bilirubin|Creatinine|Urea|Hemoglobin|WBC|RBC|Platelet)\b.*$/gim, '');
+      // Clean up multiple blank lines
+      examination = examination.replace(/\n{3,}/g, '\n\n').trim();
+
+      if (!examination) return '';
+      return '<div class="section"><div class="section-subtitle">EXAMINATION:</div><div class="section-content">' + examination.replace(/\n/g, '<br>') + '</div></div>';
+    }
+    return '';
+  })()}
 
   ${summaryData.procedures_performed && (summaryData.procedures_performed.surgery_date || summaryData.procedures_performed.procedure_performed) ? `
   <div class="section">
-    <div class="section-subtitle">**Operation Notes**</div>
+    <div class="section-subtitle">Operation Notes</div>
     <table>
       <tbody>
         <tr>
@@ -2281,21 +2429,38 @@ ${surgeryInfo?.description || surgery?.notes || 'Standard surgical procedure per
   </div>
   ` : ''}
 
-  ${summaryData.discharge_advice ? `
-  <div class="section">
-    <div class="section-subtitle">**ADVICE:**</div>
-    <div class="section-content">${summaryData.discharge_advice.replace(/\n/g, '<br>')}</div>
-  </div>
-  ` : ''}
+  ${(() => {
+    // First try to extract ADVICE from ot_notes
+    if (summaryData.ot_notes) {
+      const content = summaryData.ot_notes;
+      const adviceMatch = content.match(/ADVICE:?\s*([\s\S]*?)$/i);
+      if (adviceMatch && adviceMatch[1]) {
+        const advice = adviceMatch[1].trim();
+        if (advice) {
+          return '<div class="section"><div class="section-subtitle">ADVICE:</div><div class="section-content">' + advice.replace(/\n/g, '<br>') + '</div></div>';
+        }
+      }
+    }
+    // Fallback to original discharge_advice field
+    if (summaryData.discharge_advice) {
+      return '<div class="section"><div class="section-subtitle">ADVICE:</div><div class="section-content">' + summaryData.discharge_advice.replace(/\n/g, '<br>') + '</div></div>';
+    }
+    return '';
+  })()}
 
-  ${labResults?.formattedResults || summaryData.lab_investigations?.investigations_text ? `
-  <div class="section">
-    <div class="section-subtitle">INVESTIGATIONS</div>
-    <div class="section-content">
-      ${labResults?.formattedResults ? labResults.formattedResults.replace(/\n/g, '<br>') : (summaryData.lab_investigations?.investigations_text ? cleanJSONFromText(summaryData.lab_investigations.investigations_text).replace(/\n/g, '<br>') : '')}
-    </div>
-  </div>
-  ` : ''}
+  ${(() => {
+    const investigationsText = summaryData.lab_investigations?.investigations_text;
+    const hasRealLabResults = labResults?.formattedResults && !isPlaceholderInvestigations(labResults.formattedResults);
+    const hasRealInvestigationsText = investigationsText && !isPlaceholderInvestigations(investigationsText);
+
+    if (!hasRealLabResults && !hasRealInvestigationsText) return '';
+
+    return `
+    <div class="section">
+      <div class="section-subtitle">INVESTIGATIONS</div>
+      <div class="section-content">${hasRealLabResults ? labResults.formattedResults.replace(/\n/g, '<br>') : cleanJSONFromText(investigationsText).replace(/\n/g, '<br>')}</div>
+    </div>`;
+  })()}
 
   ${summaryData.review_on_date || summaryData.resident_on_discharge ? `
   <table class="review-table">
@@ -2519,10 +2684,40 @@ ${surgeryInfo?.description || surgery?.notes || 'Standard surgical procedure per
 
       let data, error;
 
-      if (visitUUID) {
-        console.log('🧪 Fetching LATEST lab results for visit UUID:', visitUUID);
+      // First try with TEXT visit_id (e.g., "IH25L06010") - this is how LabOrders saves results
+      console.log('🧪 Fetching lab results for TEXT visit_id:', visitId);
 
-        const result = await supabase
+      let result = await supabase
+        .from('lab_results')
+        .select(`
+          id,
+          visit_id,
+          test_name,
+          test_category,
+          result_value,
+          result_unit,
+          main_test_name,
+          created_at,
+          updated_at
+        `)
+        .eq('visit_id', visitId)
+        .order('created_at', { ascending: false })
+        .order('updated_at', { ascending: false });
+
+      data = result.data;
+      error = result.error;
+
+      console.log('✅ Lab results fetched with TEXT visit_id:', {
+        count: data?.length,
+        firstResult: data?.[0],
+        error
+      });
+
+      // If no results with text visit_id, try with UUID as fallback
+      if ((!data || data.length === 0) && visitUUID) {
+        console.log('🧪 No results with text visit_id, trying UUID:', visitUUID);
+
+        result = await supabase
           .from('lab_results')
           .select(`
             id,
@@ -2542,26 +2737,18 @@ ${surgeryInfo?.description || surgery?.notes || 'Standard surgical procedure per
         data = result.data;
         error = result.error;
 
-        console.log('✅ Lab results fetched:', {
+        console.log('✅ Lab results fetched with UUID:', {
           count: data?.length,
           firstResult: data?.[0],
           error
         });
-
-        // Log first few results to see what we got
-        if (data && data.length > 0) {
-          console.log('📋 First 3 results:', data.slice(0, 3));
-        }
-      } else {
-        console.log('⚠️ No visit UUID found, cannot fetch lab results');
-        data = [];
       }
 
-      // If no results for this visit ID, try to get any recent lab results to show example format
-      if (!data || data.length === 0) {
-        console.log('No results for visit ID, trying to get sample data...');
+      // If still no results, try by patient_name (fallback since visit_id may not be linked)
+      if ((!data || data.length === 0) && patientData?.patients?.name) {
+        console.log('🧪 No results with visit_id, trying by patient_name:', patientData.patients.name);
 
-        const { data: sampleData } = await supabase
+        result = await supabase
           .from('lab_results')
           .select(`
             id,
@@ -2572,32 +2759,29 @@ ${surgeryInfo?.description || surgery?.notes || 'Standard surgical procedure per
             result_unit,
             main_test_name,
             created_at,
-            patient_name
+            updated_at
           `)
-          .order('created_at', { ascending: false })
-          .limit(5);
+          .ilike('patient_name', `%${patientData.patients.name}%`)
+          .order('created_at', { ascending: false });
 
-        if (sampleData && sampleData.length > 0) {
-          const sampleResult = sampleData[0];
-          const sampleFormat = `${format(new Date(sampleResult.created_at), 'dd/MM/yyyy')}:-${sampleResult.main_test_name || 'Sample Test'}: ${sampleResult.test_name}:${sampleResult.result_value || 'Sample Value'}${sampleResult.result_unit ? ' ' + sampleResult.result_unit : ''}`;
+        data = result.data;
+        error = result.error;
 
-          setInvestigations(`No lab results found for visit ID: ${visitId}
+        console.log('✅ Lab results fetched by patient_name:', {
+          count: data?.length,
+          firstResult: data?.[0],
+          error
+        });
+      }
 
-Sample format (from other patients):
-${sampleFormat}
+      // Log first few results to see what we got
+      if (data && data.length > 0) {
+        console.log('📋 First 3 results:', data.slice(0, 3));
+      }
 
-You can manually enter lab results in this format:
-DD/MM/YYYY:-Test Category: Test1:Value1 unit, Test2:Value2 unit
-
-Example:
-26/09/2024:-KFT (Kidney Function Test): Blood Urea:39.3 mg/dl, Creatinine:1.03 mg/dl, Sr. Sodium:147 mmol/L`);
-
-          toast({
-            title: "No Data for This Visit",
-            description: `No lab results found for visit ${visitId}. Sample format provided.`,
-          });
-          return;
-        }
+      // Note: Don't return early here - continue to check visit_labs and radiology tables
+      if (!data || data.length === 0) {
+        console.log('No lab_results found, will check visit_labs table next...');
       }
 
       // Process lab results
@@ -2659,6 +2843,114 @@ Example:
           .join('\n\n');
 
         combinedResults.push(formattedLabResults);
+      }
+
+      // Track visit_labs count for toast message
+      let visitLabsCount = 0;
+
+      // Track which tests already have detailed results from lab_results
+      const testsWithResults = new Set<string>();
+      if (data && data.length > 0) {
+        data.forEach((result: any) => {
+          const mainTestName = result.main_test_name || result.test_category;
+          if (mainTestName) {
+            testsWithResults.add(mainTestName.toLowerCase());
+          }
+        });
+        console.log('📋 Tests with detailed results:', Array.from(testsWithResults));
+      }
+
+      // Also fetch from visit_labs table (where Lab Dashboard stores results)
+      if (visitUUID) {
+        console.log('🧪 Fetching from visit_labs for visit UUID:', visitUUID);
+
+        // Step 1: Simple query without join to verify data exists
+        const { data: visitLabsData, error: visitLabsError } = await supabase
+          .from('visit_labs')
+          .select('*')
+          .eq('visit_id', visitUUID)
+          .order('created_at', { ascending: false });
+
+        console.log('✅ visit_labs raw query result:', {
+          count: visitLabsData?.length || 0,
+          error: visitLabsError,
+          data: visitLabsData
+        });
+
+        if (visitLabsData && visitLabsData.length > 0) {
+          // Update count for toast message
+          visitLabsCount = visitLabsData.length;
+
+          // Step 2: Fetch lab details separately
+          const labIds = [...new Set(visitLabsData.map((vl: any) => vl.lab_id).filter(Boolean))];
+          console.log('🔬 Fetching lab details for IDs:', labIds);
+
+          const { data: labDetails, error: labError } = await supabase
+            .from('lab')
+            .select('id, name, category, description')
+            .in('id', labIds);
+
+          console.log('🔬 Lab details result:', { labDetails, labError });
+
+          // Create a lookup map
+          const labMap: Record<string, any> = {};
+          labDetails?.forEach((l: any) => {
+            labMap[l.id] = l;
+          });
+
+          // Enrich visitLabsData with lab info
+          const enrichedData = visitLabsData.map((vl: any) => ({
+            ...vl,
+            lab: labMap[vl.lab_id] || null
+          }));
+
+          // Group by date and TEST NAME (for detailed results format)
+          // Skip tests that already have detailed results from lab_results
+          const groupedVisitLabs = enrichedData.reduce((acc: any, item: any) => {
+            const date = format(new Date(item.ordered_date || item.created_at), 'dd/MM/yyyy');
+            const testName = item.lab?.name || 'Unknown Test';
+
+            // Skip if this test already has detailed results from lab_results
+            if (testsWithResults.has(testName.toLowerCase())) {
+              console.log(`⏭️ Skipping ${testName} - already has detailed results`);
+              return acc;
+            }
+
+            const key = `${date}-${testName}`;
+
+            if (!acc[key]) {
+              acc[key] = {
+                date,
+                testName,
+                resultValue: item.result_value || null,
+                status: item.status
+              };
+            } else if (item.result_value && !acc[key].resultValue) {
+              // Update with result value if we didn't have one
+              acc[key].resultValue = item.result_value;
+            }
+
+            return acc;
+          }, {});
+
+          const formattedVisitLabs = Object.values(groupedVisitLabs)
+            .map((group: any) => {
+              if (group.resultValue) {
+                // Has results - show test name with detailed values
+                return `${group.date}:-${group.testName}: ${group.resultValue}`;
+              } else {
+                // No results yet - show test name with status
+                return `${group.date}:-${group.testName} (${group.status || 'ordered'})`;
+              }
+            })
+            .join('\n');
+
+          // Don't include visit_labs status in discharge summary - only show actual lab results with values
+          // if (formattedVisitLabs) {
+          //   console.log('📋 Formatted visit_labs data:', formattedVisitLabs);
+          //   combinedResults.push(formattedVisitLabs);
+          // }
+        }
       }
 
       // Now fetch radiology data
@@ -2738,9 +3030,24 @@ Example:
         combinedResults.push(formattedRadiologyResults);
       }
 
-      // Combine all results
+      // Combine all results - only add RADIOLOGY separator before actual radiology data
       if (combinedResults.length > 0) {
-        const finalResults = combinedResults.join('\n\n--- RADIOLOGY ---\n\n');
+        let labResultsSection = '';
+        let radiologySection = '';
+
+        // Check if last item contains radiology data (radiology is always pushed last)
+        if (radiologyResults.length > 0 && combinedResults.length > 1) {
+          // Last item is radiology, everything else is lab data
+          labResultsSection = combinedResults.slice(0, -1).join('\n\n');
+          radiologySection = combinedResults[combinedResults.length - 1];
+        } else {
+          // No radiology or only one item - join all as lab data
+          labResultsSection = combinedResults.join('\n\n');
+        }
+
+        const finalResults = radiologySection
+          ? `${labResultsSection}\n\n--- RADIOLOGY ---\n\n${radiologySection}`
+          : labResultsSection;
 
         // IMPORTANT: Clean any JSON that might still be in the text
         console.log('🧹 Auto-cleaning fetched data before displaying...');
@@ -2749,7 +3056,7 @@ Example:
 
         setInvestigations(cleanedResults);
 
-        const labCount = data?.length || 0;
+        const labCount = (data?.length || 0) + visitLabsCount;
         const radiologyCount = radiologyResults.length;
 
         toast({
@@ -3541,7 +3848,17 @@ DD/MM/YYYY:-Test Category: Test1:Value1 unit, Test2:Value2 unit`);
       {/* Investigations */}
       <Card>
         <CardHeader>
-          <CardTitle>Investigations:</CardTitle>
+          <CardTitle className="flex items-center justify-between">
+            <span>Investigations:</span>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleFetchInvestigations}
+              disabled={isInvestigationsLoading}
+            >
+              {isInvestigationsLoading ? 'Loading...' : 'Fetch Lab & Radiology Data'}
+            </Button>
+          </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex items-center space-x-2">
@@ -3977,7 +4294,7 @@ Enter surgical procedure description here...`}
                               messages: [
                                 {
                                   role: 'system',
-                                  content: 'You are a medical documentation assistant. When creating tables, ALWAYS use markdown table format with proper alignment. Ensure tables have clear borders using pipes (|) and dashes (-). Format tables exactly like this:\n\n| Column 1 | Column 2 | Column 3 |\n|----------|----------|----------|\n| Data 1   | Data 2   | Data 3   |\n\nMake sure each table has a header row, a separator row with dashes, and data rows. Keep table formatting clean and consistent.\n\nIMPORTANT INSTRUCTIONS:\n1. Do NOT include any PATIENT DETAILS section or table - patient information is already displayed at the top of the document\n2. At the end of the ADVICE section, always add this line: "Follow up after 7 days/SOS."\n3. Do NOT include the emergency contact line (URGENT CARE/EMERGENCY CARE IS AVAILABLE...) in the ADVICE section, as it will be added separately at the bottom of the document\n4. Start directly with the Operation Notes table if surgery was performed, or with MEDICATIONS if no surgery\n5. When you see "CASE SUMMARY / PRESENTING COMPLAINTS:", expand the brief symptoms/complaints into a proper 4-5 line CLINICAL HISTORY paragraph. Write it as a professional medical narrative describing the patient presenting symptoms, duration, progression, and relevant history. Do not just copy the text verbatim - elaborate and format it professionally.'
+                                  content: 'You are a medical documentation assistant. When creating tables, ALWAYS use markdown table format with proper alignment. Ensure tables have clear borders using pipes (|) and dashes (-). Format tables exactly like this:\n\n| Column 1 | Column 2 | Column 3 |\n|----------|----------|----------|\n| Data 1   | Data 2   | Data 3   |\n\nMake sure each table has a header row, a separator row with dashes, and data rows. Keep table formatting clean and consistent.\n\nIMPORTANT INSTRUCTIONS:\n1. Do NOT include any PATIENT DETAILS section or table - patient information is already displayed at the top of the document\n2. At the end of the ADVICE section, always add this line: "Follow up after 7 days/SOS."\n3. Do NOT include the emergency contact line (URGENT CARE/EMERGENCY CARE IS AVAILABLE...) in the ADVICE section, as it will be added separately at the bottom of the document\n4. Start directly with the Operation Notes table if surgery was performed, or with MEDICATIONS if no surgery\n5. When you see "CASE SUMMARY / PRESENTING COMPLAINTS:", expand the brief symptoms/complaints into a proper 4-5 line CLINICAL HISTORY paragraph. Write it as a professional medical narrative describing the patient presenting symptoms, duration, progression, and relevant history. Do not just copy the text verbatim - elaborate and format it professionally.\n6. When you see "EXAMINATION / VITAL SIGNS" or vital signs data, expand it into a proper 4-5 line EXAMINATION paragraph. Write it as a professional medical narrative describing the physical examination findings, vital signs interpretation, general condition, and relevant clinical observations. Do not just list vital signs - elaborate them into a professional medical examination summary.'
                                 },
                                 {
                                   role: 'user',
