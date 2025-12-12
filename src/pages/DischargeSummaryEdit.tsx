@@ -2047,33 +2047,30 @@ IMPORTANT: Format everything as plain text, include ALL provided investigations,
       console.log('🔍 API Request Details:');
       console.log('- Prompt length:', editablePrompt.length);
       console.log('- Patient data keys:', Object.keys(editablePatientData));
-      console.log('- About to call OpenAI API...');
+      console.log('- About to call Gemini API...');
 
       // Comprehensive medical discharge summary request
+      const systemPrompt = 'You are an expert medical professional specializing in creating comprehensive discharge summaries for hospitals. Generate detailed, professional medical documentation following Indian medical standards and terminology. Include ALL provided medical data including investigations, lab results, radiology findings, OT notes, and complications.';
+
       const requestBody = {
-        model: 'gpt-4',
-        messages: [
-          {
-            role: 'system',
-            content: 'You are an expert medical professional specializing in creating comprehensive discharge summaries for hospitals. Generate detailed, professional medical documentation following Indian medical standards and terminology. Include ALL provided medical data including investigations, lab results, radiology findings, OT notes, and complications.'
-          },
-          {
-            role: 'user',
-            content: editablePrompt
-          }
-        ],
-        max_tokens: 4000,
-        temperature: 0.7
+        contents: [{
+          parts: [{
+            text: systemPrompt + '\n\n' + editablePrompt
+          }]
+        }],
+        generationConfig: {
+          temperature: 0.7,
+          maxOutputTokens: 4000
+        }
       };
 
       console.log('🔍 Request body:', JSON.stringify(requestBody, null, 2));
 
-      // Call OpenAI API directly using the same pattern as FinalBill.tsx
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      // Call Google Gemini API
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${import.meta.env.VITE_GEMINI_API_KEY}`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${import.meta.env.VITE_OPENAI_API_KEY}`
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify(requestBody)
       });
@@ -2095,17 +2092,17 @@ IMPORTANT: Format everything as plain text, include ALL provided investigations,
           errorDetails = await response.text();
         }
 
-        throw new Error(`OpenAI API error: ${response.status} - ${response.statusText}\nDetails: ${errorDetails}`);
+        throw new Error(`Gemini API error: ${response.status} - ${response.statusText}\nDetails: ${errorDetails}`);
       }
 
       const data = await response.json();
       console.log('✅ API Response data structure:', {
-        choices: data.choices?.length,
-        hasContent: !!data.choices?.[0]?.message?.content,
-        usage: data.usage
+        candidates: data.candidates?.length,
+        hasContent: !!data.candidates?.[0]?.content?.parts?.[0]?.text,
+        usageMetadata: data.usageMetadata
       });
-      // Get AI response content
-      const aiResponse = data.choices[0].message.content;
+      // Get AI response content (Gemini format)
+      const aiResponse = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
       console.log('🤖 AI Response received:', aiResponse ? aiResponse.substring(0, 200) + '...' : 'No content');
 
       // Check if AI response is properly formatted
@@ -3381,7 +3378,7 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
             <div className="space-y-4">
               <h3 className="text-lg font-semibold flex items-center gap-2">
                 <Sparkles className="h-4 w-4" />
-                OpenAI Prompt (Editable)
+                Gemini Prompt (Editable)
               </h3>
               <div className="space-y-2">
                 <Label htmlFor="prompt">AI Generation Prompt</Label>
@@ -3391,7 +3388,7 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
                   onChange={(e) => setEditablePrompt(e.target.value)}
                   rows={12}
                   className="text-sm"
-                  placeholder="Edit the OpenAI prompt for discharge summary generation..."
+                  placeholder="Edit the Gemini prompt for discharge summary generation..."
                 />
               </div>
               <p className="text-xs text-gray-500">
