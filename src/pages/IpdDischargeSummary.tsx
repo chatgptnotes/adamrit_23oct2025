@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Calendar, CalendarDays } from "lucide-react";
+import { Calendar, CalendarDays, Loader2 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { format } from 'date-fns';
 import { useAuth } from '@/contexts/AuthContext';
@@ -308,6 +308,7 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
   const [reviewDate, setReviewDate] = useState('2025-09-26');
   const [residentOnDischarge, setResidentOnDischarge] = useState('Please select');
   const [enableSmsAlert, setEnableSmsAlert] = useState(false);
+  const [isChatGptLoading, setIsChatGptLoading] = useState(false);
 
   // Fetch patient data using the same query structure as IPD Dashboard
   const { data: patientData, isLoading: isPatientLoading, error: patientError } = useQuery({
@@ -2300,13 +2301,18 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
     </div>
   </div>
 
-  ${summaryData.primary_diagnosis ? `
-  <div class="section">
-    <div class="section-title">Present Condition</div>
-    <div class="section-subtitle">DIAGNOSIS:</div>
-    <div class="section-content">${summaryData.primary_diagnosis.replace(/\n/g, '<br>')}</div>
-  </div>
-  ` : ''}
+  ${(() => {
+    // Try to extract elaborated DIAGNOSIS from ot_notes (ChatGPT response)
+    let diagnosis = summaryData.primary_diagnosis || '';
+    if (summaryData.ot_notes) {
+      const diagMatch = summaryData.ot_notes.match(/^DIAGNOSIS:\s*([\s\S]*?)(?=\nCLINICAL HISTORY:|\n\n)/i);
+      if (diagMatch && diagMatch[1]) {
+        diagnosis = diagMatch[1].trim();
+      }
+    }
+    if (!diagnosis) return '';
+    return '<div class="section"><div class="section-title">Present Condition</div><div class="section-subtitle">DIAGNOSIS:</div><div class="section-content">' + diagnosis.replace(/\n/g, '<br>') + '</div></div>';
+  })()}
 
   ${medications.length > 0 ? `
   <div class="section">
@@ -2332,8 +2338,10 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
     // Extract only CLINICAL HISTORY section from ot_notes
     let clinicalHistory = summaryData.ot_notes;
 
-    // Remove "CLINICAL HISTORY:" header if present at start
-    clinicalHistory = clinicalHistory.replace(/^CLINICAL HISTORY:\s*/i, '');
+    // Remove "DIAGNOSIS:" section if present (it's rendered separately above)
+    clinicalHistory = clinicalHistory.replace(/^DIAGNOSIS:[\s\S]*?(?=\nCLINICAL HISTORY:|\n\n)/i, '');
+    // Remove "CLINICAL HISTORY:" header if present (with leading whitespace)
+    clinicalHistory = clinicalHistory.replace(/^\s*CLINICAL HISTORY:\s*/i, '');
 
     // Remove markdown ## headers (e.g., "## Clinical History")
     clinicalHistory = clinicalHistory.replace(/^##\s*.*?\n/gm, '');
@@ -4261,6 +4269,7 @@ Enter surgical procedure description here...`}
                       type="button"
                       size="sm"
                       className="bg-blue-600 hover:bg-blue-700 text-white"
+                      disabled={isChatGptLoading}
                       onClick={async (e) => {
                         e.preventDefault();
                         e.stopPropagation();
@@ -4274,6 +4283,7 @@ Enter surgical procedure description here...`}
                           return;
                         }
 
+                        setIsChatGptLoading(true);
                         try {
                           toast({
                             title: "Processing",
@@ -4294,7 +4304,7 @@ Enter surgical procedure description here...`}
                               messages: [
                                 {
                                   role: 'system',
-                                  content: 'You are a medical documentation assistant. When creating tables, ALWAYS use markdown table format with proper alignment. Ensure tables have clear borders using pipes (|) and dashes (-). Format tables exactly like this:\n\n| Column 1 | Column 2 | Column 3 |\n|----------|----------|----------|\n| Data 1   | Data 2   | Data 3   |\n\nMake sure each table has a header row, a separator row with dashes, and data rows. Keep table formatting clean and consistent.\n\nIMPORTANT INSTRUCTIONS:\n1. Do NOT include any PATIENT DETAILS section or table - patient information is already displayed at the top of the document\n2. At the end of the ADVICE section, always add this line: "Follow up after 7 days/SOS."\n3. Do NOT include the emergency contact line (URGENT CARE/EMERGENCY CARE IS AVAILABLE...) in the ADVICE section, as it will be added separately at the bottom of the document\n4. Start directly with the Operation Notes table if surgery was performed, or with MEDICATIONS if no surgery\n5. When you see "CASE SUMMARY / PRESENTING COMPLAINTS:", expand the brief symptoms/complaints into a proper 4-5 line CLINICAL HISTORY paragraph. Write it as a professional medical narrative describing the patient presenting symptoms, duration, progression, and relevant history. Do not just copy the text verbatim - elaborate and format it professionally.\n6. When you see "EXAMINATION / VITAL SIGNS" or vital signs data, expand it into a proper 4-5 line EXAMINATION paragraph. Write it as a professional medical narrative describing the physical examination findings, vital signs interpretation, general condition, and relevant clinical observations. Do not just list vital signs - elaborate them into a professional medical examination summary.'
+                                  content: 'You are a medical documentation assistant. When creating tables, ALWAYS use markdown table format with proper alignment. Ensure tables have clear borders using pipes (|) and dashes (-). Format tables exactly like this:\n\n| Column 1 | Column 2 | Column 3 |\n|----------|----------|----------|\n| Data 1   | Data 2   | Data 3   |\n\nMake sure each table has a header row, a separator row with dashes, and data rows. Keep table formatting clean and consistent.\n\nIMPORTANT INSTRUCTIONS:\n1. Do NOT include any PATIENT DETAILS section or table - patient information is already displayed at the top of the document\n2. At the end of the ADVICE section, always add this line: "Follow up after 7 days/SOS."\n3. Do NOT include the emergency contact line (URGENT CARE/EMERGENCY CARE IS AVAILABLE...) in the ADVICE section, as it will be added separately at the bottom of the document\n4. ALWAYS follow this EXACT section order: DIAGNOSIS → CLINICAL HISTORY → EXAMINATION → INVESTIGATIONS → SURGERY DETAILS/OPERATION NOTES (only if surgery was performed) → MEDICATIONS → ADVICE. Do NOT include empty sections - only include sections that have actual data.\n5. For DIAGNOSIS: Do NOT just copy the diagnosis verbatim. Expand it into a professional 2-3 sentence medical diagnosis statement explaining the condition, its nature, and clinical significance. For example, if input is "LUMBAR CANAL STENOSIS WITH RADICULOPATHY", write: "The patient was diagnosed with LUMBAR CANAL STENOSIS WITH RADICULOPATHY. This condition involves narrowing of the spinal canal in the lower back region, causing compression of nerve roots leading to radiating pain and neurological symptoms in the lower extremities."\n6. When you see "CASE SUMMARY / PRESENTING COMPLAINTS:", expand the brief symptoms/complaints into a proper 4-5 line CLINICAL HISTORY paragraph. Write it as a professional medical narrative describing the patient presenting symptoms, duration, progression, and relevant history. Do not just copy the text verbatim - elaborate and format it professionally.\n7. When you see "EXAMINATION / VITAL SIGNS" or vital signs data, expand it into a proper 4-5 line EXAMINATION paragraph. Write it as a professional medical narrative describing the physical examination findings, vital signs interpretation, general condition, and relevant clinical observations. Do not just list vital signs - elaborate them into a professional medical examination summary.\n8. For INVESTIGATIONS: Only include this section if investigation data is provided. Format investigations clearly with test names and results.'
                                 },
                                 {
                                   role: 'user',
@@ -4334,10 +4344,19 @@ Enter surgical procedure description here...`}
                             description: `Failed to generate summary: ${error.message}`,
                             variant: "destructive"
                           });
+                        } finally {
+                          setIsChatGptLoading(false);
                         }
                       }}
                     >
-                      Message chat GPT as
+                      {isChatGptLoading ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Generating...
+                        </>
+                      ) : (
+                        'Message chat GPT as'
+                      )}
                     </Button>
                     <Button
                       size="sm"
