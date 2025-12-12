@@ -18,6 +18,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import PatientSearchWithVisit from './PatientSearchWithVisit';
+import HistoCytologyEntryForm from './HistoCytologyEntryForm';
 import { safeArrayAccess } from '@/utils/arrayHelpers';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -4540,7 +4541,35 @@ const LabOrders = () => {
             <DialogTitle className="text-lg font-semibold">Lab Results Entry Form</DialogTitle>
           </DialogHeader>
 
-          {selectedTestsForEntry.length > 0 && (
+          {selectedTestsForEntry.length > 0 && (() => {
+            // Check if this is a Histo/Cytology type test
+            const isHistoCytology = selectedTestsForEntry.some(test =>
+              test.test_category?.toLowerCase().includes('histo') ||
+              test.test_category?.toLowerCase().includes('cytology') ||
+              test.test_category?.toLowerCase().includes('pathology') ||
+              test.test_name?.toLowerCase().includes('fnac') ||
+              test.test_name?.toLowerCase().includes('biopsy') ||
+              test.test_name?.toLowerCase().includes('histopath') ||
+              test.test_name?.toLowerCase().includes('cytopathology')
+            );
+
+            // If Histo/Cytology, show special form
+            if (isHistoCytology) {
+              return (
+                <HistoCytologyEntryForm
+                  selectedTests={selectedTestsForEntry}
+                  patientInfo={selectedTestsForEntry[0]}
+                  onClose={handleEntryFormClose}
+                  onSaved={() => {
+                    setIsFormSaved(true);
+                    queryClient.invalidateQueries({ queryKey: ['visit-lab-orders'] });
+                  }}
+                />
+              );
+            }
+
+            // Normal entry form for other tests
+            return (
             <div className="space-y-4">
               {/* Header Info Section */}
               <div className="bg-blue-50 p-4 rounded-lg">
@@ -5062,7 +5091,8 @@ const LabOrders = () => {
               </div>
 
             </div>
-          )}
+            );
+          })()}
         </DialogContent>
       </Dialog>
     </div>
