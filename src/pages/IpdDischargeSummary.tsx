@@ -1615,6 +1615,7 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
           route: med.route,
           timing: med.timing,
           is_sos: med.isSos,
+          start_date: med.startDate,
           remark: med.remark
         })),
 
@@ -2056,6 +2057,7 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
     const medicationsHTML = medications.map((med: any) => `
       <tr>
         <td>${med.name || ''}</td>
+        <td>${med.unit || ''}</td>
         <td>${med.route || 'P.O'}</td>
         <td>${med.dose || ''}</td>
         <td>${med.days || ''} DAYS</td>
@@ -2316,6 +2318,7 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
       <thead>
         <tr>
           <th>Medication Name</th>
+          <th>Unit</th>
           <th>Route</th>
           <th>Dosage</th>
           <th>Duration</th>
