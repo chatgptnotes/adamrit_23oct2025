@@ -2119,8 +2119,8 @@ const AddPanelForm: React.FC<AddPanelFormProps> = ({ onSubmit }) => {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="Regular">Regular</SelectItem>
-                <SelectItem value="Histopathology">Histopathology</SelectItem>
-                <SelectItem value="Culture and Sensitivity">Culture and Sensitivity</SelectItem>
+                <SelectItem value="Emergency">Emergency</SelectItem>
+                <SelectItem value="STAT">STAT</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -2925,8 +2925,8 @@ const EditPanelForm: React.FC<EditPanelFormProps> = ({ panel, onSubmit }) => {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="Regular">Regular</SelectItem>
-                <SelectItem value="Histopathology">Histopathology</SelectItem>
-                <SelectItem value="Culture and Sensitivity">Culture and Sensitivity</SelectItem>
+                <SelectItem value="Emergency">Emergency</SelectItem>
+                <SelectItem value="STAT">STAT</SelectItem>
               </SelectContent>
             </Select>
           </div>

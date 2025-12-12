@@ -127,13 +127,14 @@ const LabDashboard: React.FC = () => {
 
       <Tabs value={selectedTab} onValueChange={setSelectedTab} className="space-y-6">
         <div className="flex flex-wrap gap-2">
-          <TabsList className="grid grid-cols-6 w-auto">
+          <TabsList className="grid grid-cols-7 w-auto">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="catalog">Test Catalog</TabsTrigger>
             <TabsTrigger value="orders">Orders</TabsTrigger>
             <TabsTrigger value="samples">Samples</TabsTrigger>
             <TabsTrigger value="results">Results</TabsTrigger>
             <TabsTrigger value="reports">Reports</TabsTrigger>
+            <TabsTrigger value="printformat">📄 Print Format</TabsTrigger>
           </TabsList>
           <TabsList className="grid grid-cols-4 w-auto bg-blue-50 border-2 border-blue-200">
             <TabsTrigger value="subspecialty" className="text-blue-700 font-semibold">🧪 Sub Specialty</TabsTrigger>
@@ -502,6 +503,9 @@ const LabDashboard: React.FC = () => {
           <QualityControl />
         </TabsContent>
 
+        <TabsContent value="printformat">
+          <LabReportPrintFormat />
+        </TabsContent>
       </Tabs>
     </div>
   );
