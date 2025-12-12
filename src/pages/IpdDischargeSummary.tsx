@@ -79,48 +79,40 @@ const extractValueFromJSON = (data: any): string => {
   return String(data);
 };
 
-// Helper function to clean JSON from text
+// Helper function to clean JSON from text - only keeps valid lab results
 const cleanJSONFromText = (text: string): string => {
   if (!text) return text;
 
-  console.log('🧹 Cleaning JSON from text, length:', text.length);
-  console.log('🔍 First 200 chars:', text.substring(0, 200));
+  return text.split('\n').filter(line => {
+    const trimmed = line.trim();
+    if (!trimmed) return false;
 
-  let cleaned = text;
+    // Remove lines containing JSON patterns
+    if (trimmed.includes('{"') || trimmed.includes('"}') ||
+        trimmed.includes('":"') || trimmed.includes('histoCytologyData') ||
+        trimmed.includes('"specimen"') || trimmed.includes('"clinicalDetails"') ||
+        trimmed.includes('"grossDescription"') || trimmed.includes('"microscopicDescription"') ||
+        trimmed.includes('"impression"') || trimmed.includes('"noteComment"') ||
+        trimmed.includes('"tabNotes"') || trimmed.includes('"immunohistochemistry"') ||
+        trimmed.includes('"savedAt"') || trimmed.includes('"files"')) {
+      return false;
+    }
 
-  // Pattern 1: Match complete JSON objects with "value" field
-  // Handles: {"value":"15","timestamp":"2025-10-03T11:47:36.408Z","entry_time":"...","session_id":"..."}
-  // This pattern captures the entire JSON object and replaces it with just the value
-  const pattern1 = /\{[^}]*?"value"\s*:\s*"?([^",}]+)"?[^}]*?\}/gi;
-  let count1 = 0;
-  cleaned = cleaned.replace(pattern1, (match, value) => {
-    count1++;
-    console.log(`✂️ Pattern 1 Match ${count1}:`, match.substring(0, 100) + '...');
-    console.log(`   Extracted value: "${value}"`);
-    return value.trim();
-  });
+    // Keep valid lab results: starts with date pattern DD/MM/YYYY:-TestName
+    const isValidLabResult = /^\d{1,2}\/\d{1,2}\/\d{4}:-[A-Z]/.test(trimmed) &&
+                            trimmed.includes(':') &&
+                            (trimmed.includes('mmol') || trimmed.includes('mg/') ||
+                             trimmed.includes('mg/dL') || trimmed.includes('%') ||
+                             trimmed.includes('Reactive') || trimmed.includes('Non') ||
+                             trimmed.includes('unit') || trimmed.includes('IU/L') ||
+                             trimmed.includes('gm/dL') || trimmed.includes('lac') ||
+                             trimmed.includes('cumm') || trimmed.includes('fl'));
 
-  // Pattern 2: Handle any remaining JSON-like structures with curly braces
-  const pattern2 = /\{[^}]*?"timestamp"[^}]*?\}/gi;
-  let count2 = 0;
-  cleaned = cleaned.replace(pattern2, (match) => {
-    count2++;
-    console.log(`✂️ Pattern 2 Match ${count2}: Removing remaining JSON object`);
-    return '';
-  });
+    // Filter gibberish: lines with excessive consecutive consonants
+    const hasHighConsonantRatio = (trimmed.match(/[bcdfghjklmnpqrstvwxyz]{5,}/gi) || []).length > 3;
 
-  // Pattern 3: Clean up any double commas or spaces left behind
-  cleaned = cleaned.replace(/,\s*,/g, ',');
-  cleaned = cleaned.replace(/:\s*,/g, ':');
-  cleaned = cleaned.replace(/,\s*\)/g, ')');
-
-  console.log('✅ Cleaning complete.');
-  console.log(`   Original length: ${text.length}`);
-  console.log(`   New length: ${cleaned.length}`);
-  console.log(`   Pattern 1 matches: ${count1}, Pattern 2 matches: ${count2}`);
-  console.log('🔍 First 200 chars after cleaning:', cleaned.substring(0, 200));
-
-  return cleaned;
+    return isValidLabResult && !hasHighConsonantRatio;
+  }).join('\n');
 };
 
 const IpdDischargeSummary = () => {
@@ -261,6 +253,7 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
 
   // New states for Advice and Case Summary
   const [advice, setAdvice] = useState('');
+  const [hospitalStayNotes, setHospitalStayNotes] = useState('');
   const [caseSummaryPresentingComplaints, setCaseSummaryPresentingComplaints] = useState('');
   const [editingTemplateIndex, setEditingTemplateIndex] = useState<number | null>(null);
   const [editingTemplateName, setEditingTemplateName] = useState('');
@@ -1222,6 +1215,7 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
           setStayNotes(summary.ot_notes || '');
           setCaseSummaryPresentingComplaints(summary.chief_complaints || '');
           setAdvice(summary.discharge_advice || '');
+          setHospitalStayNotes(summary.hospital_stay_notes || '');
           setTreatmentCondition(summary.condition_on_discharge || 'Satisfactory');
           setTreatmentStatus(summary.treatment_during_stay || 'Please select');
           setReviewDate(summary.review_on_date ? format(new Date(summary.review_on_date), 'yyyy-MM-dd') : '2025-09-26');
@@ -1588,6 +1582,7 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
         ot_notes: stayNotes || null,
         chief_complaints: caseSummaryPresentingComplaints || null,
         discharge_advice: advice || null,
+        hospital_stay_notes: hospitalStayNotes || null,
 
         // Treatment info - using correct schema column names
         condition_on_discharge: treatmentCondition || null,
@@ -2362,18 +2357,18 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
     // Extract EXAMINATION section from ot_notes (handles ##, **, : formats and "Upon examination" text)
     const content = summaryData.ot_notes;
     // Try ## Examination format first, then **EXAMINATION**, then EXAMINATION:, then "Upon/On examination"
-    let examMatch = content.match(/##\s*Examination\s*([\s\S]*?)(?=\n\s*(?:##\s*Operation|##\s*Advice|Operation Notes|\*\*|$))/i);
+    let examMatch = content.match(/##\s*Examination\s*([\s\S]*?)(?=\n\s*(?:##\s*Operation|##\s*Advice|##\s*Hospital|Operation Notes|HOSPITAL STAY NOTES|\*\*|$))/i);
     if (!examMatch) {
-      examMatch = content.match(/\*\*EXAMINATION\*\*\s*([\s\S]*?)(?=\n\s*(?:\*\*ADVICE|\*\*OPERATION|ADVICE:|Operation Notes|$))/i);
+      examMatch = content.match(/\*\*EXAMINATION\*\*\s*([\s\S]*?)(?=\n\s*(?:\*\*ADVICE|\*\*OPERATION|\*\*HOSPITAL|HOSPITAL STAY NOTES|ADVICE:|Operation Notes|$))/i);
     }
     if (!examMatch) {
-      examMatch = content.match(/EXAMINATION:?\s*([\s\S]*?)(?=\n\s*(?:MEDICATIONS|OPERATION|ADVICE:|\*\*|$))/i);
+      examMatch = content.match(/EXAMINATION:?\s*([\s\S]*?)(?=\n\s*(?:MEDICATIONS|OPERATION|HOSPITAL STAY NOTES|ADVICE:|\*\*|$))/i);
     }
     if (!examMatch) {
       // Try to capture "Upon examination" or "On examination" text directly
-      examMatch = content.match(/(Upon examination[\s\S]*?)(?=\n\s*(?:##\s*Operation|Operation Notes|ADVICE:|$))/i);
+      examMatch = content.match(/(Upon examination[\s\S]*?)(?=\n\s*(?:##\s*Operation|Operation Notes|HOSPITAL STAY NOTES|ADVICE:|$))/i);
       if (!examMatch) {
-        examMatch = content.match(/(On examination[\s\S]*?)(?=\n\s*(?:##\s*Operation|Operation Notes|ADVICE:|$))/i);
+        examMatch = content.match(/(On examination[\s\S]*?)(?=\n\s*(?:##\s*Operation|Operation Notes|HOSPITAL STAY NOTES|ADVICE:|$))/i);
       }
     }
     if (examMatch && examMatch[1]) {
@@ -2384,6 +2379,8 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
       // Remove investigation-related content from examination section
       // Remove INVESTIGATIONS: section and everything after it
       examination = examination.replace(/INVESTIGATIONS:[\s\S]*/i, '');
+      // Remove HOSPITAL STAY NOTES section from examination (safety cleanup)
+      examination = examination.replace(/HOSPITAL STAY NOTES:[\s\S]*/i, '');
       // Remove markdown tables (| Test | Result | format)
       examination = examination.replace(/\|[\s\S]*?\|[-]+\|[\s\S]*?(?=\n\n|$)/g, '');
       // Remove lines starting with | (table rows)
@@ -2457,6 +2454,22 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
   })()}
 
   ${(() => {
+    // Hospital Stay Notes - prefer AI-generated from ot_notes, fallback to database field
+    // First try to extract from ot_notes (AI-generated)
+    if (summaryData.ot_notes) {
+      const match = summaryData.ot_notes.match(/HOSPITAL STAY NOTES:?\s*([\s\S]*?)(?=ADVICE|$)/i);
+      if (match && match[1]?.trim()) {
+        return '<div class="section"><div class="section-subtitle">HOSPITAL STAY NOTES:</div><div class="section-content">' + match[1].trim().replace(/\n/g, '<br>') + '</div></div>';
+      }
+    }
+    // Fallback to database field if no AI-generated content
+    if (summaryData.hospital_stay_notes) {
+      return '<div class="section"><div class="section-subtitle">HOSPITAL STAY NOTES:</div><div class="section-content">' + summaryData.hospital_stay_notes.replace(/\n/g, '<br>') + '</div></div>';
+    }
+    return '';
+  })()}
+
+  ${(() => {
     const investigationsText = summaryData.lab_investigations?.investigations_text;
     const hasRealLabResults = labResults?.formattedResults && !isPlaceholderInvestigations(labResults.formattedResults);
     const hasRealInvestigationsText = investigationsText && !isPlaceholderInvestigations(investigationsText);
@@ -2466,7 +2479,7 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
     return `
     <div class="section">
       <div class="section-subtitle">INVESTIGATIONS</div>
-      <div class="section-content">${hasRealLabResults ? labResults.formattedResults.replace(/\n/g, '<br>') : cleanJSONFromText(investigationsText).replace(/\n/g, '<br>')}</div>
+      <div class="section-content">${hasRealLabResults ? cleanJSONFromText(labResults.formattedResults).replace(/\n/g, '<br>') : cleanJSONFromText(investigationsText).replace(/\n/g, '<br>')}</div>
     </div>`;
   })()}
 
@@ -2587,6 +2600,11 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
         formattedText += `ADVICE:\n${summaryData.discharge_advice}\n\n`;
       }
 
+      // Hospital Stay Notes
+      if (summaryData.hospital_stay_notes) {
+        formattedText += `HOSPITAL STAY NOTES:\n${summaryData.hospital_stay_notes}\n\n`;
+      }
+
       // Examination / Vital Signs
       if (summaryData.vital_signs) {
         formattedText += `EXAMINATION / VITAL SIGNS:\n`;
@@ -2599,52 +2617,8 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
         formattedText += '\n';
       }
 
-      // Medications (Treatment on Discharge)
-      if (summaryData.discharge_medications && Array.isArray(summaryData.discharge_medications) && summaryData.discharge_medications.length > 0) {
-        formattedText += `MEDICATIONS (TREATMENT ON DISCHARGE):\n`;
-        summaryData.discharge_medications.forEach((med, index) => {
-          formattedText += `${index + 1}. ${med.name || 'N/A'}`;
-          if (med.dose) formattedText += ` - ${med.dose}`;
-          if (med.route) formattedText += ` (${med.route})`;
-          if (med.days) formattedText += ` for ${med.days} days`;
-          const timings = [];
-          if (med.timing?.morning) timings.push('Morning');
-          if (med.timing?.afternoon) timings.push('Afternoon');
-          if (med.timing?.evening) timings.push('Evening');
-          if (med.timing?.night) timings.push('Night');
-          if (timings.length > 0) formattedText += ` - ${timings.join(', ')}`;
-          if (med.remark) formattedText += ` | Remark: ${med.remark}`;
-          formattedText += '\n';
-        });
-        formattedText += '\n';
-      }
-
-      // Surgery Details
-      if (summaryData.procedures_performed) {
-        formattedText += `SURGERY DETAILS:\n`;
-        if (summaryData.procedures_performed.surgery_date) {
-          formattedText += `Date: ${format(new Date(summaryData.procedures_performed.surgery_date), 'dd-MM-yyyy HH:mm')}\n`;
-        }
-        if (summaryData.procedures_performed.procedure_performed) {
-          formattedText += `Procedure: ${summaryData.procedures_performed.procedure_performed}\n`;
-        }
-        if (summaryData.procedures_performed.surgeon) {
-          formattedText += `Surgeon: ${summaryData.procedures_performed.surgeon}\n`;
-        }
-        if (summaryData.procedures_performed.anesthetist) {
-          formattedText += `Anesthetist: ${summaryData.procedures_performed.anesthetist}\n`;
-        }
-        if (summaryData.procedures_performed.anesthesia_type) {
-          formattedText += `Anesthesia: ${summaryData.procedures_performed.anesthesia_type}\n`;
-        }
-        if (summaryData.procedures_performed.implant) {
-          formattedText += `Implant: ${summaryData.procedures_performed.implant}\n`;
-        }
-        if (summaryData.procedures_performed.description) {
-          formattedText += `Description: ${summaryData.procedures_performed.description}\n`;
-        }
-        formattedText += '\n';
-      }
+      // NOTE: MEDICATIONS and SURGERY DETAILS are NOT included here
+      // They are displayed separately in their own sections and should not be sent to Gemini
 
       // Display formatted text in the newTemplateContent textarea
       setNewTemplateContent(formattedText);
@@ -3573,6 +3547,21 @@ DD/MM/YYYY:-Test Category: Test1:Value1 unit, Test2:Value2 unit`);
         </CardContent>
       </Card>
 
+      {/* Hospital Stay Notes */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Hospital Stay Notes:</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Textarea
+            value={hospitalStayNotes}
+            onChange={(e) => setHospitalStayNotes(e.target.value)}
+            placeholder="Enter hospital stay notes..."
+            className="min-h-[120px]"
+          />
+        </CardContent>
+      </Card>
+
       {/* Treatment on Discharge */}
       <Card>
         <CardHeader>
@@ -3998,28 +3987,31 @@ Anesthesia: ${surgeryDetails.anesthesia || 'Not specified'}
 Include: procedure performed, key findings, patient's condition post-procedure, complications (if none, state "uneventful recovery").
 Keep it concise - maximum 100 words. Write in paragraph form only. No tables or bullet points.`;
 
-                    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+                    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${import.meta.env.VITE_GEMINI_API_KEY}`, {
                       method: 'POST',
                       headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${import.meta.env.VITE_OPENAI_API_KEY}`
+                        'Content-Type': 'application/json'
                       },
                       body: JSON.stringify({
-                        model: 'gpt-4',
-                        messages: [
-                          { role: 'user', content: prompt }
-                        ],
-                        temperature: 0.7,
-                        max_tokens: 300
+                        contents: [{
+                          parts: [{
+                            text: prompt
+                          }]
+                        }],
+                        generationConfig: {
+                          temperature: 0.7,
+                          maxOutputTokens: 300
+                        }
                       })
                     });
 
                     if (!response.ok) {
-                      throw new Error(`OpenAI API error: ${response.statusText}`);
+                      const errorData = await response.json();
+                      throw new Error(`Gemini API error: ${errorData.error?.message || response.statusText}`);
                     }
 
                     const data = await response.json();
-                    const generatedDescription = data.choices[0]?.message?.content;
+                    const generatedDescription = data.candidates?.[0]?.content?.parts?.[0]?.text;
 
                     if (generatedDescription) {
                       setSurgeryDetails({...surgeryDetails, description: generatedDescription});
@@ -4190,14 +4182,8 @@ Enter surgical procedure description here...`}
                                   patientContext += `\nINVESTIGATIONS:\n${investigations}\n`;
                                 }
 
-                                // Add surgery details if available
-                                if (surgeryDetails.procedurePerformed) {
-                                  patientContext += `\nSURGERY PERFORMED:\n`;
-                                  patientContext += `Procedure: ${surgeryDetails.procedurePerformed}\n`;
-                                  if (surgeryDetails.surgeon) patientContext += `Surgeon: ${surgeryDetails.surgeon}\n`;
-                                  if (surgeryDetails.anesthetist) patientContext += `Anesthetist: ${surgeryDetails.anesthetist}\n`;
-                                  if (surgeryDetails.date) patientContext += `Date: ${surgeryDetails.date}\n`;
-                                }
+                                // NOTE: Surgery details are NOT added here - they are displayed separately in a table
+                                // and should not be included in Gemini input to prevent duplication
 
                                 // Add the template content with patient context to newTemplateContent textbox (above Fetch Data button)
                                 // Preserve existing content if any
@@ -4287,41 +4273,63 @@ Enter surgical procedure description here...`}
                         try {
                           toast({
                             title: "Processing",
-                            description: "Sending request to ChatGPT...",
+                            description: "Sending request to Gemini AI...",
                           });
 
-                          console.log('🤖 Sending to ChatGPT:', newTemplateContent);
+                          console.log('🤖 Sending to Gemini:', newTemplateContent);
 
-                          // Call OpenAI API
-                          const response = await fetch('https://api.openai.com/v1/chat/completions', {
+                          // System prompt for Gemini
+                          const systemPrompt = `You are a medical documentation assistant.
+
+CRITICAL FORMATTING RULES:
+- Do NOT use any markdown formatting like ** or ## or * or _
+- Write in PLAIN TEXT only - no bold, no headers with hashtags
+- For tables, use simple pipe format: | Column | Column |
+- Write section headers as plain text like "DIAGNOSIS:" not "**DIAGNOSIS:**"
+
+CRITICAL - DO NOT INCLUDE PATIENT DETAILS:
+- NEVER include patient name, age, gender, address, registration ID, admission date, discharge date, treating consultant, or corporate type
+- Patient information is ALREADY displayed at the top of the document - do not repeat it
+- If input contains patient details, IGNORE them completely
+
+IMPORTANT INSTRUCTIONS:
+1. ALWAYS follow this EXACT section order: DIAGNOSIS → CLINICAL HISTORY → EXAMINATION → HOSPITAL STAY NOTES → ADVICE. Do NOT include empty sections.
+2. Do NOT include SURGERY DETAILS or OPERATION NOTES - they are displayed separately in a table.
+3. Do NOT include INVESTIGATIONS section - it is displayed separately from the database.
+4. Do NOT include MEDICATIONS section - it is displayed separately in a table.
+5. Do NOT include the emergency contact line in the ADVICE section.
+6. For DIAGNOSIS: Expand into a professional 2-3 sentence medical diagnosis statement explaining the condition.
+7. For CLINICAL HISTORY: Expand symptoms into a proper 4-5 line paragraph as a professional medical narrative.
+8. For EXAMINATION: Expand vital signs into a proper 4-5 line paragraph describing physical examination findings.
+9. For HOSPITAL STAY NOTES: Write a 2-3 sentence summary of the patient's hospital stay, treatment received, and recovery progress during hospitalization.
+10. For ADVICE: Write ONLY a SHORT 2-3 sentence paragraph with general post-operative care instructions. Example: "The patient is advised to follow up after 3 days or sooner if symptoms worsen. They are instructed to perform dressing changes and to use an LS belt for support. Follow up after 7 days/SOS." Do NOT include medications list, do NOT include numbered lists, do NOT include detailed wound care instructions.`;
+
+                          // Call Google Gemini API
+                          const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${import.meta.env.VITE_GEMINI_API_KEY}`, {
                             method: 'POST',
                             headers: {
-                              'Content-Type': 'application/json',
-                              'Authorization': `Bearer ${import.meta.env.VITE_OPENAI_API_KEY}`
+                              'Content-Type': 'application/json'
                             },
                             body: JSON.stringify({
-                              model: 'gpt-4',
-                              messages: [
-                                {
-                                  role: 'system',
-                                  content: 'You are a medical documentation assistant. When creating tables, ALWAYS use markdown table format with proper alignment. Ensure tables have clear borders using pipes (|) and dashes (-). Format tables exactly like this:\n\n| Column 1 | Column 2 | Column 3 |\n|----------|----------|----------|\n| Data 1   | Data 2   | Data 3   |\n\nMake sure each table has a header row, a separator row with dashes, and data rows. Keep table formatting clean and consistent.\n\nIMPORTANT INSTRUCTIONS:\n1. Do NOT include any PATIENT DETAILS section or table - patient information is already displayed at the top of the document\n2. At the end of the ADVICE section, always add this line: "Follow up after 7 days/SOS."\n3. Do NOT include the emergency contact line (URGENT CARE/EMERGENCY CARE IS AVAILABLE...) in the ADVICE section, as it will be added separately at the bottom of the document\n4. ALWAYS follow this EXACT section order: DIAGNOSIS → CLINICAL HISTORY → EXAMINATION → INVESTIGATIONS → SURGERY DETAILS/OPERATION NOTES (only if surgery was performed) → MEDICATIONS → ADVICE. Do NOT include empty sections - only include sections that have actual data.\n5. For DIAGNOSIS: Do NOT just copy the diagnosis verbatim. Expand it into a professional 2-3 sentence medical diagnosis statement explaining the condition, its nature, and clinical significance. For example, if input is "LUMBAR CANAL STENOSIS WITH RADICULOPATHY", write: "The patient was diagnosed with LUMBAR CANAL STENOSIS WITH RADICULOPATHY. This condition involves narrowing of the spinal canal in the lower back region, causing compression of nerve roots leading to radiating pain and neurological symptoms in the lower extremities."\n6. When you see "CASE SUMMARY / PRESENTING COMPLAINTS:", expand the brief symptoms/complaints into a proper 4-5 line CLINICAL HISTORY paragraph. Write it as a professional medical narrative describing the patient presenting symptoms, duration, progression, and relevant history. Do not just copy the text verbatim - elaborate and format it professionally.\n7. When you see "EXAMINATION / VITAL SIGNS" or vital signs data, expand it into a proper 4-5 line EXAMINATION paragraph. Write it as a professional medical narrative describing the physical examination findings, vital signs interpretation, general condition, and relevant clinical observations. Do not just list vital signs - elaborate them into a professional medical examination summary.\n8. For INVESTIGATIONS: Only include this section if investigation data is provided. Format investigations clearly with test names and results.'
-                                },
-                                {
-                                  role: 'user',
-                                  content: newTemplateContent
-                                }
-                              ],
-                              temperature: 0.7,
-                              max_tokens: 2000
+                              contents: [{
+                                parts: [{
+                                  text: systemPrompt + '\n\nUser Request:\n' + newTemplateContent
+                                }]
+                              }],
+                              generationConfig: {
+                                temperature: 0.7,
+                                maxOutputTokens: 2000
+                              }
                             })
                           });
 
                           if (!response.ok) {
-                            throw new Error(`OpenAI API error: ${response.statusText}`);
+                            const errorData = await response.json();
+                            throw new Error(`Gemini API error: ${errorData.error?.message || response.statusText}`);
                           }
 
                           const data = await response.json();
-                          const generatedSummary = data.choices[0]?.message?.content;
+                          const generatedSummary = data.candidates?.[0]?.content?.parts?.[0]?.text;
 
                           if (generatedSummary) {
                             // Display generated summary in Stay Notes box
