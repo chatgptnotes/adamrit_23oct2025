@@ -1024,8 +1024,8 @@ const LabOrders = () => {
       const loadExistingLabResults = async () => {
         console.log('🔍 Loading existing lab results for selected tests...');
         const firstTest = selectedTestsForEntry[0];
-        const visitId = firstTest.visit_id || firstTest.order_id || firstTest.id;
-        console.log('🔍 Using visit_id for loading:', visitId);
+        const visitId = firstTest.visit_uuid || firstTest.order_id || firstTest.id;
+        console.log('🔍 Using visit_id (UUID) for loading:', visitId);
         console.log('🔍 First test object:', {
           id: firstTest.id,
           visit_id: firstTest.visit_id,
@@ -1515,20 +1515,7 @@ const LabOrders = () => {
 
             // Test details
             test_category: result.test_category || 'GENERAL',
-            result_value: JSON.stringify({
-              value: result.result_value || '',
-              timestamp: new Date().toISOString(),
-              entry_time: new Date().toLocaleString('en-IN', {
-                timeZone: 'Asia/Kolkata',
-                year: 'numeric',
-                month: '2-digit',
-                day: '2-digit',
-                hour: '2-digit',
-                minute: '2-digit',
-                second: '2-digit'
-              }),
-              session_id: `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-            }),
+            result_value: result.result_value || '',
             result_unit: result.result_unit || '',
             reference_range: result.reference_range || '',
             comments: result.comments ? `${result.comments} [Entry at: ${new Date().toLocaleString()}]` : `Entry at: ${new Date().toLocaleString()}`,
@@ -1545,9 +1532,9 @@ const LabOrders = () => {
             patient_age: originalTestRow.patient_age || null,
             patient_gender: originalTestRow.patient_gender || 'Unknown',
 
-            // Foreign keys for proper data linking
-            visit_id: originalTestRow.visit_id || originalTestRow.order_id || null,
-            lab_id: originalTestRow.test_id || originalTestRow.lab_id || null
+            // Foreign keys for proper data linking (use UUID fields)
+            visit_id: originalTestRow.visit_uuid || originalTestRow.order_id || null,
+            lab_id: originalTestRow.lab_uuid || originalTestRow.test_id || null
           };
 
           // Remove any undefined values to prevent schema errors
@@ -1579,20 +1566,7 @@ const LabOrders = () => {
               main_test_name: originalTestRow.test_name || 'Test',
               test_name: result.test_name || 'Test Result',
               test_category: result.test_category || 'GENERAL',
-              result_value: JSON.stringify({
-                value: result.result_value || 'No Value',
-                timestamp: new Date().toISOString(),
-                entry_time: new Date().toLocaleString('en-IN', {
-                  timeZone: 'Asia/Kolkata',
-                  year: 'numeric',
-                  month: '2-digit',
-                  day: '2-digit',
-                  hour: '2-digit',
-                  minute: '2-digit',
-                  second: '2-digit'
-                }),
-                session_id: `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-              }),
+              result_value: result.result_value || '',
               result_unit: result.result_unit || '',
               reference_range: result.reference_range || '',
               comments: result.comments || '',
@@ -1604,9 +1578,9 @@ const LabOrders = () => {
               patient_name: originalTestRow.patient_name || 'Unknown Patient',
               patient_age: originalTestRow.patient_age || null,
               patient_gender: originalTestRow.patient_gender || 'Unknown',
-              // Skip foreign keys for now
-              // visit_id: visitId || null,
-              // lab_id: labId || null
+              // Foreign keys for proper data linking (use UUID fields)
+              visit_id: originalTestRow.visit_uuid || originalTestRow.order_id || null,
+              lab_id: originalTestRow.lab_uuid || originalTestRow.test_id || null
             };
 
             const { data: minimalResult, error: minimalError } = await supabase
@@ -1945,7 +1919,9 @@ const LabOrders = () => {
         ordering_doctor: entry.visits?.appointment_with || 'Dr. Unknown',
         clinical_history: entry.visits?.reason_for_visit,
         sample_status: entry.collected_date ? 'taken' : 'not_taken' as const,
-        visit_id: entry.visits?.visit_id, // Visit ID text field
+        visit_id: entry.visits?.visit_id, // Visit ID text field (e.g., "IH25L06010")
+        visit_uuid: entry.visit_id, // Actual UUID FK to visits table
+        lab_uuid: entry.lab_id, // Actual UUID FK to lab table
         patient_id: entry.visits?.patient_id // Add patient_id from visits table
       })) || [];
 
@@ -5063,12 +5039,13 @@ const LabOrders = () => {
                   <Button
                     variant="outline"
                     className="px-8"
-                    onClick={() => {
-                      // Print without saving - uses current form data
+                    onClick={async () => {
+                      // First save, then print
+                      await handleSaveLabResults();
                       handlePreviewAndPrint();
                     }}
                     disabled={selectedTestsForEntry.length === 0}
-                    title="Print report with current entered values (saved or unsaved)"
+                    title="Save and print lab report"
                   >
                     Preview & Print
                   </Button>
