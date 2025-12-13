@@ -34,6 +34,7 @@ import { CascadingBillingStatusDropdown } from '@/components/shared/CascadingBil
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuSeparator, DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ColumnPickerModal } from '@/components/print/ColumnPickerModal';
 import { PrintPreview } from '@/components/print/PrintPreview';
 import { usePrintColumns } from '@/hooks/usePrintColumns';
@@ -2301,7 +2302,7 @@ const TodaysIpdDashboard = () => {
                 <TableHead className="font-semibold">Admission Date</TableHead>
                 <TableHead className="font-semibold">Days Admitted</TableHead>
                 <TableHead className="font-semibold">Discharge Date</TableHead>
-                <TableHead className="font-semibold">Discharge Summary</TableHead>
+                <TableHead className="font-semibold">Summaries and Certificates</TableHead>
                 {isAdmin && <TableHead className="font-semibold">Actions</TableHead>}
               </TableRow>
               <TableRow className="bg-muted/30">
@@ -2590,15 +2591,22 @@ const TodaysIpdDashboard = () => {
                     ) : '—'}
                   </TableCell>
                   <TableCell>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-8 w-8 p-0 hover:bg-blue-50"
-                      onClick={() => navigate(`/ipd-discharge-summary/${visit.visit_id}`)}
-                      title="IPD Discharge Summary"
-                    >
-                      <ClipboardList className="h-4 w-4 text-blue-600" />
-                    </Button>
+                    <Select onValueChange={(value) => {
+                      if (value === 'discharge-summary') {
+                        navigate(`/ipd-discharge-summary/${visit.visit_id}`);
+                      } else if (value === 'death-certificate') {
+                        navigate(`/death-certificate/${visit.visit_id}`);
+                      }
+                    }}>
+                      <SelectTrigger className="w-[140px] h-8">
+                        <SelectValue placeholder="Select" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="discharge-summary">Discharge Summary</SelectItem>
+                        <SelectItem value="death-summary" disabled>Death Summary</SelectItem>
+                        <SelectItem value="death-certificate">Death Certificate</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </TableCell>
                   {isAdmin && (
                    <TableCell>
