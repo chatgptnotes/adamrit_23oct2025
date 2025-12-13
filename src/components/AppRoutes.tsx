@@ -65,6 +65,7 @@ const GatePassPrintPage = lazy(() => import("../pages/GatePassPrint"));
 const DischargeSummaryPrint = lazy(() => import("../pages/DischargeSummaryPrint"));
 const DischargeSummaryEdit = lazy(() => import("../pages/DischargeSummaryEdit"));
 const IpdDischargeSummary = lazy(() => import("../pages/IpdDischargeSummary"));
+const DeathCertificate = lazy(() => import("../pages/DeathCertificate"));
 const PhysiotherapyBill = lazy(() => import("../pages/PhysiotherapyBill"));
 const AdmissionNotes = lazy(() => import("../pages/AdmissionNotes"));
 const OpdAdmissionNotes = lazy(() => import("../pages/OpdAdmissionNotes"));
@@ -180,6 +181,7 @@ export const AppRoutes = () => {
         <Route path="/detailed-invoice" element={<Suspense fallback={<PageLoader />}><DetailedInvoice /></Suspense>} />
         <Route path="/discharge-invoice/:visitId" element={<Suspense fallback={<PageLoader />}><DischargeInvoice /></Suspense>} />
         <Route path="/ipd-discharge-summary/:visitId" element={<Suspense fallback={<PageLoader />}><IpdDischargeSummary /></Suspense>} />
+        <Route path="/death-certificate/:visitId" element={<Suspense fallback={<PageLoader />}><DeathCertificate /></Suspense>} />
         {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
         <Route path="*" element={<NotFound />} />
       </Routes>
