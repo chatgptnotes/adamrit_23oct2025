@@ -121,7 +121,7 @@ const DeathCertificate = () => {
           .signature-table { width: 100%; }
           .signature-table td { vertical-align: top; padding: 5px; }
           .signature-table .date-col { width: 10%; vertical-align: top; }
-          .signature-table .middle-col { width: 55%; padding-left: 40px; }
+          .signature-table .middle-col { width: 55%; padding-left: 80px; }
           .signature-table .right-col { width: 35%; text-align: right; }
           .received-title { font-weight: bold; margin-bottom: 10px; }
           .field-row { margin: 8px 0; display: flex; align-items: center; }
