@@ -17,7 +17,7 @@ import {
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { EnhancedDatePicker } from "@/components/ui/enhanced-date-picker"
-import { ChevronUp, ChevronDown, Trash2, Plus, ChevronLeft, ChevronRight, Edit, X, Copy, PenTool } from "lucide-react"
+import { ChevronUp, ChevronDown, Trash2, Plus, ChevronLeft, ChevronRight, Edit, X, Copy, PenTool, Loader2 } from "lucide-react"
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from '@/contexts/AuthContext';
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -2072,11 +2072,14 @@ const FinalBill = () => {
   const [savedClinicalServicesData, setSavedClinicalServicesData] = useState<any[]>([]);
   const [savedMandatoryServicesData, setSavedMandatoryServicesData] = useState<any[]>([]);
   const [savedAccommodationData, setSavedAccommodationData] = useState<any[]>([]);
+  const [savedPathologyCharges, setSavedPathologyCharges] = useState<any[]>([]);
 
   // State initialization flags to prevent duplicate fetches
   const [clinicalServicesInitialized, setClinicalServicesInitialized] = useState(false);
   const [mandatoryServicesInitialized, setMandatoryServicesInitialized] = useState(false);
   const [accommodationInitialized, setAccommodationInitialized] = useState(false);
+  const [pathologyChargesInitialized, setPathologyChargesInitialized] = useState(false);
+  const [isAddingPathology, setIsAddingPathology] = useState(false);
 
   // Force refresh counter for mandatory services UI
   const [mandatoryServicesRefreshKey, setMandatoryServicesRefreshKey] = useState(0);
@@ -2099,6 +2102,13 @@ const FinalBill = () => {
       fetchSavedLabs(visitId);
     }
   }, [visitId, labDataRefreshCounter]);
+
+  // Fetch saved pathology charges when visit ID is available
+  useEffect(() => {
+    if (visitId && !pathologyChargesInitialized) {
+      fetchSavedPathologyCharges();
+    }
+  }, [visitId, pathologyChargesInitialized]);
 
   // State for discharge view
   const [showDischargeView, setShowDischargeView] = useState(false);
@@ -4877,48 +4887,51 @@ INSTRUCTIONS:
     }
   }, [billData, isSavingBill, invoiceItems]);
 
-  // Update Pathology Charges with saved lab data
+  // Update Pathology Charges with saved pathology date ranges
   useEffect(() => {
-    console.log('🔬 Pathology Charges Debug:', { 
-      savedLabData, 
-      savedLabDataLength: savedLabData?.length || 0,
-      visitId 
+    console.log('🔬 Pathology Charges Debug:', {
+      savedPathologyCharges,
+      savedPathologyChargesLength: savedPathologyCharges?.length || 0,
+      visitId
     });
-    
+
     setInvoiceItems(prev => prev.map(item => {
       if (item.type === 'main' && item.description === 'Pathology Charges') {
-        if (savedLabData && savedLabData.length > 0) {
-          console.log('📋 Updating Pathology Charges with lab data:', savedLabData);
-          // Create sub-items from saved lab data
-          const labSubItems = savedLabData.map((lab, index) => ({
-            id: `pathology_${lab.id}`,
+        if (savedPathologyCharges && savedPathologyCharges.length > 0) {
+          console.log('📋 Updating Pathology Charges with date ranges:', savedPathologyCharges);
+          // Create sub-items from saved pathology date ranges
+          const pathologySubItems = savedPathologyCharges.map((charge, index) => ({
+            id: `pathology_${charge.id}`,
             srNo: `${String.fromCharCode(97 + index)})`, // a), b), c), etc.
-            description: lab.lab_name,
+            description: '', // No description for date-based entries
             code: '',
-            rate: parseFloat(lab.cost?.toString() || '0') || 0,
-            qty: 1,
-            amount: parseFloat(lab.cost?.toString() || '0') || 0,
+            rate: parseFloat(charge.rate?.toString() || '0') || 0,
+            qty: parseInt(charge.days?.toString() || '1') || 1,
+            amount: parseFloat(charge.amount?.toString() || '0') || 0,
             type: 'standard' as const,
-            dates: { from: new Date(), to: new Date() }
+            dates: {
+              from: charge.start_date ? new Date(charge.start_date + 'T00:00:00') : new Date(),
+              to: charge.end_date ? new Date(charge.end_date + 'T00:00:00') : new Date()
+            }
           }));
 
           // Calculate total amount
-          const totalAmount = labSubItems.reduce((sum, item) => sum + item.amount, 0);
+          const totalAmount = pathologySubItems.reduce((sum, item) => sum + item.amount, 0);
 
-          console.log('✅ Pathology Charges updated with lab items:', { labSubItems, totalAmount });
+          console.log('✅ Pathology Charges updated with date ranges:', { pathologySubItems, totalAmount });
 
           return {
             ...item,
-            subItems: labSubItems,
+            subItems: pathologySubItems,
             amount: totalAmount
           };
         } else {
-          console.log('⚠️ No lab tests found - updating Pathology Charges to show "No lab tests"');
-          // No lab tests - show default message
+          console.log('⚠️ No pathology charges found - updating to show empty state');
+          // No pathology charges - show default message
           const defaultSubItem = {
             id: 'pathology_default',
             srNo: 'a)',
-            description: 'No lab tests ordered for this visit',
+            description: 'No pathology charges added',
             code: '',
             rate: 0,
             qty: 1,
@@ -4936,7 +4949,7 @@ INSTRUCTIONS:
       }
       return item;
     }));
-  }, [savedLabData, visitId]);
+  }, [savedPathologyCharges, visitId]);
 
   // Update Medicine Charges with saved medication data
   useEffect(() => {
@@ -8101,6 +8114,186 @@ INSTRUCTIONS:
     } catch (error) {
       console.error('❌ [ACCOMMODATION DELETE] Unexpected error:', error);
       toast.error('Failed to delete accommodation');
+    }
+  };
+
+  // =============================================
+  // PATHOLOGY CHARGES FUNCTIONS (Date Range Based)
+  // =============================================
+
+  // Function to fetch saved pathology charges
+  const fetchSavedPathologyCharges = async () => {
+    if (!visitId) {
+      console.log('⚠️ [PATHOLOGY CHARGES FETCH] No visitId available');
+      return [];
+    }
+
+    try {
+      console.log('🔍 [PATHOLOGY CHARGES FETCH] Starting fetch for visitId:', visitId);
+
+      // Get visit UUID
+      const { data: visitData, error: visitError } = await supabase
+        .from('visits')
+        .select('id')
+        .eq('visit_id', visitId)
+        .single();
+
+      if (visitError || !visitData) {
+        console.error('❌ [PATHOLOGY CHARGES FETCH] Visit not found:', visitError);
+        return [];
+      }
+
+      console.log('✅ [PATHOLOGY CHARGES FETCH] Visit found:', visitData.id);
+
+      // Fetch pathology charges data
+      const { data: pathologyData, error: pathologyError } = await supabase
+        .from('visit_pathology_charges')
+        .select('*')
+        .eq('visit_id', visitData.id)
+        .order('start_date', { ascending: false });
+
+      if (pathologyError) {
+        console.error('❌ [PATHOLOGY CHARGES FETCH] Error fetching pathology charges:', pathologyError);
+        return [];
+      }
+
+      console.log('✅ [PATHOLOGY CHARGES FETCH] Raw data:', pathologyData);
+
+      // Update state
+      setSavedPathologyCharges(pathologyData || []);
+      setPathologyChargesInitialized(true);
+
+      return pathologyData || [];
+    } catch (error) {
+      console.error('❌ [PATHOLOGY CHARGES FETCH] Unexpected error:', error);
+      return [];
+    }
+  };
+
+  // Function to add pathology date range
+  const handleAddPathologyDateRange = async () => {
+    if (!visitId) {
+      toast.error('No visit ID available');
+      return;
+    }
+
+    setIsAddingPathology(true);
+    try {
+      console.log('🧪 [PATHOLOGY ADD] Adding pathology date range');
+
+      // Ensure visit exists
+      const ensureResult = await ensureVisitExists(visitId);
+
+      if (!ensureResult.success) {
+        console.error('❌ [PATHOLOGY ADD] Failed to ensure visit exists');
+        return;
+      }
+
+      // Get visit UUID
+      const { data: visitData, error: visitError } = await supabase
+        .from('visits')
+        .select('id')
+        .eq('visit_id', visitId)
+        .single();
+
+      if (visitError || !visitData) {
+        toast.error('Failed to find visit');
+        return;
+      }
+
+      // Use default values - user will edit dates and rate in the table
+      // Use format() to preserve local timezone instead of toISOString() which converts to UTC
+      const today = format(new Date(), 'yyyy-MM-dd');
+
+      // Insert into visit_pathology_charges with default dates
+      const pathologyData = {
+        visit_id: visitData.id,
+        start_date: today,
+        end_date: today,
+        rate: 0
+      };
+
+      console.log('💾 [PATHOLOGY ADD] Inserting with defaults:', pathologyData);
+
+      const { data: insertedData, error: insertError } = await supabase
+        .from('visit_pathology_charges')
+        .insert(pathologyData)
+        .select()
+        .single();
+
+      if (insertError) {
+        console.error('❌ [PATHOLOGY ADD] Insert error:', insertError);
+        toast.error('Failed to add pathology date range: ' + insertError.message);
+        return;
+      }
+
+      console.log('✅ [PATHOLOGY ADD] Successfully added:', insertedData);
+      toast.success('Pathology date range added. Edit dates and rate in the table below.');
+
+      // Refresh pathology data
+      await fetchSavedPathologyCharges();
+
+    } catch (error) {
+      console.error('❌ [PATHOLOGY ADD] Unexpected error:', error);
+      toast.error('Failed to add pathology date range');
+    } finally {
+      setIsAddingPathology(false);
+    }
+  };
+
+  // Function to update pathology field
+  const updatePathologyField = async (pathologyId: string, field: string, value: string | number) => {
+    try {
+      const { error } = await supabase
+        .from('visit_pathology_charges')
+        .update({ [field]: value })
+        .eq('id', pathologyId);
+
+      if (error) {
+        console.error('Error updating pathology field:', error);
+        toast.error('Failed to update pathology data');
+        return;
+      }
+
+      // Refresh pathology data to get auto-calculated days and amount
+      await fetchSavedPathologyCharges();
+
+      toast.success('Pathology data updated successfully');
+    } catch (error) {
+      console.error('Error updating pathology field:', error);
+      toast.error('Failed to update pathology data');
+    }
+  };
+
+  // Function to delete pathology charge
+  const handleDeletePathologyCharge = async (pathologyId: string) => {
+    if (!confirm('Are you sure you want to delete this pathology charge?')) {
+      return;
+    }
+
+    try {
+      console.log('🗑️ [PATHOLOGY DELETE] Deleting pathology charge:', pathologyId);
+
+      const { error: deleteError } = await supabase
+        .from('visit_pathology_charges')
+        .delete()
+        .eq('id', pathologyId);
+
+      if (deleteError) {
+        console.error('❌ [PATHOLOGY DELETE] Delete error:', deleteError);
+        toast.error('Failed to delete pathology charge');
+        return;
+      }
+
+      console.log('✅ [PATHOLOGY DELETE] Successfully deleted');
+
+      // Update local state
+      setSavedPathologyCharges(prev => prev.filter(p => p.id !== pathologyId));
+
+      toast.success('Pathology charge deleted successfully');
+    } catch (error) {
+      console.error('❌ [PATHOLOGY DELETE] Unexpected error:', error);
+      toast.error('Failed to delete pathology charge');
     }
   };
 
@@ -19646,114 +19839,117 @@ Dr. Murali B K
                   <span className="print-only">{patientData.billDate ? format(new Date(patientData.billDate), 'dd/MM/yyyy') : ''}</span>
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-x-12 text-sm mt-4 pb-4 border-0 patient-info-grid w-full">
-                <div className="space-y-2">
-                  <div className="flex items-center">
-                    <span className="font-semibold w-40">BILL NO:</span>
-                    <span className="screen-only">
-                      <Input className="h-7 w-full" value={patientData.billNo} onChange={(e) => handlePatientDataChange('billNo', e.target.value)} />
-                    </span>
-                    <span className="print-only">{patientData.billNo || ''}</span>
-                  </div>
-                  <div className="flex items-center">
-                    <span className="font-semibold w-40">REGISTRATION NO:</span>
-                    <span className="screen-only">
-                      <Input className="h-7 w-full" value={patientData.registrationNo} onChange={(e) => handlePatientDataChange('registrationNo', e.target.value)} />
-                    </span>
-                    <span className="print-only">{patientData.registrationNo || ''}</span>
-                  </div>
-                  <div className="flex items-center">
-                    <span className="font-semibold w-40">NAME OF PATIENT:</span>
-                    <span className="screen-only">
-                      <Input className="h-7 w-full" value={patientData.name} onChange={(e) => handlePatientDataChange('name', e.target.value)} />
-                    </span>
-                    <span className="print-only">{patientData.name || ''}</span>
-                  </div>
-                  <div className="flex items-center">
-                    <span className="font-semibold w-40">AGE:</span>
-                    <span className="screen-only">
-                      <Input className="h-7 w-full" value={patientData.age} onChange={(e) => handlePatientDataChange('age', e.target.value)} />
-                    </span>
-                    <span className="print-only">{patientData.age || ''}</span>
-                  </div>
-                  <div className="flex items-center">
-                    <span className="font-semibold w-40">SEX:</span>
-                    <span className="screen-only">
-                      <Input className="h-7 w-full" value={patientData.sex} onChange={(e) => handlePatientDataChange('sex', e.target.value)} />
-                    </span>
-                    <span className="print-only">{patientData.sex || ''}</span>
-                  </div>
-
-                  <div className="flex items-center">
-                    <span className="font-semibold w-40">ADDRESS:</span>
-                    <span className="screen-only">
-                      <Input className="h-7 w-full" value={patientData.address} onChange={(e) => handlePatientDataChange('address', e.target.value)} />
-                    </span>
-                    <span className="print-only">{patientData.address || ''}</span>
-                  </div>
-                  <div className="flex items-center">
-                    <span className="font-semibold w-40">NAME OF ESIC BENEFICIARY:</span>
-                    <span className="screen-only">
-                      <Input className="h-7 w-full" value={patientData.beneficiaryName} onChange={(e) => handlePatientDataChange('beneficiaryName', e.target.value)} />
-                    </span>
-                    <span className="print-only">{patientData.beneficiaryName || ''}</span>
-                  </div>
-                  <div className="flex items-center">
-                    <span className="font-semibold w-40">RELATION WITH IP:</span>
-                    <span className="screen-only">
-                      <Input className="h-7 w-full" value={patientData.relation} onChange={(e) => handlePatientDataChange('relation', e.target.value)} />
-                    </span>
-                    <span className="print-only">{patientData.relation || ''}</span>
-                  </div>
+              <div className="grid grid-cols-2 gap-x-12 gap-y-2 text-sm mt-4 pb-4 border-0 patient-info-grid w-full">
+                {/* Row 1: BILL NO | DATE OF ADMISSION */}
+                <div className="flex items-start">
+                  <span className="font-semibold w-48 shrink-0">BILL NO:</span>
+                  <span className="screen-only flex-1">
+                    <Input className="h-7 w-full" value={patientData.billNo} onChange={(e) => handlePatientDataChange('billNo', e.target.value)} />
+                  </span>
+                  <span className="print-only flex-1 break-words">{patientData.billNo || ''}</span>
                 </div>
-                <div className="space-y-2">
-                  <div className="flex items-center">
-                    <span className="font-semibold w-40">DATE OF ADMISSION:</span>
-                    <span className="screen-only">
-                      <Input type="date" className="h-7 w-full" value={patientData.dateOfAdmission} onChange={(e) => handlePatientDataChange('dateOfAdmission', e.target.value)} />
-                    </span>
-                    <span className="print-only">{patientData.dateOfAdmission ? format(new Date(patientData.dateOfAdmission), 'dd/MM/yyyy') : ''}</span>
-                  </div>
-                  <div className="flex items-center">
-                    <span className="font-semibold w-40">DATE OF DISCHARGE:</span>
-                    <span className="screen-only">
-                      <Input type="date" className="h-7 w-full" value={patientData.dateOfDischarge} onChange={(e) => handlePatientDataChange('dateOfDischarge', e.target.value)} />
-                    </span>
-                    <span className="print-only">{patientData.dateOfDischarge ? format(new Date(patientData.dateOfDischarge), 'dd/MM/yyyy') : ''}</span>
-                  </div>
-                  <div className="flex items-center">
-                    <span className="font-semibold w-40">IP NO.:</span>
-                    <span className="screen-only">
-                      <Input className="h-7 w-full" value={patientData.ipNo || ''} onChange={(e) => handlePatientDataChange('ipNo', e.target.value)} />
-                    </span>
-                    <span className="print-only">{patientData.ipNo || ''}</span>
-                  </div>
-                  <div className="flex items-center">
-                    <span className="font-semibold w-40">SERVICE NO:</span>
-                    <span className="screen-only">
-                      <Input className="h-7 w-full" value={patientData.serviceNo} onChange={(e) => handlePatientDataChange('serviceNo', e.target.value)} />
-                    </span>
-                    <span className="print-only">{patientData.serviceNo || ''}</span>
-                  </div>
-                  <div className="flex items-center">
-                    <span className="font-semibold w-40">CATEGORY:</span>
-                    <span className="screen-only">
-                      <Input className="h-7 w-full bg-green-200" value={patientData.category} onChange={(e) => handlePatientDataChange('category', e.target.value)} />
-                    </span>
-                    <span className="print-only">{patientData.category || ''}</span>
-                  </div>
-                  <div>
-                    <span className="font-semibold block mb-1">DIAGNOSIS:</span>
-                    <span className="screen-only block">
-                      <Textarea className="mt-1" value={patientData.diagnosis} onChange={(e) => handlePatientDataChange('diagnosis', e.target.value)} />
+                <div className="flex items-start">
+                  <span className="font-semibold w-48 shrink-0">DATE OF ADMISSION:</span>
+                  <span className="screen-only flex-1">
+                    <Input type="date" className="h-7 w-full" value={patientData.dateOfAdmission} onChange={(e) => handlePatientDataChange('dateOfAdmission', e.target.value)} />
+                  </span>
+                  <span className="print-only flex-1 break-words">{patientData.dateOfAdmission ? format(new Date(patientData.dateOfAdmission), 'dd/MM/yyyy') : ''}</span>
+                </div>
 
-                    </span>
-                    <span className="print-only block mt-1">
-                      {patientData.diagnosis || 'No diagnosis recorded'}
-                    </span>
-                  </div>
+                {/* Row 2: REGISTRATION NO | DATE OF DISCHARGE */}
+                <div className="flex items-start">
+                  <span className="font-semibold w-48 shrink-0">REGISTRATION NO:</span>
+                  <span className="screen-only flex-1">
+                    <Input className="h-7 w-full" value={patientData.registrationNo} onChange={(e) => handlePatientDataChange('registrationNo', e.target.value)} />
+                  </span>
+                  <span className="print-only flex-1 break-words">{patientData.registrationNo || ''}</span>
+                </div>
+                <div className="flex items-start">
+                  <span className="font-semibold w-48 shrink-0">DATE OF DISCHARGE:</span>
+                  <span className="screen-only flex-1">
+                    <Input type="date" className="h-7 w-full" value={patientData.dateOfDischarge} onChange={(e) => handlePatientDataChange('dateOfDischarge', e.target.value)} />
+                  </span>
+                  <span className="print-only flex-1 break-words">{patientData.dateOfDischarge ? format(new Date(patientData.dateOfDischarge), 'dd/MM/yyyy') : ''}</span>
+                </div>
 
+                {/* Row 3: NAME OF PATIENT | IP NO */}
+                <div className="flex items-start">
+                  <span className="font-semibold w-48 shrink-0">NAME OF PATIENT:</span>
+                  <span className="screen-only flex-1">
+                    <Input className="h-7 w-full" value={patientData.name} onChange={(e) => handlePatientDataChange('name', e.target.value)} />
+                  </span>
+                  <span className="print-only flex-1 break-words">{patientData.name || ''}</span>
+                </div>
+                <div className="flex items-start">
+                  <span className="font-semibold w-48 shrink-0">IP NO.:</span>
+                  <span className="screen-only flex-1">
+                    <Input className="h-7 w-full" value={patientData.ipNo || ''} onChange={(e) => handlePatientDataChange('ipNo', e.target.value)} />
+                  </span>
+                  <span className="print-only flex-1 break-words">{patientData.ipNo || ''}</span>
+                </div>
 
+                {/* Row 4: AGE | SERVICE NO */}
+                <div className="flex items-start">
+                  <span className="font-semibold w-48 shrink-0">AGE:</span>
+                  <span className="screen-only flex-1">
+                    <Input className="h-7 w-full" value={patientData.age} onChange={(e) => handlePatientDataChange('age', e.target.value)} />
+                  </span>
+                  <span className="print-only flex-1 break-words">{patientData.age || ''}</span>
+                </div>
+                <div className="flex items-start">
+                  <span className="font-semibold w-48 shrink-0">SERVICE NO:</span>
+                  <span className="screen-only flex-1">
+                    <Input className="h-7 w-full" value={patientData.serviceNo} onChange={(e) => handlePatientDataChange('serviceNo', e.target.value)} />
+                  </span>
+                  <span className="print-only flex-1 break-words">{patientData.serviceNo || ''}</span>
+                </div>
+
+                {/* Row 5: SEX | CATEGORY */}
+                <div className="flex items-start">
+                  <span className="font-semibold w-48 shrink-0">SEX:</span>
+                  <span className="screen-only flex-1">
+                    <Input className="h-7 w-full" value={patientData.sex} onChange={(e) => handlePatientDataChange('sex', e.target.value)} />
+                  </span>
+                  <span className="print-only flex-1 break-words">{patientData.sex || ''}</span>
+                </div>
+                <div className="flex items-start">
+                  <span className="font-semibold w-48 shrink-0">CATEGORY:</span>
+                  <span className="screen-only flex-1">
+                    <Input className="h-7 w-full bg-green-200" value={patientData.category} onChange={(e) => handlePatientDataChange('category', e.target.value)} />
+                  </span>
+                  <span className="print-only flex-1 break-words">{patientData.category || ''}</span>
+                </div>
+
+                {/* Row 6: ADDRESS | DIAGNOSIS */}
+                <div className="flex items-start">
+                  <span className="font-semibold w-48 shrink-0">ADDRESS:</span>
+                  <span className="screen-only flex-1">
+                    <Input className="h-7 w-full" value={patientData.address} onChange={(e) => handlePatientDataChange('address', e.target.value)} />
+                  </span>
+                  <span className="print-only flex-1 break-words">{patientData.address || ''}</span>
+                </div>
+                <div className="flex items-start">
+                  <span className="font-semibold w-48 shrink-0">DIAGNOSIS:</span>
+                  <span className="screen-only flex-1">
+                    <Textarea className="mt-1" value={patientData.diagnosis} onChange={(e) => handlePatientDataChange('diagnosis', e.target.value)} />
+                  </span>
+                  <span className="print-only flex-1 break-words">{patientData.diagnosis || 'No diagnosis recorded'}</span>
+                </div>
+
+                {/* Row 7: NAME OF ESIC BENEFICIARY | RELATION WITH IP */}
+                <div className="flex items-start">
+                  <span className="font-semibold w-48 shrink-0">NAME OF ESIC BENEFICIARY:</span>
+                  <span className="screen-only flex-1">
+                    <Input className="h-7 w-full" value={patientData.beneficiaryName} onChange={(e) => handlePatientDataChange('beneficiaryName', e.target.value)} />
+                  </span>
+                  <span className="print-only flex-1 break-words">{patientData.beneficiaryName || ''}</span>
+                </div>
+                <div className="flex items-start">
+                  <span className="font-semibold w-48 shrink-0">RELATION WITH IP:</span>
+                  <span className="screen-only flex-1">
+                    <Input className="h-7 w-full" value={patientData.relation} onChange={(e) => handlePatientDataChange('relation', e.target.value)} />
+                  </span>
+                  <span className="print-only flex-1 break-words">{patientData.relation || ''}</span>
                 </div>
               </div>
 
@@ -19871,9 +20067,15 @@ Dr. Murali B K
                             </span>
                           </td>
                           <td className="border border-gray-400 p-2 text-center no-print">
-                            <Button size="sm" className="bg-green-500 hover:bg-green-600 h-7" onClick={() => handleAddItem(item.id)}>
-                              <Plus className="h-4 w-4 mr-1" /> Add
-                            </Button>
+                            {item.description === 'Pathology Charges' ? (
+                              <Button size="sm" className="bg-green-500 hover:bg-green-600 h-7" onClick={() => handleAddPathologyDateRange()} disabled={isAddingPathology}>
+                                {isAddingPathology ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Plus className="h-4 w-4 mr-1" />} Add
+                              </Button>
+                            ) : (
+                              <Button size="sm" className="bg-green-500 hover:bg-green-600 h-7" onClick={() => handleAddItem(item.id)}>
+                                <Plus className="h-4 w-4 mr-1" /> Add
+                              </Button>
+                            )}
                           </td>
                         </tr>
                       );
@@ -20095,7 +20297,54 @@ Dr. Murali B K
                                       </Button>
                                     </div>
                                   </div>
-                                ) : ['Pathology Charges', 'Medicine Charges'].includes(item.description) ? (
+                                ) : item.description === 'Pathology Charges' ? (
+                                  <div>
+                                    {/* Pathology Charges - Date range only (no test names) */}
+                                    {subItem.id === 'pathology_default' ? (
+                                      <p className="text-sm text-gray-500 italic py-2">Click "Add" button above to add pathology charges</p>
+                                    ) : (
+                                      <div className="space-y-2">
+                                        {/* Separate Start and End Date inputs */}
+                                        <div className="flex items-center gap-2">
+                                          <input
+                                            type="date"
+                                            value={subItem.dates?.from ? format(subItem.dates.from, 'yyyy-MM-dd') : ''}
+                                            onChange={(e) => {
+                                              const pathologyId = subItem.id.replace('pathology_', '');
+                                              if (pathologyId && pathologyId !== 'default' && e.target.value) {
+                                                updatePathologyField(pathologyId, 'start_date', e.target.value);
+                                              }
+                                            }}
+                                            className="border rounded px-2 py-1 h-8 text-sm"
+                                          />
+                                          <span className="text-gray-500">to</span>
+                                          <input
+                                            type="date"
+                                            value={subItem.dates?.to ? format(subItem.dates.to, 'yyyy-MM-dd') : ''}
+                                            onChange={(e) => {
+                                              const pathologyId = subItem.id.replace('pathology_', '');
+                                              if (pathologyId && pathologyId !== 'default' && e.target.value) {
+                                                updatePathologyField(pathologyId, 'end_date', e.target.value);
+                                              }
+                                            }}
+                                            className="border rounded px-2 py-1 h-8 text-sm"
+                                          />
+                                        </div>
+                                        {/* Add Date Range Button - below the dates like Accommodation */}
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          className="h-8"
+                                          onClick={() => handleAddPathologyDateRange()}
+                                          disabled={isAddingPathology}
+                                        >
+                                          {isAddingPathology ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Plus className="h-4 w-4 mr-1" />}
+                                          Add Date Range
+                                        </Button>
+                                      </div>
+                                    )}
+                                  </div>
+                                ) : item.description === 'Medicine Charges' ? (
                                   <div>
                                     <p className="flex items-center h-8 text-sm">{subItem.description}</p>
                                     <div className="mt-2">
@@ -20157,7 +20406,18 @@ Dr. Murali B K
                                 <Input
                                   type="number"
                                   value={(subItem as StandardSubItem).rate}
-                                  onChange={(e) => handleItemChange(item.id, subItem.id, 'rate', parseFloat(e.target.value) || 0)}
+                                  onChange={(e) => {
+                                    const newRate = parseFloat(e.target.value) || 0;
+                                    if (item.description === 'Pathology Charges') {
+                                      // For Pathology Charges, update database
+                                      const pathologyId = subItem.id.replace('pathology_', '');
+                                      if (pathologyId && pathologyId !== 'default') {
+                                        updatePathologyField(pathologyId, 'rate', newRate);
+                                      }
+                                    } else {
+                                      handleItemChange(item.id, subItem.id, 'rate', newRate);
+                                    }
+                                  }}
                                   className="w-24 h-8"
                                 />
                               </span>
@@ -20170,6 +20430,7 @@ Dr. Murali B K
                                   min="0"
                                   step="1"
                                   value={subItem.qty}
+                                  readOnly={item.description === 'Pathology Charges'} // Days are auto-calculated for pathology
                                   onChange={(e) => {
                                     const newQty = parseInt(e.target.value, 10) || 0;
                                     handleItemChange(item.id, subItem.id, 'qty', newQty);
@@ -20202,7 +20463,18 @@ Dr. Murali B K
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                onClick={() => deleteSubItem(item.id, subItem.id)}
+                                onClick={() => {
+                                  if (item.description === 'Pathology Charges') {
+                                    // For Pathology Charges, delete from database
+                                    const pathologyId = subItem.id.replace('pathology_', '');
+                                    if (pathologyId && pathologyId !== 'default') {
+                                      handleDeletePathologyCharge(pathologyId);
+                                    }
+                                  } else {
+                                    // For other items, use the standard delete
+                                    deleteSubItem(item.id, subItem.id);
+                                  }
+                                }}
                                 className="text-red-500 hover:text-red-700 hover:bg-red-50"
                               >
                                 <Trash2 className="h-4 w-4" />
