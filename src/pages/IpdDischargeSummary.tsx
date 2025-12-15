@@ -1084,6 +1084,9 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
 
   // Update surgery details when data is loaded (combine visit_surgeries + ot_notes data)
   useEffect(() => {
+    // Wait for OT Notes to finish loading before setting surgery details
+    if (isOtNotesLoading) return;
+
     if (visitSurgeryData && visitSurgeryData.length > 0) {
       try {
         const surgery = visitSurgeryData[0]; // Get the first/primary surgery
@@ -1110,7 +1113,7 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
           anesthetist: anesthetist,
           anesthesia: anesthesia,
           implant: implant,
-          description: '' // Keep empty - user will generate via AI Generate button
+          description: otNotesData?.description || '' // Use OT Notes description if available
         });
 
         console.log('✅ Surgery details updated with data from:', {
@@ -1125,8 +1128,31 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
       } catch (error) {
         console.log('❌ Error updating surgery details:', error);
       }
+    } else if (otNotesData) {
+      // Fallback: Populate from OT Notes even if no visit_surgeries data
+      try {
+        const surgeryDate = otNotesData?.date ? new Date(otNotesData.date) : null;
+
+        setSurgeryDetails({
+          date: surgeryDate ? format(surgeryDate, "yyyy-MM-dd'T'HH:mm") : '',
+          procedurePerformed: otNotesData?.procedure_performed || otNotesData?.surgery_name || '',
+          surgeon: otNotesData?.surgeon || '',
+          anesthetist: otNotesData?.anaesthetist || '',
+          anesthesia: otNotesData?.anaesthesia || '',
+          implant: otNotesData?.implant || '',
+          description: otNotesData?.description || ''
+        });
+
+        console.log('✅ Surgery details populated from OT Notes only:', {
+          surgeon: otNotesData?.surgeon,
+          anaesthetist: otNotesData?.anaesthetist,
+          anaesthesia: otNotesData?.anaesthesia
+        });
+      } catch (error) {
+        console.log('❌ Error populating from OT Notes:', error);
+      }
     }
-  }, [visitSurgeryData, otNotesData, patientData]);
+  }, [visitSurgeryData, otNotesData, patientData, isOtNotesLoading]);
 
   // Update diagnosis when data is loaded from visit_diagnoses table
   useEffect(() => {
