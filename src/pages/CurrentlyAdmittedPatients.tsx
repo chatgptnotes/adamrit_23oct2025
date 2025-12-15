@@ -75,6 +75,11 @@ interface Visit {
   }>;
 }
 
+interface CorporateOption {
+  id: string;
+  name: string;
+}
+
 const formatDate = (dateString?: string): string => {
   if (!dateString) return "-";
   try {
@@ -115,9 +120,22 @@ const CurrentlyAdmittedPatients = () => {
   const { hospitalConfig } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [corporateFilter, setCorporateFilter] = useState('all');
   const [selectedVisitForDischarge, setSelectedVisitForDischarge] = useState<Visit | null>(null);
 
-
+  // Fetch available corporates for filter dropdown
+  const { data: availableCorporates } = useQuery({
+    queryKey: ['corporates'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('corporate')
+        .select('id, name')
+        .order('name', { ascending: true });
+      if (error) throw error;
+      return data as CorporateOption[];
+    },
+    staleTime: 300000, // 5 minutes cache
+  });
 
   const { data: visits = [], isLoading, error } = useQuery({
     queryKey: ['currently-admitted-visits', hospitalConfig?.name],
@@ -236,7 +254,9 @@ const CurrentlyAdmittedPatients = () => {
 
     const matchesStatus = statusFilter === 'all' || visit.billing_status === statusFilter;
 
-    return matchesSearch && matchesStatus;
+    const matchesCorporate = corporateFilter === 'all' || visit.patients?.corporate === corporateFilter;
+
+    return matchesSearch && matchesStatus && matchesCorporate;
   });
 
   const stats = (() => {
@@ -359,13 +379,24 @@ const CurrentlyAdmittedPatients = () => {
           <SelectContent>
             <SelectItem value="all">All Statuses</SelectItem>
             <SelectItem value="pending">Pending</SelectItem>
-
-
             <SelectItem value="in_progress">In Progress</SelectItem>
             <SelectItem value="completed">Completed</SelectItem>
             <SelectItem value="submitted">Submitted</SelectItem>
             <SelectItem value="approved">Approved</SelectItem>
             <SelectItem value="rejected">Rejected</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={corporateFilter} onValueChange={setCorporateFilter}>
+          <SelectTrigger className="w-full sm:w-[200px]">
+            <SelectValue placeholder="All Corporates" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Corporates</SelectItem>
+            {availableCorporates?.map((corporate) => (
+              <SelectItem key={corporate.id} value={corporate.name}>
+                {corporate.name}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
       </div>
@@ -383,7 +414,7 @@ const CurrentlyAdmittedPatients = () => {
               <Users className="h-12 w-12 text-gray-400 mx-auto mb-4" />
               <h3 className="text-lg font-medium text-gray-900 mb-2">No undischarged patients</h3>
               <p className="text-gray-500">
-                {searchTerm || statusFilter !== 'all'
+                {searchTerm || statusFilter !== 'all' || corporateFilter !== 'all'
                   ? 'No patients match your current filters.'
                   : 'There are no undischarged patients in the hospital.'}
               </p>
