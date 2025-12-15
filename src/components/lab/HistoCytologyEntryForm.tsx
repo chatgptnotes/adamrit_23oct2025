@@ -23,6 +23,44 @@ interface TabConfig {
   field: string;
 }
 
+// Define preferred tab order for histopathology/cytology reports
+const HISTO_TAB_ORDER = [
+  'BIOPSY NO',
+  'SPECIMEN',
+  'CLINICAL HISTORY',
+  'CLINICAL DETAILS',
+  'GROSS',
+  'GROSS DESCRIPTION',
+  'MICROSCOPY',
+  'MICROSCOPIC DESCRIPTION',
+  'IMPRESSION/DIAGNOSIS',
+  'IMPRESSION',
+  'ADVICE/COMMENT',
+  'ADVICE',
+  'COMMENT'
+];
+
+// Sort tabs according to preferred order
+const sortTabs = (tabs: TabConfig[]): TabConfig[] => {
+  return [...tabs].sort((a, b) => {
+    const aLabel = a.label.toUpperCase();
+    const bLabel = b.label.toUpperCase();
+
+    const aIndex = HISTO_TAB_ORDER.findIndex(name =>
+      aLabel.includes(name) || name.includes(aLabel)
+    );
+    const bIndex = HISTO_TAB_ORDER.findIndex(name =>
+      bLabel.includes(name) || name.includes(bLabel)
+    );
+
+    // If not found in order array, put at end
+    const aOrder = aIndex === -1 ? 999 : aIndex;
+    const bOrder = bIndex === -1 ? 999 : bIndex;
+
+    return aOrder - bOrder;
+  });
+};
+
 const HistoCytologyEntryForm: React.FC<HistoCytologyEntryFormProps> = ({
   selectedTests,
   patientInfo,
@@ -83,13 +121,15 @@ const HistoCytologyEntryForm: React.FC<HistoCytologyEntryFormProps> = ({
             field: `subtest_${idx}`
           }));
 
-          console.log('Dynamic tabs created:', tabs);
-          setDynamicTabs(tabs);
-          setActiveTab(tabs[0]?.id || '');
+          // Sort tabs according to preferred order
+          const sortedTabs = sortTabs(tabs);
+          console.log('Dynamic tabs created (sorted):', sortedTabs);
+          setDynamicTabs(sortedTabs);
+          setActiveTab(sortedTabs[0]?.id || '');
 
           // Initialize form data for each tab
           const initialData: Record<string, string> = {};
-          tabs.forEach((tab) => {
+          sortedTabs.forEach((tab) => {
             initialData[tab.field] = '';
           });
           setFormData(initialData);
@@ -101,12 +141,14 @@ const HistoCytologyEntryForm: React.FC<HistoCytologyEntryFormProps> = ({
             field: `subtest_${idx}`
           }));
 
-          console.log('Dynamic tabs from sub_test_name:', tabs);
-          setDynamicTabs(tabs);
-          setActiveTab(tabs[0]?.id || '');
+          // Sort tabs according to preferred order
+          const sortedTabs = sortTabs(tabs);
+          console.log('Dynamic tabs from sub_test_name (sorted):', sortedTabs);
+          setDynamicTabs(sortedTabs);
+          setActiveTab(sortedTabs[0]?.id || '');
 
           const initialData: Record<string, string> = {};
-          tabs.forEach((tab) => {
+          sortedTabs.forEach((tab) => {
             initialData[tab.field] = '';
           });
           setFormData(initialData);

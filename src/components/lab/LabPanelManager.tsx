@@ -955,6 +955,7 @@ const LabPanelManager: React.FC = () => {
           display_order: subTestIndex,
           is_active: true,
           lab_id: labId,
+          test_type: isTextType ? 'Text' : 'Numeric', // Save the test type
           age_ranges: isTextType ? [] : ageRangesData, // Empty array for Text type
           normal_ranges: isTextType ? [] : normalRangesData, // Empty array for Text type
           nested_sub_tests: nestedSubTestsData
