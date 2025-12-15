@@ -1907,12 +1907,29 @@ const FinalBill = () => {
   const [otNotesData, setOtNotesData] = useState({
     date: new Date().toISOString().slice(0, 16), // Default to current date/time in datetime-local format
     procedure: '',
-    surgeon: '',
+    surgeons: [] as string[], // Changed to array for multiple surgeons
     anaesthetist: '',
     anaesthesia: '',
     implant: '',
     description: ''
   });
+
+  // Helper functions for multiple surgeons
+  const addSurgeon = (surgeonName: string) => {
+    if (surgeonName && !otNotesData.surgeons.includes(surgeonName)) {
+      setOtNotesData({
+        ...otNotesData,
+        surgeons: [...otNotesData.surgeons, surgeonName]
+      });
+    }
+  };
+
+  const removeSurgeon = (index: number) => {
+    setOtNotesData({
+      ...otNotesData,
+      surgeons: otNotesData.surgeons.filter((_, i) => i !== index)
+    });
+  };
   const [isGeneratingSurgeryNotes, setIsGeneratingSurgeryNotes] = useState(false);
   const [isSavingOtNotes, setIsSavingOtNotes] = useState(false);
 
@@ -1970,10 +1987,14 @@ const FinalBill = () => {
         }
 
         // Update the form with saved data
+        // Split surgeon string into array (handles comma-separated multiple surgeons)
+        const surgeonString = otNotesRecord.surgeon || '';
+        const surgeonsArray = surgeonString ? surgeonString.split(',').map((s: string) => s.trim()).filter(Boolean) : [];
+
         setOtNotesData({
           date: formattedDate,
           procedure: otNotesRecord.procedure_performed || '', // Use saved procedure data
-          surgeon: otNotesRecord.surgeon || '',
+          surgeons: surgeonsArray,
           anaesthetist: otNotesRecord.anaesthetist || '',
           anaesthesia: otNotesRecord.anaesthesia || '',
           implant: otNotesRecord.implant || '',
@@ -4395,7 +4416,7 @@ SURGERY DETAILS FROM PATIENT RECORDS:
 ${surgeryInfo}
 
 ADDITIONAL INFORMATION:
-Surgeon: ${otNotesData.surgeon || 'Dr. [Surgeon Name]'}
+Surgeon: ${otNotesData.surgeons.length > 0 ? otNotesData.surgeons.join(', ') : 'Dr. [Surgeon Name]'}
 Anaesthetist: ${otNotesData.anaesthetist || 'Dr. [Anaesthetist Name]'}
 Anaesthesia: ${otNotesData.anaesthesia || 'General Anaesthesia'}
 Implant: ${otNotesData.implant || 'N/A'}
@@ -4474,7 +4495,7 @@ Make it detailed and professional as if written by an experienced surgeon.`;
       const fallbackNotes = `OPERATIVE NOTE
 
 PROCEDURE: ${otNotesData.procedure}
-SURGEON: ${otNotesData.surgeon}
+SURGEON: ${otNotesData.surgeons.join(', ')}
 ANAESTHETIST: ${otNotesData.anaesthetist}
 ANAESTHESIA: ${otNotesData.anaesthesia || 'General Anaesthesia'}
 IMPLANT: ${otNotesData.implant || 'N/A'}
@@ -4523,11 +4544,11 @@ INSTRUCTIONS:
       return;
     }
 
-    if (!otNotesData.procedure || !otNotesData.surgeon || !otNotesData.date) {
+    if (!otNotesData.procedure || otNotesData.surgeons.length === 0 || !otNotesData.date) {
       toast.error("Please fill in required fields: Procedure, Surgeon, and Date");
       console.error("Missing required fields:", {
         procedure: otNotesData.procedure,
-        surgeon: otNotesData.surgeon,
+        surgeons: otNotesData.surgeons,
         date: otNotesData.date
       });
       return;
@@ -4611,7 +4632,7 @@ INSTRUCTIONS:
         // Main form fields
         date: otNotesData.date,
         procedure_performed: otNotesData.procedure,
-        surgeon: otNotesData.surgeon,
+        surgeon: otNotesData.surgeons.join(', '), // Join multiple surgeons with comma
         anaesthetist: otNotesData.anaesthetist,
         anaesthesia: otNotesData.anaesthesia,
         implant: otNotesData.implant,
@@ -15009,21 +15030,61 @@ Dr. Murali B K
                             />
                           </div>
 
-                          {/* Surgeon Field */}
+                          {/* Multiple Surgeons Field */}
                           <div className="mb-3">
                             <label className="block text-xs font-medium text-gray-600 mb-1">Surgeon</label>
-                            <select
-                              className="w-full text-xs border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                              value={otNotesData.surgeon}
-                              onChange={(e) => setOtNotesData({ ...otNotesData, surgeon: e.target.value })}
-                            >
-                              <option value="">Select Surgeon</option>
-                              {surgeons.map((surgeon) => (
-                                <option key={surgeon.id} value={surgeon.name}>
-                                  {surgeon.name}
-                                </option>
-                              ))}
-                            </select>
+
+                            {/* Display selected surgeons as badges */}
+                            {otNotesData.surgeons.length > 0 && (
+                              <div className="flex flex-wrap gap-1 mb-2">
+                                {otNotesData.surgeons.map((surgeon, idx) => (
+                                  <span key={idx} className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded flex items-center gap-1">
+                                    {surgeon}
+                                    <button
+                                      type="button"
+                                      onClick={() => removeSurgeon(idx)}
+                                      className="text-red-500 hover:text-red-700 font-bold"
+                                    >
+                                      ×
+                                    </button>
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+
+                            {/* Add surgeon dropdown */}
+                            <div className="flex gap-2">
+                              <select
+                                className="flex-1 text-xs border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                value=""
+                                onChange={(e) => {
+                                  if (e.target.value) {
+                                    addSurgeon(e.target.value);
+                                  }
+                                }}
+                              >
+                                <option value="">Select Surgeon</option>
+                                {surgeons
+                                  .filter(s => !otNotesData.surgeons.includes(s.name))
+                                  .map((surgeon) => (
+                                    <option key={surgeon.id} value={surgeon.name}>
+                                      {surgeon.name}
+                                    </option>
+                                  ))}
+                              </select>
+                              <button
+                                type="button"
+                                className="bg-green-500 text-white px-3 py-1 rounded text-xs hover:bg-green-600"
+                                onClick={() => {
+                                  const select = document.querySelector('select[value=""]') as HTMLSelectElement;
+                                  if (select && select.value) {
+                                    addSurgeon(select.value);
+                                  }
+                                }}
+                              >
+                                + Add
+                              </button>
+                            </div>
                           </div>
 
                           {/* Anaesthetist Field */}

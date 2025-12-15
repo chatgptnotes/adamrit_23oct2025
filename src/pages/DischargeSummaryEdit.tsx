@@ -3075,6 +3075,80 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
               </div>
             </CardContent>
           </Card>
+
+          {/* OT Notes / Operative Details Section */}
+          {otNote && (
+            <Card className="mt-4">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-lg text-green-700">Operative Details</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {/* Surgery Name */}
+                {otNote.surgery_name && (
+                  <div>
+                    <label className="text-sm font-medium text-gray-600">Surgery</label>
+                    <div className="font-medium">{otNote.surgery_name}</div>
+                  </div>
+                )}
+
+                {/* Multiple Surgeons */}
+                {otNote.surgeon && (
+                  <div>
+                    <label className="text-sm font-medium text-gray-600">Surgeon(s)</label>
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {otNote.surgeon.split(',').map((s: string, i: number) => (
+                        <span key={i} className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded">
+                          {s.trim()}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Anaesthetist */}
+                {otNote.anaesthetist && (
+                  <div>
+                    <label className="text-sm font-medium text-gray-600">Anaesthetist</label>
+                    <div>{otNote.anaesthetist}</div>
+                  </div>
+                )}
+
+                {/* Anaesthesia Type */}
+                {otNote.anaesthesia && (
+                  <div>
+                    <label className="text-sm font-medium text-gray-600">Anaesthesia</label>
+                    <div>{otNote.anaesthesia}</div>
+                  </div>
+                )}
+
+                {/* Implant */}
+                {otNote.implant && (
+                  <div>
+                    <label className="text-sm font-medium text-gray-600">Implant</label>
+                    <div>{otNote.implant}</div>
+                  </div>
+                )}
+
+                {/* Procedure Performed */}
+                {otNote.procedure_performed && (
+                  <div>
+                    <label className="text-sm font-medium text-gray-600">Procedure</label>
+                    <div className="text-sm">{otNote.procedure_performed}</div>
+                  </div>
+                )}
+
+                {/* Description */}
+                {otNote.description && (
+                  <div>
+                    <label className="text-sm font-medium text-gray-600">Operative Notes</label>
+                    <div className="text-sm bg-gray-50 p-2 rounded mt-1 whitespace-pre-wrap max-h-40 overflow-y-auto">
+                      {otNote.description}
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
         </div>
 
         {/* Main Content */}
