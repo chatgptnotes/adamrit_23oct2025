@@ -50,6 +50,26 @@ const DeathCertificate = () => {
     enabled: !!patientData?.id,
   });
 
+  // Fetch final payment status to check if payment is completed and discharge reason is death
+  const { data: finalPayment } = useQuery({
+    queryKey: ['final-payment', visitId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('final_payments')
+        .select('reason_of_discharge')
+        .eq('visit_id', visitId)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!visitId,
+  });
+
+  // Validation: Check if final payment is done with death as discharge reason
+  const isPaymentCompleted = !!finalPayment;
+  const isDeathDischarge = finalPayment?.reason_of_discharge?.toLowerCase() === 'death';
+  const canSubmitOrPrint = isPaymentCompleted && isDeathDischarge;
+
   // Pre-populate form with existing data
   useEffect(() => {
     if (existingCertificate) {
@@ -417,12 +437,31 @@ const DeathCertificate = () => {
         </div>
       </div>
 
+      {/* Validation Message */}
+      {!canSubmitOrPrint && (
+        <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-md">
+          <p className="text-sm text-red-600">
+            {!isPaymentCompleted
+              ? "⚠️ Final payment must be completed before generating death certificate."
+              : "⚠️ Death certificate can only be generated when discharge reason is 'Death'."}
+          </p>
+        </div>
+      )}
+
       {/* Buttons */}
       <div className="flex justify-end gap-2 mt-6">
-        <Button variant="outline" onClick={handlePrint}>
+        <Button
+          variant="outline"
+          onClick={handlePrint}
+          disabled={!canSubmitOrPrint}
+        >
           Print
         </Button>
-        <Button onClick={handleSubmit} className="bg-green-600 hover:bg-green-700">
+        <Button
+          onClick={handleSubmit}
+          className="bg-green-600 hover:bg-green-700"
+          disabled={!canSubmitOrPrint}
+        >
           Submit
         </Button>
         <Button variant="secondary" onClick={() => navigate('/todays-ipd')}>
