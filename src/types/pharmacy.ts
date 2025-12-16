@@ -844,10 +844,12 @@ export interface AvailableBatch {
 export interface CreateGRNPayload {
   purchase_order_id: string;
   grn_date: string;
+  grn_number?: string;  // Reuse existing GRN number when updating draft
   invoice_number?: string;
   invoice_date?: string;
   invoice_amount?: number;
   discount?: number;
+  total_tax?: number;
   notes?: string;
   hospital_name?: string;
   items: CreateGRNItemPayload[];

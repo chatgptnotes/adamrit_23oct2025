@@ -2329,6 +2329,8 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
         let patientDetailsData = [];
         let inDischargeMedications = false;
         let dischargeMedicationsData = [];
+        // Track whether we're in a section to skip (duplicate patient/surgery info from AI)
+        const skipRef = { skip: false };
 
         lines.forEach((line, index) => {
           // Check if we're entering patient details section
@@ -2442,7 +2444,7 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
               tableHeaders = [];
               if (line.trim() !== '') {
                 // Process this line normally
-                processNormalLine(line, htmlContent);
+                processNormalLine(line, htmlContent, skipRef);
               }
             } else if (!line.includes('------')) {
               // Add table row (skip separator lines)
@@ -2475,7 +2477,7 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
               inDischargeMedications = false;
               // Process this line normally if it's not empty
               if (line.trim() !== '') {
-                processNormalLine(line, htmlContent);
+                processNormalLine(line, htmlContent, skipRef);
               }
               return;
             }
@@ -2496,7 +2498,7 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
           }
 
           // Process normal lines
-          processNormalLine(line, htmlContent);
+          processNormalLine(line, htmlContent, skipRef);
         });
 
         // Close any remaining table
@@ -2569,22 +2571,61 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
           return tableHTML;
         }
 
+        // Helper function to convert markdown to HTML
+        function convertMarkdownToHTML(text) {
+          // Convert **bold** to <strong>bold</strong>
+          text = text.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+          // Convert *italic* to <em>italic</em> (but not if it's a bullet point)
+          text = text.replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, '<em>$1</em>');
+          // Remove any remaining stray ** markers
+          text = text.replace(/\*\*/g, '');
+          return text;
+        }
+
         // Helper function to process normal lines
-        function processNormalLine(line, htmlContent) {
+        function processNormalLine(line, htmlContent, skipRef) {
+          // Detect start of duplicate sections to skip (AI-generated patient/surgery info)
+          if (line.includes('**Patient') || line.includes('**Surgery Details') ||
+              line.includes('**Additional') || line.includes('Information:**') ||
+              line.includes('Patient Information') && line.includes('**')) {
+            skipRef.skip = true;
+            return;
+          }
+
+          // Detect end of skip section (next major heading or Description)
+          if (skipRef.skip) {
+            if (line.startsWith('Description:') || line.match(/^[A-Z][A-Z\s]+:/) && !line.includes('Name:') && !line.includes('Age:') && !line.includes('Gender:')) {
+              skipRef.skip = false;
+            } else {
+              return; // Skip this line
+            }
+          }
+
+          // Skip duplicate patient info lines (Name, Age, Gender, etc.)
+          if (line.includes('• Name:') || line.includes('• Age:') || line.includes('• Gender:') ||
+              line.includes('• Surgery Name:') || line.includes('• Surgery Code:') ||
+              line.includes('• NABH/NABL Rate:') || line.includes('• Sanction Status:') ||
+              line.includes('• Surgeon:') || line.includes('• Anesthetist:')) {
+            return;
+          }
+
           if (line.trim() === '') {
             htmlContent.push('<br>');
           } else if (line.startsWith('- ')) {
-            // Bullet point
-            htmlContent.push(`<li style="margin: 5px 0 5px 20px;">${line.substring(2)}</li>`);
+            // Bullet point with dash
+            htmlContent.push(`<li style="margin: 5px 0 5px 20px;">${convertMarkdownToHTML(line.substring(2))}</li>`);
+          } else if (line.startsWith('• ') || line.startsWith('* ')) {
+            // Bullet point with • or *
+            htmlContent.push(`<li style="margin: 5px 0 5px 20px;">${convertMarkdownToHTML(line.substring(2))}</li>`);
           } else if (line.match(/^(PRESENT CONDITION:|INVESTIGATIONS:|MEDICATIONS ON DISCHARGE:|RADIOLOGY INVESTIGATIONS:|LAB INVESTIGATIONS:|Present Condition|Investigations:|Medications on Discharge:|Case Summary:)/)) {
             // Section headings with or without colons
-            htmlContent.push(`<h3 style="font-size: 11pt; font-weight: bold; margin: 15px 0 8px 0;">${line}</h3>`);
+            htmlContent.push(`<h3 style="font-size: 11pt; font-weight: bold; margin: 15px 0 8px 0;">${convertMarkdownToHTML(line)}</h3>`);
           } else if (line.includes('URGENT CARE') && line.includes('EMERGENCY CARE')) {
             // URGENT CARE text - make it bold with 11pt font
-            htmlContent.push(`<p style="font-size: 11pt; font-weight: bold; margin: 8px 0;">${line}</p>`);
+            htmlContent.push(`<p style="font-size: 11pt; font-weight: bold; margin: 8px 0;">${convertMarkdownToHTML(line)}</p>`);
           } else if (line.includes('PLEASE CONTACT:') && (line.includes('7030974619') || line.includes('9373111709'))) {
             // Contact phone numbers - make them bold with 11pt font
-            htmlContent.push(`<p style="font-size: 11pt; font-weight: bold; margin: 8px 0;">${line}</p>`);
+            htmlContent.push(`<p style="font-size: 11pt; font-weight: bold; margin: 8px 0;">${convertMarkdownToHTML(line)}</p>`);
           } else if (line.includes(':') && line.indexOf(':') < 30) {
             // Key-value pair
             const colonIndex = line.indexOf(':');
@@ -2592,13 +2633,13 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
             const value = line.substring(colonIndex + 1).trim();
 
             if (key && value) {
-              htmlContent.push(`<div style="margin: 8px 0;"><strong>${key}:</strong> ${value}</div>`);
+              htmlContent.push(`<div style="margin: 8px 0;"><strong>${convertMarkdownToHTML(key)}:</strong> ${convertMarkdownToHTML(value)}</div>`);
             } else {
-              htmlContent.push(`<p style="margin: 8px 0;">${line}</p>`);
+              htmlContent.push(`<p style="margin: 8px 0;">${convertMarkdownToHTML(line)}</p>`);
             }
           } else {
             // Regular paragraph
-            htmlContent.push(`<p style="margin: 8px 0;">${line}</p>`);
+            htmlContent.push(`<p style="margin: 8px 0;">${convertMarkdownToHTML(line)}</p>`);
           }
         }
 
@@ -3077,26 +3118,26 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
           </Card>
 
           {/* OT Notes / Operative Details Section */}
-          {otNote && (
+          {editablePatientData?.otData && (
             <Card className="mt-4">
               <CardHeader className="pb-2">
                 <CardTitle className="text-lg text-green-700">Operative Details</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
                 {/* Surgery Name */}
-                {otNote.surgery_name && (
+                {editablePatientData.otData.surgeryName && (
                   <div>
                     <label className="text-sm font-medium text-gray-600">Surgery</label>
-                    <div className="font-medium">{otNote.surgery_name}</div>
+                    <div className="font-medium">{editablePatientData.otData.surgeryName}</div>
                   </div>
                 )}
 
                 {/* Multiple Surgeons */}
-                {otNote.surgeon && (
+                {editablePatientData.otData.surgeon && (
                   <div>
                     <label className="text-sm font-medium text-gray-600">Surgeon(s)</label>
                     <div className="flex flex-wrap gap-1 mt-1">
-                      {otNote.surgeon.split(',').map((s: string, i: number) => (
+                      {editablePatientData.otData.surgeon.split(',').map((s: string, i: number) => (
                         <span key={i} className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded">
                           {s.trim()}
                         </span>
@@ -3106,43 +3147,43 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
                 )}
 
                 {/* Anaesthetist */}
-                {otNote.anaesthetist && (
+                {editablePatientData.otData.anaesthetist && (
                   <div>
                     <label className="text-sm font-medium text-gray-600">Anaesthetist</label>
-                    <div>{otNote.anaesthetist}</div>
+                    <div>{editablePatientData.otData.anaesthetist}</div>
                   </div>
                 )}
 
                 {/* Anaesthesia Type */}
-                {otNote.anaesthesia && (
+                {editablePatientData.otData.anaesthesia && (
                   <div>
                     <label className="text-sm font-medium text-gray-600">Anaesthesia</label>
-                    <div>{otNote.anaesthesia}</div>
+                    <div>{editablePatientData.otData.anaesthesia}</div>
                   </div>
                 )}
 
                 {/* Implant */}
-                {otNote.implant && (
+                {editablePatientData.otData.implant && (
                   <div>
                     <label className="text-sm font-medium text-gray-600">Implant</label>
-                    <div>{otNote.implant}</div>
+                    <div>{editablePatientData.otData.implant}</div>
                   </div>
                 )}
 
                 {/* Procedure Performed */}
-                {otNote.procedure_performed && (
+                {editablePatientData.otData.procedurePerformed && (
                   <div>
                     <label className="text-sm font-medium text-gray-600">Procedure</label>
-                    <div className="text-sm">{otNote.procedure_performed}</div>
+                    <div className="text-sm">{editablePatientData.otData.procedurePerformed}</div>
                   </div>
                 )}
 
                 {/* Description */}
-                {otNote.description && (
+                {editablePatientData.otData.description && (
                   <div>
                     <label className="text-sm font-medium text-gray-600">Operative Notes</label>
                     <div className="text-sm bg-gray-50 p-2 rounded mt-1 whitespace-pre-wrap max-h-40 overflow-y-auto">
-                      {otNote.description}
+                      {editablePatientData.otData.description}
                     </div>
                   </div>
                 )}
