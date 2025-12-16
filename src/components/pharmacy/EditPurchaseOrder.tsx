@@ -59,6 +59,7 @@ const EditPurchaseOrder: React.FC<EditPurchaseOrderProps> = ({ purchaseOrderId, 
   const [partyInvoiceNumber, setPartyInvoiceNumber] = useState('');
   const [goodsReceivedDate, setGoodsReceivedDate] = useState('');
   const [discount, setDiscount] = useState<number>(0);
+  const [manualTotalTax, setManualTotalTax] = useState<number | null>(null);
 
   useEffect(() => {
     fetchPurchaseOrder();
@@ -164,6 +165,11 @@ const EditPurchaseOrder: React.FC<EditPurchaseOrderProps> = ({ purchaseOrderId, 
       [field]: value,
     };
 
+    // Clear manual total tax when user edits item-level tax
+    if (field === 'tax_percentage') {
+      setManualTotalTax(null);
+    }
+
     // Recalculate amounts if quantity or price changes
     if (['order_quantity', 'received_quantity', 'purchase_price', 'tax_percentage', 'mrp', 'sale_price'].includes(field)) {
       const item = updatedItems[index];
@@ -171,19 +177,17 @@ const EditPurchaseOrder: React.FC<EditPurchaseOrderProps> = ({ purchaseOrderId, 
       const price = item.purchase_price || 0;
       const taxPercent = item.tax_percentage || 0;
 
-      // Calculate GST amounts (assuming GST is split equally between SGST and CGST)
-      const sgst = taxPercent / 2;
-      const cgst = taxPercent / 2;
-      const gstAmount = (qty * price * taxPercent) / 100;
+      // Calculate tax amount
+      const taxAmount = (qty * price * taxPercent) / 100;
 
       updatedItems[index] = {
         ...updatedItems[index],
         gst: taxPercent,
-        sgst: sgst,
-        cgst: cgst,
-        gst_amount: gstAmount,
-        tax_amount: gstAmount,
-        amount: qty * price + gstAmount,
+        sgst: taxPercent / 2,
+        cgst: taxPercent / 2,
+        gst_amount: taxAmount,
+        tax_amount: taxAmount,
+        amount: qty * price + taxAmount,
       };
     }
 
@@ -236,18 +240,10 @@ const EditPurchaseOrder: React.FC<EditPurchaseOrderProps> = ({ purchaseOrderId, 
 
     try {
       setIsSaving(true);
+      const { supabaseClient } = await import('@/utils/supabase-client');
 
-      // If an existing DRAFT exists, delete it first to avoid duplicates
-      if (grnId && grnStatus === 'DRAFT') {
-        console.log('Deleting existing draft to update with new data...');
-        const { supabaseClient } = await import('@/utils/supabase-client');
-
-        // Delete GRN header - items will be CASCADE deleted automatically
-        await supabaseClient.from('goods_received_notes').delete().eq('id', grnId);
-      }
-
-      // Prepare GRN items
-      const grnItems = items.map(item => ({
+      // Prepare GRN items data
+      const grnItemsData = items.map(item => ({
         purchase_order_item_id: item.id,
         medicine_id: item.medicine_id || null,
         product_name: item.product_name,
@@ -255,9 +251,10 @@ const EditPurchaseOrder: React.FC<EditPurchaseOrderProps> = ({ purchaseOrderId, 
         pack: item.pack,
         batch_number: item.batch_no,
         expiry_date: item.expiry_date || '',
-        manufacturing_date: undefined,
+        manufacturing_date: null,
         ordered_quantity: item.order_quantity,
         received_quantity: item.received_quantity || item.order_quantity,
+        accepted_quantity: item.received_quantity || item.order_quantity,
         rejected_quantity: 0,
         free_quantity: 0,
         purchase_price: item.purchase_price,
@@ -266,39 +263,163 @@ const EditPurchaseOrder: React.FC<EditPurchaseOrderProps> = ({ purchaseOrderId, 
         gst: item.gst || item.tax_percentage || 0,
         sgst: item.sgst || (item.tax_percentage || 0) / 2,
         cgst: item.cgst || (item.tax_percentage || 0) / 2,
+        tax_amount: item.tax_amount || 0,
+        amount: item.amount || (item.purchase_price * (item.received_quantity || item.order_quantity)),
         rack_number: '',
         shelf_location: '',
       }));
 
-      // Create GRN as DRAFT (does NOT add to inventory)
-      const grnPayload = {
-        purchase_order_id: purchaseOrderId,
-        grn_date: new Date().toISOString().split('T')[0],
-        invoice_number: partyInvoiceNumber || undefined,
-        invoice_date: undefined,
-        invoice_amount: undefined,
-        discount: discount || undefined,
-        notes: undefined,
-        hospital_name: 'hope HMIS',
-        items: grnItems,
-      };
+      // Calculate totals for GRN header
+      const totalTax = manualTotalTax !== null ? manualTotalTax : totals.totalTax;
+      const totalAmount = totals.subtotal + totalTax;
 
-      const result = await GRNService.createGRNFromPO(grnPayload);
+      // SAFETY CHECK: Query DB directly to find existing GRN for this PO
+      // This ensures we update even if state was not loaded properly
+      let existingGrnId = grnId;
+      let existingGrnNumber = grnNumber;
+      let existingGrnStatus = grnStatus;
 
-      // Save GRN details to state
-      setGrnId(result.grn.id);
-      setGrnStatus('DRAFT');
-      setGrnNumber(result.grn.grn_number);
+      if (!existingGrnId) {
+        console.log('grnId not in state, checking database for PO:', purchaseOrderId);
 
-      toast({
-        title: 'Draft Saved',
-        description: `GRN ${result.grn.grn_number} saved as draft. Click Submit to add inventory.`,
-      });
-    } catch (error) {
+        // First, try to find by purchase_order_id
+        let { data: existingGrn, error: queryError } = await supabaseClient
+          .from('goods_received_notes')
+          .select('id, grn_number, status, purchase_order_id')
+          .eq('purchase_order_id', purchaseOrderId)
+          .maybeSingle();
+
+        if (queryError) {
+          console.error('Error querying for existing GRN:', queryError);
+        }
+
+        console.log('Query result for PO', purchaseOrderId, ':', existingGrn);
+
+        // If not found by PO ID, look for orphaned DRAFT GRNs (with null purchase_order_id)
+        if (!existingGrn) {
+          console.log('No GRN found by PO ID. Checking for orphaned DRAFT GRNs...');
+          const { data: draftGrns } = await supabaseClient
+            .from('goods_received_notes')
+            .select('id, grn_number, status, purchase_order_id')
+            .eq('status', 'DRAFT')
+            .order('created_at', { ascending: false })
+            .limit(5);
+
+          console.log('Draft GRNs found:', draftGrns);
+
+          // Find orphaned GRN (null purchase_order_id)
+          if (draftGrns && draftGrns.length > 0) {
+            const orphanedGrn = draftGrns.find(g => !g.purchase_order_id);
+            if (orphanedGrn) {
+              console.log('Found orphaned DRAFT GRN:', orphanedGrn.grn_number, '- linking to this PO');
+              // Link it to this PO
+              await supabaseClient
+                .from('goods_received_notes')
+                .update({ purchase_order_id: purchaseOrderId })
+                .eq('id', orphanedGrn.id);
+              existingGrn = orphanedGrn;
+            }
+          }
+        }
+
+        if (existingGrn) {
+          console.log('Using existing GRN:', existingGrn);
+          existingGrnId = existingGrn.id;
+          existingGrnNumber = existingGrn.grn_number;
+          existingGrnStatus = existingGrn.status as 'DRAFT' | 'POSTED';
+
+          // Update state so next time we don't need to query
+          setGrnId(existingGrn.id);
+          setGrnNumber(existingGrn.grn_number);
+          setGrnStatus(existingGrn.status as 'DRAFT' | 'POSTED');
+        }
+      }
+
+      if (existingGrnId && existingGrnStatus === 'DRAFT') {
+        // UPDATE existing GRN
+        console.log('Updating existing draft GRN:', existingGrnId);
+
+        // Update GRN header
+        const { error: updateError } = await supabaseClient
+          .from('goods_received_notes')
+          .update({
+            invoice_number: partyInvoiceNumber || null,
+            discount: discount || 0,
+            total_amount: totalAmount,
+          })
+          .eq('id', existingGrnId);
+
+        if (updateError) {
+          console.error('Error updating GRN:', updateError);
+          throw new Error('Failed to update GRN header');
+        }
+
+        // Delete old GRN items
+        const { error: deleteItemsError } = await supabaseClient
+          .from('grn_items')
+          .delete()
+          .eq('grn_id', existingGrnId);
+
+        if (deleteItemsError) {
+          console.error('Error deleting old GRN items:', deleteItemsError);
+        }
+
+        // Insert updated GRN items
+        const itemsToInsert = grnItemsData.map(item => ({
+          ...item,
+          grn_id: existingGrnId,
+        }));
+
+        const { error: insertItemsError } = await supabaseClient
+          .from('grn_items')
+          .insert(itemsToInsert);
+
+        if (insertItemsError) {
+          console.error('Error inserting GRN items:', insertItemsError);
+          throw new Error('Failed to save GRN items');
+        }
+
+        toast({
+          title: 'Draft Updated',
+          description: `GRN ${existingGrnNumber} updated successfully. Click Submit to add inventory.`,
+        });
+      } else if (existingGrnId && existingGrnStatus === 'POSTED') {
+        // GRN already posted - cannot modify
+        throw new Error('This GRN has already been posted to inventory and cannot be modified');
+      } else {
+        // CREATE new GRN (first time - no GRN exists for this PO)
+        console.log('Creating new GRN for PO:', purchaseOrderId);
+        const grnPayload = {
+          purchase_order_id: purchaseOrderId,
+          grn_date: new Date().toISOString().split('T')[0],
+          invoice_number: partyInvoiceNumber || undefined,
+          invoice_date: undefined,
+          invoice_amount: undefined,
+          discount: discount || undefined,
+          total_tax: manualTotalTax !== null ? manualTotalTax : undefined,
+          notes: undefined,
+          hospital_name: 'hope HMIS',
+          items: grnItemsData,
+        };
+
+        const result = await GRNService.createGRNFromPO(grnPayload);
+
+        // Save GRN details to state
+        setGrnId(result.grn.id);
+        setGrnStatus('DRAFT');
+        setGrnNumber(result.grn.grn_number);
+
+        toast({
+          title: 'Draft Saved',
+          description: `GRN ${result.grn.grn_number} saved as draft. Click Submit to add inventory.`,
+        });
+      }
+    } catch (error: any) {
       console.error('Error saving GRN draft:', error);
+      const errorMessage = error?.message || error?.details || JSON.stringify(error);
       toast({
         title: 'Error',
-        description: 'Failed to save GRN draft',
+        description: `Failed to save GRN draft: ${errorMessage}`,
         variant: 'destructive',
       });
     } finally {
@@ -362,16 +483,21 @@ const EditPurchaseOrder: React.FC<EditPurchaseOrderProps> = ({ purchaseOrderId, 
   // Calculate totals
   const calculateTotals = () => {
     const subtotal = items.reduce((sum, item) => sum + (item.purchase_price * (item.received_quantity || item.order_quantity)), 0);
-    const totalSGST = items.reduce((sum, item) => sum + ((item.sgst || 0) * (item.received_quantity || item.order_quantity) * item.purchase_price) / 100, 0);
-    const totalCGST = items.reduce((sum, item) => sum + ((item.cgst || 0) * (item.received_quantity || item.order_quantity) * item.purchase_price) / 100, 0);
-    const totalAmount = subtotal + totalSGST + totalCGST;
+
+    // Use manual total tax if set, otherwise calculate from individual items
+    const calculatedTax = items.reduce((sum, item) => {
+      const taxPercent = item.tax_percentage || item.gst || 0;
+      return sum + ((taxPercent * (item.received_quantity || item.order_quantity) * item.purchase_price) / 100);
+    }, 0);
+    const totalTax = manualTotalTax !== null ? manualTotalTax : calculatedTax;
+
+    const totalAmount = subtotal + totalTax;
     const netAmount = totalAmount - discount;
 
     return {
       subtotal,
       discount,
-      totalSGST,
-      totalCGST,
+      totalTax,
       totalAmount,
       netAmount,
     };
@@ -545,10 +671,8 @@ const EditPurchaseOrder: React.FC<EditPurchaseOrderProps> = ({ purchaseOrderId, 
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">
                       Sale Price<span className="text-red-500">*</span>
                     </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">GST</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">SGST</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">CGST</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">GST Amt.</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Tax (%)</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Tax Amt.</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Qty. Ord</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Qty. Rcvd</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Free</th>
@@ -619,11 +743,19 @@ const EditPurchaseOrder: React.FC<EditPurchaseOrderProps> = ({ purchaseOrderId, 
                           placeholder="0.00"
                         />
                       </td>
-                      <td className="px-4 py-2 text-right text-xs text-gray-600">{item.gst || item.tax_percentage}</td>
-                      <td className="px-4 py-2 text-right text-xs text-gray-600">{item.sgst || (item.tax_percentage / 2)}</td>
-                      <td className="px-4 py-2 text-right text-xs text-gray-600">{item.cgst || (item.tax_percentage / 2)}</td>
+                      <td className="px-4 py-2">
+                        <Input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          className="w-16 h-8 px-2 text-xs text-right border-gray-300"
+                          value={item.tax_percentage || item.gst || 0}
+                          onChange={(e) => handleItemChange(index, 'tax_percentage', parseFloat(e.target.value) || 0)}
+                          placeholder="0"
+                        />
+                      </td>
                       <td className="px-4 py-2 text-right text-xs text-gray-700 font-medium">
-                        {item.gst_amount?.toFixed(2) || item.tax_amount?.toFixed(2)}
+                        {(item.tax_amount || item.gst_amount || 0).toFixed(2)}
                       </td>
                       <td className="px-4 py-2 text-center text-xs text-gray-700">{item.order_quantity}</td>
                       <td className="px-4 py-2">
@@ -669,14 +801,16 @@ const EditPurchaseOrder: React.FC<EditPurchaseOrderProps> = ({ purchaseOrderId, 
                   />
                 </div>
 
-                <div className="flex justify-between px-4 py-3 bg-gray-50">
-                  <span className="text-sm font-medium text-gray-700">Total SGST</span>
-                  <span className="text-sm font-semibold text-gray-900">₹{totals.totalSGST.toFixed(2)}</span>
-                </div>
-
                 <div className="flex justify-between px-4 py-3 bg-white">
-                  <span className="text-sm font-medium text-gray-700">Total CGST</span>
-                  <span className="text-sm font-semibold text-gray-900">₹{totals.totalCGST.toFixed(2)}</span>
+                  <span className="text-sm font-medium text-gray-700">Total Tax</span>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    className="w-24 h-8 px-2 text-right text-sm border-gray-300"
+                    value={manualTotalTax !== null ? manualTotalTax : totals.totalTax.toFixed(2)}
+                    onChange={(e) => setManualTotalTax(parseFloat(e.target.value) || 0)}
+                  />
                 </div>
 
                 <div className="flex justify-between px-4 py-3 bg-gray-50">
