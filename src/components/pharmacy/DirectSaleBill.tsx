@@ -23,19 +23,33 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 
+interface BatchInfo {
+  id: string;
+  batch_number: string;
+  expiry_date: string;
+  current_stock: number;
+  mrp: number;
+  selling_price: number;
+  medicine_id: string;
+}
+
 interface MedicineRow {
   id: string;
   itemCode: string;
   itemName: string;
+  medicineId: string;  // UUID of selected medicine
   quantity: string;
   quantityUnit: string;
   pack: string;
   batchNo: string;
+  batchInventoryId: string;  // UUID of selected batch
+  availableBatches: BatchInfo[];  // Available batches for this medicine
   stock: string;
   expiryDate: string;
   mrp: string;
   price: string;
   amount: string;
+  quantityError: string;  // Validation error message
 }
 
 interface CompletedBill {
@@ -52,9 +66,6 @@ const DirectSaleBill: React.FC = () => {
   const { hospitalConfig } = useAuth();
   const [forHopeEmployee, setForHopeEmployee] = useState(false);
   const [patientName, setPatientName] = useState('');
-  const [patientSearchTerm, setPatientSearchTerm] = useState('');
-  const [showPatientResults, setShowPatientResults] = useState(false);
-  const [patientSuggestions, setPatientSuggestions] = useState<Array<{name: string, dob?: string, age?: number, gender?: string}>>([]);
   const [doctorSearchTerm, setDoctorSearchTerm] = useState('');
   const [showDoctorResults, setShowDoctorResults] = useState(false);
   const [doctorSuggestions, setDoctorSuggestions] = useState<Array<{name: string}>>([]);
@@ -67,7 +78,19 @@ const DirectSaleBill: React.FC = () => {
   const [totalAmount, setTotalAmount] = useState('Rs');
   const [netAmount, setNetAmount] = useState('Rs');
   const [completedBill, setCompletedBill] = useState<CompletedBill | null>(null);
-  const [medicationSuggestions, setMedicationSuggestions] = useState<{[key: string]: Array<{id: string, name: string, generic_name?: string, category?: string, dosage?: string}>}>({});
+  const [medicationSuggestions, setMedicationSuggestions] = useState<{[key: string]: Array<{
+    id: string;
+    name: string;
+    generic_name?: string;
+    category?: string;
+    // Batch info
+    batch_id?: string;
+    batch_number?: string;
+    current_stock?: number;
+    expiry_date?: string;
+    mrp?: number;
+    selling_price?: number;
+  }>}>({});
   const [showMedicationResults, setShowMedicationResults] = useState<{[key: string]: boolean}>({});
   const [dropdownPosition, setDropdownPosition] = useState<{[key: string]: {top: number, left: number, width: number}}>({});
   const inputRefs = useRef<{[key: string]: HTMLInputElement | null}>({});
@@ -77,15 +100,19 @@ const DirectSaleBill: React.FC = () => {
       id: '1',
       itemCode: '',
       itemName: '',
+      medicineId: '',
       quantity: '',
       quantityUnit: 'MSU',
       pack: '',
       batchNo: '',
+      batchInventoryId: '',
+      availableBatches: [],
       stock: '',
       expiryDate: '',
       mrp: '',
       price: '',
-      amount: ''
+      amount: '',
+      quantityError: ''
     }
   ]);
 
@@ -94,15 +121,19 @@ const DirectSaleBill: React.FC = () => {
       id: Date.now().toString(),
       itemCode: '',
       itemName: '',
+      medicineId: '',
       quantity: '',
       quantityUnit: 'MSU',
       pack: '',
       batchNo: '',
+      batchInventoryId: '',
+      availableBatches: [],
       stock: '',
       expiryDate: '',
       mrp: '',
       price: '',
-      amount: ''
+      amount: '',
+      quantityError: ''
     };
     setMedicines([...medicines, newRow]);
   };
@@ -131,51 +162,7 @@ const DirectSaleBill: React.FC = () => {
     }));
   };
 
-  // Fetch patient names from visits table
-  const searchPatients = async (searchTerm: string) => {
-    if (searchTerm.length < 2) {
-      setPatientSuggestions([]);
-      return;
-    }
-
-    try {
-      const { data, error } = await supabase
-        .from('visits')
-        .select(`
-          patient_id,
-          patients!inner(
-            name,
-            date_of_birth,
-            age,
-            gender
-          )
-        `)
-        .ilike('patients.name', `%${searchTerm}%`)
-        .limit(10);
-
-      if (error) throw error;
-
-      // Remove duplicates based on patient name
-      const uniquePatients = data?.reduce((acc: Array<{name: string, dob?: string, age?: number, gender?: string}>, curr: any) => {
-        const patientName = curr.patients?.name;
-        if (patientName && !acc.some(p => p.name === patientName)) {
-          acc.push({
-            name: patientName,
-            dob: curr.patients?.date_of_birth,
-            age: curr.patients?.age,
-            gender: curr.patients?.gender
-          });
-        }
-        return acc;
-      }, []) || [];
-
-      setPatientSuggestions(uniquePatients);
-    } catch (error: any) {
-      console.error('Error searching patients:', error);
-    }
-  };
-
-  // Fetch medication names from medication table
+  // Fetch medication names from medicine_master with batch inventory info
   const searchMedications = async (searchTerm: string, medicineId: string) => {
     if (searchTerm.length < 2) {
       setMedicationSuggestions(prev => ({ ...prev, [medicineId]: [] }));
@@ -184,34 +171,90 @@ const DirectSaleBill: React.FC = () => {
 
     try {
       console.log('🔍 Searching medications for:', searchTerm, 'medicineId:', medicineId);
-      const { data, error } = await supabase
-        .from('medication')
-        .select('id, name, generic_name, category, dosage')
-        .ilike('name', `%${searchTerm}%`)
+
+      // First get medicines matching the search term
+      const { data: medicines, error: medError } = await supabase
+        .from('medicine_master')
+        .select('id, medicine_name, generic_name, type')
+        .eq('is_deleted', false)
+        .ilike('medicine_name', `%${searchTerm}%`)
         .limit(10);
 
-      if (error) {
-        console.error('❌ Error searching medications:', error);
-        throw error;
+      if (medError) {
+        console.error('❌ Error searching medications:', medError);
+        throw medError;
       }
 
-      console.log('✅ Medication search results:', data);
-      console.log('📊 Number of results:', data?.length);
-      setMedicationSuggestions(prev => {
-        const updated = { ...prev, [medicineId]: data || [] };
-        console.log('💾 Updated medication suggestions:', updated);
-        return updated;
+      if (!medicines || medicines.length === 0) {
+        setMedicationSuggestions(prev => ({ ...prev, [medicineId]: [] }));
+        return;
+      }
+
+      // Get batch inventory for these medicines
+      const medicineIds = medicines.map(m => m.id);
+      const { data: batches, error: batchError } = await supabase
+        .from('medicine_batch_inventory')
+        .select('id, medicine_id, batch_number, expiry_date, current_stock, mrp, selling_price')
+        .in('medicine_id', medicineIds)
+        .eq('is_active', true)
+        .eq('is_expired', false)
+        .gt('current_stock', 0)
+        .order('expiry_date', { ascending: true });
+
+      if (batchError) {
+        console.error('❌ Error fetching batches:', batchError);
+      }
+
+      // Create dropdown items - one per batch (so user can see stock for each batch)
+      const mappedData: Array<{
+        id: string;
+        name: string;
+        generic_name?: string;
+        category?: string;
+        batch_id?: string;
+        batch_number?: string;
+        current_stock?: number;
+        expiry_date?: string;
+        mrp?: number;
+        selling_price?: number;
+      }> = [];
+
+      medicines.forEach(med => {
+        const medBatches = batches?.filter(b => b.medicine_id === med.id) || [];
+
+        if (medBatches.length > 0) {
+          // Add one entry per batch
+          medBatches.forEach(batch => {
+            mappedData.push({
+              id: med.id,
+              name: med.medicine_name,
+              generic_name: med.generic_name,
+              category: med.type,
+              batch_id: batch.id,
+              batch_number: batch.batch_number,
+              current_stock: batch.current_stock,
+              expiry_date: batch.expiry_date,
+              mrp: batch.mrp,
+              selling_price: batch.selling_price
+            });
+          });
+        } else {
+          // No stock available - show medicine but indicate no stock
+          mappedData.push({
+            id: med.id,
+            name: med.medicine_name,
+            generic_name: med.generic_name,
+            category: med.type,
+            current_stock: 0
+          });
+        }
       });
 
-      if (data && data.length > 0) {
-        console.log('👁️ Setting showMedicationResults to true for:', medicineId);
-        setShowMedicationResults(prev => {
-          const updated = { ...prev, [medicineId]: true };
-          console.log('👁️ Updated showMedicationResults:', updated);
-          return updated;
-        });
-      } else {
-        console.log('⚠️ No results found for:', searchTerm);
+      console.log('✅ Medication search results with batches:', mappedData);
+      setMedicationSuggestions(prev => ({ ...prev, [medicineId]: mappedData }));
+
+      if (mappedData.length > 0) {
+        setShowMedicationResults(prev => ({ ...prev, [medicineId]: true }));
       }
     } catch (error: any) {
       console.error('❌ Error searching medications:', error);
@@ -221,6 +264,91 @@ const DirectSaleBill: React.FC = () => {
         variant: "destructive"
       });
     }
+  };
+
+  // Fetch available batches for a selected medicine from batch inventory
+  const fetchBatchesForMedicine = async (medicineId: string, rowId: string) => {
+    try {
+      console.log('🔍 Fetching batches for medicine:', medicineId);
+      const { data, error } = await supabase
+        .from('medicine_batch_inventory')
+        .select('id, medicine_id, batch_number, expiry_date, current_stock, mrp, selling_price')
+        .eq('medicine_id', medicineId)
+        .eq('is_active', true)
+        .eq('is_expired', false)
+        .gt('current_stock', 0)
+        .order('expiry_date', { ascending: true }); // FEFO - First Expiry First Out
+
+      if (error) {
+        console.error('❌ Error fetching batches:', error);
+        throw error;
+      }
+
+      console.log('✅ Available batches:', data);
+
+      // Update the medicine row with available batches
+      setMedicines(prev => prev.map(m => {
+        if (m.id === rowId) {
+          return {
+            ...m,
+            availableBatches: data || []
+          };
+        }
+        return m;
+      }));
+
+      if (!data || data.length === 0) {
+        toast({
+          title: "No Stock",
+          description: "No available stock found for this medicine",
+          variant: "destructive"
+        });
+      }
+    } catch (error: any) {
+      console.error('❌ Error fetching batches:', error);
+    }
+  };
+
+  // Handle batch selection - auto-populate fields
+  const handleBatchSelection = (rowId: string, batchId: string) => {
+    setMedicines(prev => prev.map(m => {
+      if (m.id === rowId) {
+        const selectedBatch = m.availableBatches.find(b => b.id === batchId);
+        if (selectedBatch) {
+          return {
+            ...m,
+            batchNo: selectedBatch.batch_number,
+            batchInventoryId: batchId,
+            stock: selectedBatch.current_stock.toString(),
+            expiryDate: selectedBatch.expiry_date,
+            mrp: selectedBatch.mrp?.toString() || '',
+            price: selectedBatch.selling_price?.toString() || selectedBatch.mrp?.toString() || '',
+            quantityError: '' // Clear any previous error
+          };
+        }
+      }
+      return m;
+    }));
+  };
+
+  // Validate quantity against available stock
+  const validateQuantity = (rowId: string, quantity: string) => {
+    setMedicines(prev => prev.map(m => {
+      if (m.id === rowId) {
+        const qty = parseFloat(quantity) || 0;
+        const stock = parseFloat(m.stock) || 0;
+        let error = '';
+
+        if (qty > stock && stock > 0) {
+          error = `Exceeds stock (${stock})`;
+        } else if (qty <= 0 && quantity !== '') {
+          error = 'Invalid quantity';
+        }
+
+        return { ...m, quantityError: error };
+      }
+      return m;
+    }));
   };
 
   // Fetch doctor names from ayushman_consultants table
@@ -252,17 +380,6 @@ const DirectSaleBill: React.FC = () => {
       console.error('Error searching doctors:', error);
     }
   };
-
-  // Handle patient name search
-  useEffect(() => {
-    const debounceTimer = setTimeout(() => {
-      if (patientSearchTerm) {
-        searchPatients(patientSearchTerm);
-      }
-    }, 300);
-
-    return () => clearTimeout(debounceTimer);
-  }, [patientSearchTerm]);
 
   // Handle doctor name search
   useEffect(() => {
@@ -309,6 +426,29 @@ const DirectSaleBill: React.FC = () => {
       toast({
         title: "Error",
         description: "Please add at least one medicine",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    // Validate batch selection for all medicines with quantity
+    const medicinesWithQuantity = medicines.filter(m => m.itemName && m.quantity);
+    const missingBatch = medicinesWithQuantity.find(m => !m.batchInventoryId);
+    if (missingBatch) {
+      toast({
+        title: "Error",
+        description: `Please select a batch for ${missingBatch.itemName}`,
+        variant: "destructive"
+      });
+      return;
+    }
+
+    // Validate no quantity errors
+    const hasQuantityError = medicinesWithQuantity.some(m => m.quantityError);
+    if (hasQuantityError) {
+      toast({
+        title: "Error",
+        description: "Please fix quantity errors before submitting",
         variant: "destructive"
       });
       return;
@@ -370,6 +510,59 @@ const DirectSaleBill: React.FC = () => {
 
       if (insertError) throw insertError;
 
+      // Deduct stock from batch inventory for each medicine
+      console.log('📦 Deducting stock for sold medicines...');
+      for (const med of validMedicines) {
+        if (med.batchInventoryId) {
+          // Get current stock
+          const { data: batchData, error: fetchError } = await supabase
+            .from('medicine_batch_inventory')
+            .select('current_stock, sold_quantity')
+            .eq('id', med.batchInventoryId)
+            .single();
+
+          if (fetchError) {
+            console.error('Error fetching batch:', fetchError);
+            continue;
+          }
+
+          const soldQty = parseFloat(med.quantity) || 0;
+          const newStock = (batchData.current_stock || 0) - soldQty;
+          const newSoldQty = (batchData.sold_quantity || 0) + soldQty;
+
+          // Update batch inventory
+          const { error: updateError } = await supabase
+            .from('medicine_batch_inventory')
+            .update({
+              current_stock: newStock,
+              sold_quantity: newSoldQty,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', med.batchInventoryId);
+
+          if (updateError) {
+            console.error('Error updating stock:', updateError);
+          } else {
+            console.log(`✅ Stock deducted for ${med.itemName}: ${soldQty} units (New stock: ${newStock})`);
+          }
+
+          // Log stock movement
+          await supabase
+            .from('batch_stock_movements')
+            .insert({
+              batch_id: med.batchInventoryId,
+              movement_type: 'OUT',
+              quantity_before: batchData.current_stock,
+              quantity_changed: soldQty,
+              quantity_after: newStock,
+              reference_type: 'DIRECT_SALE',
+              reference_id: billNumber,
+              reason: `Direct sale to ${patientName}`,
+              performed_by: user?.id || null
+            });
+        }
+      }
+
       // Set completed bill for dialog
       setCompletedBill({
         billNumber: billNumber,
@@ -382,7 +575,7 @@ const DirectSaleBill: React.FC = () => {
 
       toast({
         title: "Success",
-        description: `Direct sale bill ${billNumber} created successfully`
+        description: `Direct sale bill ${billNumber} created successfully. Stock has been updated.`
       });
 
       // Reset form
@@ -398,15 +591,19 @@ const DirectSaleBill: React.FC = () => {
         id: '1',
         itemCode: '',
         itemName: '',
+        medicineId: '',
         quantity: '',
         quantityUnit: 'MSU',
         pack: '',
         batchNo: '',
+        batchInventoryId: '',
+        availableBatches: [],
         stock: '',
         expiryDate: '',
         mrp: '',
         price: '',
-        amount: ''
+        amount: '',
+        quantityError: ''
       }]);
 
     } catch (error: any) {
@@ -437,169 +634,202 @@ const DirectSaleBill: React.FC = () => {
     const printWindow = window.open('', '', 'width=800,height=600');
     if (!printWindow) return;
 
+    const billDate = new Date(completedBill.billDate);
+    const formattedDate = `${billDate.getDate().toString().padStart(2, '0')}/${(billDate.getMonth() + 1).toString().padStart(2, '0')}/${billDate.getFullYear()} ${billDate.getHours().toString().padStart(2, '0')}:${billDate.getMinutes().toString().padStart(2, '0')}:${billDate.getSeconds().toString().padStart(2, '0')}`;
+
     const receiptHTML = `
       <!DOCTYPE html>
       <html>
       <head>
-        <title>Direct Sale Bill - ${completedBill.billNumber}</title>
+        <title>Sales Bill - ${completedBill.billNumber}</title>
         <style>
+          * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+          }
           body {
-            font-family: 'Courier New', monospace;
+            font-family: Arial, sans-serif;
             padding: 20px;
             max-width: 800px;
             margin: 0 auto;
-          }
-          .header {
-            text-align: center;
-            border-bottom: 2px solid #000;
-            padding-bottom: 10px;
-            margin-bottom: 20px;
-          }
-          .header h1 {
-            margin: 0;
-            font-size: 24px;
-          }
-          .header p {
-            margin: 5px 0;
             font-size: 12px;
           }
-          .bill-info {
-            margin: 20px 0;
+          .header-container {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 10px;
           }
-          .bill-info table {
+          .header-image {
             width: 100%;
+            max-width: 100%;
+            height: auto;
+            margin-bottom: 5px;
           }
-          .bill-info td {
-            padding: 5px 0;
-          }
-          .bill-info td:first-child {
+          .bill-title {
+            text-align: center;
+            color: #cc0000;
+            font-size: 16px;
             font-weight: bold;
-            width: 150px;
+            margin: 15px 0;
+            border-top: 1px solid #ccc;
+            border-bottom: 1px solid #ccc;
+            padding: 8px 0;
+          }
+          .bill-info {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #ccc;
+          }
+          .bill-info-left, .bill-info-right {
+            width: 48%;
+          }
+          .bill-info-row {
+            display: flex;
+            margin-bottom: 4px;
+          }
+          .bill-info-label {
+            font-weight: bold;
+            width: 100px;
+          }
+          .bill-info-value {
+            flex: 1;
           }
           .items-table {
             width: 100%;
             border-collapse: collapse;
-            margin: 20px 0;
+            margin: 15px 0;
+            font-size: 11px;
           }
           .items-table th,
           .items-table td {
-            border: 1px solid #000;
-            padding: 8px;
+            border: 1px solid #999;
+            padding: 6px 8px;
             text-align: left;
           }
           .items-table th {
-            background-color: #f0f0f0;
+            background-color: #f5f5f5;
             font-weight: bold;
+            font-size: 10px;
           }
-          .items-table td:last-child,
-          .items-table th:last-child {
+          .items-table td.amount,
+          .items-table th.amount {
             text-align: right;
           }
-          .totals {
-            margin-top: 20px;
-            float: right;
-            width: 300px;
+          .items-table td.center,
+          .items-table th.center {
+            text-align: center;
           }
-          .totals table {
-            width: 100%;
-          }
-          .totals td {
-            padding: 5px 0;
-          }
-          .totals td:first-child {
-            text-align: left;
-          }
-          .totals td:last-child {
+          .total-section {
             text-align: right;
-          }
-          .totals .grand-total {
-            font-size: 18px;
+            margin: 15px 0;
+            font-size: 14px;
             font-weight: bold;
-            border-top: 2px solid #000;
+          }
+          .signatures {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 50px;
             padding-top: 10px;
           }
-          .footer {
-            clear: both;
-            margin-top: 40px;
-            padding-top: 20px;
-            border-top: 2px solid #000;
-            text-align: center;
-            font-size: 12px;
+          .signature-box {
+            width: 45%;
+          }
+          .signature-line {
+            border-top: 1px solid #000;
+            padding-top: 5px;
+            font-size: 11px;
+          }
+          .footer-info {
+            margin-top: 30px;
+            font-size: 9px;
+            color: #666;
           }
           @media print {
             body {
-              padding: 0;
+              padding: 10px;
             }
           }
         </style>
       </head>
       <body>
-        <div class="header">
-          <h1>${hospitalConfig?.name || 'Hospital Pharmacy'}</h1>
-          <p>Direct Sales Bill</p>
-          <p>${hospitalConfig?.address || ''}</p>
+        <div class="header-container">
+          <img src="/pharmacy_header.png" alt="Hope Pharmacy Header" class="header-image" />
         </div>
 
+        <div class="bill-title">Sales Bill</div>
+
         <div class="bill-info">
-          <table>
-            <tr>
-              <td>Bill Number:</td>
-              <td>${completedBill.billNumber}</td>
-            </tr>
-            <tr>
-              <td>Date & Time:</td>
-              <td>${new Date(completedBill.billDate).toLocaleString()}</td>
-            </tr>
-            <tr>
-              <td>Patient Name:</td>
-              <td>${completedBill.patientName}</td>
-            </tr>
-            <tr>
-              <td>Payment Mode:</td>
-              <td>${completedBill.paymentMode}</td>
-            </tr>
-          </table>
+          <div class="bill-info-left">
+            <div class="bill-info-row">
+              <span class="bill-info-label">Bill No:</span>
+              <span class="bill-info-value">${completedBill.billNumber}</span>
+            </div>
+            <div class="bill-info-row">
+              <span class="bill-info-label">Date:</span>
+              <span class="bill-info-value">${formattedDate}</span>
+            </div>
+            <div class="bill-info-row">
+              <span class="bill-info-label">Patient:</span>
+              <span class="bill-info-value">${completedBill.patientName}</span>
+            </div>
+            <div class="bill-info-row">
+              <span class="bill-info-label">Prescribed by:</span>
+              <span class="bill-info-value">${doctorName || '-'}</span>
+            </div>
+          </div>
+          <div class="bill-info-right">
+            <div class="bill-info-row">
+              <span class="bill-info-label">Payment:</span>
+              <span class="bill-info-value">${completedBill.paymentMode}</span>
+            </div>
+          </div>
         </div>
 
         <table class="items-table">
           <thead>
             <tr>
-              <th>Item Name</th>
-              <th>Batch No.</th>
-              <th>Qty</th>
-              <th>Price</th>
-              <th>Amount</th>
+              <th style="width: 40%">Item Name</th>
+              <th class="center" style="width: 8%">Pkg</th>
+              <th class="center" style="width: 15%">Batch No.</th>
+              <th class="center" style="width: 12%">Exp Date</th>
+              <th class="center" style="width: 8%">Qty</th>
+              <th class="amount" style="width: 17%">Amount</th>
             </tr>
           </thead>
           <tbody>
             ${completedBill.medicines.map(item => `
               <tr>
                 <td>${item.itemName}</td>
-                <td>${item.batchNo || 'N/A'}</td>
-                <td>${item.quantity} ${item.quantityUnit}</td>
-                <td>${formatCurrency(parseFloat(item.price) || 0)}</td>
-                <td>${formatCurrency(parseFloat(item.amount) || 0)}</td>
+                <td class="center">${item.pack || '1'}</td>
+                <td class="center">${item.batchNo || 'N/A'}</td>
+                <td class="center">${item.expiryDate || 'N/A'}</td>
+                <td class="center">${item.quantity}</td>
+                <td class="amount">${parseFloat(item.amount || '0').toFixed(2)}</td>
               </tr>
             `).join('')}
           </tbody>
         </table>
 
-        <div class="totals">
-          <table>
-            <tr class="grand-total">
-              <td>TOTAL:</td>
-              <td>${formatCurrency(completedBill.totalAmount)}</td>
-            </tr>
-            <tr>
-              <td>Payment Mode:</td>
-              <td>${completedBill.paymentMode}</td>
-            </tr>
-          </table>
+        <div class="total-section">
+          Total: Rs ${completedBill.totalAmount.toFixed(2)}
         </div>
 
-        <div class="footer">
-          <p>Thank you for your purchase!</p>
-          <p>For any queries, please contact the pharmacy</p>
+        <div class="signatures">
+          <div class="signature-box">
+            <div class="signature-line">Patient Signature</div>
+          </div>
+          <div class="signature-box" style="text-align: right;">
+            <div class="signature-line">Pharmacist Signature</div>
+          </div>
+        </div>
+
+        <div class="footer-info">
+          <div>GST No. 27ACLPV4078L1ZQ</div>
+          <div>D.L. No. 20-NAG/136/2009, 21-NAG/136/2009</div>
         </div>
 
         <script>
@@ -639,52 +869,15 @@ const DirectSaleBill: React.FC = () => {
         </div>
 
         <div className="grid grid-cols-4 gap-4">
-          <div className="relative">
+          <div>
             <label className="text-sm font-medium">
               Name<span className="text-red-500">*</span>
             </label>
             <Input
-              placeholder="Type To Search"
-              value={patientSearchTerm || patientName}
-              onChange={(e) => {
-                setPatientSearchTerm(e.target.value);
-                setPatientName(e.target.value);
-                setShowPatientResults(true);
-              }}
-              onFocus={() => {
-                if (patientSearchTerm && patientSuggestions.length > 0) {
-                  setShowPatientResults(true);
-                }
-              }}
-              onBlur={() => setTimeout(() => setShowPatientResults(false), 200)}
+              placeholder="Enter patient name"
+              value={patientName}
+              onChange={(e) => setPatientName(e.target.value)}
             />
-            {showPatientResults && patientSuggestions.length > 0 && (
-              <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto">
-                {patientSuggestions.map((patient, index) => (
-                  <div
-                    key={index}
-                    className="p-3 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-b-0"
-                    onClick={() => {
-                      setPatientName(patient.name);
-                      setPatientSearchTerm('');
-                      if (patient.dob) setDateOfBirth(patient.dob);
-                      if (patient.age) setAge(patient.age.toString());
-                      if (patient.gender) setGender(patient.gender);
-                      setShowPatientResults(false);
-                    }}
-                  >
-                    <div className="font-medium text-gray-900">{patient.name}</div>
-                    {(patient.age || patient.gender) && (
-                      <div className="text-sm text-gray-600">
-                        {patient.age && `Age: ${patient.age}`}
-                        {patient.age && patient.gender && ' • '}
-                        {patient.gender && `Gender: ${patient.gender}`}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
           <div>
             <label className="text-sm font-medium">Date of Birth:</label>
@@ -868,21 +1061,31 @@ const DirectSaleBill: React.FC = () => {
                     />
                   </TableCell>
                   <TableCell>
-                    <div className="flex items-center gap-2">
-                      <Input
-                        className="w-20"
-                        type="number"
-                        value={medicine.quantity}
-                        onChange={(e) => updateRow(medicine.id, 'quantity', e.target.value)}
-                      />
-                      <select
-                        className="p-1 border rounded text-sm"
-                        value={medicine.quantityUnit}
-                        onChange={(e) => updateRow(medicine.id, 'quantityUnit', e.target.value)}
-                      >
-                        <option value="MSU">MSU</option>
-                        <option value="Pack">Pack</option>
-                      </select>
+                    <div className="flex flex-col gap-1">
+                      <div className="flex items-center gap-2">
+                        <Input
+                          className={`w-20 ${medicine.quantityError ? 'border-red-500 bg-red-50' : ''}`}
+                          type="number"
+                          value={medicine.quantity}
+                          onChange={(e) => {
+                            updateRow(medicine.id, 'quantity', e.target.value);
+                            validateQuantity(medicine.id, e.target.value);
+                          }}
+                          min="1"
+                          max={medicine.stock || undefined}
+                        />
+                        <select
+                          className="p-1 border rounded text-sm"
+                          value={medicine.quantityUnit}
+                          onChange={(e) => updateRow(medicine.id, 'quantityUnit', e.target.value)}
+                        >
+                          <option value="MSU">MSU</option>
+                          <option value="Pack">Pack</option>
+                        </select>
+                      </div>
+                      {medicine.quantityError && (
+                        <span className="text-xs text-red-500">{medicine.quantityError}</span>
+                      )}
                     </div>
                   </TableCell>
                   <TableCell>
@@ -894,37 +1097,53 @@ const DirectSaleBill: React.FC = () => {
                   </TableCell>
                   <TableCell>
                     <select
-                      className="w-32 p-2 border rounded"
-                      value={medicine.batchNo}
-                      onChange={(e) => updateRow(medicine.id, 'batchNo', e.target.value)}
+                      className={`w-40 p-2 border rounded text-sm ${medicine.availableBatches.length === 0 ? 'bg-gray-100' : ''}`}
+                      value={medicine.batchInventoryId}
+                      onChange={(e) => handleBatchSelection(medicine.id, e.target.value)}
+                      disabled={medicine.availableBatches.length === 0}
                     >
-                      <option value="">Select</option>
-                      <option value="BATCH-001">BATCH-001</option>
-                      <option value="BATCH-002">BATCH-002</option>
+                      <option value="">{medicine.medicineId ? (medicine.availableBatches.length > 0 ? 'Select Batch' : 'No Stock') : 'Select Medicine First'}</option>
+                      {medicine.availableBatches.map((batch) => {
+                        const expiryDate = new Date(batch.expiry_date);
+                        const today = new Date();
+                        const daysToExpiry = Math.ceil((expiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+                        const isNearExpiry = daysToExpiry <= 30;
+
+                        return (
+                          <option
+                            key={batch.id}
+                            value={batch.id}
+                            className={isNearExpiry ? 'text-orange-600' : ''}
+                          >
+                            {batch.batch_number} | Qty: {batch.current_stock} | Exp: {batch.expiry_date}
+                          </option>
+                        );
+                      })}
                     </select>
                   </TableCell>
                   <TableCell>
                     <Input
-                      className="w-24"
+                      className="w-20 bg-gray-50"
                       value={medicine.stock}
-                      onChange={(e) => updateRow(medicine.id, 'stock', e.target.value)}
+                      readOnly
+                      placeholder="-"
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Input
+                      className="w-28 bg-gray-50"
+                      type="date"
+                      value={medicine.expiryDate}
                       readOnly
                     />
                   </TableCell>
                   <TableCell>
                     <Input
-                      className="w-32"
-                      type="date"
-                      value={medicine.expiryDate}
-                      onChange={(e) => updateRow(medicine.id, 'expiryDate', e.target.value)}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <Input
-                      className="w-24"
+                      className="w-20 bg-gray-50"
                       type="number"
                       value={medicine.mrp}
-                      onChange={(e) => updateRow(medicine.id, 'mrp', e.target.value)}
+                      readOnly
+                      placeholder="-"
                     />
                   </TableCell>
                   <TableCell>
@@ -1061,29 +1280,89 @@ const DirectSaleBill: React.FC = () => {
               position: 'fixed',
               top: `${dropdownPosition[medicine.id].top}px`,
               left: `${dropdownPosition[medicine.id].left}px`,
-              width: `${Math.max(dropdownPosition[medicine.id].width, 320)}px`,
+              width: `${Math.max(dropdownPosition[medicine.id].width, 450)}px`,
               zIndex: 99999
             }}
-            className="bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto"
+            className="bg-white border border-gray-300 rounded-md shadow-lg max-h-72 overflow-y-auto"
           >
-            {medicationSuggestions[medicine.id].map((medication) => (
-              <div
-                key={medication.id}
-                className="p-3 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-b-0"
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  updateRow(medicine.id, 'itemName', medication.name);
-                  setShowMedicationResults(prev => ({ ...prev, [medicine.id]: false }));
-                }}
-              >
-                <div className="font-medium text-gray-900">{medication.name}</div>
-                <div className="flex gap-3 text-sm text-gray-600 mt-1">
-                  {medication.generic_name && <span>{medication.generic_name}</span>}
-                  {medication.dosage && <span>• {medication.dosage}</span>}
-                  {medication.category && <span>• {medication.category}</span>}
+            {medicationSuggestions[medicine.id].map((medication, idx) => {
+              const hasStock = medication.current_stock && medication.current_stock > 0;
+              const isExpiringSoon = medication.expiry_date &&
+                new Date(medication.expiry_date) <= new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+
+              return (
+                <div
+                  key={`${medication.id}-${medication.batch_id || idx}`}
+                  className={`p-3 cursor-pointer border-b border-gray-100 last:border-b-0 ${
+                    hasStock ? 'hover:bg-green-50' : 'hover:bg-gray-50 opacity-60'
+                  }`}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    if (!hasStock) {
+                      toast({
+                        title: "No Stock",
+                        description: "This medicine has no available stock",
+                        variant: "destructive"
+                      });
+                      return;
+                    }
+                    // Update medicine row with all info including batch
+                    setMedicines(prev => prev.map(m => {
+                      if (m.id === medicine.id) {
+                        const price = medication.selling_price || medication.mrp || 0;
+                        const qty = parseFloat(m.quantity) || 0;
+                        const amount = qty > 0 ? (qty * price).toFixed(2) : '';
+                        return {
+                          ...m,
+                          itemName: medication.name,
+                          medicineId: medication.id,
+                          batchNo: medication.batch_number || '',
+                          batchInventoryId: medication.batch_id || '',
+                          availableBatches: [],
+                          stock: medication.current_stock?.toString() || '',
+                          expiryDate: medication.expiry_date || '',
+                          mrp: medication.mrp?.toString() || '',
+                          price: price.toString(),
+                          amount: amount,
+                          quantityError: ''
+                        };
+                      }
+                      return m;
+                    }));
+                    setShowMedicationResults(prev => ({ ...prev, [medicine.id]: false }));
+                  }}
+                >
+                  <div className="flex justify-between items-start">
+                    <div className="font-medium text-gray-900">{medication.name}</div>
+                    {hasStock ? (
+                      <span className="text-xs px-2 py-0.5 rounded bg-green-100 text-green-700">
+                        Stock: {medication.current_stock}
+                      </span>
+                    ) : (
+                      <span className="text-xs px-2 py-0.5 rounded bg-red-100 text-red-700">
+                        No Stock
+                      </span>
+                    )}
+                  </div>
+                  {medication.batch_number && (
+                    <div className="flex gap-3 text-sm mt-1">
+                      <span className="text-blue-600 font-medium">Batch: {medication.batch_number}</span>
+                      {medication.expiry_date && (
+                        <span className={isExpiringSoon ? 'text-orange-600' : 'text-gray-600'}>
+                          Exp: {medication.expiry_date}
+                        </span>
+                      )}
+                      {medication.mrp && (
+                        <span className="text-gray-600">MRP: ₹{medication.mrp}</span>
+                      )}
+                    </div>
+                  )}
+                  {medication.generic_name && (
+                    <div className="text-xs text-gray-500 mt-1">{medication.generic_name}</div>
+                  )}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )
       ))}
