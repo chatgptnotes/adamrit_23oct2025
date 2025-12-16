@@ -50,6 +50,7 @@ import { savePharmacySale, SaleData } from '@/lib/pharmacy-billing-service';
 interface CartItem {
   id: string;
   medicine_id: string;
+  batch_inventory_id: string; // ID from medicine_batch_inventory table
   item_code?: string;
   medicine_name: string;
   generic_name?: string;
@@ -69,6 +70,12 @@ interface CartItem {
   total_amount: number;
   available_stock: number;
   prescription_required: boolean;
+}
+
+interface VisitOption {
+  visit_id: string;
+  admission_date: string | null;
+  appointment_with: string | null;
 }
 
 interface Sale {
@@ -117,10 +124,10 @@ const PharmacyBilling: React.FC = () => {
   const [debouncedSearchTerm] = useDebounce(searchTerm, 300);
 
   const [visitId, setVisitId] = useState('');
-  const [visitOptions, setVisitOptions] = useState<string[]>([]);
+  const [visitOptions, setVisitOptions] = useState<VisitOption[]>([]);
   const [doctorName, setDoctorName] = useState('');
   const [allEncounter, setAllEncounter] = useState(false);
-  const [encounterType, setEncounterType] = useState('(Private) - OPD');
+  const [encounterType, setEncounterType] = useState('OPD');
 
   const [doctorSearchTerm, setDoctorSearchTerm] = useState('');
   const [showDoctorResults, setShowDoctorResults] = useState(false);
@@ -140,32 +147,72 @@ const PharmacyBilling: React.FC = () => {
       }
 
       setIsSearching(true);
-      const { data, error } = await supabase
-        .from('medicine_master')
-        .select('id, medicine_name, generic_name, type, batch_number, quantity, selling_price, mrp_price, expiry_date')
-        .eq('is_deleted', false)
-        .or(`medicine_name.ilike.%${debouncedSearchTerm}%,generic_name.ilike.%${debouncedSearchTerm}%`)
-        .limit(10);
 
-      if (error) {
-        console.error('Error searching for medicines:', error);
-        setSearchResults([]);
-      } else {
-        // Map medicine_master fields to expected format
-        const mappedData = (data || []).map(item => ({
-          id: item.id,
-          name: item.medicine_name,
-          generic_name: item.generic_name || '',
-          strength: '',
-          dosage: item.type || '',
-          stock: item.quantity || 0,
-          price_per_strip: item.selling_price || 0,
-          item_code: '',
-          batch_number: item.batch_number || 'BATCH-001',
-          expiry_date: item.expiry_date || ''
-        }));
+      try {
+        // Step 1: Search medicine_master directly (works correctly with Supabase)
+        const { data: medicines, error: medError } = await supabase
+          .from('medicine_master')
+          .select('id, medicine_name, generic_name, type')
+          .eq('is_deleted', false)
+          .or(`medicine_name.ilike.%${debouncedSearchTerm}%,generic_name.ilike.%${debouncedSearchTerm}%`)
+          .limit(20);
+
+        if (medError) {
+          console.error('Error searching medicines:', medError);
+          setSearchResults([]);
+          setIsSearching(false);
+          return;
+        }
+
+        if (!medicines || medicines.length === 0) {
+          setSearchResults([]);
+          setIsSearching(false);
+          return;
+        }
+
+        // Step 2: Get batch inventory for these medicines
+        const medicineIds = medicines.map((m: any) => m.id);
+        const { data: batches, error: batchError } = await supabase
+          .from('medicine_batch_inventory')
+          .select('id, medicine_id, batch_number, expiry_date, current_stock, selling_price, mrp')
+          .in('medicine_id', medicineIds)
+          .eq('is_active', true)
+          .eq('is_expired', false)
+          .gt('current_stock', 0)
+          .order('expiry_date', { ascending: true }); // FEFO - First Expiry First Out
+
+        if (batchError) {
+          console.error('Error fetching batches:', batchError);
+        }
+
+        // Step 3: Map results - one entry per batch for batch-wise display
+        const mappedData: any[] = [];
+        medicines.forEach((med: any) => {
+          const medBatches = batches?.filter((b: any) => b.medicine_id === med.id) || [];
+          medBatches.forEach((batch: any) => {
+            mappedData.push({
+              id: batch.id,                    // batch inventory id
+              medicine_id: med.id,             // FK to medicine_master
+              name: med.medicine_name,
+              generic_name: med.generic_name || '',
+              strength: '',
+              dosage: med.type || '',
+              stock: batch.current_stock || 0,
+              price_per_strip: batch.selling_price || 0,
+              mrp: batch.mrp || 0,
+              item_code: '',
+              batch_number: batch.batch_number || 'N/A',
+              expiry_date: batch.expiry_date || 'N/A'
+            });
+          });
+        });
+
         setSearchResults(mappedData);
+      } catch (error) {
+        console.error('Error in medicine search:', error);
+        setSearchResults([]);
       }
+
       setIsSearching(false);
     };
 
@@ -253,46 +300,66 @@ const PharmacyBilling: React.FC = () => {
         return;
       }
       const patientRow = patientRows[0];
-      // 2. Use id to get visits with appointment_with, sorted by created_at DESC
+      // 2. Use id to get visits with appointment_with and admission_date, sorted by created_at DESC
       const { data: visits, error: visitError } = await supabase
         .from('visits')
-        .select('visit_id, created_at, appointment_with')
+        .select('visit_id, created_at, appointment_with, admission_date')
         .eq('patient_id', patientRow.id)
         .order('created_at', { ascending: false });
       if (visitError || !visits || visits.length === 0) {
         setVisitOptions([]);
         setVisitId('');
         setDoctorName('');
+        setEncounterType('OPD');
         return;
       }
-      setVisitOptions(visits.map(v => v.visit_id));
+      // Store visit objects with IPD/OPD info
+      const visitOptionsData: VisitOption[] = visits.map(v => ({
+        visit_id: v.visit_id,
+        admission_date: v.admission_date,
+        appointment_with: v.appointment_with
+      }));
+      setVisitOptions(visitOptionsData);
       setVisitId(visits[0].visit_id); // Auto-select latest
       setDoctorName(visits[0].appointment_with || ''); // Set doctor name from first visit
+      // Set encounter type based on admission_date
+      setEncounterType(visits[0].admission_date ? 'IPD' : 'OPD');
     };
     fetchVisitsForPatient();
   }, [patientInfo.id]);
 
-  // Fetch doctor name when visit ID changes
+  // Fetch doctor name and update encounter type when visit ID changes
   useEffect(() => {
-    const fetchDoctorName = async () => {
+    const fetchVisitDetails = async () => {
       if (!visitId) {
         setDoctorName('');
+        setEncounterType('OPD');
         return;
       }
 
+      // First check if we have the visit in our cached options
+      const cachedVisit = visitOptions.find(v => v.visit_id === visitId);
+      if (cachedVisit) {
+        setDoctorName(cachedVisit.appointment_with || '');
+        setEncounterType(cachedVisit.admission_date ? 'IPD' : 'OPD');
+        return;
+      }
+
+      // If not cached, fetch from database
       const { data, error } = await supabase
         .from('visits')
-        .select('appointment_with')
+        .select('appointment_with, admission_date')
         .eq('visit_id', visitId)
         .single();
 
       if (data && !error) {
         setDoctorName(data.appointment_with || '');
+        setEncounterType(data.admission_date ? 'IPD' : 'OPD');
       }
     };
 
-    fetchDoctorName();
-  }, [visitId]);
+    fetchVisitDetails();
+  }, [visitId, visitOptions]);
 
   const handleSelectPatient = (patient: { name: string, patients_id: string }) => {
     setPatientInfo({ name: patient.name, id: patient.patients_id, phone: '' });
@@ -349,20 +416,29 @@ const PharmacyBilling: React.FC = () => {
 
   const addToCart = (medicine: any) => {
     console.log('🏥 Adding medicine to cart:', {
-      id: medicine.id,
+      batch_inventory_id: medicine.id,
+      medicine_id: medicine.medicine_id,
       name: medicine.name,
       generic_name: medicine.generic_name,
+      batch_number: medicine.batch_number,
       full_medicine_object: medicine
     });
 
-    const existingItem = cart.find(item => item.medicine_id === medicine.id && item.batch_number === medicine.batch_number);
+    // Check by batch_inventory_id since each batch is unique
+    const existingItem = cart.find(item => item.batch_inventory_id === medicine.id);
 
     if (existingItem) {
+      // Check if we can add more
+      if (existingItem.quantity + 1 > existingItem.available_stock) {
+        alert(`Cannot add more. Only ${existingItem.available_stock} units in stock for ${existingItem.medicine_name} (Batch: ${existingItem.batch_number}).`);
+        return;
+      }
       updateQuantity(existingItem.id, existingItem.quantity + 1);
     } else {
       const newItem: CartItem = {
         id: Date.now().toString(),
-        medicine_id: medicine.id,
+        medicine_id: medicine.medicine_id, // FK to medicine_master
+        batch_inventory_id: medicine.id, // ID from medicine_batch_inventory
         item_code: medicine.item_code || '',
         medicine_name: medicine.name || 'Unknown Medicine',
         generic_name: medicine.generic_name || '',
@@ -372,7 +448,7 @@ const PharmacyBilling: React.FC = () => {
         administration_time: '',
         batch_number: medicine.batch_number || 'BATCH-001',
         expiry_date: medicine.expiry_date || '',
-        mrp: medicine.price_per_strip || 0,
+        mrp: medicine.mrp || medicine.price_per_strip || 0,
         unit_price: medicine.price_per_strip || 0,
         quantity: 1,
         discount_percentage: 0,
@@ -410,7 +486,14 @@ const PharmacyBilling: React.FC = () => {
       removeFromCart(itemId);
       return;
     }
-    
+
+    // Find the item to check available stock
+    const existingItem = cart.find(i => i.id === itemId);
+    if (existingItem && newQuantity > existingItem.available_stock) {
+      alert(`Cannot add more than ${existingItem.available_stock} units. Only ${existingItem.available_stock} in stock for ${existingItem.medicine_name} (Batch: ${existingItem.batch_number}).`);
+      return;
+    }
+
     setCart(prev => prev.map(item => {
       if (item.id === itemId) {
         const subtotal = item.unit_price * newQuantity;
@@ -526,50 +609,9 @@ const PharmacyBilling: React.FC = () => {
       cashier_name: 'Current User',
       items: [...cart]
     };
-    // Insert into visit_medications (one row per medicine)
-    console.log('Saving medication_type:', saleType);
-    const now = new Date().toISOString();
-    const rowsToInsert = [];
-    for (const item of cart) {
-      // Skip duplicate check - allow multiple pharmacy bills for same medicine
-      rowsToInsert.push({
-        visit_id: visitUUID, // Use UUID
-        medication_id: item.medicine_id,
-        prescribed_date: now,
-        start_date: null,
-        end_date: null,
-        created_at: now,
-        updated_at: now,
-        status: 'dispensed', // Use allowed value
-        notes: `Pharmacy bill for patient ${patientInfo.name} (${patientInfo.id})`,
-        medication_type: saleType,
-        dosage: item.strength || null,
-        frequency: null,
-        duration: null,
-        route: null,
-      });
-    }
-    if (rowsToInsert.length === 0) {
-      setIsProcessingPayment(false);
-      return;
-    }
-    console.log('Rows to insert:', rowsToInsert);
+    // Note: visit_medications insert removed - using medicine_master which has different FK
+    // The pharmacy sale is saved to pharmacy_sales and pharmacy_sale_items tables
 
-    // Use upsert to handle duplicates - if medicine already exists, skip it
-    const { error: insertError } = await supabase
-      .from('visit_medications')
-      .upsert(rowsToInsert, {
-        onConflict: 'visit_id,medication_id,medication_type',
-        ignoreDuplicates: true
-      });
-
-    if (insertError) {
-      console.error('Warning: visit_medications insert error:', insertError.message);
-      // Don't stop - continue to pharmacy_sales save
-      // alert('Error saving bill to visit_medications: ' + insertError.message);
-      // setIsProcessingPayment(false);
-      // return;
-    }
     // Debug logging
     console.log('=== PHARMACY SALE DEBUG START ===');
     console.log('Cart items:', cart);
@@ -646,61 +688,75 @@ const PharmacyBilling: React.FC = () => {
 
     console.log('✅ Sale saved successfully! Sale ID:', response.sale_id);
 
-    // Deduct stock from medicine_master table
-    console.log('=== UPDATING STOCK IN MEDICINE_MASTER ===');
+    // Deduct stock from medicine_batch_inventory table (batch-wise stock tracking)
+    console.log('=== UPDATING STOCK IN MEDICINE_BATCH_INVENTORY ===');
     console.log('Cart items to process:', cart.length);
     console.log('Cart data:', JSON.stringify(cart.map(item => ({
+      batch_inventory_id: item.batch_inventory_id,
       medicine_id: item.medicine_id,
       medicine_name: item.medicine_name,
+      batch_number: item.batch_number,
       quantity: item.quantity
     })), null, 2));
 
     for (const item of cart) {
       try {
-        console.log(`\n🔄 Processing medicine: ${item.medicine_name} (ID: ${item.medicine_id})`);
+        console.log(`\n🔄 Processing medicine: ${item.medicine_name} (Batch: ${item.batch_number}, Inventory ID: ${item.batch_inventory_id})`);
 
-        // Get current stock first
-        const { data: currentMedicine, error: fetchError } = await supabase
-          .from('medicine_master')
-          .select('quantity, medicine_name')
-          .eq('id', item.medicine_id)
+        // Get current stock from medicine_batch_inventory
+        const { data: currentBatch, error: fetchError } = await supabase
+          .from('medicine_batch_inventory')
+          .select('current_stock, batch_number, sold_quantity')
+          .eq('id', item.batch_inventory_id)
           .single();
 
         if (fetchError) {
-          console.error(`❌ Error fetching stock for medicine ${item.medicine_id}:`, fetchError);
-          alert(`Error: Could not fetch stock for ${item.medicine_name}. Error: ${fetchError.message}`);
+          console.error(`❌ Error fetching stock for batch ${item.batch_inventory_id}:`, fetchError);
+          alert(`Error: Could not fetch stock for ${item.medicine_name} (Batch: ${item.batch_number}). Error: ${fetchError.message}`);
           continue;
         }
 
-        if (!currentMedicine) {
-          console.error(`❌ Medicine not found in medicine_master table: ${item.medicine_id}`);
-          alert(`Error: Medicine ${item.medicine_name} not found in medicine_master table`);
+        if (!currentBatch) {
+          console.error(`❌ Batch not found in medicine_batch_inventory table: ${item.batch_inventory_id}`);
+          alert(`Error: ${item.medicine_name} (Batch: ${item.batch_number}) not found in inventory`);
           continue;
         }
 
-        const newQuantity = (currentMedicine.quantity || 0) - item.quantity;
+        const currentStock = currentBatch.current_stock || 0;
+        const newStock = currentStock - item.quantity;
+        const currentSoldQty = currentBatch.sold_quantity || 0;
+        const newSoldQty = currentSoldQty + item.quantity;
 
         console.log(`📊 Stock Update Details:`);
-        console.log(`  Medicine: ${currentMedicine.medicine_name}`);
-        console.log(`  Current Stock: ${currentMedicine.quantity}`);
+        console.log(`  Medicine: ${item.medicine_name}`);
+        console.log(`  Batch: ${currentBatch.batch_number}`);
+        console.log(`  Current Stock: ${currentStock}`);
         console.log(`  Sold Quantity: ${item.quantity}`);
-        console.log(`  New Stock: ${newQuantity}`);
+        console.log(`  New Stock: ${newStock}`);
 
-        // Update the stock in medicine_master
+        // Check if stock would go negative
+        if (newStock < 0) {
+          console.warn(`⚠️ Insufficient stock for ${item.medicine_name}. Available: ${currentStock}, Requested: ${item.quantity}`);
+          alert(`Warning: Insufficient stock for ${item.medicine_name} (Batch: ${item.batch_number}). Available: ${currentStock}, Sold: ${item.quantity}. Stock set to 0.`);
+        }
+
+        // Update the stock in medicine_batch_inventory (use Math.max to prevent negative)
+        // Must update both current_stock AND sold_quantity to satisfy check_current_stock_valid constraint
         const { data: updateData, error: updateError } = await supabase
-          .from('medicine_master')
+          .from('medicine_batch_inventory')
           .update({
-            quantity: newQuantity,
+            current_stock: Math.max(0, newStock),
+            sold_quantity: newSoldQty,
             updated_at: new Date().toISOString()
           })
-          .eq('id', item.medicine_id)
+          .eq('id', item.batch_inventory_id)
           .select();
 
         if (updateError) {
-          console.error(`❌ Error updating stock for medicine ${item.medicine_id}:`, updateError);
-          alert(`Error updating stock for ${item.medicine_name}: ${updateError.message}`);
+          console.error(`❌ Error updating stock for batch ${item.batch_inventory_id}:`, updateError);
+          alert(`Error updating stock for ${item.medicine_name} (Batch: ${item.batch_number}): ${updateError.message}`);
         } else {
-          console.log(`✅ Stock updated successfully for ${currentMedicine.medicine_name}`);
+          console.log(`✅ Stock updated successfully for ${item.medicine_name} (Batch: ${currentBatch.batch_number})`);
           console.log(`Updated data:`, updateData);
         }
       } catch (error: any) {
@@ -1024,7 +1080,12 @@ const PharmacyBilling: React.FC = () => {
                     />
                     <span className="text-sm font-medium">All Encounter</span>
                   </label>
-                  <span className="text-sm pb-2">{encounterType}</span>
+                  <Badge
+                    variant={encounterType === 'IPD' ? 'default' : 'secondary'}
+                    className={`mb-2 ${encounterType === 'IPD' ? 'bg-blue-500 hover:bg-blue-600' : 'bg-green-500 hover:bg-green-600 text-white'}`}
+                  >
+                    {encounterType}
+                  </Badge>
                 </div>
                 <div className="relative">
                   <label className="text-sm font-medium">Doctor Name</label>
@@ -1093,7 +1154,9 @@ const PharmacyBilling: React.FC = () => {
                     >
                       <option value="">Select visit ID</option>
                       {visitOptions.map((v) => (
-                        <option key={v} value={v}>{v}</option>
+                        <option key={v.visit_id} value={v.visit_id}>
+                          {v.visit_id} ({v.admission_date ? 'IPD' : 'OPD'})
+                        </option>
                       ))}
                     </select>
                   ) : (
@@ -1139,7 +1202,7 @@ const PharmacyBilling: React.FC = () => {
                   <div className="max-h-60 overflow-y-auto border rounded">
                     {isSearching && <div className="p-4 text-center">Searching...</div>}
                     {!isSearching && searchResults.map((medicine) => (
-                      <div 
+                      <div
                         key={medicine.id}
                         className="p-3 border-b hover:bg-gray-50 cursor-pointer"
                         onClick={() => addToCart(medicine)}
@@ -1148,14 +1211,15 @@ const PharmacyBilling: React.FC = () => {
                           <div>
                             <div className="font-medium">{medicine.name}</div>
                             <div className="text-sm text-muted-foreground">
-                              {medicine.strength} • {medicine.dosage}
+                              Batch: <span className="font-semibold">{medicine.batch_number}</span> | Exp: <span className={medicine.expiry_date && new Date(medicine.expiry_date) < new Date() ? 'text-red-500 font-semibold' : ''}>{medicine.expiry_date || 'N/A'}</span>
                             </div>
                             <div className="text-xs text-muted-foreground">
-                              Stock: {medicine.stock}
+                              Stock: <span className={medicine.stock < 10 ? 'text-orange-500 font-semibold' : 'text-green-600'}>{medicine.stock}</span> | MRP: {formatCurrency(medicine.mrp || 0)}
                             </div>
                           </div>
                           <div className="text-right">
-                            <div className="font-medium">{formatCurrency(medicine.price_per_strip || 0)}</div>
+                            <div className="font-medium text-green-600">{formatCurrency(medicine.price_per_strip || 0)}</div>
+                            <div className="text-xs text-muted-foreground">Selling Price</div>
                           </div>
                         </div>
                       </div>

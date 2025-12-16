@@ -129,7 +129,7 @@ export async function savePharmacySale(saleData: SaleData): Promise<SaleResponse
 
       return {
         sale_id: saleId,
-        medication_id: item.medicine_id,
+        medication_id: item.medicine_id || null, // May be null if FK constraint is removed
         medication_name: item.medicine_name || 'Unknown', // Ensure not null
         generic_name: item.generic_name || null,
         item_code: item.item_code || null,
