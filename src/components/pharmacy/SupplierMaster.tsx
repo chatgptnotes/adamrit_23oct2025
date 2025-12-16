@@ -644,12 +644,11 @@ const SupplierMaster: React.FC<SupplierMasterProps> = ({ activeTab: propActiveTa
                   />
                 </label>
                 <label className="flex items-center gap-2">
-                  <span className="w-32">S. Tax No.<span className="text-red-500">*</span></span>
+                  <span className="w-32">S. Tax No.</span>
                   <input
                     className="border rounded px-2 py-1 flex-1"
                     value={supplierForm.s_tax_no}
                     onChange={(e) => setSupplierForm({...supplierForm, s_tax_no: e.target.value})}
-                    required
                     disabled={isLoading}
                   />
                 </label>
