@@ -20,6 +20,12 @@ DECLARE
   v_bank_account_id UUID;
   v_bank_account_name TEXT;
 BEGIN
+  -- Skip voucher creation for patient_payment_transactions
+  -- These are unified payment records from pharmacy/OPD that don't need additional vouchers
+  IF TG_TABLE_NAME = 'patient_payment_transactions' THEN
+    RETURN NEW;
+  END IF;
+
   -- Extract payment details based on which table triggered this
   IF TG_TABLE_NAME = 'final_payments' THEN
     v_payment_amount := NEW.amount;
