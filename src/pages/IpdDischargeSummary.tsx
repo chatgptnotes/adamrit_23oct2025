@@ -223,16 +223,50 @@ const IpdDischargeSummary = () => {
   const [investigations, setInvestigations] = useState('');
   const [printRecentOnly, setPrintRecentOnly] = useState(false);
 
-  // Surgery Details States
-  const [surgeryDetails, setSurgeryDetails] = useState({
+  // Surgery Details States - Multiple surgeries support
+  const [surgeryRows, setSurgeryRows] = useState<Array<{
+    id: string;
+    date: string;
+    procedurePerformed: string;
+    surgeon: string;
+    anesthetist: string;
+    anesthesia: string;
+    implant: string;
+  }>>([{
+    id: '1',
     date: '',
     procedurePerformed: '',
     surgeon: '',
     anesthetist: '',
     anesthesia: '',
-    implant: '',
-    description: ''
-  });
+    implant: ''
+  }]);
+  const [sharedSurgeryDescription, setSharedSurgeryDescription] = useState('');
+
+  // Helper functions for multiple surgeries
+  const addSurgeryRow = () => {
+    setSurgeryRows([...surgeryRows, {
+      id: Date.now().toString(),
+      date: '',
+      procedurePerformed: '',
+      surgeon: '',
+      anesthetist: '',
+      anesthesia: '',
+      implant: ''
+    }]);
+  };
+
+  const removeSurgeryRow = (id: string) => {
+    if (surgeryRows.length > 1) {
+      setSurgeryRows(surgeryRows.filter(row => row.id !== id));
+    }
+  };
+
+  const updateSurgeryRow = (id: string, field: string, value: string) => {
+    setSurgeryRows(surgeryRows.map(row =>
+      row.id === id ? { ...row, [field]: value } : row
+    ));
+  };
 
 
   // OT Notes States
@@ -1033,7 +1067,24 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
         if (summary.surgery_details) {
           try {
             const surgeryData = JSON.parse(summary.surgery_details);
-            setSurgeryDetails(surgeryData);
+            // Handle both old format (single object) and new format (object with surgeryRows array)
+            if (surgeryData.surgeryRows && Array.isArray(surgeryData.surgeryRows)) {
+              // New format: { surgeryRows: [...], sharedDescription: '...' }
+              setSurgeryRows(surgeryData.surgeryRows);
+              setSharedSurgeryDescription(surgeryData.sharedDescription || '');
+            } else if (!Array.isArray(surgeryData) && surgeryData.date !== undefined) {
+              // Old format: single object - convert to array
+              setSurgeryRows([{
+                id: '1',
+                date: surgeryData.date || '',
+                procedurePerformed: surgeryData.procedurePerformed || '',
+                surgeon: surgeryData.surgeon || '',
+                anesthetist: surgeryData.anesthetist || '',
+                anesthesia: surgeryData.anesthesia || '',
+                implant: surgeryData.implant || ''
+              }]);
+              setSharedSurgeryDescription(surgeryData.description || '');
+            }
           } catch (e) {
             console.log('Error parsing surgery details:', e);
           }
@@ -1082,47 +1133,51 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [labResultsData, radiologyData]);  // Removed 'investigations' to prevent overwriting manual fetch data
 
-  // Update surgery details when data is loaded (combine visit_surgeries + ot_notes data)
+  // Update surgery details when data is loaded - map each surgery to its own form row
   useEffect(() => {
     // Wait for OT Notes to finish loading before setting surgery details
     if (isOtNotesLoading) return;
 
     if (visitSurgeryData && visitSurgeryData.length > 0) {
       try {
-        const surgery = visitSurgeryData[0]; // Get the first/primary surgery
-        const surgeryInfo = surgery?.cghs_surgery;
+        // Map each surgery to its own form row
+        const mappedSurgeryRows = visitSurgeryData.map((surgery: any, index: number) => {
+          const surgeryInfo = surgery?.cghs_surgery;
 
-        // Prefer OT notes data for surgeon, anesthetist, implant info, fallback to surgery table
-        const surgeon = otNotesData?.surgeon || surgery?.surgeon || '';
-        const anesthetist = otNotesData?.anaesthetist || surgery?.anaesthetist_name || '';
-        const anesthesia = otNotesData?.anaesthesia || surgery?.anaesthesia_type || '';
-        const implant = otNotesData?.implant || surgery?.implant || '';
+          // For first surgery, prefer OT notes data if available
+          const isFirst = index === 0;
+          const surgeon = isFirst && otNotesData?.surgeon ? otNotesData.surgeon : (surgery?.surgeon || '');
+          const anesthetist = isFirst && otNotesData?.anaesthetist ? otNotesData.anaesthetist : (surgery?.anaesthetist_name || '');
+          const anesthesia = isFirst && otNotesData?.anaesthesia ? otNotesData.anaesthesia : (surgery?.anaesthesia_type || '');
+          const implant = isFirst && otNotesData?.implant ? otNotesData.implant : (surgery?.implant || '');
 
-        // Use OT notes date if available, otherwise surgery date
-        const surgeryDate = (otNotesData?.date ? new Date(otNotesData.date) : null) ||
-                           (surgery?.created_at ? new Date(surgery.created_at) : null);
+          // Use surgery date from visit_surgeries or OT notes
+          const surgeryDate = surgery?.surgery_date ? new Date(surgery.surgery_date) :
+                             (isFirst && otNotesData?.date ? new Date(otNotesData.date) :
+                             (surgery?.created_at ? new Date(surgery.created_at) : null));
 
-        // Use OT notes procedure if available, otherwise CGHS surgery info
-        const procedurePerformed = otNotesData?.procedure_performed ||
-                                 (surgeryInfo?.name ? `${surgeryInfo.name} (${surgeryInfo.code || ''})` : '');
+          // Get procedure name from cghs_surgery
+          const procedurePerformed = surgeryInfo?.name ? `${surgeryInfo.name} (${surgeryInfo.code || ''})` : '';
 
-        setSurgeryDetails({
-          date: surgeryDate ? format(surgeryDate, "yyyy-MM-dd'T'HH:mm") : '',
-          procedurePerformed: procedurePerformed,
-          surgeon: surgeon,
-          anesthetist: anesthetist,
-          anesthesia: anesthesia,
-          implant: implant,
-          description: otNotesData?.description || '' // Use OT Notes description if available
+          return {
+            id: surgery.id || Date.now().toString() + index,
+            date: surgeryDate ? format(surgeryDate, "yyyy-MM-dd'T'HH:mm") : '',
+            procedurePerformed: procedurePerformed,
+            surgeon: surgeon,
+            anesthetist: anesthetist,
+            anesthesia: anesthesia,
+            implant: implant
+          };
         });
 
-        console.log('✅ Surgery details updated with data from:', {
-          surgeryTable: !!visitSurgeryData,
-          otNotes: !!otNotesData,
-          surgeon,
-          anesthetist,
-          anesthesia,
-          implant
+        setSurgeryRows(mappedSurgeryRows);
+
+        // Set shared description from OT notes
+        setSharedSurgeryDescription(otNotesData?.description || '');
+
+        console.log('✅ Surgery rows updated with data:', {
+          count: mappedSurgeryRows.length,
+          surgeries: mappedSurgeryRows.map(r => r.procedurePerformed)
         });
 
       } catch (error) {
@@ -1133,15 +1188,17 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
       try {
         const surgeryDate = otNotesData?.date ? new Date(otNotesData.date) : null;
 
-        setSurgeryDetails({
+        setSurgeryRows([{
+          id: '1',
           date: surgeryDate ? format(surgeryDate, "yyyy-MM-dd'T'HH:mm") : '',
           procedurePerformed: otNotesData?.procedure_performed || otNotesData?.surgery_name || '',
           surgeon: otNotesData?.surgeon || '',
           anesthetist: otNotesData?.anaesthetist || '',
           anesthesia: otNotesData?.anaesthesia || '',
-          implant: otNotesData?.implant || '',
-          description: otNotesData?.description || ''
-        });
+          implant: otNotesData?.implant || ''
+        }]);
+
+        setSharedSurgeryDescription(otNotesData?.description || '');
 
         console.log('✅ Surgery details populated from OT Notes only:', {
           surgeon: otNotesData?.surgeon,
@@ -1292,15 +1349,16 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
         // Populate surgery details ONLY if OT Notes data is not available
         // OT Notes takes priority as it's the source of truth for surgery data
         if (surgery && !otNotesData) {
-          setSurgeryDetails({
+          setSurgeryRows([{
+            id: '1',
             date: surgery.surgery_date ? format(new Date(surgery.surgery_date), "yyyy-MM-dd'T'HH:mm") : '',
             procedurePerformed: surgery.procedure_performed || '',
             surgeon: surgery.surgeon || '',
             anesthetist: surgery.anesthetist || '',
             anesthesia: surgery.anesthesia_type || '',
-            implant: surgery.implant || '',
-            description: '' // Keep empty - user will generate via AI Generate button
-          });
+            implant: surgery.implant || ''
+          }]);
+          setSharedSurgeryDescription(''); // Keep empty - user will generate via AI Generate button
           console.log('🏥 Populated surgery details from saved discharge summary (no OT notes available)');
         } else if (surgery && otNotesData) {
           console.log('🏥 Skipping saved surgery details - using fresh OT notes data instead');
@@ -1645,15 +1703,10 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
           remark: med.remark
         })),
 
-        // Surgery details in procedures_performed JSONB column
+        // Surgery details in procedures_performed JSONB column - now supports multiple surgeries
         procedures_performed: {
-          surgery_date: surgeryDetails.date,
-          procedure_performed: surgeryDetails.procedurePerformed,
-          surgeon: surgeryDetails.surgeon,
-          anesthetist: surgeryDetails.anesthetist,
-          anesthesia_type: surgeryDetails.anesthesia,
-          implant: surgeryDetails.implant,
-          description: surgeryDetails.description
+          surgeryRows: surgeryRows,
+          sharedDescription: sharedSurgeryDescription
         },
 
         // Store original visit_id string in additional_data for reference
@@ -3906,93 +3959,112 @@ DD/MM/YYYY:-Test Category: Test1:Value1 unit, Test2:Value2 unit`);
         </CardContent>
       </Card>
 
-      {/* Surgery Details */}
+      {/* Surgery Details - Multiple Surgery Forms */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center justify-between">
             <span>Surgery Details</span>
-            {(isSurgeryLoading || isOtNotesLoading) && (
-              <div className="flex items-center text-sm text-gray-500">
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary mr-2"></div>
-                {isSurgeryLoading && isOtNotesLoading ? 'Loading surgery & OT data...' :
-                 isSurgeryLoading ? 'Loading surgery data...' :
-                 'Loading OT notes...'}
-              </div>
-            )}
-            {visitSurgeryData && visitSurgeryData.length > 0 && (
-              <Badge variant="secondary" className="text-green-700 bg-green-100">
-                {visitSurgeryData.length} Surgery(s) Found
-              </Badge>
-            )}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>Date:</Label>
-              <Input
-                type="datetime-local"
-                value={surgeryDetails.date}
-                onChange={(e) => setSurgeryDetails({...surgeryDetails, date: e.target.value})}
-                placeholder="Select date and time"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Procedure Performed:</Label>
-              <Input
-                value={surgeryDetails.procedurePerformed}
-                onChange={(e) => setSurgeryDetails({...surgeryDetails, procedurePerformed: e.target.value})}
-                placeholder="e.g., Femoral Hernia Repair (427), Hernia Repair (CGHS-003), 2D echocardiography (592)"
-                className={visitSurgeryData && visitSurgeryData.length > 0 ? 'bg-green-50 border-green-200' : ''}
-                readOnly={isSurgeryLoading}
-              />
-              {visitSurgeryData && visitSurgeryData.length > 0 && (
-                <div className="text-xs text-green-600">
-                  ✅ Loaded from billing system
+            <div className="flex items-center gap-2">
+              {(isSurgeryLoading || isOtNotesLoading) && (
+                <div className="flex items-center text-sm text-gray-500">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary mr-2"></div>
+                  {isSurgeryLoading && isOtNotesLoading ? 'Loading surgery & OT data...' :
+                   isSurgeryLoading ? 'Loading surgery data...' :
+                   'Loading OT notes...'}
                 </div>
               )}
+              {visitSurgeryData && visitSurgeryData.length > 0 && (
+                <Badge variant="secondary" className="text-green-700 bg-green-100">
+                  {visitSurgeryData.length} Surgery(s) Found
+                </Badge>
+              )}
+              <Button
+                size="sm"
+                variant="outline"
+                className="bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100"
+                onClick={addSurgeryRow}
+              >
+                + Add Surgery
+              </Button>
             </div>
-            <div className="space-y-2">
-              <Label>Surgeon:</Label>
-              <Input
-                value={surgeryDetails.surgeon}
-                onChange={(e) => setSurgeryDetails({...surgeryDetails, surgeon: e.target.value})}
-                placeholder="Enter surgeon name"
-                className={isSurgeryLoading ? 'bg-gray-50' : ''}
-              />
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {/* Multiple Surgery Forms */}
+          {surgeryRows.map((surgery, index) => (
+            <div key={surgery.id} className="border rounded-lg p-4 bg-gray-50 relative">
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="font-semibold text-gray-700">Surgery #{index + 1}</h4>
+                {surgeryRows.length > 1 && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="text-red-500 hover:bg-red-50 hover:text-red-700"
+                    onClick={() => removeSurgeryRow(surgery.id)}
+                  >
+                    Remove
+                  </Button>
+                )}
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Date:</Label>
+                  <Input
+                    type="datetime-local"
+                    value={surgery.date}
+                    onChange={(e) => updateSurgeryRow(surgery.id, 'date', e.target.value)}
+                    placeholder="Select date and time"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Procedure Performed:</Label>
+                  <Input
+                    value={surgery.procedurePerformed}
+                    onChange={(e) => updateSurgeryRow(surgery.id, 'procedurePerformed', e.target.value)}
+                    placeholder="e.g., Femoral Hernia Repair (427)"
+                    className={visitSurgeryData && visitSurgeryData.length > 0 ? 'bg-green-50 border-green-200' : ''}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Surgeon:</Label>
+                  <Input
+                    value={surgery.surgeon}
+                    onChange={(e) => updateSurgeryRow(surgery.id, 'surgeon', e.target.value)}
+                    placeholder="Enter surgeon name"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Anesthetist:</Label>
+                  <Input
+                    value={surgery.anesthetist}
+                    onChange={(e) => updateSurgeryRow(surgery.id, 'anesthetist', e.target.value)}
+                    placeholder="Enter anesthetist name"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Anesthesia:</Label>
+                  <Input
+                    value={surgery.anesthesia}
+                    onChange={(e) => updateSurgeryRow(surgery.id, 'anesthesia', e.target.value)}
+                    placeholder="Enter anesthesia type"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Implant:</Label>
+                  <Input
+                    value={surgery.implant}
+                    onChange={(e) => updateSurgeryRow(surgery.id, 'implant', e.target.value)}
+                    placeholder="e.g., N/A if no implant"
+                  />
+                </div>
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label>Anesthetist:</Label>
-              <Input
-                value={surgeryDetails.anesthetist}
-                onChange={(e) => setSurgeryDetails({...surgeryDetails, anesthetist: e.target.value})}
-                placeholder="Enter anesthetist name"
-                className={isSurgeryLoading ? 'bg-gray-50' : ''}
-                readOnly={isSurgeryLoading}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Anesthesia:</Label>
-              <Input
-                value={surgeryDetails.anesthesia}
-                onChange={(e) => setSurgeryDetails({...surgeryDetails, anesthesia: e.target.value})}
-                placeholder="Enter anesthesia type"
-                className={isSurgeryLoading ? 'bg-gray-50' : ''}
-                readOnly={isSurgeryLoading}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Implant:</Label>
-              <Input
-                value={surgeryDetails.implant}
-                onChange={(e) => setSurgeryDetails({...surgeryDetails, implant: e.target.value})}
-                placeholder="e.g., asssssassax or N/A if no implant"
-              />
-            </div>
-          </div>
-          <div className="space-y-2">
+          ))}
+
+          {/* Shared Description for ALL surgeries */}
+          <div className="space-y-2 border-t pt-4">
             <div className="flex items-center justify-between">
-              <Label>Description:</Label>
+              <Label className="text-base font-semibold">Shared Description (for all surgeries):</Label>
               <Button
                 size="sm"
                 variant="outline"
@@ -4007,14 +4079,16 @@ DD/MM/YYYY:-Test Category: Test1:Value1 unit, Test2:Value2 unit`);
                       description: "Generating description with AI...",
                     });
 
-                    // Build context from surgery details
-                    const prompt = `You are a medical specialist. Write a brief, professional surgical summary in 5-8 lines only for:
-Procedure: ${surgeryDetails.procedurePerformed || 'Not specified'}
-Surgeon: ${surgeryDetails.surgeon || 'Not specified'}
-Anesthesia: ${surgeryDetails.anesthesia || 'Not specified'}
+                    // Build context from all surgery details
+                    const allProcedures = surgeryRows.map((s, i) =>
+                      `Surgery ${i + 1}: ${s.procedurePerformed || 'Not specified'} (Surgeon: ${s.surgeon || 'Not specified'}, Anesthesia: ${s.anesthesia || 'Not specified'})`
+                    ).join('\n');
 
-Include: procedure performed, key findings, patient's condition post-procedure, complications (if none, state "uneventful recovery").
-Keep it concise - maximum 100 words. Write in paragraph form only. No tables or bullet points.`;
+                    const prompt = `You are a medical specialist. Write a brief, professional surgical summary in 5-8 lines only for the following procedures:
+${allProcedures}
+
+Include: procedures performed, key findings, patient's condition post-procedure, complications (if none, state "uneventful recovery").
+Keep it concise - maximum 150 words. Write in paragraph form only. No tables or bullet points.`;
 
                     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${import.meta.env.VITE_GEMINI_API_KEY}`, {
                       method: 'POST',
@@ -4029,7 +4103,7 @@ Keep it concise - maximum 100 words. Write in paragraph form only. No tables or 
                         }],
                         generationConfig: {
                           temperature: 0.7,
-                          maxOutputTokens: 300
+                          maxOutputTokens: 400
                         }
                       })
                     });
@@ -4043,7 +4117,7 @@ Keep it concise - maximum 100 words. Write in paragraph form only. No tables or 
                     const generatedDescription = data.candidates?.[0]?.content?.parts?.[0]?.text;
 
                     if (generatedDescription) {
-                      setSurgeryDetails({...surgeryDetails, description: generatedDescription});
+                      setSharedSurgeryDescription(generatedDescription);
                       toast({
                         title: "Success",
                         description: "Description generated successfully!",
@@ -4061,22 +4135,13 @@ Keep it concise - maximum 100 words. Write in paragraph form only. No tables or 
                   }
                 }}
               >
-                🤖 AI Generate
+                AI Generate
               </Button>
             </div>
             <Textarea
-              value={surgeryDetails.description}
-              onChange={(e) => setSurgeryDetails({...surgeryDetails, description: e.target.value})}
-              placeholder={`**Surgical Operation Record**
-
-**Patient Information:**
-- Name: USA
-- Age: 25
-- Gender: Male
-
-**Date of Surgery:** September 25, 2025
-
-Enter surgical procedure description here...`}
+              value={sharedSurgeryDescription}
+              onChange={(e) => setSharedSurgeryDescription(e.target.value)}
+              placeholder="Enter surgical procedure description here... This description applies to all surgeries listed above."
               className="min-h-[150px]"
             />
           </div>
