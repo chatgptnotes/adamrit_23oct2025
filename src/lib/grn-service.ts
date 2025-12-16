@@ -36,8 +36,31 @@ export async function generateGRNNumber(): Promise<string> {
     throw error;
   }
 
-  const sequence = ((count || 0) + 1).toString().padStart(4, '0');
-  return `${prefix}${year}${month}${sequence}`;
+  // Start from count+1 and keep incrementing until we find a unique number
+  let sequence = (count || 0) + 1;
+  let grn_number = `${prefix}${year}${month}${sequence.toString().padStart(4, '0')}`;
+
+  // Check if this number already exists, if so increment until unique
+  let maxAttempts = 100; // Safety limit
+  while (maxAttempts > 0) {
+    const { data: existing } = await supabaseClient
+      .from('goods_received_notes')
+      .select('id')
+      .eq('grn_number', grn_number)
+      .maybeSingle();
+
+    if (!existing) {
+      break; // Number is unique
+    }
+
+    console.log(`GRN number ${grn_number} already exists, trying next...`);
+    sequence++;
+    grn_number = `${prefix}${year}${month}${sequence.toString().padStart(4, '0')}`;
+    maxAttempts--;
+  }
+
+  console.log(`Generated unique GRN number: ${grn_number}`);
+  return grn_number;
 }
 
 /**
@@ -47,8 +70,8 @@ export async function createGRNFromPO(
   payload: CreateGRNPayload
 ): Promise<{ grn: GoodsReceivedNote; batch_inventories: MedicineBatchInventory[] }> {
   try {
-    // Generate GRN number
-    const grn_number = await generateGRNNumber();
+    // Use existing GRN number if provided (for updating drafts), otherwise generate new
+    const grn_number = payload.grn_number || await generateGRNNumber();
 
     // Get PO details
     const { data: poData, error: poError } = await supabaseClient
@@ -63,11 +86,17 @@ export async function createGRNFromPO(
     const total_items = payload.items.length;
     const total_quantity_ordered = payload.items.reduce((sum, item) => sum + item.ordered_quantity, 0);
     const total_quantity_received = payload.items.reduce((sum, item) => sum + item.received_quantity, 0);
-    const total_amount = payload.items.reduce((sum, item) => {
+
+    // Calculate subtotal (without tax)
+    const subtotal = payload.items.reduce((sum, item) => sum + (item.received_quantity * item.purchase_price), 0);
+
+    // Use manual total_tax if provided, otherwise calculate from items
+    const calculatedTax = payload.items.reduce((sum, item) => {
       const itemAmount = item.received_quantity * item.purchase_price;
-      const taxAmount = ((item.gst || 0) * itemAmount) / 100;
-      return sum + itemAmount + taxAmount;
+      return sum + ((item.gst || 0) * itemAmount) / 100;
     }, 0);
+    const totalTax = payload.total_tax !== undefined ? payload.total_tax : calculatedTax;
+    const total_amount = subtotal + totalTax;
 
     // 1. Create GRN header
     const { data: grnData, error: grnError } = await supabaseClient
