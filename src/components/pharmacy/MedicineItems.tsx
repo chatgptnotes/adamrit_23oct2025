@@ -48,7 +48,7 @@ const MedicineItems: React.FC = () => {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [selectedMedicine, setSelectedMedicine] = useState<MedicineMaster | null>(null);
   const [medicines, setMedicines] = useState<MedicineMaster[]>([]);
-  const [batchStockMap, setBatchStockMap] = useState<Record<string, number>>({});
+  const [batchStockMap, setBatchStockMap] = useState<Record<string, { totalStock: number; piecesPerPack: number }>>({});
   const [loading, setLoading] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(10);
@@ -81,18 +81,28 @@ const MedicineItems: React.FC = () => {
     } else {
       setMedicines(data || []);
 
-      // Fetch batch inventory stock for all medicines
+      // Fetch batch inventory stock for all medicines with pieces_per_pack
       const { data: batchData, error: batchError } = await supabase
         .from('medicine_batch_inventory')
-        .select('medicine_id, current_stock')
+        .select('medicine_id, current_stock, pieces_per_pack')
         .eq('is_active', true);
 
       if (!batchError && batchData) {
-        // Aggregate stock by medicine_id
-        const stockMap: Record<string, number> = {};
+        // Aggregate stock by medicine_id and get pieces_per_pack from first batch
+        const stockMap: Record<string, { totalStock: number; piecesPerPack: number }> = {};
         batchData.forEach((batch) => {
           if (batch.medicine_id) {
-            stockMap[batch.medicine_id] = (stockMap[batch.medicine_id] || 0) + (batch.current_stock || 0);
+            if (!stockMap[batch.medicine_id]) {
+              stockMap[batch.medicine_id] = {
+                totalStock: 0,
+                piecesPerPack: batch.pieces_per_pack || 1
+              };
+            }
+            stockMap[batch.medicine_id].totalStock += (batch.current_stock || 0);
+            // Use the pieces_per_pack from the batch with stock (prefer non-zero)
+            if (batch.pieces_per_pack && batch.pieces_per_pack > 0) {
+              stockMap[batch.medicine_id].piecesPerPack = batch.pieces_per_pack;
+            }
           }
         });
         setBatchStockMap(stockMap);
@@ -242,20 +252,21 @@ const MedicineItems: React.FC = () => {
                   <TableHead>Manufacturer</TableHead>
                   <TableHead>Supplier</TableHead>
                   <TableHead>Type</TableHead>
-                  <TableHead>Stock</TableHead>
+                  <TableHead>Stock (Tablets)</TableHead>
+                  <TableHead>Stock (Strips)</TableHead>
                   <TableHead>Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8">
+                    <TableCell colSpan={8} className="text-center py-8">
                       Loading medicines...
                     </TableCell>
                   </TableRow>
                 ) : paginatedMedicines.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8">
+                    <TableCell colSpan={8} className="text-center py-8">
                       <div className="flex flex-col items-center gap-2">
                         <Package className="h-8 w-8 text-muted-foreground" />
                         <p className="text-muted-foreground">
@@ -268,7 +279,11 @@ const MedicineItems: React.FC = () => {
                   </TableRow>
                 ) : (
                   paginatedMedicines.map((medicine) => {
-                    const batchStock = batchStockMap[medicine.id] || 0;
+                    const stockInfo = batchStockMap[medicine.id] || { totalStock: 0, piecesPerPack: 1 };
+                    const stockTablets = stockInfo.totalStock;
+                    const stockStrips = stockInfo.piecesPerPack > 0
+                      ? Math.floor(stockInfo.totalStock / stockInfo.piecesPerPack)
+                      : 0;
 
                     return (
                       <TableRow key={medicine.id}>
@@ -278,8 +293,13 @@ const MedicineItems: React.FC = () => {
                         <TableCell>{medicine.supplier?.supplier_name || 'N/A'}</TableCell>
                         <TableCell>{medicine.type || 'N/A'}</TableCell>
                         <TableCell>
-                          <Badge variant={batchStock < 50 ? "destructive" : "outline"}>
-                            {batchStock}
+                          <Badge variant={stockTablets < 50 ? "destructive" : "outline"}>
+                            {stockTablets}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={stockStrips < 5 ? "destructive" : "outline"}>
+                            {stockStrips}
                           </Badge>
                         </TableCell>
                         <TableCell>

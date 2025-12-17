@@ -246,6 +246,12 @@ export async function postGRN(
           continue; // Skip creating duplicate
         }
 
+        // Calculate stock in PIECES (not packs)
+        // e.g., 5 strips × 10 tablets/strip = 50 tablets
+        const piecesPerPack = item.pieces_per_pack || 1;
+        const totalPacks = accepted_quantity + (item.free_quantity || 0);
+        const totalPieces = totalPacks * piecesPerPack;
+
         const { data: batchInventory, error: batchError } = await supabaseClient
           .from('medicine_batch_inventory')
           .insert({
@@ -253,9 +259,9 @@ export async function postGRN(
             batch_number: item.batch_number,
             expiry_date: item.expiry_date,
             manufacturing_date: item.manufacturing_date,
-            pieces_per_pack: item.pieces_per_pack || 0,
-            received_quantity: accepted_quantity,
-            current_stock: accepted_quantity + (item.free_quantity || 0),
+            pieces_per_pack: piecesPerPack,
+            received_quantity: totalPieces, // Store in PIECES to satisfy constraint (current_stock = received_quantity - sold_quantity)
+            current_stock: totalPieces, // Store stock in PIECES
             sold_quantity: 0,
             reserved_stock: 0,
             free_quantity: item.free_quantity || 0,
@@ -285,7 +291,7 @@ export async function postGRN(
 
         batch_inventories.push(batchInventory);
 
-        // Create stock movement record
+        // Create stock movement record (quantities in pieces)
         await supabaseClient.from('batch_stock_movements').insert({
           batch_inventory_id: batchInventory.id,
           medicine_id: item.medicine_id,
@@ -295,9 +301,9 @@ export async function postGRN(
           reference_id: grnData.id,
           reference_number: grnData.grn_number,
           quantity_before: 0,
-          quantity_changed: accepted_quantity + (item.free_quantity || 0),
-          quantity_after: accepted_quantity + (item.free_quantity || 0),
-          reason: `Goods received via GRN ${grnData.grn_number}`,
+          quantity_changed: totalPieces,
+          quantity_after: totalPieces,
+          reason: `Goods received via GRN ${grnData.grn_number} (${totalPacks} packs × ${piecesPerPack} pcs)`,
           hospital_name: grnData.hospital_name,
         });
       }
@@ -312,22 +318,41 @@ export async function postGRN(
 
         const newReceivedQty = (poItem?.received_quantity || 0) + item.received_quantity;
 
+        // Update received_quantity AND batch/pricing/expiry/amount/tax data from GRN
+        const itemAmount = (item.purchase_price || 0) * (item.received_quantity || 0);
+        const taxPercentage = item.gst || 0;
+        const taxAmt = itemAmount * (taxPercentage / 100);
         await supabaseClient
           .from('purchase_order_items')
-          .update({ received_quantity: newReceivedQty })
+          .update({
+            received_quantity: newReceivedQty,
+            batch_no: item.batch_number,
+            mrp: item.mrp,
+            sale_price: item.sale_price,
+            purchase_price: item.purchase_price,
+            expiry_date: item.expiry_date,
+            amount: itemAmount,
+            tax_percentage: taxPercentage,
+            tax_amount: taxAmt,
+          })
           .eq('id', item.purchase_order_item_id);
       }
     }
 
-    // 3. Update Purchase Order status
+    // 3. Update Purchase Order status and totals
     const { data: poItems } = await supabaseClient
       .from('purchase_order_items')
-      .select('order_quantity, received_quantity')
+      .select('order_quantity, received_quantity, amount, tax_amount')
       .eq('purchase_order_id', grnData.purchase_order_id);
 
     if (poItems) {
       const totalOrdered = poItems.reduce((sum, item) => sum + item.order_quantity, 0);
       const totalReceived = poItems.reduce((sum, item) => sum + (item.received_quantity || 0), 0);
+
+      // Calculate totals from updated items
+      const subtotal = poItems.reduce((sum, item) => sum + (item.amount || 0), 0);
+      const taxAmount = poItems.reduce((sum, item) => sum + (item.tax_amount || 0), 0);
+      const totalAmount = subtotal + taxAmount;
 
       let newStatus = 'ORDERED';
       if (totalReceived === 0) {
@@ -343,6 +368,9 @@ export async function postGRN(
         .update({
           status: newStatus,
           actual_delivery_date: totalReceived >= totalOrdered ? grnData.grn_date : null,
+          subtotal: subtotal,
+          tax_amount: taxAmount,
+          total_amount: totalAmount,
         })
         .eq('id', grnData.purchase_order_id);
     }
