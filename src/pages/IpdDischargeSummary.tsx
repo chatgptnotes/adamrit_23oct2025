@@ -1988,8 +1988,8 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
         };
       }
 
-      // Generate print HTML
-      const printHTML = generatePrintHTML(summaryData, patientInfo, visitId, formattedLabResults);
+      // Generate print HTML - pass current form surgery data
+      const printHTML = generatePrintHTML(summaryData, patientInfo, visitId, formattedLabResults, surgeryRows, sharedSurgeryDescription);
 
       // Open print preview in new window
       const printWindow = window.open('', '_blank');
@@ -2125,7 +2125,7 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
   };
 
   // Function to generate formatted print HTML
-  const generatePrintHTML = (summaryData: any, patientInfo: any, visitIdString: string, labResults?: any) => {
+  const generatePrintHTML = (summaryData: any, patientInfo: any, visitIdString: string, labResults?: any, currentSurgeryRows?: any[], currentSurgeryDescription?: string) => {
     const currentDate = format(new Date(), 'dd/MM/yyyy');
 
     console.log('🖨️ Generating print HTML with summaryData:', summaryData);
@@ -2478,43 +2478,41 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
     return '';
   })()}
 
-  ${summaryData.procedures_performed && (summaryData.procedures_performed.surgery_date || summaryData.procedures_performed.procedure_performed) ? `
-  <div class="section">
-    <div class="section-subtitle">Operation Notes</div>
-    <table>
-      <tbody>
-        <tr>
-          <td style="width: 30%; font-weight: bold; background-color: #f0f0f0;">Date & Time</td>
-          <td>${summaryData.procedures_performed.surgery_date ? format(new Date(summaryData.procedures_performed.surgery_date), 'dd/MM/yyyy, HH:mm') + ' hours' : ''}</td>
-        </tr>
-        <tr>
-          <td style="width: 30%; font-weight: bold; background-color: #f0f0f0;">Procedure</td>
-          <td>${summaryData.procedures_performed.procedure_performed || ''}</td>
-        </tr>
-        <tr>
-          <td style="width: 30%; font-weight: bold; background-color: #f0f0f0;">Surgeon</td>
-          <td>${summaryData.procedures_performed.surgeon || ''}</td>
-        </tr>
-        <tr>
-          <td style="width: 30%; font-weight: bold; background-color: #f0f0f0;">Anaesthetist</td>
-          <td>${summaryData.procedures_performed.anesthetist || ''}</td>
-        </tr>
-        <tr>
-          <td style="width: 30%; font-weight: bold; background-color: #f0f0f0;">Anaesthesia Type</td>
-          <td>${summaryData.procedures_performed.anesthesia_type || ''}</td>
-        </tr>
-        <tr>
-          <td style="width: 30%; font-weight: bold; background-color: #f0f0f0;">Description</td>
-          <td style="white-space: pre-wrap;">${(summaryData.procedures_performed.description || '').replace(/\n/g, '<br>').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')}</td>
-        </tr>
-        <tr>
-          <td style="width: 30%; font-weight: bold; background-color: #f0f0f0;">IMPLANT:</td>
-          <td>${summaryData.procedures_performed.implant || ''}</td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
-  ` : ''}
+  ${(() => {
+    // Use current form data (surgeryRows from state) - show as paragraphs
+    if (currentSurgeryRows && currentSurgeryRows.length > 0) {
+      const surgeries = currentSurgeryRows.filter((s: any) => s.date || s.procedurePerformed);
+      if (surgeries.length === 0) return '';
+
+      let html = '<div class="section"><div class="section-subtitle">Operation Notes</div><div class="section-content">';
+
+      surgeries.forEach((surgery: any, index: number) => {
+        const dateStr = surgery.date ? format(new Date(surgery.date), 'dd/MM/yyyy, HH:mm') + ' hours' : '';
+
+        // Build paragraph text
+        let paragraph = '<strong>Surgery ' + (index + 1) + ': ' + (surgery.procedurePerformed || 'N/A') + '</strong>';
+        if (dateStr) paragraph += ' was performed on ' + dateStr;
+        if (surgery.surgeon) paragraph += ' by ' + surgery.surgeon;
+        if (surgery.anesthesia) paragraph += ' under ' + surgery.anesthesia;
+        paragraph += '.';
+
+        if (surgery.anesthetist) paragraph += ' Anaesthetist: ' + surgery.anesthetist + '.';
+        if (surgery.implant) paragraph += ' Implant: ' + surgery.implant + '.';
+
+        html += '<p style="margin-bottom: 10px;">' + paragraph + '</p>';
+      });
+
+      // Add description at the end
+      if (currentSurgeryDescription) {
+        html += '<p style="margin-top: 15px;"><strong>Description:</strong><br>' + currentSurgeryDescription.replace(/\n/g, '<br>').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') + '</p>';
+      }
+
+      html += '</div></div>';
+      return html;
+    }
+
+    return '';
+  })()}
 
   ${(() => {
     // First try to extract ADVICE from ot_notes
@@ -2699,10 +2697,30 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
         formattedText += '\n';
       }
 
-      // NOTE: MEDICATIONS and SURGERY DETAILS are NOT included here
-      // They are displayed separately in their own sections and should not be sent to Gemini
+      // NOTE: MEDICATIONS are NOT included here - displayed separately in their own section
 
-      // Display formatted text in the newTemplateContent textarea
+      // Surgery Details - from current form state (surgeryRows)
+      if (surgeryRows && surgeryRows.length > 0) {
+        const validSurgeries = surgeryRows.filter((s) => s.date || s.procedurePerformed);
+        if (validSurgeries.length > 0) {
+          formattedText += `SURGERY DETAILS:\n`;
+          validSurgeries.forEach((surgery, index) => {
+            formattedText += `Surgery ${index + 1}:\n`;
+            if (surgery.date) formattedText += `  Date: ${surgery.date}\n`;
+            if (surgery.procedurePerformed) formattedText += `  Procedure: ${surgery.procedurePerformed}\n`;
+            if (surgery.surgeon) formattedText += `  Surgeon: ${surgery.surgeon}\n`;
+            if (surgery.anesthetist) formattedText += `  Anaesthetist: ${surgery.anesthetist}\n`;
+            if (surgery.anesthesia) formattedText += `  Anaesthesia: ${surgery.anesthesia}\n`;
+            if (surgery.implant) formattedText += `  Implant: ${surgery.implant}\n`;
+          });
+          if (sharedSurgeryDescription) {
+            formattedText += `Description: ${sharedSurgeryDescription}\n`;
+          }
+          formattedText += '\n';
+        }
+      }
+
+      // Display formatted text in the newTemplateContent textarea (above Fetch Data button)
       setNewTemplateContent(formattedText);
 
       toast({
@@ -4392,10 +4410,10 @@ IMPORTANT INSTRUCTIONS:
 3. Do NOT include INVESTIGATIONS section - it is displayed separately from the database.
 4. Do NOT include MEDICATIONS section - it is displayed separately in a table.
 5. Do NOT include the emergency contact line in the ADVICE section.
-6. For DIAGNOSIS: Expand into a professional 2-3 sentence medical diagnosis statement explaining the condition.
-7. For CLINICAL HISTORY: Expand symptoms into a proper 4-5 line paragraph as a professional medical narrative.
-8. For EXAMINATION: Expand vital signs into a proper 4-5 line paragraph describing physical examination findings.
-9. For HOSPITAL STAY NOTES: Write a 2-3 sentence summary of the patient's hospital stay, treatment received, and recovery progress during hospitalization.
+6. For DIAGNOSIS: Keep as is in simple format. Do NOT expand into detailed sentences.
+7. For CLINICAL HISTORY: Keep as is in simple format. Do NOT expand into detailed paragraphs.
+8. For EXAMINATION: Keep as is in simple format. Do NOT expand into detailed paragraphs.
+9. For HOSPITAL STAY NOTES: Keep as is in simple format. Do NOT expand into detailed paragraphs.
 10. For ADVICE: Write ONLY a SHORT 2-3 sentence paragraph with general post-operative care instructions. Example: "The patient is advised to follow up after 3 days or sooner if symptoms worsen. They are instructed to perform dressing changes and to use an LS belt for support. Follow up after 7 days/SOS." Do NOT include medications list, do NOT include numbered lists, do NOT include detailed wound care instructions.`;
 
                           // Call Google Gemini API
