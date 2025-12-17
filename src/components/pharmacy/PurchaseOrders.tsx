@@ -696,7 +696,7 @@ const PurchaseOrders: React.FC<PurchaseOrdersProps> = ({ onAddClick, onEditClick
                               0
                             );
                             const subtotalBeforeTax = selectedPOItems.reduce(
-                              (sum, item) => sum + (item.amount - (item.tax_amount || 0)),
+                              (sum, item) => sum + (item.amount || 0),
                               0
                             );
                             const discount = selectedGRN?.discount || 0;

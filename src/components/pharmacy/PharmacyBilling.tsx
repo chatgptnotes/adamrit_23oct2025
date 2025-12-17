@@ -61,14 +61,17 @@ interface CartItem {
   batch_number: string;
   expiry_date: string;
   mrp: number;
-  unit_price: number;
-  quantity: number;
+  unit_price: number; // Price per piece (tablet)
+  quantity: number; // Total pieces to sell (calculated: strips * pieces_per_pack + tablets)
+  qty_strips: number; // Number of full strips to sell
+  qty_tablets: number; // Number of loose tablets to sell
   discount_percentage: number;
   discount_amount: number;
   tax_percentage: number;
   tax_amount: number;
   total_amount: number;
-  available_stock: number;
+  available_stock: number; // Stock in pieces (tablets)
+  pieces_per_pack: number; // e.g., 10 tablets per strip
   prescription_required: boolean;
 }
 
@@ -174,7 +177,7 @@ const PharmacyBilling: React.FC = () => {
         const medicineIds = medicines.map((m: any) => m.id);
         const { data: batches, error: batchError } = await supabase
           .from('medicine_batch_inventory')
-          .select('id, medicine_id, batch_number, expiry_date, current_stock, selling_price, mrp')
+          .select('id, medicine_id, batch_number, expiry_date, current_stock, selling_price, mrp, pieces_per_pack')
           .in('medicine_id', medicineIds)
           .eq('is_active', true)
           .eq('is_expired', false)
@@ -197,7 +200,8 @@ const PharmacyBilling: React.FC = () => {
               generic_name: med.generic_name || '',
               strength: '',
               dosage: med.type || '',
-              stock: batch.current_stock || 0,
+              stock: batch.current_stock || 0, // Now stored in pieces (tablets)
+              pieces_per_pack: batch.pieces_per_pack || 1,
               price_per_strip: batch.selling_price || 0,
               mrp: batch.mrp || 0,
               item_code: '',
@@ -435,6 +439,7 @@ const PharmacyBilling: React.FC = () => {
       }
       updateQuantity(existingItem.id, existingItem.quantity + 1);
     } else {
+      const piecesPerPack = medicine.pieces_per_pack || 1;
       const newItem: CartItem = {
         id: Date.now().toString(),
         medicine_id: medicine.medicine_id, // FK to medicine_master
@@ -449,34 +454,41 @@ const PharmacyBilling: React.FC = () => {
         batch_number: medicine.batch_number || 'BATCH-001',
         expiry_date: medicine.expiry_date || '',
         mrp: medicine.mrp || medicine.price_per_strip || 0,
-        unit_price: medicine.price_per_strip || 0,
-        quantity: 1,
+        unit_price: medicine.price_per_strip || 0, // Price per piece
+        quantity: piecesPerPack, // Start with 1 strip worth of tablets
+        qty_strips: 1, // Default to 1 strip
+        qty_tablets: 0, // Default to 0 loose tablets
         discount_percentage: 0,
         discount_amount: 0,
         tax_percentage: medicine.tax_percentage || 12,
         tax_amount: 0,
         total_amount: 0,
-        available_stock: medicine.stock || 0,
+        available_stock: medicine.stock || 0, // Now in pieces (tablets)
+        pieces_per_pack: piecesPerPack,
         prescription_required: medicine.prescription_required || false
       };
 
-      console.log('✅ New cart item created:', {
-        medicine_id: newItem.medicine_id,
-        medicine_name: newItem.medicine_name,
-        generic_name: newItem.generic_name
-      });
-      
-      // Calculate amounts
-      const subtotal = newItem.unit_price * newItem.quantity;
+      // Calculate amounts based on total pieces (qty_strips * pieces_per_pack + qty_tablets)
+      const totalPieces = newItem.quantity; // Already calculated as piecesPerPack (1 strip)
+      const subtotal = newItem.unit_price * totalPieces;
       const discountAmount = (subtotal * newItem.discount_percentage) / 100;
       const taxableAmount = subtotal - discountAmount;
       const taxAmount = (taxableAmount * newItem.tax_percentage) / 100;
       const totalAmount = taxableAmount + taxAmount;
-      
+
       newItem.discount_amount = discountAmount;
       newItem.tax_amount = taxAmount;
       newItem.total_amount = totalAmount;
-      
+
+      console.log('✅ New cart item created:', {
+        medicine_id: newItem.medicine_id,
+        medicine_name: newItem.medicine_name,
+        qty_strips: newItem.qty_strips,
+        qty_tablets: newItem.qty_tablets,
+        total_quantity: newItem.quantity,
+        pieces_per_pack: newItem.pieces_per_pack
+      });
+
       setCart(prev => [...prev, newItem]);
     }
   };
@@ -1249,19 +1261,19 @@ const PharmacyBilling: React.FC = () => {
                 </div>
               ) : (
                 <div className="overflow-x-auto">
-                  <p className="text-xs text-red-500 mb-2">(MSU = Minimum Saleable Unit)</p>
+                  <p className="text-xs text-blue-600 mb-2">Enter quantity in Strips or individual Tablets</p>
                   <Table>
                     <TableHeader>
                       <TableRow>
                         <TableHead>Item Name</TableHead>
-                        <TableHead>Quantity (MSU)</TableHead>
-                        <TableHead>Pack</TableHead>
+                        <TableHead>Strips</TableHead>
+                        <TableHead>Tablets</TableHead>
                         <TableHead>Administration Time</TableHead>
                         <TableHead>Batch No.</TableHead>
                         <TableHead>Stock Available</TableHead>
                         <TableHead>Expiry Date</TableHead>
                         <TableHead>MRP</TableHead>
-                        <TableHead>Price</TableHead>
+                        <TableHead>Price/Pc</TableHead>
                         <TableHead>Amount</TableHead>
                         <TableHead>#</TableHead>
                       </TableRow>
@@ -1292,42 +1304,145 @@ const PharmacyBilling: React.FC = () => {
                               />
                             </div>
                           </TableCell>
+                          {/* Strips - editable */}
                           <TableCell>
                             <div className="flex items-center gap-1">
                               <Button
                                 size="sm"
                                 variant="outline"
-                                onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                                onClick={() => {
+                                  const newStrips = Math.max(0, item.qty_strips - 1);
+                                  const totalQty = (newStrips * item.pieces_per_pack) + item.qty_tablets;
+                                  if (totalQty <= item.available_stock) {
+                                    const subtotal = item.unit_price * totalQty;
+                                    const discountAmount = (subtotal * item.discount_percentage) / 100;
+                                    const taxableAmount = subtotal - discountAmount;
+                                    const taxAmount = (taxableAmount * item.tax_percentage) / 100;
+                                    const totalAmount = taxableAmount + taxAmount;
+                                    setCart(prev => prev.map(i =>
+                                      i.id === item.id ? { ...i, qty_strips: newStrips, quantity: totalQty, discount_amount: discountAmount, tax_amount: taxAmount, total_amount: totalAmount } : i
+                                    ));
+                                  }
+                                }}
                                 className="h-6 w-6 p-0"
                               >
                                 <Minus className="h-3 w-3" />
                               </Button>
                               <Input
-                                className="w-16 text-center text-xs h-6"
-                                value={item.quantity}
-                                onChange={(e) => updateQuantity(item.id, parseInt(e.target.value) || 0)}
+                                type="number"
+                                className="w-14 text-center text-xs h-6"
+                                value={item.qty_strips}
+                                onChange={(e) => {
+                                  const newStrips = Math.max(0, parseInt(e.target.value) || 0);
+                                  const totalQty = (newStrips * item.pieces_per_pack) + item.qty_tablets;
+                                  if (totalQty <= item.available_stock) {
+                                    const subtotal = item.unit_price * totalQty;
+                                    const discountAmount = (subtotal * item.discount_percentage) / 100;
+                                    const taxableAmount = subtotal - discountAmount;
+                                    const taxAmount = (taxableAmount * item.tax_percentage) / 100;
+                                    const totalAmount = taxableAmount + taxAmount;
+                                    setCart(prev => prev.map(i =>
+                                      i.id === item.id ? { ...i, qty_strips: newStrips, quantity: totalQty, discount_amount: discountAmount, tax_amount: taxAmount, total_amount: totalAmount } : i
+                                    ));
+                                  } else {
+                                    alert(`Cannot exceed available stock of ${item.available_stock} tablets.`);
+                                  }
+                                }}
                               />
                               <Button
                                 size="sm"
                                 variant="outline"
-                                onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                                disabled={item.quantity >= item.available_stock}
+                                onClick={() => {
+                                  const newStrips = item.qty_strips + 1;
+                                  const totalQty = (newStrips * item.pieces_per_pack) + item.qty_tablets;
+                                  if (totalQty <= item.available_stock) {
+                                    const subtotal = item.unit_price * totalQty;
+                                    const discountAmount = (subtotal * item.discount_percentage) / 100;
+                                    const taxableAmount = subtotal - discountAmount;
+                                    const taxAmount = (taxableAmount * item.tax_percentage) / 100;
+                                    const totalAmount = taxableAmount + taxAmount;
+                                    setCart(prev => prev.map(i =>
+                                      i.id === item.id ? { ...i, qty_strips: newStrips, quantity: totalQty, discount_amount: discountAmount, tax_amount: taxAmount, total_amount: totalAmount } : i
+                                    ));
+                                  } else {
+                                    alert(`Cannot exceed available stock of ${item.available_stock} tablets.`);
+                                  }
+                                }}
+                                disabled={((item.qty_strips + 1) * item.pieces_per_pack + item.qty_tablets) > item.available_stock}
                                 className="h-6 w-6 p-0"
                               >
                                 <Plus className="h-3 w-3" />
                               </Button>
                             </div>
                           </TableCell>
+                          {/* Tablets - editable for loose tablets */}
                           <TableCell>
-                            <Input
-                              className="w-20 text-xs"
-                              value={item.pack || ''}
-                              onChange={(e) => {
-                                setCart(prev => prev.map(i =>
-                                  i.id === item.id ? { ...i, pack: e.target.value } : i
-                                ));
-                              }}
-                            />
+                            <div className="flex items-center gap-1">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  const newTablets = Math.max(0, item.qty_tablets - 1);
+                                  const totalQty = (item.qty_strips * item.pieces_per_pack) + newTablets;
+                                  const subtotal = item.unit_price * totalQty;
+                                  const discountAmount = (subtotal * item.discount_percentage) / 100;
+                                  const taxableAmount = subtotal - discountAmount;
+                                  const taxAmount = (taxableAmount * item.tax_percentage) / 100;
+                                  const totalAmount = taxableAmount + taxAmount;
+                                  setCart(prev => prev.map(i =>
+                                    i.id === item.id ? { ...i, qty_tablets: newTablets, quantity: totalQty, discount_amount: discountAmount, tax_amount: taxAmount, total_amount: totalAmount } : i
+                                  ));
+                                }}
+                                className="h-6 w-6 p-0"
+                              >
+                                <Minus className="h-3 w-3" />
+                              </Button>
+                              <Input
+                                type="number"
+                                className="w-14 text-center text-xs h-6"
+                                value={item.qty_tablets}
+                                onChange={(e) => {
+                                  const newTablets = Math.max(0, parseInt(e.target.value) || 0);
+                                  const totalQty = (item.qty_strips * item.pieces_per_pack) + newTablets;
+                                  if (totalQty <= item.available_stock) {
+                                    const subtotal = item.unit_price * totalQty;
+                                    const discountAmount = (subtotal * item.discount_percentage) / 100;
+                                    const taxableAmount = subtotal - discountAmount;
+                                    const taxAmount = (taxableAmount * item.tax_percentage) / 100;
+                                    const totalAmount = taxableAmount + taxAmount;
+                                    setCart(prev => prev.map(i =>
+                                      i.id === item.id ? { ...i, qty_tablets: newTablets, quantity: totalQty, discount_amount: discountAmount, tax_amount: taxAmount, total_amount: totalAmount } : i
+                                    ));
+                                  } else {
+                                    alert(`Cannot exceed available stock of ${item.available_stock} tablets.`);
+                                  }
+                                }}
+                              />
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  const newTablets = item.qty_tablets + 1;
+                                  const totalQty = (item.qty_strips * item.pieces_per_pack) + newTablets;
+                                  if (totalQty <= item.available_stock) {
+                                    const subtotal = item.unit_price * totalQty;
+                                    const discountAmount = (subtotal * item.discount_percentage) / 100;
+                                    const taxableAmount = subtotal - discountAmount;
+                                    const taxAmount = (taxableAmount * item.tax_percentage) / 100;
+                                    const totalAmount = taxableAmount + taxAmount;
+                                    setCart(prev => prev.map(i =>
+                                      i.id === item.id ? { ...i, qty_tablets: newTablets, quantity: totalQty, discount_amount: discountAmount, tax_amount: taxAmount, total_amount: totalAmount } : i
+                                    ));
+                                  } else {
+                                    alert(`Cannot exceed available stock of ${item.available_stock} tablets.`);
+                                  }
+                                }}
+                                disabled={(item.qty_strips * item.pieces_per_pack + item.qty_tablets + 1) > item.available_stock}
+                                className="h-6 w-6 p-0"
+                              >
+                                <Plus className="h-3 w-3" />
+                              </Button>
+                            </div>
                           </TableCell>
                           <TableCell>
                             <select
