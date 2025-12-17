@@ -31,6 +31,7 @@ import {
 import { PurchaseOrderService } from '@/lib/purchase-order-service';
 import { SupplierService, Supplier } from '@/lib/supplier-service';
 import { MedicineService, Medicine } from '@/lib/medicine-service';
+import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useNavigate } from 'react-router-dom';
 import { Loader2, Plus, Trash2, Check, ChevronsUpDown } from 'lucide-react';
@@ -177,18 +178,36 @@ const AddPurchaseOrder: React.FC<AddPurchaseOrderProps> = ({ onBack }) => {
       }
     }
 
+    // Fetch total stock from batch inventory (sum of all batches for this medicine)
+    let totalBatchStock = 0;
+    try {
+      const { data: batchData } = await supabase
+        .from('medicine_batch_inventory')
+        .select('current_stock')
+        .eq('medicine_id', medicine.id)
+        .eq('is_active', true);
+
+      if (batchData) {
+        totalBatchStock = batchData.reduce((sum, batch) => sum + (batch.current_stock || 0), 0);
+      }
+    } catch (error) {
+      console.error('Error fetching batch inventory:', error);
+    }
+
     // Auto-populate the form
+    // Note: Pricing fields default to 0 - user must enter purchase_price
+    // Batch number will be entered later during GRN
     setNewProduct({
       medicine_id: medicine.id,
       product_name: medicine.medicine_name,
       manufacturer: manufacturerName,
       pack: medicine.type || '1',
-      batch_no: medicine.batch_number || '',
-      mrp: medicine.mrp_price || 0,
-      sale_price: medicine.selling_price || 0,
-      purchase_price: medicine.purchase_price || 0,
+      batch_no: '', // Batch entered during GRN
+      mrp: 0, // User can enter
+      sale_price: 0, // User can enter
+      purchase_price: 0, // User must enter
       tax: 0, // User must enter
-      total_stock: medicine.quantity || 0,
+      total_stock: totalBatchStock, // Stock from batch inventory
       order_qty: 0, // User must enter
       vat_amt: 0,
       amount: 0,
@@ -452,7 +471,7 @@ const AddPurchaseOrder: React.FC<AddPurchaseOrderProps> = ({ onBack }) => {
                                     <span className="font-medium">{medicine.medicine_name}</span>
                                     {medicine.generic_name && (
                                       <span className="text-xs text-gray-500">
-                                        {medicine.generic_name} - Stock: {medicine.quantity} - Batch: {medicine.batch_number || 'N/A'}
+                                        {medicine.generic_name}
                                       </span>
                                     )}
                                   </div>
@@ -475,11 +494,11 @@ const AddPurchaseOrder: React.FC<AddPurchaseOrderProps> = ({ onBack }) => {
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-medium">Pack</label>
+                  <label className="text-sm font-medium">Pack (Pieces/Tablets)</label>
                   <Input
                     value={newProduct.pack}
                     onChange={(e) => setNewProduct({ ...newProduct, pack: e.target.value })}
-                    placeholder="e.g., 1"
+                    placeholder="e.g., 10 Tablets, 1 Bottle"
                   />
                 </div>
                 <div>
@@ -537,12 +556,12 @@ const AddPurchaseOrder: React.FC<AddPurchaseOrderProps> = ({ onBack }) => {
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-medium">Order Qty (MSU) *</label>
+                  <label className="text-sm font-medium">Order Qty (Strips/Units) *</label>
                   <Input
                     type="number"
                     value={newProduct.order_qty}
                     onChange={(e) => setNewProduct({ ...newProduct, order_qty: parseInt(e.target.value) || 0 })}
-                    placeholder="Enter quantity to order"
+                    placeholder="e.g., 100 strips"
                   />
                 </div>
               </div>

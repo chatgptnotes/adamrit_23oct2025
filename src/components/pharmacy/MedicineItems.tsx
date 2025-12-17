@@ -48,6 +48,7 @@ const MedicineItems: React.FC = () => {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [selectedMedicine, setSelectedMedicine] = useState<MedicineMaster | null>(null);
   const [medicines, setMedicines] = useState<MedicineMaster[]>([]);
+  const [batchStockMap, setBatchStockMap] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(10);
@@ -56,11 +57,14 @@ const MedicineItems: React.FC = () => {
 
   const fetchMedicines = async () => {
     setLoading(true);
+
+    // Fetch medicines from medicine_master with manufacturer and supplier
     const { data, error } = await supabase
       .from('medicine_master')
       .select(`
         *,
-        manufacturer:manufacturer_companies(id, name)
+        manufacturer:manufacturer_companies(id, name),
+        supplier:suppliers(id, supplier_name)
       `)
       .eq('is_deleted', false)
       .eq('hospital_name', hospitalConfig.fullName)
@@ -76,6 +80,23 @@ const MedicineItems: React.FC = () => {
       setMedicines([]);
     } else {
       setMedicines(data || []);
+
+      // Fetch batch inventory stock for all medicines
+      const { data: batchData, error: batchError } = await supabase
+        .from('medicine_batch_inventory')
+        .select('medicine_id, current_stock')
+        .eq('is_active', true);
+
+      if (!batchError && batchData) {
+        // Aggregate stock by medicine_id
+        const stockMap: Record<string, number> = {};
+        batchData.forEach((batch) => {
+          if (batch.medicine_id) {
+            stockMap[batch.medicine_id] = (stockMap[batch.medicine_id] || 0) + (batch.current_stock || 0);
+          }
+        });
+        setBatchStockMap(stockMap);
+      }
     }
     setLoading(false);
   };
@@ -119,8 +140,7 @@ const MedicineItems: React.FC = () => {
   const filteredMedicines = medicines.filter(medicine => {
     const searchLower = searchTerm.toLowerCase();
     return medicine.medicine_name?.toLowerCase().includes(searchLower) ||
-           medicine.generic_name?.toLowerCase().includes(searchLower) ||
-           medicine.batch_number?.toLowerCase().includes(searchLower);
+           medicine.generic_name?.toLowerCase().includes(searchLower);
   });
 
   // Pagination calculations
@@ -133,16 +153,6 @@ const MedicineItems: React.FC = () => {
   useEffect(() => {
     setCurrentPage(1);
   }, [searchTerm]);
-
-  const formatPrice = (price: number | undefined | null) => {
-    if (price === undefined || price === null) return '₹0.00';
-    return `₹${price.toFixed(2)}`;
-  };
-
-  const formatDate = (date: string | undefined | null) => {
-    if (!date) return 'N/A';
-    return new Date(date).toLocaleDateString('en-IN');
-  };
 
   return (
     <div className="space-y-6">
@@ -208,7 +218,7 @@ const MedicineItems: React.FC = () => {
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
             <Input
-              placeholder="Search medicines by name, generic name, or batch number..."
+              placeholder="Search medicines by name or generic name..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-10"
@@ -231,27 +241,21 @@ const MedicineItems: React.FC = () => {
                   <TableHead>Generic Name</TableHead>
                   <TableHead>Manufacturer</TableHead>
                   <TableHead>Supplier</TableHead>
-                  <TableHead>Batch No.</TableHead>
                   <TableHead>Type</TableHead>
-                  <TableHead>Quantity</TableHead>
-                  <TableHead>Tablets/Pieces</TableHead>
-                  <TableHead>Purchase Price</TableHead>
-                  <TableHead>Selling Price</TableHead>
-                  <TableHead>MRP</TableHead>
-                  <TableHead>Expiry Date</TableHead>
+                  <TableHead>Stock</TableHead>
                   <TableHead>Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={13} className="text-center py-8">
+                    <TableCell colSpan={7} className="text-center py-8">
                       Loading medicines...
                     </TableCell>
                   </TableRow>
                 ) : paginatedMedicines.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={13} className="text-center py-8">
+                    <TableCell colSpan={7} className="text-center py-8">
                       <div className="flex flex-col items-center gap-2">
                         <Package className="h-8 w-8 text-muted-foreground" />
                         <p className="text-muted-foreground">
@@ -264,10 +268,7 @@ const MedicineItems: React.FC = () => {
                   </TableRow>
                 ) : (
                   paginatedMedicines.map((medicine) => {
-                    const isExpiringSoon = medicine.expiry_date &&
-                      new Date(medicine.expiry_date) <= new Date(Date.now() + 90 * 24 * 60 * 60 * 1000);
-                    const isExpired = medicine.expiry_date &&
-                      new Date(medicine.expiry_date) < new Date();
+                    const batchStock = batchStockMap[medicine.id] || 0;
 
                     return (
                       <TableRow key={medicine.id}>
@@ -275,22 +276,10 @@ const MedicineItems: React.FC = () => {
                         <TableCell>{medicine.generic_name || 'N/A'}</TableCell>
                         <TableCell>{medicine.manufacturer?.name || 'N/A'}</TableCell>
                         <TableCell>{medicine.supplier?.supplier_name || 'N/A'}</TableCell>
-                        <TableCell>{medicine.batch_number || 'N/A'}</TableCell>
                         <TableCell>{medicine.type || 'N/A'}</TableCell>
                         <TableCell>
-                          <Badge variant={medicine.quantity && medicine.quantity < 50 ? "destructive" : "outline"}>
-                            {medicine.quantity || 0}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>{medicine.tablets_pieces || 0}</TableCell>
-                        <TableCell>{formatPrice(medicine.purchase_price)}</TableCell>
-                        <TableCell>{formatPrice(medicine.selling_price)}</TableCell>
-                        <TableCell>{formatPrice(medicine.mrp_price)}</TableCell>
-                        <TableCell>
-                          <Badge
-                            variant={isExpired ? "destructive" : isExpiringSoon ? "default" : "outline"}
-                          >
-                            {formatDate(medicine.expiry_date)}
+                          <Badge variant={batchStock < 50 ? "destructive" : "outline"}>
+                            {batchStock}
                           </Badge>
                         </TableCell>
                         <TableCell>
@@ -414,14 +403,7 @@ const AddMedicineForm: React.FC<{ hospitalName: string; onSuccess: () => void }>
     generic_name: '',
     manufacturer_id: '',
     supplier_id: '',
-    quantity: '',
-    tablets_pieces: '',
-    batch_number: '',
     type: '',
-    purchase_price: '',
-    selling_price: '',
-    mrp_price: '',
-    expiry_date: '',
   });
 
   useEffect(() => {
@@ -462,14 +444,7 @@ const AddMedicineForm: React.FC<{ hospitalName: string; onSuccess: () => void }>
           generic_name: formData.generic_name || null,
           manufacturer_id: formData.manufacturer_id ? parseInt(formData.manufacturer_id) : null,
           supplier_id: formData.supplier_id ? parseInt(formData.supplier_id) : null,
-          quantity: formData.quantity ? parseInt(formData.quantity) : 0,
-          tablets_pieces: formData.tablets_pieces ? parseInt(formData.tablets_pieces) : 0,
-          batch_number: formData.batch_number || null,
           type: formData.type || null,
-          purchase_price: formData.purchase_price ? parseFloat(formData.purchase_price) : 0,
-          selling_price: formData.selling_price ? parseFloat(formData.selling_price) : 0,
-          mrp_price: formData.mrp_price ? parseFloat(formData.mrp_price) : 0,
-          expiry_date: formData.expiry_date || null,
           hospital_name: hospitalName,
         }
       ]);
@@ -559,40 +534,10 @@ const AddMedicineForm: React.FC<{ hospitalName: string; onSuccess: () => void }>
         </div>
       </div>
 
-      {/* Stock Information */}
+      {/* Medicine Type */}
       <div>
-        <h3 className="text-lg font-semibold mb-3">Stock Information</h3>
-        <div className="grid grid-cols-4 gap-4">
-          <div>
-            <label className="text-sm font-medium">Quantity</label>
-            <Input
-              type="number"
-              value={formData.quantity}
-              onChange={(e) => setFormData(prev => ({ ...prev, quantity: e.target.value }))}
-              placeholder="Enter quantity"
-              min="0"
-            />
-            <p className="text-xs text-muted-foreground mt-1">e.g., Number of strips, bottles, or boxes</p>
-          </div>
-          <div>
-            <label className="text-sm font-medium">Tablets/Pieces</label>
-            <Input
-              type="number"
-              value={formData.tablets_pieces}
-              onChange={(e) => setFormData(prev => ({ ...prev, tablets_pieces: e.target.value }))}
-              placeholder="Enter tablets/pieces"
-              min="0"
-            />
-            <p className="text-xs text-muted-foreground mt-1">e.g., Number of tablets/pieces in one quantity unit</p>
-          </div>
-          <div>
-            <label className="text-sm font-medium">Batch Number</label>
-            <Input
-              value={formData.batch_number}
-              onChange={(e) => setFormData(prev => ({ ...prev, batch_number: e.target.value }))}
-              placeholder="Enter batch number"
-            />
-          </div>
+        <h3 className="text-lg font-semibold mb-3">Medicine Type</h3>
+        <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="text-sm font-medium">Type</label>
             <Select
@@ -610,61 +555,6 @@ const AddMedicineForm: React.FC<{ hospitalName: string; onSuccess: () => void }>
                 <SelectItem value="Tablets">Tablets</SelectItem>
               </SelectContent>
             </Select>
-          </div>
-        </div>
-      </div>
-
-      {/* Pricing Information */}
-      <div>
-        <h3 className="text-lg font-semibold mb-3">Pricing Information</h3>
-        <div className="grid grid-cols-3 gap-4">
-          <div>
-            <label className="text-sm font-medium">Purchase Price (₹)</label>
-            <Input
-              type="number"
-              step="0.01"
-              value={formData.purchase_price}
-              onChange={(e) => setFormData(prev => ({ ...prev, purchase_price: e.target.value }))}
-              placeholder="0.00"
-              min="0"
-            />
-          </div>
-          <div>
-            <label className="text-sm font-medium">Selling Price (₹)</label>
-            <Input
-              type="number"
-              step="0.01"
-              value={formData.selling_price}
-              onChange={(e) => setFormData(prev => ({ ...prev, selling_price: e.target.value }))}
-              placeholder="0.00"
-              min="0"
-            />
-          </div>
-          <div>
-            <label className="text-sm font-medium">MRP (₹)</label>
-            <Input
-              type="number"
-              step="0.01"
-              value={formData.mrp_price}
-              onChange={(e) => setFormData(prev => ({ ...prev, mrp_price: e.target.value }))}
-              placeholder="0.00"
-              min="0"
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* Expiry Date */}
-      <div>
-        <h3 className="text-lg font-semibold mb-3">Expiry Information</h3>
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="text-sm font-medium">Expiry Date</label>
-            <Input
-              type="date"
-              value={formData.expiry_date}
-              onChange={(e) => setFormData(prev => ({ ...prev, expiry_date: e.target.value }))}
-            />
           </div>
         </div>
       </div>
@@ -691,14 +581,7 @@ const EditMedicineForm: React.FC<{
     generic_name: medicine.generic_name || '',
     manufacturer_id: medicine.manufacturer_id?.toString() || '',
     supplier_id: medicine.supplier_id?.toString() || '',
-    quantity: medicine.quantity?.toString() || '',
-    tablets_pieces: medicine.tablets_pieces?.toString() || '',
-    batch_number: medicine.batch_number || '',
     type: medicine.type || '',
-    purchase_price: medicine.purchase_price?.toString() || '',
-    selling_price: medicine.selling_price?.toString() || '',
-    mrp_price: medicine.mrp_price?.toString() || '',
-    expiry_date: medicine.expiry_date || '',
   });
 
   useEffect(() => {
@@ -738,14 +621,7 @@ const EditMedicineForm: React.FC<{
         generic_name: formData.generic_name || null,
         manufacturer_id: formData.manufacturer_id ? parseInt(formData.manufacturer_id) : null,
         supplier_id: formData.supplier_id ? parseInt(formData.supplier_id) : null,
-        quantity: formData.quantity ? parseInt(formData.quantity) : 0,
-        tablets_pieces: formData.tablets_pieces ? parseInt(formData.tablets_pieces) : 0,
-        batch_number: formData.batch_number || null,
         type: formData.type || null,
-        purchase_price: formData.purchase_price ? parseFloat(formData.purchase_price) : 0,
-        selling_price: formData.selling_price ? parseFloat(formData.selling_price) : 0,
-        mrp_price: formData.mrp_price ? parseFloat(formData.mrp_price) : 0,
-        expiry_date: formData.expiry_date || null,
         hospital_name: hospitalName,
       })
       .eq('id', medicine.id);
@@ -835,40 +711,10 @@ const EditMedicineForm: React.FC<{
         </div>
       </div>
 
-      {/* Stock Information */}
+      {/* Medicine Type */}
       <div>
-        <h3 className="text-lg font-semibold mb-3">Stock Information</h3>
-        <div className="grid grid-cols-4 gap-4">
-          <div>
-            <label className="text-sm font-medium">Quantity</label>
-            <Input
-              type="number"
-              value={formData.quantity}
-              onChange={(e) => setFormData(prev => ({ ...prev, quantity: e.target.value }))}
-              placeholder="Enter quantity"
-              min="0"
-            />
-            <p className="text-xs text-muted-foreground mt-1">e.g., Number of strips, bottles, or boxes</p>
-          </div>
-          <div>
-            <label className="text-sm font-medium">Tablets/Pieces</label>
-            <Input
-              type="number"
-              value={formData.tablets_pieces}
-              onChange={(e) => setFormData(prev => ({ ...prev, tablets_pieces: e.target.value }))}
-              placeholder="Enter tablets/pieces"
-              min="0"
-            />
-            <p className="text-xs text-muted-foreground mt-1">e.g., Number of tablets/pieces in one quantity unit</p>
-          </div>
-          <div>
-            <label className="text-sm font-medium">Batch Number</label>
-            <Input
-              value={formData.batch_number}
-              onChange={(e) => setFormData(prev => ({ ...prev, batch_number: e.target.value }))}
-              placeholder="Enter batch number"
-            />
-          </div>
+        <h3 className="text-lg font-semibold mb-3">Medicine Type</h3>
+        <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="text-sm font-medium">Type</label>
             <Select
@@ -886,61 +732,6 @@ const EditMedicineForm: React.FC<{
                 <SelectItem value="Tablets">Tablets</SelectItem>
               </SelectContent>
             </Select>
-          </div>
-        </div>
-      </div>
-
-      {/* Pricing Information */}
-      <div>
-        <h3 className="text-lg font-semibold mb-3">Pricing Information</h3>
-        <div className="grid grid-cols-3 gap-4">
-          <div>
-            <label className="text-sm font-medium">Purchase Price (₹)</label>
-            <Input
-              type="number"
-              step="0.01"
-              value={formData.purchase_price}
-              onChange={(e) => setFormData(prev => ({ ...prev, purchase_price: e.target.value }))}
-              placeholder="0.00"
-              min="0"
-            />
-          </div>
-          <div>
-            <label className="text-sm font-medium">Selling Price (₹)</label>
-            <Input
-              type="number"
-              step="0.01"
-              value={formData.selling_price}
-              onChange={(e) => setFormData(prev => ({ ...prev, selling_price: e.target.value }))}
-              placeholder="0.00"
-              min="0"
-            />
-          </div>
-          <div>
-            <label className="text-sm font-medium">MRP (₹)</label>
-            <Input
-              type="number"
-              step="0.01"
-              value={formData.mrp_price}
-              onChange={(e) => setFormData(prev => ({ ...prev, mrp_price: e.target.value }))}
-              placeholder="0.00"
-              min="0"
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* Expiry Date */}
-      <div>
-        <h3 className="text-lg font-semibold mb-3">Expiry Information</h3>
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="text-sm font-medium">Expiry Date</label>
-            <Input
-              type="date"
-              value={formData.expiry_date}
-              onChange={(e) => setFormData(prev => ({ ...prev, expiry_date: e.target.value }))}
-            />
           </div>
         </div>
       </div>

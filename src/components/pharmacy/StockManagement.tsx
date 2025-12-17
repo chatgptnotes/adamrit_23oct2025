@@ -114,6 +114,7 @@ const StockManagement: React.FC = () => {
   const [stockFilter, setStockFilter] = useState('all');
   const [selectedStockItem, setSelectedStockItem] = useState<any | null>(null);
   const [isAdjustmentDialogOpen, setIsAdjustmentDialogOpen] = useState(false);
+  const [isOpeningStockDialogOpen, setIsOpeningStockDialogOpen] = useState(false);
   const [selectedBatchForHistory, setSelectedBatchForHistory] = useState<string | null>(null);
 
   // Fetch real data using custom hooks
@@ -255,9 +256,26 @@ const StockManagement: React.FC = () => {
             <RefreshCw className={`h-4 w-4 mr-2 ${isLoadingInventory ? 'animate-spin' : ''}`} />
             Refresh
           </Button>
+          <Dialog open={isOpeningStockDialogOpen} onOpenChange={setIsOpeningStockDialogOpen}>
+            <DialogTrigger asChild>
+              <Button variant="default">
+                <Plus className="h-4 w-4 mr-2" />
+                Add Opening Stock
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Add Opening Stock</DialogTitle>
+              </DialogHeader>
+              <OpeningStockForm onSuccess={() => {
+                setIsOpeningStockDialogOpen(false);
+                handleRefresh();
+              }} />
+            </DialogContent>
+          </Dialog>
           <Dialog open={isAdjustmentDialogOpen} onOpenChange={setIsAdjustmentDialogOpen}>
             <DialogTrigger asChild>
-              <Button>
+              <Button variant="outline">
                 <ArrowUpDown className="h-4 w-4 mr-2" />
                 Stock Adjustment
               </Button>
@@ -936,6 +954,317 @@ const StockAdjustmentForm: React.FC<{ onSuccess: () => void }> = ({ onSuccess })
             </>
           ) : (
             'Record Adjustment'
+          )}
+        </Button>
+      </div>
+    </form>
+  );
+};
+
+// Opening Stock Form Component
+const OpeningStockForm: React.FC<{ onSuccess: () => void }> = ({ onSuccess }) => {
+  const { hospitalConfig } = useAuth();
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const [medicineSearch, setMedicineSearch] = useState('');
+  const [selectedMedicine, setSelectedMedicine] = useState<any>(null);
+  const [medicines, setMedicines] = useState<any[]>([]);
+  const [searchingMedicines, setSearchingMedicines] = useState(false);
+
+  const [formData, setFormData] = useState({
+    batch_number: '',
+    quantity: '',
+    expiry_date: '',
+    manufacturing_date: '',
+    purchase_price: '',
+    mrp: '',
+    selling_price: '',
+    rack_number: '',
+    shelf_location: '',
+  });
+
+  // Search medicines from medicine_master
+  const searchMedicines = async (term: string) => {
+    if (!term || term.length < 2) {
+      setMedicines([]);
+      return;
+    }
+
+    setSearchingMedicines(true);
+    try {
+      const { data, error } = await supabase
+        .from('medicine_master')
+        .select(`
+          id,
+          medicine_name,
+          generic_name,
+          type,
+          purchase_price,
+          selling_price,
+          mrp_price,
+          manufacturer:manufacturer_companies(name)
+        `)
+        .eq('is_deleted', false)
+        .eq('hospital_name', hospitalConfig.fullName)
+        .or(`medicine_name.ilike.%${term}%,generic_name.ilike.%${term}%`)
+        .limit(10);
+
+      if (error) throw error;
+      setMedicines(data || []);
+    } catch (error) {
+      console.error('Error searching medicines:', error);
+      toast.error('Failed to search medicines');
+    } finally {
+      setSearchingMedicines(false);
+    }
+  };
+
+  const handleMedicineSelect = (med: any) => {
+    setSelectedMedicine(med);
+    setMedicineSearch(med.medicine_name);
+    setMedicines([]);
+    // Auto-fill prices from medicine master
+    setFormData(prev => ({
+      ...prev,
+      purchase_price: med.purchase_price?.toString() || '',
+      mrp: med.mrp_price?.toString() || '',
+      selling_price: med.selling_price?.toString() || '',
+    }));
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!selectedMedicine) {
+      toast.error('Please select a medicine');
+      return;
+    }
+
+    if (!formData.batch_number.trim()) {
+      toast.error('Please enter batch number');
+      return;
+    }
+
+    if (!formData.quantity || parseInt(formData.quantity) <= 0) {
+      toast.error('Please enter a valid quantity');
+      return;
+    }
+
+    if (!formData.expiry_date) {
+      toast.error('Please enter expiry date');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const { addOpeningStock } = await import('@/lib/batch-inventory-service');
+
+      await addOpeningStock({
+        medicine_id: selectedMedicine.id,
+        batch_number: formData.batch_number,
+        quantity: parseInt(formData.quantity),
+        expiry_date: formData.expiry_date,
+        manufacturing_date: formData.manufacturing_date || undefined,
+        purchase_price: formData.purchase_price ? parseFloat(formData.purchase_price) : undefined,
+        mrp: formData.mrp ? parseFloat(formData.mrp) : undefined,
+        selling_price: formData.selling_price ? parseFloat(formData.selling_price) : undefined,
+        rack_number: formData.rack_number || undefined,
+        shelf_location: formData.shelf_location || undefined,
+        hospital_name: hospitalConfig.fullName,
+      });
+
+      toast.success('Opening stock added successfully! Stock is now available for sale.');
+      onSuccess();
+    } catch (error: any) {
+      console.error('Error adding opening stock:', error);
+      toast.error(error.message || 'Failed to add opening stock');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      {/* Medicine Search */}
+      <div>
+        <label className="text-sm font-medium block mb-2">Medicine *</label>
+        <div className="relative">
+          <Input
+            required
+            placeholder="Search by medicine name or generic name..."
+            value={medicineSearch}
+            onChange={(e) => {
+              setMedicineSearch(e.target.value);
+              searchMedicines(e.target.value);
+              setSelectedMedicine(null);
+            }}
+            className="mb-2"
+          />
+          {searchingMedicines && (
+            <Loader2 className="absolute right-3 top-3 h-4 w-4 animate-spin text-muted-foreground" />
+          )}
+        </div>
+
+        {medicines.length > 0 && !selectedMedicine && (
+          <div className="border rounded-md max-h-48 overflow-y-auto">
+            {medicines.map((med) => (
+              <div
+                key={med.id}
+                className="p-3 hover:bg-accent cursor-pointer border-b last:border-b-0"
+                onClick={() => handleMedicineSelect(med)}
+              >
+                <div className="font-medium">{med.medicine_name}</div>
+                <div className="text-sm text-muted-foreground">
+                  {med.generic_name} • {med.manufacturer?.name || 'N/A'} • {med.type || 'N/A'}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {selectedMedicine && (
+          <div className="p-3 bg-accent rounded-md">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="font-medium">{selectedMedicine.medicine_name}</div>
+                <div className="text-sm text-muted-foreground">
+                  {selectedMedicine.generic_name} • {selectedMedicine.manufacturer?.name || 'N/A'}
+                </div>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setSelectedMedicine(null);
+                  setMedicineSearch('');
+                }}
+              >
+                Change
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Batch Number & Quantity */}
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="text-sm font-medium block mb-2">Batch Number *</label>
+          <Input
+            required
+            placeholder="e.g., BATCH001"
+            value={formData.batch_number}
+            onChange={(e) => setFormData(prev => ({ ...prev, batch_number: e.target.value }))}
+          />
+        </div>
+        <div>
+          <label className="text-sm font-medium block mb-2">Quantity *</label>
+          <Input
+            type="number"
+            required
+            min="1"
+            placeholder="Enter quantity"
+            value={formData.quantity}
+            onChange={(e) => setFormData(prev => ({ ...prev, quantity: e.target.value }))}
+          />
+        </div>
+      </div>
+
+      {/* Dates */}
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="text-sm font-medium block mb-2">Manufacturing Date</label>
+          <Input
+            type="date"
+            value={formData.manufacturing_date}
+            onChange={(e) => setFormData(prev => ({ ...prev, manufacturing_date: e.target.value }))}
+          />
+        </div>
+        <div>
+          <label className="text-sm font-medium block mb-2">Expiry Date *</label>
+          <Input
+            type="date"
+            required
+            value={formData.expiry_date}
+            onChange={(e) => setFormData(prev => ({ ...prev, expiry_date: e.target.value }))}
+          />
+        </div>
+      </div>
+
+      {/* Prices */}
+      <div className="grid grid-cols-3 gap-4">
+        <div>
+          <label className="text-sm font-medium block mb-2">Purchase Price (₹)</label>
+          <Input
+            type="number"
+            step="0.01"
+            min="0"
+            placeholder="0.00"
+            value={formData.purchase_price}
+            onChange={(e) => setFormData(prev => ({ ...prev, purchase_price: e.target.value }))}
+          />
+        </div>
+        <div>
+          <label className="text-sm font-medium block mb-2">Selling Price (₹)</label>
+          <Input
+            type="number"
+            step="0.01"
+            min="0"
+            placeholder="0.00"
+            value={formData.selling_price}
+            onChange={(e) => setFormData(prev => ({ ...prev, selling_price: e.target.value }))}
+          />
+        </div>
+        <div>
+          <label className="text-sm font-medium block mb-2">MRP (₹)</label>
+          <Input
+            type="number"
+            step="0.01"
+            min="0"
+            placeholder="0.00"
+            value={formData.mrp}
+            onChange={(e) => setFormData(prev => ({ ...prev, mrp: e.target.value }))}
+          />
+        </div>
+      </div>
+
+      {/* Location */}
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="text-sm font-medium block mb-2">Rack Number</label>
+          <Input
+            placeholder="e.g., R1"
+            value={formData.rack_number}
+            onChange={(e) => setFormData(prev => ({ ...prev, rack_number: e.target.value }))}
+          />
+        </div>
+        <div>
+          <label className="text-sm font-medium block mb-2">Shelf Location</label>
+          <Input
+            placeholder="e.g., S1"
+            value={formData.shelf_location}
+            onChange={(e) => setFormData(prev => ({ ...prev, shelf_location: e.target.value }))}
+          />
+        </div>
+      </div>
+
+      {/* Submit Button */}
+      <div className="flex justify-end gap-2 pt-4 border-t">
+        <Button
+          type="submit"
+          disabled={!selectedMedicine || !formData.batch_number || !formData.quantity || !formData.expiry_date || isSubmitting}
+        >
+          {isSubmitting ? (
+            <>
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              Adding Stock...
+            </>
+          ) : (
+            <>
+              <Plus className="h-4 w-4 mr-2" />
+              Add Opening Stock
+            </>
           )}
         </Button>
       </div>

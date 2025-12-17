@@ -118,6 +118,7 @@ const CreateGRN: React.FC = () => {
           manufacturer: item.manufacturer,
           pack: item.pack,
           batch_number: '',
+          pieces_per_pack: 0,
           expiry_date: '',
           manufacturing_date: '',
           ordered_quantity: item.order_quantity,
@@ -533,6 +534,7 @@ const CreateGRN: React.FC = () => {
                     <TableHead className="w-[80px]">Ordered</TableHead>
                     <TableHead className="w-[80px]">Balance</TableHead>
                     <TableHead className="w-[120px]">Batch No *</TableHead>
+                    <TableHead className="w-[80px]">Pieces/Pack</TableHead>
                     <TableHead className="w-[120px]">Expiry Date *</TableHead>
                     <TableHead className="w-[80px]">Received *</TableHead>
                     <TableHead className="w-[80px]">Rejected</TableHead>
@@ -562,6 +564,16 @@ const CreateGRN: React.FC = () => {
                           placeholder="Batch"
                           value={item.batch_number}
                           onChange={(e) => updateGRNItem(index, 'batch_number', e.target.value)}
+                          className="w-full"
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Input
+                          type="number"
+                          min="1"
+                          placeholder="e.g., 10"
+                          value={item.pieces_per_pack || ''}
+                          onChange={(e) => updateGRNItem(index, 'pieces_per_pack', Number(e.target.value))}
                           className="w-full"
                         />
                       </TableCell>
