@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useDebounce } from 'use-debounce';
 import { Badge } from '@/components/ui/badge';
-import { Eye, FileText, Search, Calendar, DollarSign, Trash2, FolderOpen, FolderX, CheckCircle, XCircle, Clock, MinusCircle, RotateCcw, Printer, Filter, MessageSquare, ClipboardList, ArrowUpDown, Circle, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Eye, FileText, Search, Calendar, DollarSign, Trash2, FolderOpen, FolderX, CheckCircle, XCircle, Clock, MinusCircle, RotateCcw, Printer, Filter, MessageSquare, ClipboardList, ArrowUpDown, Circle, ChevronLeft, ChevronRight, Upload } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -29,6 +29,7 @@ import {
 import { format } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
 import { EditPatientDialog } from '@/components/EditPatientDialog';
+import { DocumentUploadDialog } from '@/components/DocumentUploadDialog';
 import { usePatients } from '@/hooks/usePatients';
 import { CascadingBillingStatusDropdown } from '@/components/shared/CascadingBillingStatusDropdown';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuSeparator, DropdownMenuItem } from '@/components/ui/dropdown-menu';
@@ -47,6 +48,8 @@ const TodaysIpdDashboard = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [showEditPatientDialog, setShowEditPatientDialog] = useState(false);
   const [selectedPatientForEdit, setSelectedPatientForEdit] = useState(null);
+  const [showDocumentUploadDialog, setShowDocumentUploadDialog] = useState(false);
+  const [selectedVisitForDocument, setSelectedVisitForDocument] = useState<any>(null);
   const [selectedPatientForView, setSelectedPatientForView] = useState<any>(null);
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
   const [srNo, setSrNo] = useState('');
@@ -1321,8 +1324,9 @@ const TodaysIpdDashboard = () => {
   }, [todaysVisits]);
 
   // Function to check if referral letter is uploaded for a visit
-  const checkReferralLetterUploaded = async (visitId: string) => {
+  const checkReferralLetterUploaded = async (visitId: string, patientName?: string) => {
     try {
+      // First try by visit_id
       const { data, error } = await supabase
         .from('patient_documents')
         .select('is_uploaded')
@@ -1331,12 +1335,22 @@ const TodaysIpdDashboard = () => {
         .eq('is_uploaded', true)
         .single();
 
-      if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
-        console.error('Error checking referral letter:', error);
-        return false;
+      if (data) return true;
+
+      // Fallback: Check by patient_name for documents with 'Not assigned' visit_id
+      if (patientName) {
+        const { data: fallbackData } = await supabase
+          .from('patient_documents')
+          .select('is_uploaded')
+          .eq('patient_name', patientName)
+          .eq('document_type_id', 1)
+          .eq('is_uploaded', true)
+          .maybeSingle();
+
+        if (fallbackData) return true;
       }
 
-      return !!data;
+      return false;
     } catch (error) {
       console.error('Error checking referral letter:', error);
       return false;
@@ -1409,7 +1423,7 @@ const TodaysIpdDashboard = () => {
       if (!todaysVisits || todaysVisits.length === 0) return;
 
       const statusPromises = todaysVisits.map(async (visit) => {
-        const isUploaded = await checkReferralLetterUploaded(visit.visit_id);
+        const isUploaded = await checkReferralLetterUploaded(visit.visit_id, visit.patients?.name);
         return { visitId: visit.visit_id, isUploaded };
       });
 
@@ -1425,6 +1439,39 @@ const TodaysIpdDashboard = () => {
 
     loadReferralLetterStatus();
   }, [todaysVisits]);
+
+  // Real-time subscription to patient_documents table for referral letter updates
+  useEffect(() => {
+    const channel = supabase
+      .channel('referral-letter-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'patient_documents',
+          filter: 'document_type_id=eq.1' // Only referral letters
+        },
+        async (payload: any) => {
+          console.log('📄 Referral letter change detected:', payload);
+          const visitId = payload.new?.visit_id || payload.old?.visit_id;
+          const patientName = payload.new?.patient_name || payload.old?.patient_name;
+          if (visitId) {
+            // Re-check referral status for this visit
+            const isUploaded = await checkReferralLetterUploaded(visitId, patientName);
+            setReferralLetterStatus(prev => ({
+              ...prev,
+              [visitId]: isUploaded
+            }));
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
   // Compute unique options for column filters from current data
   const fileStatusOptions = useMemo(() => Array.from(new Set((todaysVisits || []).map((v) => v.file_status).filter(Boolean))) as string[], [todaysVisits]);
@@ -1564,7 +1611,7 @@ const TodaysIpdDashboard = () => {
     }
 
     // For ESIC patients only - check referral letter requirements
-    const isReferralLetterUploaded = await checkReferralLetterUploaded(visit.visit_id);
+    const isReferralLetterUploaded = await checkReferralLetterUploaded(visit.visit_id, visit.patients?.name);
     const withinGracePeriod = isWithin24Hours(visit.visit_date || visit.created_at);
 
     // If within 24 hours, allow access even without referral letter
@@ -2643,6 +2690,18 @@ const TodaysIpdDashboard = () => {
                        >
                          <MessageSquare className="h-4 w-4 text-green-600" />
                        </Button>
+                       <Button
+                         variant="ghost"
+                         size="sm"
+                         className="h-8 w-8 p-0 hover:bg-purple-50"
+                         onClick={() => {
+                           setSelectedVisitForDocument(visit);
+                           setShowDocumentUploadDialog(true);
+                         }}
+                         title="Upload Documents"
+                       >
+                         <Upload className="h-4 w-4 text-purple-600" />
+                       </Button>
                        {/* Show Revoke Discharge button only for discharged patients */}
                        {visit.discharge_date && (
                          <AlertDialog>
@@ -2789,6 +2848,30 @@ const TodaysIpdDashboard = () => {
             }}
             patient={selectedPatientForEdit}
             onSave={handleSavePatient}
+          />
+        )}
+
+        {/* Document Upload Dialog */}
+        {selectedVisitForDocument && (
+          <DocumentUploadDialog
+            isOpen={showDocumentUploadDialog}
+            onClose={() => {
+              const visitId = selectedVisitForDocument?.visit_id;
+              const patientName = selectedVisitForDocument?.patients?.name;
+              setShowDocumentUploadDialog(false);
+              setSelectedVisitForDocument(null);
+              // Refresh referral status after closing
+              if (visitId) {
+                checkReferralLetterUploaded(visitId, patientName).then(isUploaded => {
+                  setReferralLetterStatus(prev => ({
+                    ...prev,
+                    [visitId]: isUploaded
+                  }));
+                });
+              }
+            }}
+            patientName={selectedVisitForDocument.patients?.name || 'Unknown'}
+            visitId={selectedVisitForDocument.visit_id}
           />
         )}
 

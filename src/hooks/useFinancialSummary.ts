@@ -534,6 +534,47 @@ export const useFinancialSummary = (billId?: string, visitId?: string, savedMedi
     }
   };
 
+  const fetchSurgeryTotal = async (): Promise<number> => {
+    if (!visitId) return 0;
+
+    try {
+      // Get visit UUID first
+      const { data: visitData, error: visitError } = await supabase
+        .from('visits')
+        .select('id')
+        .eq('visit_id', visitId)
+        .single();
+
+      if (visitError || !visitData) return 0;
+
+      // Fetch surgeries from visit_surgeries junction table with cghs_surgery rate
+      const { data: surgeryData, error: surgeryError } = await supabase
+        .from('visit_surgeries')
+        .select(`
+          surgery_id,
+          cghs_surgery:surgery_id (
+            NABH_NABL_Rate
+          )
+        `)
+        .eq('visit_id', visitData.id);
+
+      if (surgeryError || !surgeryData) return 0;
+
+      // Calculate total from NABH_NABL_Rate
+      const total = surgeryData.reduce((sum, item: any) => {
+        const rateStr = item.cghs_surgery?.NABH_NABL_Rate || '0';
+        const rate = parseFloat(rateStr.replace(/[^\d.]/g, '')) || 0;
+        return sum + rate;
+      }, 0);
+
+      console.log('💰 Surgery total calculated:', total);
+      return total;
+    } catch (error) {
+      console.error('Error fetching surgery total:', error);
+      return 0;
+    }
+  };
+
   const fetchRadiologyTotal = async (): Promise<number> => {
     if (!visitId) return 0;
 
@@ -1584,7 +1625,8 @@ export const useFinancialSummary = (billId?: string, visitId?: string, savedMedi
         pharmacyTotal,
         accommodationTotal,
         advancePaymentTotal,
-        refundedTotal
+        refundedTotal,
+        surgeryTotal
       ] = await Promise.all([
         fetchLabTestsTotal(),
         fetchClinicalServicesTotal(),
@@ -1593,11 +1635,12 @@ export const useFinancialSummary = (billId?: string, visitId?: string, savedMedi
         fetchPharmacyTotal(),
         fetchAccommodationTotal(),
         fetchAdvancePaymentTotal(),
-        fetchRefundedAmount()
+        fetchRefundedAmount(),
+        fetchSurgeryTotal()
       ]);
 
-      // Calculate grand total
-      const grandTotal = labTotal + clinicalTotal + mandatoryTotal + radiologyTotal + pharmacyTotal + accommodationTotal;
+      // Calculate grand total (including surgery)
+      const grandTotal = labTotal + clinicalTotal + mandatoryTotal + radiologyTotal + pharmacyTotal + accommodationTotal + surgeryTotal;
       console.log('✅ [AUTO-POPULATE] Step 1 Complete: Calculated totals only');
 
       // 🔥 STEP 2: Update ONLY totals, preserve existing discount values from state
@@ -1620,6 +1663,7 @@ export const useFinancialSummary = (billId?: string, visitId?: string, savedMedi
             laboratoryServices: labTotal.toString(),
             radiology: radiologyTotal.toString(),
             pharmacy: pharmacyTotal.toString(),
+            surgery: surgeryTotal.toString(),
             mandatoryServices: mandatoryTotal.toString(),
             accommodationCharges: accommodationTotal.toString(),
             total: grandTotal.toString()
@@ -1647,6 +1691,7 @@ export const useFinancialSummary = (billId?: string, visitId?: string, savedMedi
             laboratoryServices: (labTotal - (parseFloat(prev.amountPaid.laboratoryServices) || 0) + (parseFloat(prev.refundedAmount.laboratoryServices) || 0)).toString(),
             radiology: (radiologyTotal - (parseFloat(prev.amountPaid.radiology) || 0) + (parseFloat(prev.refundedAmount.radiology) || 0)).toString(),
             pharmacy: (pharmacyTotal - (parseFloat(prev.amountPaid.pharmacy) || 0) + (parseFloat(prev.refundedAmount.pharmacy) || 0)).toString(),
+            surgery: (surgeryTotal - (parseFloat(prev.amountPaid.surgery) || 0) + (parseFloat(prev.refundedAmount.surgery) || 0)).toString(),
             mandatoryServices: (mandatoryTotal - (parseFloat(prev.amountPaid.mandatoryServices) || 0) + (parseFloat(prev.refundedAmount.mandatoryServices) || 0)).toString(),
             total: (grandTotal - advancePaymentTotal + refundedTotal).toString()
           }
@@ -1671,6 +1716,7 @@ export const useFinancialSummary = (billId?: string, visitId?: string, savedMedi
         mandatoryTotal,
         radiologyTotal,
         pharmacyTotal,
+        surgeryTotal,
         accommodationTotal,
         grandTotal,
         discountHandling: 'preserved from state (loaded by loadFinancialSummary)'

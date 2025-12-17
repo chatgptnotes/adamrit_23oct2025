@@ -29,7 +29,7 @@ const convertAmountToWords = (amount: number): string => {
 const Invoice = () => {
   const [showPharmacyCharges, setShowPharmacyCharges] = useState(false);
   const [discountRemoved, setDiscountRemoved] = useState(false);
-  const [chargeFilter, setChargeFilter] = useState('all'); // 'all', 'lab', 'radiology'
+  const [chargeFilter, setChargeFilter] = useState('all'); // 'all', 'lab', 'radiology', 'surgery'
   const [hideLabRadiology, setHideLabRadiology] = useState(false);
   const navigate = useNavigate();
   const { visitId } = useParams<{ visitId: string }>();
@@ -482,6 +482,51 @@ const Invoice = () => {
     enabled: !!visitId
   });
 
+  // Fetch surgeries from visit_surgeries table
+  const { data: surgeryOrdersData } = useQuery({
+    queryKey: ['invoice-visit-surgeries', visitId],
+    queryFn: async () => {
+      console.log('=== SURGERY ORDERS FETCH ===');
+      console.log('Fetching surgeries for visitId:', visitId);
+
+      if (!visitId) return [];
+
+      // Get visit UUID first
+      const { data: visitData, error: visitError } = await supabase
+        .from('visits')
+        .select('id')
+        .eq('visit_id', visitId)
+        .single();
+
+      if (visitError || !visitData?.id) {
+        console.error('Visit not found for surgeries:', visitError);
+        return [];
+      }
+
+      const { data, error } = await supabase
+        .from('visit_surgeries')
+        .select(`
+          *,
+          cghs_surgery:surgery_id (
+            id,
+            name,
+            code,
+            NABH_NABL_Rate
+          )
+        `)
+        .eq('visit_id', visitData.id);
+
+      console.log('Surgery orders query result:', { data, error });
+
+      if (error) {
+        console.error('Error fetching surgery orders:', error);
+        return [];
+      }
+      return data || [];
+    },
+    enabled: !!visitId
+  });
+
   // Fetch mandatory services from junction table (actual saved services for this visit)
   const { data: mandatoryServicesData } = useQuery({
     queryKey: ['invoice-mandatory-services-junction', visitId],
@@ -632,6 +677,54 @@ const Invoice = () => {
 
       console.log('Clinical services data mapped:', mappedData);
       return mappedData;
+    },
+    enabled: !!visitId
+  });
+
+  // Fetch accommodation charges from visit_accommodations table
+  const { data: accommodationData } = useQuery({
+    queryKey: ['invoice-visit-accommodations', visitId],
+    queryFn: async () => {
+      console.log('=== ACCOMMODATION FETCH ===');
+      console.log('Fetching accommodations for visitId:', visitId);
+
+      if (!visitId) return [];
+
+      // Get visit UUID first
+      const { data: visitData, error: visitError } = await supabase
+        .from('visits')
+        .select('id')
+        .eq('visit_id', visitId)
+        .single();
+
+      if (visitError || !visitData?.id) {
+        console.error('Visit not found for accommodations:', visitError);
+        return [];
+      }
+
+      const { data, error } = await supabase
+        .from('visit_accommodations')
+        .select(`
+          *,
+          accommodation:accommodation_id (
+            id,
+            room_type,
+            private_rate,
+            nabh_rate,
+            non_nabh_rate,
+            tpa_rate
+          )
+        `)
+        .eq('visit_id', visitData.id)
+        .order('start_date', { ascending: false });
+
+      console.log('Accommodation query result:', { data, error });
+
+      if (error) {
+        console.error('Error fetching accommodations:', error);
+        return [];
+      }
+      return data || [];
     },
     enabled: !!visitId
   });
@@ -826,6 +919,63 @@ const Invoice = () => {
       return services;
     }
 
+    if (chargeFilter === 'surgery') {
+      console.log('=== CREATING SURGERY SERVICES ===');
+      console.log('surgeryOrdersData:', surgeryOrdersData);
+      console.log('surgeryOrdersData length:', surgeryOrdersData?.length);
+
+      if (surgeryOrdersData && surgeryOrdersData.length > 0) {
+        surgeryOrdersData.forEach((visitSurgery: any) => {
+          console.log('Processing visit surgery:', visitSurgery);
+          const rateStr = visitSurgery.cghs_surgery?.NABH_NABL_Rate || '0';
+          const surgeryRate = parseFloat(String(rateStr).replace(/[^\d.]/g, '')) || 0;
+
+          console.log('Surgery details:', {
+            name: visitSurgery.cghs_surgery?.name,
+            code: visitSurgery.cghs_surgery?.code,
+            rateStr: rateStr,
+            rate: surgeryRate
+          });
+
+          services.push({
+            srNo: srNo++,
+            item: visitSurgery.cghs_surgery?.name || 'Surgery',
+            rate: surgeryRate,
+            qty: 1,
+            amount: surgeryRate,
+            type: 'surgery'
+          });
+        });
+      } else {
+        console.log('No surgery orders data found');
+      }
+      console.log('Surgery services created:', services);
+      return services;
+    }
+
+    if (chargeFilter === 'accommodation') {
+      console.log('=== CREATING ACCOMMODATION SERVICES ===');
+      console.log('accommodationData:', accommodationData);
+
+      if (accommodationData && accommodationData.length > 0) {
+        accommodationData.forEach((visitAccom: any) => {
+          const rate = parseFloat(visitAccom.amount) || parseFloat(visitAccom.rate_used) || 0;
+          const days = visitAccom.days || 1;
+
+          services.push({
+            srNo: srNo++,
+            item: visitAccom.accommodation?.room_type || 'Accommodation',
+            rate: rate,
+            qty: days,
+            amount: rate,
+            type: 'accommodation'
+          });
+        });
+      }
+      console.log('Accommodation services created:', services);
+      return services;
+    }
+
     // Default: show all charges (bill data + lab + radiology + mandatory services + clinical services)
     // Don't add static General Ward - let mandatory services be the primary charges
     if (!billData?.bill_sections) {
@@ -966,6 +1116,40 @@ const Invoice = () => {
       }
     }
 
+    // Add surgery charges from visit_surgeries junction table
+    console.log('=== SURGERY CHARGES INTEGRATION ===');
+    console.log('surgeryOrdersData:', surgeryOrdersData);
+    console.log('surgeryOrdersData length:', surgeryOrdersData?.length);
+
+    let totalSurgeryCharges = 0;
+    if (surgeryOrdersData && surgeryOrdersData.length > 0) {
+      surgeryOrdersData.forEach((visitSurgery: any) => {
+        const rateStr = visitSurgery.cghs_surgery?.NABH_NABL_Rate || '0';
+        const surgeryRate = parseFloat(String(rateStr).replace(/[^\d.]/g, '')) || 0;
+        totalSurgeryCharges += surgeryRate;
+        console.log('Adding surgery to total:', {
+          name: visitSurgery.cghs_surgery?.name,
+          rateStr: rateStr,
+          surgeryRate: surgeryRate
+        });
+      });
+
+      // Add single summary line for all surgery charges
+      if (totalSurgeryCharges > 0) {
+        console.log('Adding Surgery Charges summary line:', totalSurgeryCharges);
+        services.push({
+          srNo: srNo++,
+          item: 'Surgery Charges',
+          rate: totalSurgeryCharges,
+          qty: 1,
+          amount: totalSurgeryCharges,
+          type: 'surgery'
+        });
+      }
+    } else {
+      console.log('No surgery orders found for this visit');
+    }
+
     // Add mandatory services from junction table (actual saved services with correct rates)
     console.log('=== MANDATORY SERVICES INTEGRATION (JUNCTION TABLE) ===');
     console.log('mandatoryServicesData:', mandatoryServicesData);
@@ -1046,6 +1230,38 @@ const Invoice = () => {
       });
     } else {
       console.log('No clinical services found in junction table for this visit');
+    }
+
+    // Add accommodation charges from visit_accommodations junction table
+    console.log('=== ACCOMMODATION CHARGES INTEGRATION ===');
+    console.log('accommodationData:', accommodationData);
+    console.log('accommodationData length:', accommodationData?.length);
+
+    let totalAccommodationCharges = 0;
+    if (accommodationData && accommodationData.length > 0) {
+      accommodationData.forEach((visitAccom: any) => {
+        const amount = parseFloat(visitAccom.amount) || parseFloat(visitAccom.rate_used) || 0;
+        totalAccommodationCharges += amount;
+        console.log('Adding accommodation to total:', {
+          room_type: visitAccom.accommodation?.room_type,
+          amount: amount
+        });
+      });
+
+      // Add single summary line for all accommodation charges
+      if (totalAccommodationCharges > 0) {
+        console.log('Adding Accommodation Charges summary line:', totalAccommodationCharges);
+        services.push({
+          srNo: srNo++,
+          item: 'Accommodation Charges',
+          rate: totalAccommodationCharges,
+          qty: 1,
+          amount: totalAccommodationCharges,
+          type: 'accommodation'
+        });
+      }
+    } else {
+      console.log('No accommodation data found for this visit');
     }
 
     return services;
