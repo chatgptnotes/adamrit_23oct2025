@@ -395,47 +395,8 @@ export class PurchaseOrderService {
         throw itemsError;
       }
 
-      // 3. Update medicine inventory quantities
-      for (const item of items) {
-        if (item.medicine_id) {
-          // Increment the quantity in medicine_master
-          const { error: updateError } = await supabaseClient.rpc(
-            'increment_medicine_quantity',
-            {
-              medicine_id: item.medicine_id,
-              qty_to_add: item.order_qty
-            }
-          );
-
-          // Fallback: If RPC doesn't exist, use direct update
-          if (updateError) {
-            console.warn('RPC not found, using direct update:', updateError);
-
-            // Get current quantity
-            const { data: currentMed, error: fetchError } = await supabaseClient
-              .from('medicine_master')
-              .select('quantity')
-              .eq('id', item.medicine_id)
-              .single();
-
-            if (!fetchError && currentMed) {
-              const newQuantity = (currentMed.quantity || 0) + item.order_qty;
-
-              const { error: directUpdateError } = await supabaseClient
-                .from('medicine_master')
-                .update({
-                  quantity: newQuantity,
-                  updated_at: new Date().toISOString()
-                })
-                .eq('id', item.medicine_id);
-
-              if (directUpdateError) {
-                console.error('Error updating medicine quantity:', directUpdateError);
-              }
-            }
-          }
-        }
-      }
+      // NOTE: Stock is NOT updated here. Stock is only updated when GRN (Goods Received Note) is posted.
+      // This ensures inventory reflects only actually received goods, not just ordered quantities.
 
       return {
         po: poResult,

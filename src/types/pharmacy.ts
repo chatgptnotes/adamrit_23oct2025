@@ -624,6 +624,7 @@ export interface MedicineBatchInventory {
   batch_number: string;
   expiry_date: string;
   manufacturing_date?: string;
+  pieces_per_pack?: number;
 
   // Stock Quantities
   received_quantity: number;
@@ -861,6 +862,7 @@ export interface CreateGRNItemPayload {
   product_name: string;
   manufacturer?: string;
   pack?: string;
+  pieces_per_pack?: number;
   batch_number: string;
   expiry_date: string;
   manufacturing_date?: string;

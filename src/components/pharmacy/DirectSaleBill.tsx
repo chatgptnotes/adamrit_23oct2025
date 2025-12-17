@@ -971,7 +971,6 @@ const DirectSaleBill: React.FC = () => {
           <Table>
             <TableHeader className="bg-gray-600">
               <TableRow>
-                <TableHead className="text-white">Item Code</TableHead>
                 <TableHead className="text-white">
                   Item Name<span className="text-red-500">*</span>
                 </TableHead>
@@ -982,7 +981,7 @@ const DirectSaleBill: React.FC = () => {
                 <TableHead className="text-white">
                   Batch No.<span className="text-red-500">*</span>
                 </TableHead>
-                <TableHead className="text-white">Stock</TableHead>
+                <TableHead className="text-white">Stock Available</TableHead>
                 <TableHead className="text-white">
                   Expiry Date<span className="text-red-500">*</span>
                 </TableHead>
@@ -999,13 +998,6 @@ const DirectSaleBill: React.FC = () => {
             <TableBody>
               {medicines.map((medicine) => (
                 <TableRow key={medicine.id}>
-                  <TableCell>
-                    <Input
-                      className="w-24"
-                      value={medicine.itemCode}
-                      onChange={(e) => updateRow(medicine.id, 'itemCode', e.target.value)}
-                    />
-                  </TableCell>
                   <TableCell>
                     <Input
                       ref={(el) => inputRefs.current[medicine.id] = el}

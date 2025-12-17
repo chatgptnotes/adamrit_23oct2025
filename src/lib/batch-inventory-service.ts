@@ -556,3 +556,83 @@ export async function transferStock(
     throw error;
   }
 }
+
+// ==================== OPENING STOCK ====================
+
+export interface OpeningStockData {
+  medicine_id: string;
+  batch_number: string;
+  quantity: number;
+  expiry_date: string;
+  manufacturing_date?: string;
+  purchase_price?: number;
+  mrp?: number;
+  selling_price?: number;
+  rack_number?: string;
+  shelf_location?: string;
+  hospital_name: string;
+  performed_by?: string;
+}
+
+/**
+ * Add opening stock for existing medicines (bypasses PO/GRN flow)
+ * Creates a new batch inventory record and audit trail
+ */
+export async function addOpeningStock(data: OpeningStockData) {
+  try {
+    // Create batch inventory record
+    const { data: batchData, error: batchError } = await supabase
+      .from('medicine_batch_inventory')
+      .insert({
+        medicine_id: data.medicine_id,
+        batch_number: data.batch_number,
+        expiry_date: data.expiry_date,
+        manufacturing_date: data.manufacturing_date || null,
+        received_quantity: data.quantity,
+        current_stock: data.quantity,
+        sold_quantity: 0,
+        reserved_stock: 0,
+        damaged_stock: 0,
+        purchase_price: data.purchase_price || 0,
+        mrp: data.mrp || 0,
+        selling_price: data.selling_price || 0,
+        rack_number: data.rack_number || null,
+        shelf_location: data.shelf_location || null,
+        hospital_name: data.hospital_name,
+        is_active: true,
+        is_expired: false,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .select()
+      .single();
+
+    if (batchError) throw batchError;
+
+    // Create stock movement audit record
+    const { error: movementError } = await supabase
+      .from('batch_stock_movements')
+      .insert({
+        batch_inventory_id: batchData.id,
+        movement_type: 'IN',
+        reference_type: 'OPENING_STOCK',
+        quantity_before: 0,
+        quantity_changed: data.quantity,
+        quantity_after: data.quantity,
+        reason: 'Opening Stock Entry',
+        performed_by: data.performed_by || null,
+        movement_date: new Date().toISOString(),
+        hospital_name: data.hospital_name,
+      });
+
+    if (movementError) {
+      console.error('Error creating stock movement record:', movementError);
+      // Don't throw here - batch was created successfully
+    }
+
+    return { success: true, batch: batchData };
+  } catch (error) {
+    console.error('Error adding opening stock:', error);
+    throw error;
+  }
+}

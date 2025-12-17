@@ -6,14 +6,7 @@ export interface MedicineMaster {
   generic_name?: string | null;
   manufacturer_id?: number | null;
   supplier_id?: number | null;
-  quantity?: number;
-  tablets_pieces?: number;
-  batch_number?: string | null;
   type?: string | null;
-  purchase_price?: number;
-  selling_price?: number;
-  mrp_price?: number;
-  expiry_date?: string | null; // ISO date string
   hospital_name?: string | null;
   is_deleted?: boolean;
   created_at?: string;
@@ -22,6 +15,16 @@ export interface MedicineMaster {
   // Relations (populated when joined)
   manufacturer?: ManufacturerCompany;
   supplier?: Supplier;
+
+  // Deprecated fields - kept for backward compatibility during migration
+  // These will be removed after database migration
+  tablets_pieces?: number;
+  quantity?: number;
+  batch_number?: string | null;
+  purchase_price?: number;
+  selling_price?: number;
+  mrp_price?: number;
+  expiry_date?: string | null;
 }
 
 export interface ManufacturerCompany {
@@ -56,12 +59,5 @@ export interface MedicineMasterFormData {
   generic_name: string;
   manufacturer_id: number | null;
   supplier_id: number | null;
-  quantity: number;
-  tablets_pieces: number;
-  batch_number: string;
   type: string;
-  purchase_price: number;
-  selling_price: number;
-  mrp_price: number;
-  expiry_date: string;
 }

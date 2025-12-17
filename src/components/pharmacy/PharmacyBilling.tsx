@@ -1253,13 +1253,12 @@ const PharmacyBilling: React.FC = () => {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Item Code</TableHead>
                         <TableHead>Item Name</TableHead>
                         <TableHead>Quantity (MSU)</TableHead>
                         <TableHead>Pack</TableHead>
                         <TableHead>Administration Time</TableHead>
                         <TableHead>Batch No.</TableHead>
-                        <TableHead>Stock</TableHead>
+                        <TableHead>Stock Available</TableHead>
                         <TableHead>Expiry Date</TableHead>
                         <TableHead>MRP</TableHead>
                         <TableHead>Price</TableHead>
@@ -1270,17 +1269,6 @@ const PharmacyBilling: React.FC = () => {
                     <TableBody>
                       {cart.map((item) => (
                         <TableRow key={item.id}>
-                          <TableCell>
-                            <Input
-                              className="w-20 text-xs"
-                              value={item.item_code || ''}
-                              onChange={(e) => {
-                                setCart(prev => prev.map(i =>
-                                  i.id === item.id ? { ...i, item_code: e.target.value } : i
-                                ));
-                              }}
-                            />
-                          </TableCell>
                           <TableCell>
                             <div className="min-w-[150px]">
                               <Input

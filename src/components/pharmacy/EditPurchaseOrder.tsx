@@ -21,6 +21,7 @@ interface PurchaseOrderItem {
   product_name: string;
   manufacturer: string;
   pack: string;
+  pieces_per_pack?: number;
   batch_no: string;
   expiry_date?: string;
   mrp: number;
@@ -106,6 +107,7 @@ const EditPurchaseOrder: React.FC<EditPurchaseOrderProps> = ({ purchaseOrderId, 
           product_name: grnItem.product_name,
           manufacturer: grnItem.manufacturer || '',
           pack: grnItem.pack || '',
+          pieces_per_pack: grnItem.pieces_per_pack || 0,
           batch_no: grnItem.batch_number,
           expiry_date: grnItem.expiry_date,
           mrp: grnItem.mrp,
@@ -249,6 +251,7 @@ const EditPurchaseOrder: React.FC<EditPurchaseOrderProps> = ({ purchaseOrderId, 
         product_name: item.product_name,
         manufacturer: item.manufacturer,
         pack: item.pack,
+        pieces_per_pack: item.pieces_per_pack || 0,
         batch_number: item.batch_no,
         expiry_date: item.expiry_date || '',
         manufacturing_date: null,
@@ -656,6 +659,7 @@ const EditPurchaseOrder: React.FC<EditPurchaseOrderProps> = ({ purchaseOrderId, 
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Product Name</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Manufacturer</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Pack</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Pieces/Pack</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">
                       Batch No<span className="text-red-500">*</span>
                     </th>
@@ -688,6 +692,16 @@ const EditPurchaseOrder: React.FC<EditPurchaseOrderProps> = ({ purchaseOrderId, 
                       </td>
                       <td className="px-4 py-2 text-xs text-gray-600">{item.manufacturer}</td>
                       <td className="px-4 py-2 text-xs text-gray-600">{item.pack}</td>
+                      <td className="px-4 py-2">
+                        <Input
+                          type="number"
+                          min="0"
+                          className="w-16 h-8 px-2 text-xs text-center border-gray-300"
+                          value={item.pieces_per_pack || ''}
+                          onChange={(e) => handleItemChange(index, 'pieces_per_pack', parseInt(e.target.value) || 0)}
+                          placeholder="e.g., 10"
+                        />
+                      </td>
                       <td className="px-4 py-2">
                         <Input
                           type="text"
