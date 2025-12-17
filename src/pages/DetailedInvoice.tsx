@@ -245,7 +245,7 @@ const DetailedInvoice = () => {
       ['SERVICE BREAKDOWN', '', '', '', ''],
       ['Sr.No.', 'Item', 'Date & Time', 'Qty/Days', 'Rate'],
       ['', '', '', '', ''],
-      ['ROOM TARIFF', '', '', '', ''],
+      ['ACCOMMODATION CHARGES', '', '', '', ''],
     ];
 
     // Add room tariff data
@@ -283,6 +283,28 @@ const DetailedInvoice = () => {
       });
     } else {
       servicesData.push(['-', 'No radiology tests ordered', '', '', '']);
+    }
+
+    // SURGERY section
+    servicesData.push(['', '', '', '', '']);
+    servicesData.push(['SURGERY', '', '', '', '']);
+    if (serviceData.surgery.length > 0) {
+      serviceData.surgery.forEach((item, index) => {
+        servicesData.push([index + 1, item.item, item.dateTime, item.qty, item.rate]);
+      });
+    } else {
+      servicesData.push(['-', 'No surgeries performed', '', '', '']);
+    }
+
+    // MANDATORY SERVICES section
+    servicesData.push(['', '', '', '', '']);
+    servicesData.push(['MANDATORY SERVICES', '', '', '', '']);
+    if (serviceData.mandatory.length > 0) {
+      serviceData.mandatory.forEach((item, index) => {
+        servicesData.push([index + 1, item.item, item.dateTime, item.qty, item.rate]);
+      });
+    } else {
+      servicesData.push(['-', 'No mandatory services', '', '', '']);
     }
 
     if (serviceData.pharmacy.length > 0) {
@@ -609,13 +631,76 @@ const DetailedInvoice = () => {
         }
       }
 
+      // Fetch surgery orders for this visit
+      let surgeryOrders = [];
+      if (actualVisitId) {
+        console.log('🔍 Fetching surgeries for actualVisitId:', actualVisitId);
+        const { data: surgeryData, error: surgeryError } = await supabase
+          .from('visit_surgeries')
+          .select(`
+            *,
+            cghs_surgery:surgery_id (
+              id,
+              name,
+              code,
+              NABH_NABL_Rate
+            )
+          `)
+          .eq('visit_id', actualVisitId);
+
+        console.log('📡 Surgery response:', { data: surgeryData, error: surgeryError });
+
+        if (surgeryError) {
+          console.error('❌ Error fetching surgery orders:', surgeryError);
+        } else {
+          surgeryOrders = surgeryData || [];
+          console.log('✅ Surgeries fetched:', surgeryOrders.length, 'records');
+        }
+      }
+
+      // Fetch mandatory services for this visit
+      let mandatoryServices = [];
+      if (actualVisitId) {
+        console.log('🔍 Fetching mandatory services for actualVisitId:', actualVisitId);
+        const { data: mandatoryData, error: mandatoryError } = await supabase
+          .from('visit_mandatory_services')
+          .select(`
+            id,
+            quantity,
+            rate_used,
+            rate_type,
+            amount,
+            selected_at,
+            mandatory_services!mandatory_service_id (
+              id,
+              service_name,
+              tpa_rate,
+              private_rate,
+              nabh_rate,
+              non_nabh_rate
+            )
+          `)
+          .eq('visit_id', actualVisitId);
+
+        console.log('📡 Mandatory services response:', { data: mandatoryData, error: mandatoryError });
+
+        if (mandatoryError) {
+          console.error('❌ Error fetching mandatory services:', mandatoryError);
+        } else {
+          mandatoryServices = mandatoryData || [];
+          console.log('✅ Mandatory services fetched:', mandatoryServices.length, 'records');
+        }
+      }
+
       return {
         visit,
         labOrders,
         radiologyOrders,
         pharmacyOrders,
         clinicalServices,
-        accommodationOrders
+        accommodationOrders,
+        surgeryOrders,
+        mandatoryServices
       };
     },
     enabled: !!visitId
@@ -634,6 +719,7 @@ const DetailedInvoice = () => {
       console.log('📸 Radiology orders:', visitData.radiologyOrders);
       console.log('💊 Pharmacy orders:', visitData.pharmacyOrders);
       console.log('🏥 Clinical services:', visitData.clinicalServices);
+      console.log('🏥 Surgery orders:', visitData.surgeryOrders);
 
       // Calculate total amount from all services
       const labTotal = visitData.labOrders.reduce((sum, order) => sum + ((order.lab?.private && order.lab.private > 0) ? order.lab.private : 100), 0);
@@ -648,9 +734,18 @@ const DetailedInvoice = () => {
         return sum + amount;
       }, 0) || 0;
       const roomTotal = visitData.visit?.room_charges || 0;
-      const totalAmount = labTotal + radioTotal + pharmaTotal + clinicalTotal + roomTotal;
+      const surgeryTotal = visitData.surgeryOrders?.reduce((sum, order) => {
+        const rateStr = order.cghs_surgery?.NABH_NABL_Rate || '0';
+        const rate = parseFloat(String(rateStr).replace(/[^\d.]/g, '')) || 0;
+        return sum + rate;
+      }, 0) || 0;
+      const mandatoryTotal = visitData.mandatoryServices?.reduce((sum, service) => {
+        const amount = parseFloat(service.amount) || parseFloat(service.rate_used) || 0;
+        return sum + amount;
+      }, 0) || 0;
+      const totalAmount = labTotal + radioTotal + pharmaTotal + clinicalTotal + roomTotal + surgeryTotal + mandatoryTotal;
 
-      console.log('💰 Calculated totals - Lab:', labTotal, 'Radio:', radioTotal, 'Pharma:', pharmaTotal, 'Clinical:', clinicalTotal, 'Room:', roomTotal, 'Total:', totalAmount);
+      console.log('💰 Calculated totals - Lab:', labTotal, 'Radio:', radioTotal, 'Pharma:', pharmaTotal, 'Clinical:', clinicalTotal, 'Room:', roomTotal, 'Surgery:', surgeryTotal, 'Mandatory:', mandatoryTotal, 'Total:', totalAmount);
 
       console.log('📝 Processing patient data with fields:', {
         'visit.visit_date': visit.visit_date,
@@ -739,6 +834,18 @@ const DetailedInvoice = () => {
       dateTime: med.prescribed_date ? format(new Date(med.prescribed_date), 'dd/MM/yyyy HH:mm:ss') : '',
       qty: med.quantity || 1,
       rate: med.medications?.price_per_strip || 0
+    })) || [],
+    surgery: visitData?.surgeryOrders?.map((surgery, index) => ({
+      item: surgery.cghs_surgery?.name || 'Surgery',
+      dateTime: surgery.created_at ? format(new Date(surgery.created_at), 'dd/MM/yyyy HH:mm:ss') : '',
+      qty: 1,
+      rate: parseFloat(String(surgery.cghs_surgery?.NABH_NABL_Rate || '0').replace(/[^\d.]/g, '')) || 0
+    })) || [],
+    mandatory: visitData?.mandatoryServices?.map((service, index) => ({
+      item: service.mandatory_services?.service_name || 'Mandatory Service',
+      dateTime: service.selected_at ? format(new Date(service.selected_at), 'dd/MM/yyyy HH:mm:ss') : '',
+      qty: service.quantity || 1,
+      rate: parseFloat(service.amount) || parseFloat(service.rate_used) || 0
     })) || [],
     totalAmount: patientData?.totalAmount || 0,
     discount: 0,
@@ -927,10 +1034,10 @@ const DetailedInvoice = () => {
             </thead>
           </table>
 
-          {/* ROOM TARIFF */}
+          {/* ACCOMMODATION CHARGES */}
           <div className="mb-0">
             <div className="bg-gray-200 border border-gray-400 border-t-0 p-1">
-              <strong className="text-xs">ROOM TARIFF</strong>
+              <strong className="text-xs">ACCOMMODATION CHARGES</strong>
             </div>
             <table className="w-full border-collapse border border-gray-400 border-t-0 text-xs">
               <tbody>
@@ -1021,6 +1128,61 @@ const DetailedInvoice = () => {
                 {serviceData.radiology.length === 0 && (
                   <tr>
                     <td className="border border-gray-400 p-1 text-center" colSpan={5}>No radiology tests ordered</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* SURGERY */}
+          <div className="mb-4">
+            <div className="bg-gray-200 border border-gray-400 border-t-0 p-1 flex justify-between items-center">
+              <strong className="text-xs">SURGERY</strong>
+              <div className="flex gap-1">
+                <span className="text-xs bg-green-100 px-1">📊</span>
+                <span className="text-xs bg-blue-100 px-1">🖨️</span>
+                <span className="text-xs bg-red-100 px-1">📋</span>
+              </div>
+            </div>
+            <table className="w-full border-collapse border border-gray-400 border-t-0 text-xs">
+              <tbody>
+                {serviceData.surgery.map((item, index) => (
+                  <tr key={index}>
+                    <td className="border border-gray-400 p-1 text-center w-12">{index + 1}</td>
+                    <td className="border border-gray-400 p-1">{item.item}</td>
+                    <td className="border border-gray-400 p-1 text-center w-32">{item.dateTime}</td>
+                    <td className="border border-gray-400 p-1 text-center w-16">{item.qty}</td>
+                    <td className="border border-gray-400 p-1 text-center w-24">{item.rate}</td>
+                  </tr>
+                ))}
+                {serviceData.surgery.length === 0 && (
+                  <tr>
+                    <td className="border border-gray-400 p-1 text-center" colSpan={5}>No surgeries performed</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* MANDATORY SERVICES */}
+          <div className="mb-4">
+            <div className="bg-gray-200 border border-gray-400 border-t-0 p-1 flex justify-between items-center">
+              <strong className="text-xs">MANDATORY SERVICES</strong>
+            </div>
+            <table className="w-full border-collapse border border-gray-400 border-t-0 text-xs">
+              <tbody>
+                {serviceData.mandatory.map((item, index) => (
+                  <tr key={index}>
+                    <td className="border border-gray-400 p-1 text-center w-12">{index + 1}</td>
+                    <td className="border border-gray-400 p-1">{item.item}</td>
+                    <td className="border border-gray-400 p-1 text-center w-32">{item.dateTime}</td>
+                    <td className="border border-gray-400 p-1 text-center w-16">{item.qty}</td>
+                    <td className="border border-gray-400 p-1 text-center w-24">{item.rate}</td>
+                  </tr>
+                ))}
+                {serviceData.mandatory.length === 0 && (
+                  <tr>
+                    <td className="border border-gray-400 p-1 text-center" colSpan={5}>No mandatory services</td>
                   </tr>
                 )}
               </tbody>

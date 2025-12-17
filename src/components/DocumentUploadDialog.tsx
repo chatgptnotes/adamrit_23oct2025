@@ -239,8 +239,10 @@ export const DocumentUploadDialog: React.FC<DocumentUploadDialogProps> = ({
       // Create file path for Supabase Storage
       const fileExtension = file.name.split('.').pop();
       const timestamp = Date.now();
-      const fileName = `${visitId}_doc${documentId}_${timestamp}.${fileExtension}`;
-      const filePath = `patient-documents/${visitId}/${fileName}`;
+      // Sanitize visitId to remove spaces and special characters for valid file path
+      const sanitizedVisitId = visitId.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_-]/g, '');
+      const fileName = `${sanitizedVisitId}_doc${documentId}_${timestamp}.${fileExtension}`;
+      const filePath = `patient-documents/${sanitizedVisitId}/${fileName}`;
 
       // Upload file to Supabase Storage
       const { data: uploadData, error: uploadError } = await supabase.storage
