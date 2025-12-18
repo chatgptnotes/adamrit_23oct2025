@@ -884,7 +884,7 @@ const TestConfigurationSection: React.FC<TestConfigurationSectionProps> = ({
                 </div>
                 <div className="col-span-2">
                   <Input
-                    placeholder="12.0"
+                    placeholder="Up to"
                     value={normalRange.minValue}
                     onChange={(e) => updateNormalRange(subTest.id, normalRange.id, { minValue: e.target.value })}
                     className="h-8 text-sm"
@@ -1108,7 +1108,7 @@ const TestConfigurationSection: React.FC<TestConfigurationSectionProps> = ({
                         </div>
                         <div className="col-span-2">
                           <Input
-                            placeholder="Min"
+                            placeholder="-Up to"
                             value={normalRange.minValue}
                             onChange={(e) => updateNestedNormalRange(subTest.id, nestedSubTest.id, normalRange.id, { minValue: e.target.value })}
                             className="h-7 text-xs"

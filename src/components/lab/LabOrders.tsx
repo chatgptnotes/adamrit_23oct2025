@@ -142,6 +142,27 @@ const findNormalRangeForGender = (
   };
 };
 
+// Helper function to format normal range display string
+const formatNormalRange = (minValue: number | null | undefined, maxValue: number | null | undefined, unit: string): string => {
+  const hasMin = minValue !== null && minValue !== undefined && minValue !== 0;
+  const hasMax = maxValue !== null && maxValue !== undefined && maxValue !== 0;
+  const displayUnit = unit && unit.toLowerCase() !== 'unit' ? ` ${unit}` : '';
+
+  if (!hasMin && hasMax) {
+    // No minimum, only maximum - "Up to X" format
+    return `Up to ${maxValue}${displayUnit}`;
+  } else if (hasMin && !hasMax) {
+    // Only minimum, no maximum - "X and above" format
+    return `${minValue} and above${displayUnit}`;
+  } else if (hasMin && hasMax) {
+    // Both min and max - standard "X - Y" format
+    return `${minValue} - ${maxValue}${displayUnit}`;
+  } else {
+    // Neither min nor max
+    return 'Consult reference values';
+  }
+};
+
 // Utility function to parse JSON result_value and extract actual observed value
 const parseResultValue = (resultValue) => {
   try {
@@ -821,7 +842,7 @@ const LabOrders = () => {
           id: bestMatch.id,
           name: subTestName,
           unit: parentUnit,
-          range: `${parentMinValue} - ${parentMaxValue}${parentDisplayUnit ? ' ' + parentDisplayUnit : ''}`,
+          range: formatNormalRange(parentMinValue, parentMaxValue, parentDisplayUnit),
           minValue: parentMinValue,
           maxValue: parentMaxValue,
           gender: patientGender || 'Both',
@@ -859,7 +880,7 @@ const LabOrders = () => {
               if (nestedRangeData) {
                 // Skip displaying "unit" placeholder text
                 const displayUnit = nestedRangeData.unit && nestedRangeData.unit.toLowerCase() !== 'unit' ? nestedRangeData.unit : '';
-                nestedRange = `${nestedRangeData.min} - ${nestedRangeData.max}${displayUnit ? ' ' + displayUnit : ''}`;
+                nestedRange = formatNormalRange(nestedRangeData.min, nestedRangeData.max, displayUnit);
                 nestedMinValue = nestedRangeData.min;
                 nestedMaxValue = nestedRangeData.max;
               }
@@ -3390,6 +3411,11 @@ const LabOrders = () => {
                     <div class="main-test-section" style="margin: 20px 0;">
                       <div class="main-test-header" style="font-size: 16px; font-weight: bold; margin-bottom: 10px;">${testRow.test_name.toUpperCase()}</div>
                       ${textTestRows}
+                      ${testRow.test_method ? `
+                        <div style="margin: 15px 20px; font-size: 13px; line-height: 1.6; text-align: justify;">
+                          ${testRow.test_method}
+                        </div>
+                      ` : ''}
                     </div>
                   `;
                   } else {
@@ -3471,6 +3497,11 @@ const LabOrders = () => {
                     <div class="main-test-section">
                       <div class="main-test-header">${testRow.test_name.toUpperCase()}</div>
                       ${subTestRows}
+                      ${testRow.test_method ? `
+                        <div style="margin: 15px 20px; font-size: 13px; line-height: 1.6; text-align: justify;">
+                          ${testRow.test_method}
+                        </div>
+                      ` : ''}
                     </div>
                   `;
                   }
@@ -3564,6 +3595,11 @@ const LabOrders = () => {
                       <div class="test-value ${formData.is_abnormal ? 'abnormal' : ''}">${displayValue}</div>
                       <div class="test-range">${referenceRange}</div>
                     </div>
+                    ${testRow.test_method ? `
+                      <div style="margin: 15px 20px; font-size: 13px; line-height: 1.6; text-align: justify;">
+                        ${testRow.test_method}
+                      </div>
+                    ` : ''}
                   </div>
                 `;
                 }
