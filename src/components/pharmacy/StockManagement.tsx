@@ -111,8 +111,17 @@ interface StockAlert {
 const StockManagement: React.FC = () => {
   const { hospitalConfig } = useAuth();
   const [activeTab, setActiveTab] = useState('inventory');
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchInput, setSearchInput] = useState(''); // Local input state
+  const [searchTerm, setSearchTerm] = useState(''); // Debounced search term for API
   const [alertFilter, setAlertFilter] = useState('all');
+
+  // Debounce search - update searchTerm 500ms after user stops typing
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setSearchTerm(searchInput);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
   const [stockFilter, setStockFilter] = useState('all');
   const [selectedStockItem, setSelectedStockItem] = useState<any | null>(null);
   const [isAdjustmentDialogOpen, setIsAdjustmentDialogOpen] = useState(false);
@@ -121,6 +130,14 @@ const StockManagement: React.FC = () => {
   const [isHistoryDialogOpen, setIsHistoryDialogOpen] = useState(false);
   const [openingStockHistory, setOpeningStockHistory] = useState<any[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
+
+  // Inline stock adjustment state
+  const [editingBatchId, setEditingBatchId] = useState<string | null>(null);
+  const [adjustmentData, setAdjustmentData] = useState({
+    type: 'ADJUSTMENT' as 'IN' | 'OUT' | 'ADJUSTMENT' | 'DAMAGE' | 'EXPIRY',
+    quantity: 0,
+    reason: ''
+  });
 
   // Fetch real data using custom hooks
   const { data: batchInventoryData, isLoading: isLoadingInventory, refetch: refetchInventory } = useBatchInventory({
@@ -148,6 +165,7 @@ const StockManagement: React.FC = () => {
     supplier_name: batch.supplier_name,
     purchase_rate: batch.purchase_price,
     mrp: batch.mrp,
+    pieces_per_pack: batch.pieces_per_pack || 1, // For per-unit price calculation
     rack_number: batch.rack_number,
     shelf_location: batch.shelf_location,
     minimum_stock_level: 0, // TODO: Get from medication table
@@ -243,6 +261,50 @@ const StockManagement: React.FC = () => {
     toast.success('Stock data refreshed');
   };
 
+  // Inline stock adjustment handler
+  const adjustBatchStockMutation = useAdjustBatchStock();
+
+  const handleInlineAdjustment = async (item: any) => {
+    const currentStock = item.current_stock || 0;
+    const targetQuantity = adjustmentData.quantity;
+
+    // Calculate the difference between current and target
+    const difference = targetQuantity - currentStock;
+
+    if (difference === 0) {
+      toast.error('No change in quantity');
+      return;
+    }
+    if (!adjustmentData.reason.trim()) {
+      toast.error('Please provide a reason');
+      return;
+    }
+
+    try {
+      // Determine adjustment type based on direction of change
+      // If difference > 0, we need to ADD stock (but via reducing sold_quantity)
+      // If difference < 0, we need to REMOVE stock (via increasing sold_quantity)
+      const adjustmentType = difference > 0 ? 'IN' : 'OUT';
+      const adjustmentAmount = Math.abs(difference);
+
+      await adjustBatchStockMutation.mutateAsync({
+        batch_id: item.id,
+        adjustment_type: adjustmentType,
+        quantity: adjustmentAmount,
+        reason: adjustmentData.reason,
+        performed_by: undefined,  // Column expects UUID, null is acceptable
+        reference_type: 'ADJUSTMENT'
+      });
+
+      toast.success(`Stock adjusted: ${currentStock} → ${targetQuantity} (${difference > 0 ? '+' : ''}${difference})`);
+      setEditingBatchId(null);
+      setAdjustmentData({ type: 'ADJUSTMENT', quantity: 0, reason: '' });
+      refetchInventory();
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to adjust stock');
+    }
+  };
+
   const formatCurrency = (amount: number) => 
     new Intl.NumberFormat('en-IN', { 
       style: 'currency', 
@@ -312,7 +374,7 @@ const StockManagement: React.FC = () => {
     outOfStockItems: stockItems.filter(item => item.current_stock === 0).length,
     expiringItems: (stockAlerts || []).filter(a => a.alert_type === 'NEAR_EXPIRY').length,
     expiredItems: (stockAlerts || []).filter(a => a.alert_type === 'EXPIRED').length,
-    totalValue: stockItems.reduce((sum, item) => sum + (item.current_stock * (item.purchase_rate || item.mrp || 0)), 0)
+    totalValue: stockItems.reduce((sum, item) => sum + (item.current_stock * ((item.purchase_rate || item.mrp || 0) / (item.pieces_per_pack || 1))), 0)
   };
 
   return (
@@ -364,23 +426,13 @@ const StockManagement: React.FC = () => {
               }} />
             </DialogContent>
           </Dialog>
-          <Dialog open={isAdjustmentDialogOpen} onOpenChange={setIsAdjustmentDialogOpen}>
-            <DialogTrigger asChild>
-              <Button variant="outline">
-                <ArrowUpDown className="h-4 w-4 mr-2" />
-                Stock Adjustment
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-2xl">
-              <DialogHeader>
-                <DialogTitle>Stock Adjustment</DialogTitle>
-              </DialogHeader>
-              <StockAdjustmentForm onSuccess={() => {
-                setIsAdjustmentDialogOpen(false);
-                handleRefresh();
-              }} />
-            </DialogContent>
-          </Dialog>
+          <Button
+            variant="outline"
+            onClick={() => setActiveTab('inventory')}
+          >
+            <ArrowUpDown className="h-4 w-4 mr-2" />
+            Stock Adjustment
+          </Button>
         </div>
       </div>
 
@@ -450,11 +502,9 @@ const StockManagement: React.FC = () => {
 
       {!isLoadingInventory && (
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="inventory">Inventory ({stockItems.length})</TabsTrigger>
-          <TabsTrigger value="alerts">Alerts ({(stockAlerts || []).length})</TabsTrigger>
           <TabsTrigger value="movements">Movements</TabsTrigger>
-          <TabsTrigger value="reports">Reports</TabsTrigger>
         </TabsList>
 
         <TabsContent value="inventory" className="space-y-6">
@@ -466,8 +516,8 @@ const StockManagement: React.FC = () => {
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
                   <Input
                     placeholder="Search by medicine name, generic name, or batch number..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
+                    value={searchInput}
+                    onChange={(e) => setSearchInput(e.target.value)}
                     className="pl-10"
                   />
                 </div>
@@ -508,7 +558,92 @@ const StockManagement: React.FC = () => {
                     {filteredStockItems.map((item) => {
                       const stockStatus = getStockStatus(item.current_stock, item.minimum_stock_level, item.reorder_level);
                       const expiryStatus = getExpiryStatus(item.days_to_expiry);
-                      
+                      const isEditing = editingBatchId === item.id;
+
+                      // INLINE EDITING ROW
+                      if (isEditing) {
+                        const stockDifference = adjustmentData.quantity - item.current_stock;
+                        return (
+                          <TableRow key={item.id} className="bg-blue-50">
+                            <TableCell>
+                              <div>
+                                <div className="font-medium">{item.medicine_name}</div>
+                                <div className="text-sm text-muted-foreground">
+                                  Batch: {item.batch_number}
+                                </div>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <div className="text-sm">
+                                <div>Current: <strong>{item.current_stock}</strong></div>
+                                <div className={`font-medium ${stockDifference > 0 ? 'text-green-600' : stockDifference < 0 ? 'text-red-600' : 'text-gray-500'}`}>
+                                  Change: {stockDifference > 0 ? '+' : ''}{stockDifference}
+                                </div>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <div className="text-sm text-muted-foreground">
+                                {stockDifference > 0 ? 'Adding stock' : stockDifference < 0 ? 'Removing stock' : 'No change'}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-2">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => setAdjustmentData({...adjustmentData, quantity: Math.max(0, adjustmentData.quantity - 1)})}
+                                >
+                                  <Minus className="h-4 w-4" />
+                                </Button>
+                                <span className="w-12 text-center font-medium">{adjustmentData.quantity}</span>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => setAdjustmentData({...adjustmentData, quantity: adjustmentData.quantity + 1})}
+                                >
+                                  <Plus className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <Input
+                                placeholder="Reason"
+                                className="text-sm"
+                                value={adjustmentData.reason}
+                                onChange={(e) => setAdjustmentData({...adjustmentData, reason: e.target.value})}
+                              />
+                            </TableCell>
+                            <TableCell colSpan={2}>
+                              <div className="flex gap-2">
+                                <Button
+                                  size="sm"
+                                  className="bg-green-600 hover:bg-green-700"
+                                  onClick={() => handleInlineAdjustment(item)}
+                                  disabled={adjustBatchStockMutation.isPending || stockDifference === 0}
+                                >
+                                  {adjustBatchStockMutation.isPending ? (
+                                    <Loader2 className="h-3 w-3 animate-spin" />
+                                  ) : (
+                                    'Save'
+                                  )}
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => {
+                                    setEditingBatchId(null);
+                                    setAdjustmentData({ type: 'ADJUSTMENT', quantity: 0, reason: '' });
+                                  }}
+                                >
+                                  Cancel
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      }
+
+                      // NORMAL ROW
                       return (
                         <TableRow key={item.id}>
                           <TableCell>
@@ -566,10 +701,11 @@ const StockManagement: React.FC = () => {
                           <TableCell>
                             <div>
                               <div className="font-medium">
-                                {formatCurrency(item.current_stock * (item.purchase_rate || item.mrp))}
+                                {/* Value = current_stock (tablets) × per-tablet price */}
+                                {formatCurrency(item.current_stock * ((item.purchase_rate || item.mrp || 0) / (item.pieces_per_pack || 1)))}
                               </div>
                               <div className="text-sm text-muted-foreground">
-                                Rate: {formatCurrency(item.purchase_rate || item.mrp)}
+                                Rate: {formatCurrency((item.purchase_rate || item.mrp || 0) / (item.pieces_per_pack || 1))}/unit
                               </div>
                             </div>
                           </TableCell>
@@ -579,11 +715,20 @@ const StockManagement: React.FC = () => {
                                 size="sm"
                                 variant="outline"
                                 onClick={() => setSelectedStockItem(item)}
+                                title="View Details"
                               >
                                 <Eye className="h-3 w-3" />
                               </Button>
-                              <Button size="sm" variant="outline">
-                                <Edit className="h-3 w-3" />
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  setEditingBatchId(item.id);
+                                  setAdjustmentData({ type: 'ADJUSTMENT', quantity: item.current_stock, reason: '' });
+                                }}
+                                title="Adjust Stock"
+                              >
+                                <ArrowUpDown className="h-3 w-3" />
                               </Button>
                             </div>
                           </TableCell>
@@ -595,69 +740,6 @@ const StockManagement: React.FC = () => {
               </div>
             </CardContent>
           </Card>
-        </TabsContent>
-
-        <TabsContent value="alerts" className="space-y-6">
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex gap-4">
-                <select
-                  className="px-3 py-2 border rounded-md"
-                  value={alertFilter}
-                  onChange={(e) => setAlertFilter(e.target.value)}
-                >
-                  <option value="all">All Alerts</option>
-                  <option value="LOW_STOCK">Low Stock</option>
-                  <option value="OUT_OF_STOCK">Out of Stock</option>
-                  <option value="NEAR_EXPIRY">Near Expiry</option>
-                  <option value="EXPIRED">Expired</option>
-                </select>
-              </div>
-            </CardContent>
-          </Card>
-
-          <div className="grid gap-4">
-            {filteredAlerts.map((alert) => (
-              <Card key={alert.id}>
-                <CardContent className="pt-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                      <AlertTriangle className={`h-6 w-6 ${
-                        alert.severity === 'CRITICAL' ? 'text-red-600' :
-                        alert.severity === 'HIGH' ? 'text-orange-600' :
-                        alert.severity === 'MEDIUM' ? 'text-yellow-600' : 'text-blue-600'
-                      }`} />
-                      <div>
-                        <div className="font-medium">{alert.medicine_name}</div>
-                        <div className="text-sm text-muted-foreground">
-                          Batch: {alert.batch_number}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <Badge className={getSeverityColor(alert.severity)}>
-                        {alert.severity}
-                      </Badge>
-                      <div className="text-sm text-muted-foreground mt-1">
-                        {alert.alert_type === 'LOW_STOCK' && `Stock: ${alert.current_stock}/${alert.threshold}`}
-                        {alert.alert_type === 'OUT_OF_STOCK' && 'No stock available'}
-                        {alert.alert_type === 'NEAR_EXPIRY' && `Expires in ${alert.days_to_expiry} days`}
-                        {alert.alert_type === 'EXPIRED' && `Expired ${Math.abs(alert.days_to_expiry!)} days ago`}
-                      </div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-            {filteredAlerts.length === 0 && (
-              <Card>
-                <CardContent className="pt-8 pb-8 text-center">
-                  <CheckCircle className="h-12 w-12 text-green-600 mx-auto mb-4" />
-                  <p className="text-muted-foreground">No alerts matching your criteria</p>
-                </CardContent>
-              </Card>
-            )}
-          </div>
         </TabsContent>
 
         <TabsContent value="movements" className="space-y-6">
@@ -692,34 +774,6 @@ const StockManagement: React.FC = () => {
                     </div>
                   </div>
                 ))}
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="reports">
-          <Card>
-            <CardHeader>
-              <CardTitle>Stock Reports</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Button variant="outline" className="h-20 flex-col">
-                  <BarChart3 className="h-6 w-6 mb-2" />
-                  <span>Inventory Valuation Report</span>
-                </Button>
-                <Button variant="outline" className="h-20 flex-col">
-                  <AlertTriangle className="h-6 w-6 mb-2" />
-                  <span>Low Stock Report</span>
-                </Button>
-                <Button variant="outline" className="h-20 flex-col">
-                  <Calendar className="h-6 w-6 mb-2" />
-                  <span>Expiry Analysis Report</span>
-                </Button>
-                <Button variant="outline" className="h-20 flex-col">
-                  <ArrowUpDown className="h-6 w-6 mb-2" />
-                  <span>Stock Movement Report</span>
-                </Button>
               </div>
             </CardContent>
           </Card>
@@ -941,7 +995,7 @@ const StockAdjustmentForm: React.FC<{ onSuccess: () => void }> = ({ onSuccess })
         adjustment_type: adjustmentType,
         quantity: Math.abs(quantity),
         reason: reason,
-        performed_by: 'Current User', // TODO: Get from auth context
+        performed_by: undefined, // Column expects UUID, null is acceptable
         reference_type: 'ADJUSTMENT'
       });
 
