@@ -701,11 +701,11 @@ const StockManagement: React.FC = () => {
                           <TableCell>
                             <div>
                               <div className="font-medium">
-                                {/* Value = current_stock (tablets) × per-tablet price */}
-                                {formatCurrency(item.current_stock * ((item.purchase_rate || item.mrp || 0) / (item.pieces_per_pack || 1)))}
+                                {/* Value = current_stock (tablets) × per-tablet selling price */}
+                                {formatCurrency(item.current_stock * ((item.selling_price || item.mrp || 0) / (item.pieces_per_pack || 1)))}
                               </div>
                               <div className="text-sm text-muted-foreground">
-                                Rate: {formatCurrency((item.purchase_rate || item.mrp || 0) / (item.pieces_per_pack || 1))}/unit
+                                Rate: {formatCurrency((item.selling_price || item.mrp || 0) / (item.pieces_per_pack || 1))}/unit
                               </div>
                             </div>
                           </TableCell>
@@ -1300,11 +1300,6 @@ const OpeningStockForm: React.FC<{ onSuccess: () => void }> = ({ onSuccess }) =>
       return;
     }
 
-    if (!formData.qty_strips || parseInt(formData.qty_strips) <= 0) {
-      toast.error('Please enter number of strips');
-      return;
-    }
-
     if (calculatedTotal <= 0) {
       toast.error('Total quantity must be greater than 0');
       return;
@@ -1433,11 +1428,10 @@ const OpeningStockForm: React.FC<{ onSuccess: () => void }> = ({ onSuccess }) =>
           <p className="text-xs text-muted-foreground mt-1">Tablets per strip</p>
         </div>
         <div>
-          <label className="text-sm font-medium block mb-2">No. of Strips *</label>
+          <label className="text-sm font-medium block mb-2">No. of Strips</label>
           <Input
             type="number"
-            required
-            min="1"
+            min="0"
             placeholder="e.g., 5"
             value={formData.qty_strips}
             onChange={(e) => setFormData(prev => ({ ...prev, qty_strips: e.target.value }))}
@@ -1456,13 +1450,13 @@ const OpeningStockForm: React.FC<{ onSuccess: () => void }> = ({ onSuccess }) =>
       </div>
 
       {/* Show calculated total */}
-      {(formData.pieces_per_pack && formData.qty_strips) && (
+      {(formData.pieces_per_pack && (formData.qty_strips || formData.qty_tablets)) && (
         <div className="bg-gray-50 p-3 rounded-md border">
           <p className="text-sm">
             Total Stock: <strong className="text-lg">{calculatedTotal}</strong> tablets
-            {formData.pieces_per_pack && formData.qty_strips && (
+            {formData.pieces_per_pack && (formData.qty_strips || formData.qty_tablets) && (
               <span className="text-muted-foreground ml-2">
-                ({formData.qty_strips} strips × {formData.pieces_per_pack} tablets{formData.qty_tablets ? ` + ${formData.qty_tablets} loose` : ''})
+                ({formData.qty_strips || 0} strips × {formData.pieces_per_pack} tablets{formData.qty_tablets ? ` + ${formData.qty_tablets} loose` : ''})
               </span>
             )}
           </p>
@@ -1546,7 +1540,7 @@ const OpeningStockForm: React.FC<{ onSuccess: () => void }> = ({ onSuccess }) =>
       <div className="flex justify-end gap-2 pt-4 border-t">
         <Button
           type="submit"
-          disabled={!selectedMedicine || !formData.batch_number || !formData.pieces_per_pack || !formData.qty_strips || calculatedTotal <= 0 || !formData.expiry_date || isSubmitting}
+          disabled={!selectedMedicine || !formData.batch_number || !formData.pieces_per_pack || calculatedTotal <= 0 || !formData.expiry_date || isSubmitting}
         >
           {isSubmitting ? (
             <>

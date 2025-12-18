@@ -455,8 +455,8 @@ const PharmacyBilling: React.FC = () => {
         expiry_date: medicine.expiry_date || '',
         mrp: medicine.mrp || medicine.price_per_strip || 0,
         unit_price: (medicine.price_per_strip || 0) / piecesPerPack, // Price per tablet = strip price ÷ pieces per pack
-        quantity: piecesPerPack, // Start with 1 strip worth of tablets
-        qty_strips: 1, // Default to 1 strip
+        quantity: 0, // Start with 0 quantity - user must select strips/tablets
+        qty_strips: 0, // Default to 0 strips
         qty_tablets: 0, // Default to 0 loose tablets
         discount_percentage: 0,
         discount_amount: 0,
