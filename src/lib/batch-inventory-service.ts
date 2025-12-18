@@ -356,30 +356,45 @@ export async function getNearExpiryAlerts(
 }
 
 /**
- * Get low stock alerts
+ * Get low stock alerts (two-query approach - NO joins due to missing FK constraints)
  */
 export async function getLowStockAlerts(hospital_name: string): Promise<BatchAlert[]> {
   try {
-    // For low stock, we need to aggregate by medicine and check against minimum stock
-    const { data: medicines, error } = await supabase
+    // Step 1: Fetch combined stock data (no join)
+    const { data: stockData, error: stockError } = await supabase
       .from('v_medicine_combined_stock')
-      .select(`
-        *,
-        medication:medicine_id (
-          product_name,
-          minimum_stock
-        )
-      `)
+      .select('*')
       .eq('hospital_name', hospital_name);
 
-    if (error) throw error;
-    if (!medicines) return [];
+    if (stockError) throw stockError;
+    if (!stockData || stockData.length === 0) return [];
 
+    // Step 2: Get unique medicine_ids
+    const medicineIds = [...new Set(stockData.map(s => s.medicine_id).filter(Boolean))];
+
+    // Step 3: Fetch medicine details separately (no join)
+    let medicineMap = new Map<string, { product_name: string; minimum_stock: number }>();
+    if (medicineIds.length > 0) {
+      const { data: medicines, error: medError } = await supabase
+        .from('medicine_master')
+        .select('id, medicine_name, minimum_stock')
+        .in('id', medicineIds);
+
+      if (!medError && medicines) {
+        medicineMap = new Map(medicines.map(m => [m.id, {
+          product_name: m.medicine_name,
+          minimum_stock: m.minimum_stock || 0
+        }]));
+      }
+    }
+
+    // Step 4: Build alerts
     const alerts: BatchAlert[] = [];
 
-    for (const medicine of medicines) {
-      const minStock = medicine.medication?.minimum_stock || 0;
-      const currentStock = medicine.total_stock || 0;
+    for (const stock of stockData) {
+      const medicineInfo = medicineMap.get(stock.medicine_id);
+      const minStock = medicineInfo?.minimum_stock || 0;
+      const currentStock = stock.total_stock || 0;
 
       if (minStock > 0 && currentStock <= minStock) {
         let severity: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL' = 'MEDIUM';
@@ -391,10 +406,10 @@ export async function getLowStockAlerts(hospital_name: string): Promise<BatchAle
         }
 
         alerts.push({
-          id: medicine.medicine_id,
-          batch_id: medicine.medicine_id,
-          medicine_name: medicine.medication?.product_name || 'Unknown',
-          batch_number: `${medicine.batch_count} batch(es)`,
+          id: stock.medicine_id,
+          batch_id: stock.medicine_id,
+          medicine_name: medicineInfo?.product_name || 'Unknown',
+          batch_number: `${stock.batch_count} batch(es)`,
           alert_type: 'LOW_STOCK',
           current_stock: currentStock,
           severity,
@@ -563,13 +578,13 @@ export interface OpeningStockData {
   medicine_id: string;
   batch_number: string;
   quantity: number;
+  pieces_per_pack?: number;
   expiry_date: string;
   manufacturing_date?: string;
   purchase_price?: number;
   mrp?: number;
   selling_price?: number;
-  rack_number?: string;
-  shelf_location?: string;
+  supplier_id?: number;
   hospital_name: string;
   performed_by?: string;
 }
@@ -591,18 +606,14 @@ export async function addOpeningStock(data: OpeningStockData) {
         received_quantity: data.quantity,
         current_stock: data.quantity,
         sold_quantity: 0,
-        reserved_stock: 0,
-        damaged_stock: 0,
+        pieces_per_pack: data.pieces_per_pack || 0,
         purchase_price: data.purchase_price || 0,
         mrp: data.mrp || 0,
         selling_price: data.selling_price || 0,
-        rack_number: data.rack_number || null,
-        shelf_location: data.shelf_location || null,
+        supplier_id: data.supplier_id || null,
         hospital_name: data.hospital_name,
         is_active: true,
         is_expired: false,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
       })
       .select()
       .single();
@@ -614,6 +625,8 @@ export async function addOpeningStock(data: OpeningStockData) {
       .from('batch_stock_movements')
       .insert({
         batch_inventory_id: batchData.id,
+        medicine_id: data.medicine_id,
+        batch_number: data.batch_number,
         movement_type: 'IN',
         reference_type: 'OPENING_STOCK',
         quantity_before: 0,

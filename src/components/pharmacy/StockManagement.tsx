@@ -1,5 +1,5 @@
 // Stock Management Component
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -44,7 +44,8 @@ import {
   Factory,
   MapPin,
   ShoppingCart,
-  Loader2
+  Loader2,
+  History
 } from 'lucide-react';
 import {
   useBatchInventory,
@@ -108,6 +109,7 @@ interface StockAlert {
 }
 
 const StockManagement: React.FC = () => {
+  const { hospitalConfig } = useAuth();
   const [activeTab, setActiveTab] = useState('inventory');
   const [searchTerm, setSearchTerm] = useState('');
   const [alertFilter, setAlertFilter] = useState('all');
@@ -116,6 +118,9 @@ const StockManagement: React.FC = () => {
   const [isAdjustmentDialogOpen, setIsAdjustmentDialogOpen] = useState(false);
   const [isOpeningStockDialogOpen, setIsOpeningStockDialogOpen] = useState(false);
   const [selectedBatchForHistory, setSelectedBatchForHistory] = useState<string | null>(null);
+  const [isHistoryDialogOpen, setIsHistoryDialogOpen] = useState(false);
+  const [openingStockHistory, setOpeningStockHistory] = useState<any[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
 
   // Fetch real data using custom hooks
   const { data: batchInventoryData, isLoading: isLoadingInventory, refetch: refetchInventory } = useBatchInventory({
@@ -154,6 +159,82 @@ const StockManagement: React.FC = () => {
 
   // Fetch stock movements for selected batch (will be implemented when viewing batch details)
   const [stockMovements, setStockMovements] = useState<StockMovement[]>([]);
+
+  // Fetch opening stock history (three-query approach - NO joins due to missing FK constraints)
+  const fetchOpeningStockHistory = async () => {
+    setLoadingHistory(true);
+    try {
+      // Step 1: Fetch movement records (no join)
+      const { data: movements, error: movementError } = await supabase
+        .from('batch_stock_movements')
+        .select('*')
+        .eq('reference_type', 'OPENING_STOCK')
+        .eq('hospital_name', hospitalConfig?.fullName || '')
+        .order('movement_date', { ascending: false });
+
+      if (movementError) throw movementError;
+
+      if (!movements || movements.length === 0) {
+        setOpeningStockHistory([]);
+        return;
+      }
+
+      // Step 2: Get unique batch_inventory_ids
+      const batchIds = [...new Set(movements.map(m => m.batch_inventory_id).filter(Boolean))];
+
+      if (batchIds.length === 0) {
+        setOpeningStockHistory(movements);
+        return;
+      }
+
+      // Step 3: Fetch batch details (NO medicine join - just basic fields)
+      const { data: batches, error: batchError } = await supabase
+        .from('medicine_batch_inventory')
+        .select('id, batch_number, pieces_per_pack, medicine_id')
+        .in('id', batchIds);
+
+      if (batchError) {
+        console.error('Error fetching batch details:', batchError);
+        setOpeningStockHistory(movements);
+        return;
+      }
+
+      // Step 4: Get unique medicine_ids from batches
+      const medicineIds = [...new Set(batches?.map(b => b.medicine_id).filter(Boolean) || [])];
+
+      // Step 5: Fetch medicine names separately (NO join)
+      let medicineMap = new Map<string, string>();
+      if (medicineIds.length > 0) {
+        const { data: medicines, error: medError } = await supabase
+          .from('medicine_master')
+          .select('id, medicine_name')
+          .in('id', medicineIds);
+
+        if (!medError && medicines) {
+          medicineMap = new Map(medicines.map(m => [m.id, m.medicine_name]));
+        }
+      }
+
+      // Step 6: Create batch lookup map with medicine names attached
+      const batchMap = new Map(batches?.map(b => [b.id, {
+        ...b,
+        medicine_name: medicineMap.get(b.medicine_id) || 'N/A'
+      }]) || []);
+
+      // Step 7: Merge all data together
+      const enrichedHistory = movements.map(movement => ({
+        ...movement,
+        batch: batchMap.get(movement.batch_inventory_id) || null
+      }));
+
+      setOpeningStockHistory(enrichedHistory);
+    } catch (error) {
+      console.error('Error fetching opening stock history:', error);
+      toast.error('Failed to fetch opening stock history');
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
 
   // Refresh handler
   const handleRefresh = () => {
@@ -255,6 +336,16 @@ const StockManagement: React.FC = () => {
           <Button variant="outline" onClick={handleRefresh} disabled={isLoadingInventory}>
             <RefreshCw className={`h-4 w-4 mr-2 ${isLoadingInventory ? 'animate-spin' : ''}`} />
             Refresh
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => {
+              setIsHistoryDialogOpen(true);
+              fetchOpeningStockHistory();
+            }}
+          >
+            <History className="h-4 w-4 mr-2" />
+            Opening Stock History
           </Button>
           <Dialog open={isOpeningStockDialogOpen} onOpenChange={setIsOpeningStockDialogOpen}>
             <DialogTrigger asChild>
@@ -691,6 +782,92 @@ const StockManagement: React.FC = () => {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Opening Stock History Dialog */}
+      <Dialog open={isHistoryDialogOpen} onOpenChange={setIsHistoryDialogOpen}>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <History className="h-5 w-5" />
+              Opening Stock History
+            </DialogTitle>
+          </DialogHeader>
+          {loadingHistory ? (
+            <div className="flex flex-col items-center justify-center py-8">
+              <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
+              <p className="text-muted-foreground">Loading history...</p>
+            </div>
+          ) : openingStockHistory.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-8">
+              <Package className="h-12 w-12 text-muted-foreground mb-4" />
+              <p className="text-muted-foreground">No opening stock entries found</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-gray-100">
+                    <TableHead>Date</TableHead>
+                    <TableHead>Medicine</TableHead>
+                    <TableHead>Batch</TableHead>
+                    <TableHead className="text-right">Qty Added</TableHead>
+                    <TableHead>Added By</TableHead>
+                    <TableHead>Reason</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {openingStockHistory.map((item) => (
+                    <TableRow key={item.id} className="hover:bg-gray-50">
+                      <TableCell>
+                        <div>
+                          <div className="font-medium">
+                            {new Date(item.movement_date).toLocaleDateString('en-IN', {
+                              day: '2-digit',
+                              month: 'short',
+                              year: 'numeric'
+                            })}
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            {new Date(item.movement_date).toLocaleTimeString('en-IN', {
+                              hour: '2-digit',
+                              minute: '2-digit'
+                            })}
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="font-medium">
+                          {item.batch?.medicine_name || 'N/A'}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <span className="font-mono text-sm">
+                          {item.batch?.batch_number || 'N/A'}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+                          +{item.quantity_changed}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <span className="text-sm">
+                          {item.performed_by || 'System'}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <span className="text-sm text-muted-foreground">
+                          {item.reason || 'Opening Stock Entry'}
+                        </span>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
@@ -970,18 +1147,40 @@ const OpeningStockForm: React.FC<{ onSuccess: () => void }> = ({ onSuccess }) =>
   const [selectedMedicine, setSelectedMedicine] = useState<any>(null);
   const [medicines, setMedicines] = useState<any[]>([]);
   const [searchingMedicines, setSearchingMedicines] = useState(false);
+  const [suppliers, setSuppliers] = useState<any[]>([]);
 
   const [formData, setFormData] = useState({
     batch_number: '',
-    quantity: '',
+    pieces_per_pack: '',
+    qty_strips: '',
+    qty_tablets: '',
     expiry_date: '',
     manufacturing_date: '',
     purchase_price: '',
     mrp: '',
     selling_price: '',
-    rack_number: '',
-    shelf_location: '',
+    supplier_id: '',
   });
+
+  // Calculate total quantity
+  const calculatedTotal = (() => {
+    const piecesPerPack = parseInt(formData.pieces_per_pack) || 0;
+    const qtyStrips = parseInt(formData.qty_strips) || 0;
+    const qtyTablets = parseInt(formData.qty_tablets) || 0;
+    return (qtyStrips * piecesPerPack) + qtyTablets;
+  })();
+
+  // Fetch suppliers on mount
+  useEffect(() => {
+    const fetchSuppliers = async () => {
+      const { data } = await supabase
+        .from('suppliers')
+        .select('id, supplier_name')
+        .order('supplier_name');
+      if (data) setSuppliers(data);
+    };
+    fetchSuppliers();
+  }, []);
 
   // Search medicines from medicine_master
   const searchMedicines = async (term: string) => {
@@ -999,13 +1198,10 @@ const OpeningStockForm: React.FC<{ onSuccess: () => void }> = ({ onSuccess }) =>
           medicine_name,
           generic_name,
           type,
-          purchase_price,
-          selling_price,
-          mrp_price,
           manufacturer:manufacturer_companies(name)
         `)
         .eq('is_deleted', false)
-        .eq('hospital_name', hospitalConfig.fullName)
+        .eq('hospital_name', hospitalConfig?.fullName || '')
         .or(`medicine_name.ilike.%${term}%,generic_name.ilike.%${term}%`)
         .limit(10);
 
@@ -1045,8 +1241,18 @@ const OpeningStockForm: React.FC<{ onSuccess: () => void }> = ({ onSuccess }) =>
       return;
     }
 
-    if (!formData.quantity || parseInt(formData.quantity) <= 0) {
-      toast.error('Please enter a valid quantity');
+    if (!formData.pieces_per_pack || parseInt(formData.pieces_per_pack) <= 0) {
+      toast.error('Please enter pieces per pack (tablets per strip)');
+      return;
+    }
+
+    if (!formData.qty_strips || parseInt(formData.qty_strips) <= 0) {
+      toast.error('Please enter number of strips');
+      return;
+    }
+
+    if (calculatedTotal <= 0) {
+      toast.error('Total quantity must be greater than 0');
       return;
     }
 
@@ -1062,14 +1268,14 @@ const OpeningStockForm: React.FC<{ onSuccess: () => void }> = ({ onSuccess }) =>
       await addOpeningStock({
         medicine_id: selectedMedicine.id,
         batch_number: formData.batch_number,
-        quantity: parseInt(formData.quantity),
+        quantity: calculatedTotal,
+        pieces_per_pack: parseInt(formData.pieces_per_pack),
         expiry_date: formData.expiry_date,
         manufacturing_date: formData.manufacturing_date || undefined,
         purchase_price: formData.purchase_price ? parseFloat(formData.purchase_price) : undefined,
         mrp: formData.mrp ? parseFloat(formData.mrp) : undefined,
         selling_price: formData.selling_price ? parseFloat(formData.selling_price) : undefined,
-        rack_number: formData.rack_number || undefined,
-        shelf_location: formData.shelf_location || undefined,
+        supplier_id: formData.supplier_id ? parseInt(formData.supplier_id) : undefined,
         hospital_name: hospitalConfig.fullName,
       });
 
@@ -1147,29 +1353,67 @@ const OpeningStockForm: React.FC<{ onSuccess: () => void }> = ({ onSuccess }) =>
         )}
       </div>
 
-      {/* Batch Number & Quantity */}
-      <div className="grid grid-cols-2 gap-4">
+      {/* Batch Number */}
+      <div>
+        <label className="text-sm font-medium block mb-2">Batch Number *</label>
+        <Input
+          required
+          placeholder="e.g., BATCH001"
+          value={formData.batch_number}
+          onChange={(e) => setFormData(prev => ({ ...prev, batch_number: e.target.value }))}
+        />
+      </div>
+
+      {/* Quantity Section */}
+      <div className="grid grid-cols-3 gap-4">
         <div>
-          <label className="text-sm font-medium block mb-2">Batch Number *</label>
-          <Input
-            required
-            placeholder="e.g., BATCH001"
-            value={formData.batch_number}
-            onChange={(e) => setFormData(prev => ({ ...prev, batch_number: e.target.value }))}
-          />
-        </div>
-        <div>
-          <label className="text-sm font-medium block mb-2">Quantity *</label>
+          <label className="text-sm font-medium block mb-2">Pieces/Pack *</label>
           <Input
             type="number"
             required
             min="1"
-            placeholder="Enter quantity"
-            value={formData.quantity}
-            onChange={(e) => setFormData(prev => ({ ...prev, quantity: e.target.value }))}
+            placeholder="e.g., 10"
+            value={formData.pieces_per_pack}
+            onChange={(e) => setFormData(prev => ({ ...prev, pieces_per_pack: e.target.value }))}
+          />
+          <p className="text-xs text-muted-foreground mt-1">Tablets per strip</p>
+        </div>
+        <div>
+          <label className="text-sm font-medium block mb-2">No. of Strips *</label>
+          <Input
+            type="number"
+            required
+            min="1"
+            placeholder="e.g., 5"
+            value={formData.qty_strips}
+            onChange={(e) => setFormData(prev => ({ ...prev, qty_strips: e.target.value }))}
+          />
+        </div>
+        <div>
+          <label className="text-sm font-medium block mb-2">Loose Tablets</label>
+          <Input
+            type="number"
+            min="0"
+            placeholder="e.g., 0"
+            value={formData.qty_tablets}
+            onChange={(e) => setFormData(prev => ({ ...prev, qty_tablets: e.target.value }))}
           />
         </div>
       </div>
+
+      {/* Show calculated total */}
+      {(formData.pieces_per_pack && formData.qty_strips) && (
+        <div className="bg-gray-50 p-3 rounded-md border">
+          <p className="text-sm">
+            Total Stock: <strong className="text-lg">{calculatedTotal}</strong> tablets
+            {formData.pieces_per_pack && formData.qty_strips && (
+              <span className="text-muted-foreground ml-2">
+                ({formData.qty_strips} strips × {formData.pieces_per_pack} tablets{formData.qty_tablets ? ` + ${formData.qty_tablets} loose` : ''})
+              </span>
+            )}
+          </p>
+        </div>
+      )}
 
       {/* Dates */}
       <div className="grid grid-cols-2 gap-4">
@@ -1229,31 +1473,26 @@ const OpeningStockForm: React.FC<{ onSuccess: () => void }> = ({ onSuccess }) =>
         </div>
       </div>
 
-      {/* Location */}
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className="text-sm font-medium block mb-2">Rack Number</label>
-          <Input
-            placeholder="e.g., R1"
-            value={formData.rack_number}
-            onChange={(e) => setFormData(prev => ({ ...prev, rack_number: e.target.value }))}
-          />
-        </div>
-        <div>
-          <label className="text-sm font-medium block mb-2">Shelf Location</label>
-          <Input
-            placeholder="e.g., S1"
-            value={formData.shelf_location}
-            onChange={(e) => setFormData(prev => ({ ...prev, shelf_location: e.target.value }))}
-          />
-        </div>
+      {/* Supplier */}
+      <div>
+        <label className="text-sm font-medium block mb-2">Supplier</label>
+        <select
+          className="w-full p-2 border rounded-md"
+          value={formData.supplier_id}
+          onChange={(e) => setFormData(prev => ({ ...prev, supplier_id: e.target.value }))}
+        >
+          <option value="">Select Supplier</option>
+          {suppliers.map((s) => (
+            <option key={s.id} value={s.id}>{s.supplier_name}</option>
+          ))}
+        </select>
       </div>
 
       {/* Submit Button */}
       <div className="flex justify-end gap-2 pt-4 border-t">
         <Button
           type="submit"
-          disabled={!selectedMedicine || !formData.batch_number || !formData.quantity || !formData.expiry_date || isSubmitting}
+          disabled={!selectedMedicine || !formData.batch_number || !formData.pieces_per_pack || !formData.qty_strips || calculatedTotal <= 0 || !formData.expiry_date || isSubmitting}
         >
           {isSubmitting ? (
             <>
