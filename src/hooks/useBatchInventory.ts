@@ -39,8 +39,8 @@ export const batchInventoryKeys = {
  * Hook to fetch all batch inventory with filters
  */
 export function useBatchInventory(filters?: BatchFilters) {
-  const { selectedHospital } = useAuth();
-  const hospitalName = selectedHospital?.name || '';
+  const { hospitalConfig } = useAuth();
+  const hospitalName = hospitalConfig?.fullName || '';
 
   return useQuery({
     queryKey: batchInventoryKeys.list(hospitalName, filters),
@@ -54,8 +54,8 @@ export function useBatchInventory(filters?: BatchFilters) {
  * Hook to fetch batches for a specific medicine
  */
 export function useMedicineBatches(medicineId: string | null, filters?: BatchFilters) {
-  const { selectedHospital } = useAuth();
-  const hospitalName = selectedHospital?.name || '';
+  const { hospitalConfig } = useAuth();
+  const hospitalName = hospitalConfig?.fullName || '';
 
   return useQuery({
     queryKey: batchInventoryKeys.medicine(medicineId || '', hospitalName),
@@ -69,8 +69,8 @@ export function useMedicineBatches(medicineId: string | null, filters?: BatchFil
  * Hook to fetch batch summary for a medicine
  */
 export function useMedicineBatchSummary(medicineId: string | null) {
-  const { selectedHospital } = useAuth();
-  const hospitalName = selectedHospital?.name || '';
+  const { hospitalConfig } = useAuth();
+  const hospitalName = hospitalConfig?.fullName || '';
 
   return useQuery({
     queryKey: batchInventoryKeys.medicineSummary(medicineId || '', hospitalName),
@@ -96,8 +96,8 @@ export function useBatchMovementHistory(batchId: string | null) {
  * Hook to fetch near expiry alerts
  */
 export function useNearExpiryAlerts(daysThreshold: number = 90) {
-  const { selectedHospital } = useAuth();
-  const hospitalName = selectedHospital?.name || '';
+  const { hospitalConfig } = useAuth();
+  const hospitalName = hospitalConfig?.fullName || '';
 
   return useQuery({
     queryKey: batchInventoryKeys.expiryAlerts(hospitalName, daysThreshold),
@@ -112,8 +112,8 @@ export function useNearExpiryAlerts(daysThreshold: number = 90) {
  * Hook to fetch low stock alerts
  */
 export function useLowStockAlerts() {
-  const { selectedHospital } = useAuth();
-  const hospitalName = selectedHospital?.name || '';
+  const { hospitalConfig } = useAuth();
+  const hospitalName = hospitalConfig?.fullName || '';
 
   return useQuery({
     queryKey: batchInventoryKeys.lowStockAlerts(hospitalName),
@@ -129,8 +129,8 @@ export function useLowStockAlerts() {
  */
 export function useAdjustBatchStock() {
   const queryClient = useQueryClient();
-  const { selectedHospital } = useAuth();
-  const hospitalName = selectedHospital?.name || '';
+  const { hospitalConfig } = useAuth();
+  const hospitalName = hospitalConfig?.fullName || '';
 
   return useMutation({
     mutationFn: (adjustment: StockAdjustment) =>
@@ -172,8 +172,8 @@ export function useMarkBatchExpired() {
  * Hook to allocate stock for sale (FEFO)
  */
 export function useAllocateStock() {
-  const { selectedHospital } = useAuth();
-  const hospitalName = selectedHospital?.name || '';
+  const { hospitalConfig } = useAuth();
+  const hospitalName = hospitalConfig?.fullName || '';
 
   return useMutation({
     mutationFn: ({
@@ -191,8 +191,8 @@ export function useAllocateStock() {
  */
 export function useTransferStock() {
   const queryClient = useQueryClient();
-  const { selectedHospital } = useAuth();
-  const hospitalName = selectedHospital?.name || '';
+  const { hospitalConfig } = useAuth();
+  const hospitalName = hospitalConfig?.fullName || '';
 
   return useMutation({
     mutationFn: ({

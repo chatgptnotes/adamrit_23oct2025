@@ -115,7 +115,10 @@ export async function getAllBatchInventory(
   hospital_name: string,
   filters?: BatchFilters
 ) {
+  console.log('🔍 getAllBatchInventory called with hospital_name:', hospital_name);
+
   try {
+    // First try the view
     let query = supabase
       .from('v_batch_stock_details')
       .select('*')
@@ -137,7 +140,136 @@ export async function getAllBatchInventory(
 
     const { data, error } = await query;
 
-    if (error) throw error;
+    console.log('🔍 v_batch_stock_details result:', { data, error });
+
+    // If view returns data with missing medicine_name, enrich it
+    if (!error && data && data.length > 0) {
+      // FIRST: Fetch pieces_per_pack from base table (view doesn't have it)
+      const batchIds = data.map(d => d.id).filter(Boolean);
+      let piecesPerPackMap = new Map<string, number>();
+
+      if (batchIds.length > 0) {
+        const { data: batchDetails } = await supabase
+          .from('medicine_batch_inventory')
+          .select('id, pieces_per_pack')
+          .in('id', batchIds);
+
+        if (batchDetails) {
+          piecesPerPackMap = new Map(batchDetails.map(b => [b.id, b.pieces_per_pack || 1]));
+        }
+        console.log('🔍 Fetched pieces_per_pack from base table:', Object.fromEntries(piecesPerPackMap));
+      }
+
+      // Check if medicine names are missing
+      const needsEnrichment = data.some(d => !d.medicine_name || d.medicine_name === 'Unknown');
+
+      if (needsEnrichment) {
+        console.log('🔍 View data needs medicine name enrichment');
+        console.log('🔍 Raw batch data medicine_ids:', data.map(b => ({ id: b.id, medicine_id: b.medicine_id, medicine_name: b.medicine_name })));
+        const medicineIds = [...new Set(data.map(b => b.medicine_id).filter(Boolean))];
+
+        if (medicineIds.length > 0) {
+          console.log('🔍 Looking up medicine IDs:', medicineIds);
+
+          // Try direct query for each medicine (to avoid .in() issues)
+          const medicineMap = new Map();
+
+          for (const medId of medicineIds) {
+            const { data: medicine, error: medError } = await supabase
+              .from('medicine_master')
+              .select('id, medicine_name, generic_name, type')
+              .eq('id', medId)
+              .single();
+
+            console.log('🔍 Medicine lookup for', medId, ':', { medicine, error: medError });
+
+            if (medicine) {
+              medicineMap.set(medId, medicine);
+            }
+          }
+
+          console.log('🔍 Final medicine map size:', medicineMap.size);
+
+          if (medicineMap.size > 0) {
+            return data.map(batch => {
+              const medicine = medicineMap.get(batch.medicine_id);
+              const piecesPerPack = piecesPerPackMap.get(batch.id) || 1;
+              console.log('🔍 Batch pieces_per_pack:', batch.id, piecesPerPack);
+              return {
+                ...batch,
+                medicine_name: medicine?.medicine_name || batch.medicine_name || 'Unknown',
+                generic_name: medicine?.generic_name || batch.generic_name,
+                dosage_form: medicine?.type || batch.dosage_form,
+                pieces_per_pack: piecesPerPack
+              };
+            });
+          }
+        }
+      }
+
+      // Ensure pieces_per_pack is always included (from base table fetch)
+      console.log('🔍 No enrichment needed, mapping pieces_per_pack from base table');
+      return data.map(batch => ({
+        ...batch,
+        pieces_per_pack: piecesPerPackMap.get(batch.id) || 1
+      }));
+    }
+
+    // If view doesn't exist or fails, fallback to direct table query
+    if (error) {
+      console.log('🔍 View query failed, trying direct table query...');
+
+      // Fallback: Query medicine_batch_inventory directly with medicine_master join
+      const { data: batchData, error: batchError } = await supabase
+        .from('medicine_batch_inventory')
+        .select('*')
+        .eq('hospital_name', hospital_name)
+        .eq('is_active', true)
+        .order('expiry_date', { ascending: true });
+
+      console.log('🔍 Direct table query result:', { batchData, batchError });
+
+      if (batchError) throw batchError;
+
+      if (!batchData || batchData.length === 0) {
+        return [];
+      }
+
+      // Get medicine details separately
+      const medicineIds = [...new Set(batchData.map(b => b.medicine_id).filter(Boolean))];
+      let medicineMap = new Map();
+
+      if (medicineIds.length > 0) {
+        const { data: medicines } = await supabase
+          .from('medicine_master')
+          .select('id, medicine_name, generic_name, type')
+          .in('id', medicineIds);
+
+        if (medicines) {
+          medicineMap = new Map(medicines.map(m => [m.id, m]));
+        }
+      }
+
+      // Merge data
+      return batchData.map(batch => {
+        const medicine = medicineMap.get(batch.medicine_id) || {};
+        const today = new Date();
+        const expiryDate = new Date(batch.expiry_date);
+        const daysToExpiry = Math.ceil((expiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+
+        console.log('🔍 Fallback batch pieces_per_pack:', batch.id, batch.pieces_per_pack);
+        return {
+          ...batch,
+          medicine_name: medicine.medicine_name || 'Unknown',
+          generic_name: medicine.generic_name,
+          dosage_form: medicine.type,
+          pieces_per_pack: batch.pieces_per_pack || 1,
+          days_to_expiry: daysToExpiry,
+          expiry_status: daysToExpiry < 0 ? 'EXPIRED' : daysToExpiry <= 30 ? 'EXPIRING_SOON' : daysToExpiry <= 90 ? 'NEAR_EXPIRY' : 'GOOD'
+        };
+      });
+    }
+
     return data;
   } catch (error) {
     console.error('Error fetching batch inventory:', error);
@@ -199,13 +331,22 @@ export async function getMedicineBatchSummary(
 
 /**
  * Adjust batch stock with audit trail
+ *
+ * IMPORTANT: Database has a check constraint:
+ * current_stock = (received_quantity + free_quantity + adjustment_quantity) - sold_quantity - reserved_stock
+ *
+ * We only modify adjustment_quantity to adjust stock (current_stock is auto-calculated):
+ * - To ADD stock (IN): Add positive value to adjustment_quantity
+ * - To REMOVE stock (OUT/DAMAGE/EXPIRY): Add negative value to adjustment_quantity
+ *
+ * This keeps received_quantity and sold_quantity accurate to actual business transactions.
  */
 export async function adjustBatchStock(adjustment: StockAdjustment, hospital_name: string) {
   try {
-    // Get current batch stock
+    // Get current batch data (including medicine_id and batch_number for audit trail)
     const { data: batchData, error: fetchError } = await supabase
       .from('medicine_batch_inventory')
-      .select('current_stock, sold_quantity')
+      .select('current_stock, adjustment_quantity, medicine_id, batch_number')
       .eq('id', adjustment.batch_id)
       .single();
 
@@ -213,59 +354,57 @@ export async function adjustBatchStock(adjustment: StockAdjustment, hospital_nam
     if (!batchData) throw new Error('Batch not found');
 
     const currentStock = batchData.current_stock || 0;
-    const soldQuantity = batchData.sold_quantity || 0;
+    const currentAdjustmentQty = batchData.adjustment_quantity || 0;
 
-    // Calculate new stock based on adjustment type
-    let newStock = currentStock;
-    let newSoldQuantity = soldQuantity;
-    let quantityChange = adjustment.quantity;
+    // Calculate adjustment change based on type
+    let adjustmentChange = 0;
+    let expectedNewStock = currentStock;
 
     switch (adjustment.adjustment_type) {
       case 'IN':
-      case 'ADJUSTMENT':
-        newStock = currentStock + adjustment.quantity;
+        // Adding stock - positive adjustment
+        adjustmentChange = adjustment.quantity;
+        expectedNewStock = currentStock + adjustment.quantity;
         break;
       case 'OUT':
-        if (currentStock < adjustment.quantity) {
-          throw new Error('Insufficient stock for this adjustment');
-        }
-        newStock = currentStock - adjustment.quantity;
-        newSoldQuantity = soldQuantity + adjustment.quantity;
-        quantityChange = -adjustment.quantity;
-        break;
       case 'DAMAGE':
       case 'EXPIRY':
+        // Removing stock - negative adjustment
         if (currentStock < adjustment.quantity) {
           throw new Error('Insufficient stock for this adjustment');
         }
-        newStock = currentStock - adjustment.quantity;
-        quantityChange = -adjustment.quantity;
+        adjustmentChange = -adjustment.quantity;
+        expectedNewStock = currentStock - adjustment.quantity;
         break;
     }
 
-    // Update batch stock
+    const newAdjustmentQty = currentAdjustmentQty + adjustmentChange;
+
+    // Update both adjustment_quantity AND current_stock (constraint validates, doesn't auto-calculate)
     const { error: updateError } = await supabase
       .from('medicine_batch_inventory')
       .update({
-        current_stock: newStock,
-        sold_quantity: newSoldQuantity,
+        adjustment_quantity: newAdjustmentQty,
+        current_stock: expectedNewStock,
         updated_at: new Date().toISOString(),
       })
       .eq('id', adjustment.batch_id);
 
     if (updateError) throw updateError;
 
-    // Create stock movement record
+    // Create stock movement record for audit trail
     const { error: movementError } = await supabase
       .from('batch_stock_movements')
       .insert({
         batch_inventory_id: adjustment.batch_id,
+        medicine_id: batchData.medicine_id,
+        batch_number: batchData.batch_number,
         movement_type: adjustment.adjustment_type,
         reference_type: adjustment.reference_type || 'ADJUSTMENT',
         reference_id: adjustment.reference_id,
         quantity_before: currentStock,
-        quantity_changed: quantityChange,
-        quantity_after: newStock,
+        quantity_changed: adjustmentChange,
+        quantity_after: expectedNewStock,
         reason: adjustment.reason,
         performed_by: adjustment.performed_by,
         movement_date: new Date().toISOString(),
@@ -274,7 +413,7 @@ export async function adjustBatchStock(adjustment: StockAdjustment, hospital_nam
 
     if (movementError) throw movementError;
 
-    return { success: true, newStock };
+    return { success: true, newStock: expectedNewStock };
   } catch (error) {
     console.error('Error adjusting batch stock:', error);
     throw error;
@@ -319,6 +458,22 @@ export async function getNearExpiryAlerts(
     if (error) throw error;
     if (!data) return [];
 
+    // Enrich with medicine names from medicine_master (view doesn't have them)
+    const medicineIds = [...new Set(data.map(b => b.medicine_id).filter(Boolean))];
+    const medicineMap = new Map<string, string>();
+
+    for (const medId of medicineIds) {
+      const { data: medicine } = await supabase
+        .from('medicine_master')
+        .select('id, medicine_name')
+        .eq('id', medId)
+        .single();
+
+      if (medicine) {
+        medicineMap.set(medId, medicine.medicine_name);
+      }
+    }
+
     // Transform to alert format
     const alerts: BatchAlert[] = data.map(batch => {
       let severity: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL' = 'LOW';
@@ -338,7 +493,7 @@ export async function getNearExpiryAlerts(
       return {
         id: batch.id,
         batch_id: batch.id,
-        medicine_name: batch.medicine_name || 'Unknown',
+        medicine_name: medicineMap.get(batch.medicine_id) || batch.medicine_name || 'Unknown',
         batch_number: batch.batch_number || 'N/A',
         alert_type,
         expiry_date: batch.expiry_date,
