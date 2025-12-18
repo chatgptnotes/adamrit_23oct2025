@@ -828,7 +828,7 @@ const LabOrders = () => {
           minAge: bestMatch.min_age,
           maxAge: bestMatch.max_age,
           allRanges: ranges,
-          isParent: true,
+          isParent: bestMatch.nested_sub_tests && Array.isArray(bestMatch.nested_sub_tests) && bestMatch.nested_sub_tests.length > 0,
           test_type: formulaData?.test_type || 'Numeric', // Load from lab_test_formulas
           text_value: formulaData?.text_value || null,     // Load from lab_test_formulas
           formula: formulaData?.formula || null            // Load from lab_test_formulas
@@ -1382,6 +1382,7 @@ const LabOrders = () => {
         }
       };
 
+      // Load saved lab results when Entry Mode opens
       loadExistingLabResults();
     }
   }, [selectedTestsForEntry]);
@@ -2003,12 +2004,12 @@ const LabOrders = () => {
                 )
               );
 
-              // Check if any matching result has valid data
-              const hasActualData = matchingResults.some(result => hasValidResultValue(result.result_value));
-
-              if (hasActualData) {
-                statusMap[testRow.id] = 'saved';
-              }
+              // DISABLED: Don't auto-check Sample Taken based on previous lab results
+              // Only check based on visit_labs.status === 'collected'
+              // const hasActualData = matchingResults.some(result => hasValidResultValue(result.result_value));
+              // if (hasActualData) {
+              //   statusMap[testRow.id] = 'saved';
+              // }
             }
           }
 
@@ -2149,6 +2150,7 @@ const LabOrders = () => {
       console.log('✅ Created', data?.length || 0, 'visit_labs entries');
       return { labOrder: labOrderResult, visitLabs: data };
     },
+    retry: false, // Prevent duplicate entries due to React.StrictMode or network retries
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['visit-lab-orders', getHospitalFilter()] });
       queryClient.invalidateQueries({ queryKey: ['lab-orders', getHospitalFilter()] });
@@ -2576,6 +2578,8 @@ const LabOrders = () => {
 
   const handleLabResultChange = (testId: string, field: string, value: string | boolean) => {
     console.log(`📝 Form data changed: key="${testId}", field="${field}", value="${value}"`);
+    // Allow re-saving when user edits
+    setIsFormSaved(false);
     setLabResultsForm(prev => {
       const updated = {
         ...prev,
@@ -2643,14 +2647,14 @@ const LabOrders = () => {
     }
   };
 
-  const handleSaveLabResults = async () => {
+  const handleSaveLabResults = async (): Promise<boolean> => {
     if (selectedTestsForEntry.length === 0) {
       toast({
         title: "No Tests Selected",
         description: "Please select tests to save results for.",
         variant: "destructive"
       });
-      return;
+      return false;
     }
 
     // Prepare results data for saving - collect both main tests and sub-tests
@@ -2805,10 +2809,11 @@ const LabOrders = () => {
         description: "Please enter at least one test result.",
         variant: "destructive"
       });
-      return;
+      return false;
     }
 
     await saveLabResultsMutation.mutateAsync(validResults);
+    return true;
   };
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -2881,14 +2886,12 @@ const LabOrders = () => {
       if (printWindow) {
         printWindow.document.write(printContent);
         printWindow.document.close();
-        setTimeout(() => {
-          printWindow.focus();
-          printWindow.print();
-        }, 1000);
+        // Just focus the window, don't auto-print - user will click Print button
+        printWindow.focus();
 
         toast({
-          title: "Print Started",
-          description: "Report is being prepared for printing.",
+          title: "Preview Ready",
+          description: "Report preview opened. Click Print button when ready.",
         });
       } else {
         toast({
@@ -3213,6 +3216,12 @@ const LabOrders = () => {
         </style>
       </head>
       <body>
+        <!-- Print Button - hidden when printing -->
+        <div class="no-print" style="position: fixed; top: 10px; right: 10px; z-index: 1000;">
+          <button onclick="window.print()" style="padding: 12px 24px; font-size: 16px; cursor: pointer; background: #4CAF50; color: white; border: none; border-radius: 5px; box-shadow: 0 2px 5px rgba(0,0,0,0.2);">
+            Print Report
+          </button>
+        </div>
 
         <div class="results-content">
           ${(() => {
@@ -3437,6 +3446,17 @@ const LabOrders = () => {
                       const isNested = subTest.isNested || (subTest.name && subTest.name.startsWith('  '));
                       // Sub-tests = bold, Nested sub-tests = faint/light
                       const nameStyle = isNested ? 'font-weight: 300; color: #666;' : 'font-weight: bold;';
+
+                      // Check if this is a parent category row (no value should be displayed)
+                      if (subTest.isParent) {
+                        return `
+                        <div class="test-row">
+                          <div class="test-name" style="font-weight: bold;">${subTest.name.trim()}</div>
+                          <div class="test-value"></div>
+                          <div class="test-range"></div>
+                        </div>
+                      `;
+                      }
 
                       return `
                       <div class="test-row">
@@ -4232,6 +4252,8 @@ const LabOrders = () => {
                       return;
                     }
 
+                    // Clear cached sub-tests data to fetch fresh normal ranges from database
+                    setTestSubTests({});
                     setSelectedTestsForEntry(selectedTests);
                     // Wait a bit for state to update, then trigger print
                     setTimeout(() => {
@@ -4264,6 +4286,8 @@ const LabOrders = () => {
                       return;
                     }
 
+                    // Clear cached sub-tests data to fetch fresh normal ranges from database
+                    setTestSubTests({});
                     setSelectedTestsForEntry(selectedTests);
                     setIsEntryModeOpen(true);
                   }
@@ -4599,8 +4623,10 @@ const LabOrders = () => {
                       id="authenticated"
                       className="w-4 h-4"
                       checked={authenticatedResult}
-                      onChange={(e) => setAuthenticatedResult(e.target.checked)}
-                      disabled={isFormSaved}
+                      onChange={(e) => {
+                        setAuthenticatedResult(e.target.checked);
+                        setIsFormSaved(false);
+                      }}
                     />
                     <label htmlFor="authenticated" className="text-sm">Authenticated Result</label>
                   </div>
@@ -4804,7 +4830,8 @@ const LabOrders = () => {
 
                         // For regular sub-tests and nested sub-tests, show input field
                         // TRY ALTERNATIVE APPROACHES TO FIND DATA
-                        let subTestFormData = savedLabResults[subTestKey] || labResultsForm[subTestKey];
+                        // Priority: labResultsForm first (for edits), then savedLabResults (for initial load)
+                        let subTestFormData = labResultsForm[subTestKey] || savedLabResults[subTestKey];
 
                         // If no data found, try searching by sub-test name in all available data
                         if (!subTestFormData || !subTestFormData.result_value) {
@@ -4832,7 +4859,8 @@ const LabOrders = () => {
                           if (!subTestFormData || !subTestFormData.result_value) {
                             const allKeys = [...Object.keys(savedLabResults), ...Object.keys(labResultsForm)];
                             for (const key of allKeys) {
-                              const data = savedLabResults[key] || labResultsForm[key];
+                              // Priority: labResultsForm first (for edits), then savedLabResults
+                              const data = labResultsForm[key] || savedLabResults[key];
                               // Check if this key contains the subtest name or if it's a direct name match
                               if ((key.toLowerCase().includes(subTest.name.trim().toLowerCase()) ||
                                 key === subTest.name.trim()) && data?.result_value) {
@@ -4882,7 +4910,6 @@ const LabOrders = () => {
                                   placeholder="Enter text value"
                                   value={subTestDisplayValue || subTest.text_value || ''}
                                   onChange={(e) => handleLabResultChange(subTestKey, 'result_value', e.target.value)}
-                                  disabled={isFormSaved}
                                 />
                                 {isFormSaved && subTestFormData.result_value && (
                                   <span className="text-green-600 text-sm">✓</span>
@@ -4905,33 +4932,42 @@ const LabOrders = () => {
                                 </span>
                               </div>
                               <div className="p-2 border-r border-gray-300 flex items-center justify-center">
-                                <input
-                                  type="text"
-                                  className={`w-full max-w-[120px] px-2 py-1 border rounded text-center text-sm border-gray-300`}
-                                  placeholder="Enter value"
-                                  value={subTestDisplayValue}
-                                  onChange={(e) => handleLabResultChange(subTestKey, 'result_value', e.target.value)}
-                                  disabled={isFormSaved}
-                                  data-observed-value="true"
-                                  onKeyDown={(e) => {
-                                    const currentInputIndex = Array.from(
-                                      document.querySelectorAll('input[data-observed-value="true"]')
-                                    ).indexOf(e.currentTarget);
-                                    handleKeyNavigation(e, currentInputIndex);
-                                  }}
-                                />
-                                <span className="ml-2 text-xs text-gray-600">{subTest.unit}</span>
-                                {isFormSaved && subTestFormData.result_value && (
-                                  <span className="ml-2 text-green-600 text-xs">✓</span>
-                                )}
-                                {subTestFormData.is_abnormal && (
-                                  <span className="ml-2 text-red-500 text-xs">🔴</span>
+                                {subTest.isParent ? (
+                                  <span className="text-gray-400 text-sm"></span>
+                                ) : (
+                                  <div className="flex items-center" style={{ width: '180px' }}>
+                                    <input
+                                      type="text"
+                                      className={`w-[100px] px-2 py-1 border rounded text-center text-sm border-gray-300`}
+                                      placeholder="Enter value"
+                                      value={subTestDisplayValue}
+                                      onChange={(e) => handleLabResultChange(subTestKey, 'result_value', e.target.value)}
+                                      data-observed-value="true"
+                                      onKeyDown={(e) => {
+                                        const currentInputIndex = Array.from(
+                                          document.querySelectorAll('input[data-observed-value="true"]')
+                                        ).indexOf(e.currentTarget);
+                                        handleKeyNavigation(e, currentInputIndex);
+                                      }}
+                                    />
+                                    <span className="ml-2 text-xs text-gray-600 min-w-[55px]">{subTest.unit}</span>
+                                    {isFormSaved && subTestFormData.result_value && (
+                                      <span className="ml-1 text-green-600 text-xs">✓</span>
+                                    )}
+                                    {subTestFormData.is_abnormal && (
+                                      <span className="ml-1 text-red-500 text-xs">🔴</span>
+                                    )}
+                                  </div>
                                 )}
                               </div>
                               <div className="p-2 flex items-center justify-center">
-                                <div className="text-sm text-gray-700">
-                                  {subTestFormData.reference_range || subTest.range || '-'}
-                                </div>
+                                {subTest.isParent ? (
+                                  <span className="text-gray-400 text-sm"></span>
+                                ) : (
+                                  <div className="text-sm text-gray-700">
+                                    {subTestFormData.reference_range || subTest.range || '-'}
+                                  </div>
+                                )}
                               </div>
                             </div>
                           </div>
@@ -4953,7 +4989,6 @@ const LabOrders = () => {
                                   [testRow.id]: e.target.checked
                                 }));
                               }}
-                              disabled={isFormSaved}
                             />
                             <label htmlFor={`comment-${testRow.id}`} className="text-xs text-gray-600 cursor-pointer">
                               Comments
@@ -4986,8 +5021,8 @@ const LabOrders = () => {
                                     ...prev,
                                     [commentKey]: commentData
                                   }));
+                                  setIsFormSaved(false);
                                 }}
-                                disabled={isFormSaved}
                               />
                             )}
                           </div>
@@ -4996,7 +5031,6 @@ const LabOrders = () => {
                               type="checkbox"
                               id={`opinion-${testRow.id}`}
                               className="w-3 h-3"
-                              disabled={isFormSaved}
                             />
                             <label htmlFor={`opinion-${testRow.id}`} className="text-xs text-gray-600 ml-1">P.S. for Opinion</label>
                           </div>
@@ -5069,7 +5103,7 @@ const LabOrders = () => {
                     variant="outline"
                     className="px-8"
                     onClick={async () => {
-                      // First save, then print
+                      // Try to save first, then always open preview
                       await handleSaveLabResults();
                       handlePreviewAndPrint();
                     }}

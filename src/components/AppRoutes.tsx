@@ -89,6 +89,7 @@ const Invoice = lazy(() => import("../pages/Invoice"));
 const DetailedInvoice = lazy(() => import("../pages/DetailedInvoice"));
 const DischargeInvoice = lazy(() => import("../pages/DischargeInvoice"));
 const Corporate = lazy(() => import("../pages/Corporate"));
+const BillSubmission = lazy(() => import("../pages/BillSubmission"));
 
 // Loading component
 const PageLoader = () => (
@@ -182,6 +183,7 @@ export const AppRoutes = () => {
         <Route path="/discharge-invoice/:visitId" element={<Suspense fallback={<PageLoader />}><DischargeInvoice /></Suspense>} />
         <Route path="/ipd-discharge-summary/:visitId" element={<Suspense fallback={<PageLoader />}><IpdDischargeSummary /></Suspense>} />
         <Route path="/death-certificate/:visitId" element={<Suspense fallback={<PageLoader />}><DeathCertificate /></Suspense>} />
+        <Route path="/bill-submission" element={<Suspense fallback={<PageLoader />}><BillSubmission /></Suspense>} />
         {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
         <Route path="*" element={<NotFound />} />
       </Routes>

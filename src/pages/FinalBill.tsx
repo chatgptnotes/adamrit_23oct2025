@@ -21156,25 +21156,13 @@ Dr. Murali B K
                     </div>
                     <div>
                       <Label htmlFor="executiveWhoSubmitted">Executive Who Submitted :</Label>
-                      <Select
+                      <Input
+                        id="executiveWhoSubmitted"
                         value={billSubmission.executiveWhoSubmitted}
-                        onValueChange={(value) => setBillSubmission({...billSubmission, executiveWhoSubmitted: value})}
-                      >
-                        <SelectTrigger id="executiveWhoSubmitted" className="mt-1">
-                          <SelectValue placeholder="Please Select" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="chetna">Chetna</SelectItem>
-                          <SelectItem value="arpit">Arpit</SelectItem>
-                          <SelectItem value="akshay">Akshay</SelectItem>
-                          <SelectItem value="shohib">Shohib</SelectItem>
-                          <SelectItem value="nisha">Nisha</SelectItem>
-                          <SelectItem value="diksha">Diksha</SelectItem>
-                          <SelectItem value="pragati">Pragati</SelectItem>
-                          <SelectItem value="jagruti">Jagruti</SelectItem>
-                          <SelectItem value="abhishekh">Abhishekh</SelectItem>
-                        </SelectContent>
-                      </Select>
+                        onChange={(e) => setBillSubmission({...billSubmission, executiveWhoSubmitted: e.target.value})}
+                        className="mt-1"
+                        placeholder="Enter name"
+                      />
                     </div>
                     <div className="flex items-end">
                       <Button
@@ -21198,7 +21186,7 @@ Dr. Murali B K
                             }
 
                             if (!billSubmission.executiveWhoSubmitted) {
-                              toast.error('Please select the executive who submitted');
+                              toast.error('Please enter the executive who submitted');
                               return;
                             }
 
