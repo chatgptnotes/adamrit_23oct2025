@@ -4,7 +4,7 @@ import TreatmentSheetPrintView from './TreatmentSheetPrintView';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import { FileText, Printer, Eye, Download, Search, Calendar, ChevronLeft, ChevronRight, Receipt, X, Pencil, Copy, Trash2, User, RotateCcw } from 'lucide-react';
+import { FileText, Printer, Eye, Download, Search, Calendar, ChevronLeft, ChevronRight, Receipt, X, Pencil, Copy, Trash2, User, RotateCcw, Wallet, Pill } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -82,6 +82,10 @@ export const SalesDetails: React.FC = () => {
   // Treatment Sheet dialog
   const [showTreatmentSheet, setShowTreatmentSheet] = useState(false);
   const [selectedVisitId, setSelectedVisitId] = useState<string | null>(null);
+
+  // Panel type for different views
+  const [panelType, setPanelType] = useState<'sales' | 'payment' | 'items' | 'medications' | null>(null);
+  const [saleItems, setSaleItems] = useState<any[]>([]);
 
   // Fetch patients as user types
   useEffect(() => {
@@ -433,6 +437,27 @@ export const SalesDetails: React.FC = () => {
     setShowTreatmentSheet(true);
   };
 
+  // Open side panel with specific content type
+  const handleOpenPanel = async (row: any, type: 'sales' | 'payment' | 'items' | 'medications') => {
+    setSelectedPatient(row);
+    setPanelType(type);
+    setShowSidePanel(true);
+
+    // Fetch sale items if needed for items or medications view
+    if (type === 'items' || type === 'medications') {
+      const { data, error } = await supabase
+        .from('pharmacy_sale_items')
+        .select('*')
+        .eq('sale_id', row.sale_id);
+
+      if (!error && data) {
+        setSaleItems(data);
+      } else {
+        setSaleItems([]);
+      }
+    }
+  };
+
   return (
     <div className="p-6 flex gap-6 bg-gray-50 min-h-screen">
       {/* Left Side - Sales List */}
@@ -598,36 +623,45 @@ export const SalesDetails: React.FC = () => {
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => handleViewPatientBills(row)}
+                            onClick={() => handleOpenPanel(row, 'sales')}
                             className="h-8 w-8 p-0 hover:bg-cyan-100 hover:text-cyan-600"
-                            title="View Details"
+                            title="View Sales"
                           >
                             <Eye className="h-4 w-4" />
                           </Button>
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => handlePrintBill(row)}
-                            className="h-8 w-8 p-0 hover:bg-cyan-100 hover:text-cyan-600"
-                            title="Print Bill"
+                            onClick={() => handleOpenPanel(row, 'payment')}
+                            className="h-8 w-8 p-0 hover:bg-green-100 hover:text-green-600"
+                            title="Money Collected"
                           >
-                            <Printer className="h-4 w-4" />
+                            <Wallet className="h-4 w-4" />
                           </Button>
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => handlePrintBill(row)}
-                            className="h-8 w-8 p-0 hover:bg-cyan-100 hover:text-cyan-600"
-                            title="Download Bill"
+                            onClick={() => handleOpenPanel(row, 'items')}
+                            className="h-8 w-8 p-0 hover:bg-blue-100 hover:text-blue-600"
+                            title="Sale Details"
                           >
-                            <Download className="h-4 w-4" />
+                            <Receipt className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleOpenPanel(row, 'medications')}
+                            className="h-8 w-8 p-0 hover:bg-purple-100 hover:text-purple-600"
+                            title="Medication Details"
+                          >
+                            <Pill className="h-4 w-4" />
                           </Button>
                           {row.visit_id && (
                             <Button
                               variant="ghost"
                               size="sm"
                               onClick={() => handleOpenTreatmentSheet(row.visit_id)}
-                              className="h-8 w-8 p-0 hover:bg-cyan-100 hover:text-cyan-600"
+                              className="h-8 w-8 p-0 hover:bg-orange-100 hover:text-orange-600"
                               title="Treatment Sheet"
                             >
                               <FileText className="h-4 w-4" />
@@ -675,7 +709,7 @@ export const SalesDetails: React.FC = () => {
         </Card>
       </div>
 
-      {/* Right Side Panel for Patient Bills */}
+      {/* Right Side Panel - Different content based on panelType */}
       {showSidePanel && selectedPatient && (
         <div className="w-1/2 bg-gray-50 shadow-lg overflow-y-auto border-l border-gray-200">
           <div className="p-4">
@@ -684,18 +718,31 @@ export const SalesDetails: React.FC = () => {
               <CardContent className="p-4">
                 <div className="flex justify-between items-start">
                   <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-full bg-cyan-100 flex items-center justify-center">
-                      <User className="h-5 w-5 text-cyan-600" />
+                    <div className={`h-10 w-10 rounded-full flex items-center justify-center ${
+                      panelType === 'sales' ? 'bg-cyan-100' :
+                      panelType === 'payment' ? 'bg-green-100' :
+                      panelType === 'items' ? 'bg-blue-100' :
+                      'bg-purple-100'
+                    }`}>
+                      {panelType === 'sales' && <Eye className="h-5 w-5 text-cyan-600" />}
+                      {panelType === 'payment' && <Wallet className="h-5 w-5 text-green-600" />}
+                      {panelType === 'items' && <Receipt className="h-5 w-5 text-blue-600" />}
+                      {panelType === 'medications' && <Pill className="h-5 w-5 text-purple-600" />}
                     </div>
                     <div>
-                      <h2 className="text-lg font-semibold text-gray-800">{selectedPatient.patient_name}</h2>
-                      <p className="text-sm text-gray-500">{selectedPatient.patient_id}</p>
+                      <h2 className="text-lg font-semibold text-gray-800">
+                        {panelType === 'sales' && 'View Sales'}
+                        {panelType === 'payment' && 'Money Collected'}
+                        {panelType === 'items' && 'Sale Details'}
+                        {panelType === 'medications' && 'Medication Details'}
+                      </h2>
+                      <p className="text-sm text-gray-500">Bill #{selectedPatient.sale_id} - {selectedPatient.patient_name || 'Walk-in'}</p>
                     </div>
                   </div>
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => setShowSidePanel(false)}
+                    onClick={() => { setShowSidePanel(false); setPanelType(null); }}
                     className="h-8 w-8 p-0 hover:bg-gray-100"
                   >
                     <X className="h-5 w-5 text-gray-500" />
@@ -704,199 +751,276 @@ export const SalesDetails: React.FC = () => {
               </CardContent>
             </Card>
 
-            {/* Sales Bill Section */}
-            <Card className="mb-4 border-0 shadow-sm">
-              <CardHeader className="py-3 px-4 bg-cyan-600 rounded-t-lg">
-                <CardTitle className="text-sm font-semibold text-white flex items-center gap-2">
-                  <Receipt className="h-4 w-4" />
-                  Sales Bill
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-0">
-                <div className="overflow-x-auto">
-                  <table className="min-w-full text-sm">
-                    <thead>
-                      <tr className="bg-gray-100 border-b">
-                        <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">Bill No.</th>
-                        <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">Mode</th>
-                        <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">Date</th>
-                        <th className="px-3 py-2 text-right text-xs font-semibold text-gray-600">Amt.</th>
-                        <th className="px-3 py-2 text-right text-xs font-semibold text-gray-600">Paid</th>
-                        <th className="px-3 py-2 text-right text-xs font-semibold text-gray-600">Disc</th>
-                        <th className="px-3 py-2 text-right text-xs font-semibold text-gray-600">Net Amt</th>
-                        <th className="px-3 py-2 text-center text-xs font-semibold text-gray-600">Action</th>
-                        <th className="px-2 py-2"></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {patientSales.map((sale, idx) => (
-                        <tr key={idx} className="bg-white border-b hover:bg-gray-50 transition-colors">
-                          <td className="px-3 py-2 text-gray-800">{sale.sale_id}</td>
-                          <td className="px-3 py-2 text-gray-600">{sale.payment_method || 'CASH'}</td>
-                          <td className="px-3 py-2 text-gray-600">{sale.sale_date ? new Date(sale.sale_date).toLocaleDateString() : ''}</td>
-                          <td className="px-3 py-2 text-right text-gray-800">{sale.subtotal?.toFixed(2) || '0.00'}</td>
-                          <td className="px-3 py-2 text-right text-gray-800">{sale.total_amount?.toFixed(2) || '0.00'}</td>
-                          <td className="px-3 py-2 text-right text-gray-600">{sale.discount?.toFixed(2) || '0.00'}</td>
-                          <td className="px-3 py-2 text-right font-medium text-gray-800">{sale.total_amount?.toFixed(2) || '0.00'}</td>
-                          <td className="px-3 py-2">
+            {/* View Sales Panel - Table Format */}
+            {panelType === 'sales' && (
+              <Card className="mb-4 border-0 shadow-sm">
+                {/* Patient Header with Print Icon */}
+                <div className="flex justify-between items-center px-4 py-3 bg-gray-100 border-b">
+                  <span className="font-medium text-gray-800">Patient Name : {selectedPatient.patient_name || 'Walk-in'}</span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handlePrintBill(selectedPatient)}
+                    className="h-8 w-8 p-0 hover:bg-gray-200"
+                    title="Print"
+                  >
+                    <Printer className="h-4 w-4 text-gray-600" />
+                  </Button>
+                </div>
+
+                {/* Sales Bill Table */}
+                <CardHeader className="py-2 px-4 bg-cyan-700">
+                  <CardTitle className="text-sm font-semibold text-white text-center">
+                    Sales Bill
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full text-sm">
+                      <thead>
+                        <tr className="bg-cyan-600 text-white">
+                          <th className="px-2 py-2 text-left text-xs font-semibold">Bill No.</th>
+                          <th className="px-2 py-2 text-left text-xs font-semibold">Mode</th>
+                          <th className="px-2 py-2 text-left text-xs font-semibold">Date</th>
+                          <th className="px-2 py-2 text-right text-xs font-semibold">Amt.</th>
+                          <th className="px-2 py-2 text-right text-xs font-semibold">Paid</th>
+                          <th className="px-2 py-2 text-right text-xs font-semibold">Disc</th>
+                          <th className="px-2 py-2 text-right text-xs font-semibold">Net Amt</th>
+                          <th className="px-2 py-2 text-center text-xs font-semibold">Action</th>
+                          <th className="px-1 py-2"></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr className="bg-white border-b hover:bg-gray-50">
+                          <td className="px-2 py-2 text-gray-800">SB-{selectedPatient.sale_id}</td>
+                          <td className="px-2 py-2 text-gray-600">{selectedPatient.payment_method || 'Cash'}</td>
+                          <td className="px-2 py-2 text-gray-600">{selectedPatient.sale_date ? new Date(selectedPatient.sale_date).toLocaleDateString() : '-'}</td>
+                          <td className="px-2 py-2 text-right text-gray-800">{selectedPatient.subtotal?.toFixed(2) || '0.00'}</td>
+                          <td className="px-2 py-2 text-right text-gray-800">{selectedPatient.total_amount?.toFixed(2) || '0.00'}</td>
+                          <td className="px-2 py-2 text-right text-gray-600">{selectedPatient.discount?.toFixed(2) || '0.00'}</td>
+                          <td className="px-2 py-2 text-right font-medium text-gray-800">{selectedPatient.total_amount?.toFixed(2) || '0.00'}</td>
+                          <td className="px-2 py-2">
                             <div className="flex items-center justify-center gap-1">
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                onClick={() => navigate(`/pharmacy/edit-sale/${sale.sale_id}`)}
-                                className="h-7 w-7 p-0 hover:bg-cyan-100 hover:text-cyan-600"
+                                onClick={() => navigate(`/pharmacy/edit-sale/${selectedPatient.sale_id}`)}
+                                className="h-6 w-6 p-0 hover:bg-cyan-100 hover:text-cyan-600"
                                 title="Edit"
                               >
-                                <Pencil className="h-3.5 w-3.5" />
+                                <Pencil className="h-3 w-3" />
                               </Button>
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                className="h-7 w-7 p-0 hover:bg-cyan-100 hover:text-cyan-600"
+                                className="h-6 w-6 p-0 hover:bg-cyan-100 hover:text-cyan-600"
                                 title="View"
                               >
-                                <Eye className="h-3.5 w-3.5" />
+                                <Eye className="h-3 w-3" />
                               </Button>
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                className="h-7 w-7 p-0 hover:bg-cyan-100 hover:text-cyan-600"
+                                className="h-6 w-6 p-0 hover:bg-cyan-100 hover:text-cyan-600"
                                 title="Copy"
                               >
-                                <Copy className="h-3.5 w-3.5" />
+                                <Copy className="h-3 w-3" />
                               </Button>
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                onClick={() => handlePrintBill(sale)}
-                                className="h-7 w-7 p-0 hover:bg-cyan-100 hover:text-cyan-600"
+                                onClick={() => handlePrintBill(selectedPatient)}
+                                className="h-6 w-6 p-0 hover:bg-cyan-100 hover:text-cyan-600"
                                 title="Print"
                               >
-                                <Printer className="h-3.5 w-3.5" />
+                                <Printer className="h-3 w-3" />
                               </Button>
-                              {sale.visit_id && (
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => handleOpenTreatmentSheet(sale.visit_id)}
-                                  className="h-7 w-7 p-0 hover:bg-cyan-100 hover:text-cyan-600"
-                                  title="Treatment Sheet"
-                                >
-                                  <FileText className="h-3.5 w-3.5" />
-                                </Button>
-                              )}
                             </div>
                           </td>
-                          <td className="px-2 py-2">
+                          <td className="px-1 py-2">
                             <input type="checkbox" className="h-4 w-4 rounded border-gray-300 text-cyan-600 focus:ring-cyan-500" />
                           </td>
                         </tr>
-                      ))}
-                      {/* Total Row */}
-                      <tr className="bg-gray-50 font-semibold border-t-2 border-gray-200">
-                        <td colSpan={3} className="px-3 py-2 text-right text-gray-700">Total :</td>
-                        <td className="px-3 py-2 text-right text-gray-800">{patientSales.reduce((sum, s) => sum + (s.subtotal || 0), 0).toFixed(2)}</td>
-                        <td className="px-3 py-2 text-right text-gray-800">{patientSales.reduce((sum, s) => sum + (s.total_amount || 0), 0).toFixed(2)}</td>
-                        <td className="px-3 py-2 text-right text-gray-600">{patientSales.reduce((sum, s) => sum + (s.discount || 0), 0).toFixed(2)}</td>
-                        <td className="px-3 py-2 text-right font-bold text-gray-800">{patientSales.reduce((sum, s) => sum + (s.total_amount || 0), 0).toFixed(2)}</td>
-                        <td className="px-3 py-2"></td>
-                        <td className="px-2 py-2">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 w-7 p-0 hover:bg-cyan-100 hover:text-cyan-600"
-                            title="Print All"
-                          >
-                            <Printer className="h-3.5 w-3.5" />
-                          </Button>
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </CardContent>
-            </Card>
+                        {/* Total Row */}
+                        <tr className="bg-gray-100 font-semibold border-t">
+                          <td colSpan={3} className="px-2 py-2 text-right text-gray-700">Total :</td>
+                          <td className="px-2 py-2 text-right text-gray-800">{selectedPatient.subtotal?.toFixed(2) || '0.00'}</td>
+                          <td className="px-2 py-2 text-right text-gray-800">{selectedPatient.total_amount?.toFixed(2) || '0.00'}</td>
+                          <td className="px-2 py-2 text-right text-gray-600">{selectedPatient.discount?.toFixed(2) || '0.00'}</td>
+                          <td className="px-2 py-2 text-right font-bold text-gray-800">{selectedPatient.total_amount?.toFixed(2) || '0.00'}</td>
+                          <td className="px-2 py-2"></td>
+                          <td className="px-1 py-2">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handlePrintBill(selectedPatient)}
+                              className="h-6 w-6 p-0 hover:bg-cyan-100 hover:text-cyan-600"
+                              title="Print All"
+                            >
+                              <Printer className="h-3 w-3" />
+                            </Button>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
-            {/* Sales Return Section */}
-            <Card className="mb-4 border-0 shadow-sm">
-              <CardHeader className="py-3 px-4 bg-cyan-600 rounded-t-lg">
-                <CardTitle className="text-sm font-semibold text-white flex items-center gap-2">
-                  <RotateCcw className="h-4 w-4" />
-                  Sales Return
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-0">
-                <div className="overflow-x-auto">
-                  <table className="min-w-full text-sm">
-                    <thead>
-                      <tr className="bg-gray-100 border-b">
-                        <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">Bill No.</th>
-                        <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">Date</th>
-                        <th className="px-3 py-2 text-right text-xs font-semibold text-gray-600">Total Amt</th>
-                        <th className="px-3 py-2 text-right text-xs font-semibold text-gray-600">Return Amt</th>
-                        <th className="px-3 py-2 text-right text-xs font-semibold text-gray-600">Discount(Rs)</th>
-                        <th className="px-3 py-2 text-center text-xs font-semibold text-gray-600">Action</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {patientReturns.length === 0 ? (
-                        <tr>
-                          <td colSpan={6} className="px-3 py-4 text-center text-gray-500">No returns found</td>
+            {/* Money Collected Panel */}
+            {panelType === 'payment' && (
+              <Card className="mb-4 border-0 shadow-sm">
+                <CardHeader className="py-3 px-4 bg-green-600 rounded-t-lg">
+                  <CardTitle className="text-sm font-semibold text-white flex items-center gap-2">
+                    <Wallet className="h-4 w-4" />
+                    Payment Details
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-4">
+                  <div className="space-y-4">
+                    <div className="bg-green-50 p-4 rounded-lg text-center">
+                      <p className="text-sm text-green-600">Amount Collected</p>
+                      <p className="text-3xl font-bold text-green-700">₹{selectedPatient.total_amount?.toFixed(2) || '0.00'}</p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="bg-gray-50 p-3 rounded-lg">
+                        <p className="text-xs text-gray-500">Payment Method</p>
+                        <p className="text-lg font-semibold text-gray-800">{selectedPatient.payment_method || 'CASH'}</p>
+                      </div>
+                      <div className="bg-gray-50 p-3 rounded-lg">
+                        <p className="text-xs text-gray-500">Payment Status</p>
+                        <p className="text-lg font-semibold text-green-600">Paid</p>
+                      </div>
+                      <div className="bg-gray-50 p-3 rounded-lg">
+                        <p className="text-xs text-gray-500">Bill Amount</p>
+                        <p className="text-lg font-semibold text-gray-800">₹{selectedPatient.subtotal?.toFixed(2) || '0.00'}</p>
+                      </div>
+                      <div className="bg-gray-50 p-3 rounded-lg">
+                        <p className="text-xs text-gray-500">Discount Given</p>
+                        <p className="text-lg font-semibold text-red-600">₹{selectedPatient.discount?.toFixed(2) || '0.00'}</p>
+                      </div>
+                    </div>
+                    <div className="bg-gray-50 p-3 rounded-lg">
+                      <p className="text-xs text-gray-500">Transaction Date & Time</p>
+                      <p className="text-lg font-semibold text-gray-800">{selectedPatient.sale_date ? new Date(selectedPatient.sale_date).toLocaleString() : '-'}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Sale Details (Items) Panel */}
+            {panelType === 'items' && (
+              <Card className="mb-4 border-0 shadow-sm">
+                <CardHeader className="py-3 px-4 bg-blue-600 rounded-t-lg">
+                  <CardTitle className="text-sm font-semibold text-white flex items-center gap-2">
+                    <Receipt className="h-4 w-4" />
+                    Itemized Sale Details
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full text-sm">
+                      <thead>
+                        <tr className="bg-gray-100 border-b">
+                          <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">#</th>
+                          <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">Item</th>
+                          <th className="px-3 py-2 text-right text-xs font-semibold text-gray-600">Qty</th>
+                          <th className="px-3 py-2 text-right text-xs font-semibold text-gray-600">Rate</th>
+                          <th className="px-3 py-2 text-right text-xs font-semibold text-gray-600">Disc%</th>
+                          <th className="px-3 py-2 text-right text-xs font-semibold text-gray-600">Amount</th>
                         </tr>
-                      ) : (
-                        patientReturns.map((ret, idx) => (
-                          <tr key={idx} className="bg-white border-b hover:bg-gray-50 transition-colors">
-                            <td className="px-3 py-2 text-gray-800">{ret.return_id}</td>
-                            <td className="px-3 py-2 text-gray-600">{ret.return_date}</td>
-                            <td className="px-3 py-2 text-right text-gray-800">{ret.total_amount}</td>
-                            <td className="px-3 py-2 text-right text-gray-800">{ret.return_amount}</td>
-                            <td className="px-3 py-2 text-right text-gray-600">{ret.discount}</td>
-                            <td className="px-3 py-2">
-                              <div className="flex items-center justify-center gap-1">
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-7 w-7 p-0 hover:bg-cyan-100 hover:text-cyan-600"
-                                  title="Copy"
-                                >
-                                  <Copy className="h-3.5 w-3.5" />
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-7 w-7 p-0 hover:bg-cyan-100 hover:text-cyan-600"
-                                  title="Print"
-                                >
-                                  <Printer className="h-3.5 w-3.5" />
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-7 w-7 p-0 hover:bg-red-100 hover:text-red-600"
-                                  title="Delete"
-                                >
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                </Button>
-                              </div>
-                            </td>
+                      </thead>
+                      <tbody>
+                        {saleItems.length === 0 ? (
+                          <tr>
+                            <td colSpan={6} className="px-3 py-4 text-center text-gray-500">No items found</td>
                           </tr>
-                        ))
+                        ) : (
+                          saleItems.map((item, idx) => (
+                            <tr key={idx} className="bg-white border-b hover:bg-gray-50">
+                              <td className="px-3 py-2 text-gray-500">{idx + 1}</td>
+                              <td className="px-3 py-2">
+                                <div className="font-medium text-gray-800">{item.medication_name || item.medicine_name}</div>
+                                <div className="text-xs text-gray-500">Batch: {item.batch_number || '-'}</div>
+                              </td>
+                              <td className="px-3 py-2 text-right text-gray-800">{item.quantity}</td>
+                              <td className="px-3 py-2 text-right text-gray-800">₹{item.unit_price?.toFixed(2) || '0.00'}</td>
+                              <td className="px-3 py-2 text-right text-gray-600">{item.discount_percentage || 0}%</td>
+                              <td className="px-3 py-2 text-right font-medium text-gray-800">₹{item.total_amount?.toFixed(2) || '0.00'}</td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                      {saleItems.length > 0 && (
+                        <tfoot>
+                          <tr className="bg-blue-50 font-semibold">
+                            <td colSpan={5} className="px-3 py-2 text-right text-gray-700">Total:</td>
+                            <td className="px-3 py-2 text-right text-blue-700">₹{saleItems.reduce((sum, item) => sum + (item.total_amount || 0), 0).toFixed(2)}</td>
+                          </tr>
+                        </tfoot>
                       )}
-                      {/* Total Row */}
-                      {patientReturns.length > 0 && (
-                        <tr className="bg-gray-50 font-semibold border-t-2 border-gray-200">
-                          <td colSpan={2} className="px-3 py-2 text-right text-gray-700">Total :</td>
-                          <td className="px-3 py-2 text-right text-gray-800">{patientReturns.reduce((sum, r) => sum + (r.total_amount || 0), 0).toFixed(2)}</td>
-                          <td className="px-3 py-2 text-right font-bold text-gray-800">{patientReturns.reduce((sum, r) => sum + (r.return_amount || 0), 0).toFixed(2)}</td>
-                          <td className="px-3 py-2 text-right text-gray-600">{patientReturns.reduce((sum, r) => sum + (r.discount || 0), 0).toFixed(2)}</td>
-                          <td className="px-3 py-2"></td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </CardContent>
-            </Card>
+                    </table>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Medication Details Panel */}
+            {panelType === 'medications' && (
+              <Card className="mb-4 border-0 shadow-sm">
+                <CardHeader className="py-3 px-4 bg-purple-600 rounded-t-lg">
+                  <CardTitle className="text-sm font-semibold text-white flex items-center gap-2">
+                    <Pill className="h-4 w-4" />
+                    Medications Dispensed
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-4">
+                  {saleItems.length === 0 ? (
+                    <p className="text-center text-gray-500 py-4">No medications found</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {saleItems.map((item, idx) => (
+                        <div key={idx} className="bg-purple-50 p-4 rounded-lg border border-purple-100">
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <h4 className="font-semibold text-purple-900">{item.medication_name || item.medicine_name}</h4>
+                              <p className="text-sm text-purple-700">{item.generic_name || ''}</p>
+                            </div>
+                            <span className="bg-purple-200 text-purple-800 text-xs font-medium px-2.5 py-0.5 rounded">
+                              Qty: {item.quantity}
+                            </span>
+                          </div>
+                          <div className="mt-2 grid grid-cols-3 gap-2 text-xs">
+                            <div>
+                              <span className="text-purple-600">Batch:</span>
+                              <span className="ml-1 font-medium text-purple-800">{item.batch_number || '-'}</span>
+                            </div>
+                            <div>
+                              <span className="text-purple-600">Expiry:</span>
+                              <span className="ml-1 font-medium text-purple-800">{item.expiry_date ? new Date(item.expiry_date).toLocaleDateString() : '-'}</span>
+                            </div>
+                            <div>
+                              <span className="text-purple-600">Price:</span>
+                              <span className="ml-1 font-medium text-purple-800">₹{item.unit_price?.toFixed(2) || '0.00'}</span>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Print Button */}
+            <div className="flex justify-end">
+              <Button onClick={() => handlePrintBill(selectedPatient)} className="bg-gray-700 hover:bg-gray-800">
+                <Printer className="h-4 w-4 mr-2" />
+                Print Bill
+              </Button>
+            </div>
           </div>
         </div>
       )}
