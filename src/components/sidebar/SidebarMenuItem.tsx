@@ -18,8 +18,16 @@ export const SidebarMenuItem = ({ item }: SidebarMenuItemProps) => {
       event.preventDefault();
       window.open(route, '_blank');
     } else {
-      // Default: Navigate in the same tab
-      navigate(route);
+      // Preserve query params if navigating to same base path
+      const currentPath = location.pathname;
+      const currentSearch = location.search;
+
+      // If clicking on current page, preserve query params
+      if (currentPath === route && currentSearch) {
+        navigate(route + currentSearch);
+      } else {
+        navigate(route);
+      }
     }
   };
 

@@ -173,6 +173,11 @@ export const menuItems = [
     icon: Building2,
   },
   {
+    title: "Bill Submission",
+    url: "/bill-submission",
+    icon: Receipt,
+  },
+  {
     title: "Pharmacy",
     url: "/pharmacy",
     icon: Pill,

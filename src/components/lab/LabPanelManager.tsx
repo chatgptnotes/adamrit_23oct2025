@@ -1547,7 +1547,8 @@ const LabPanelManager: React.FC = () => {
             <DialogTitle>Edit Panel</DialogTitle>
           </DialogHeader>
           {editingPanel && (
-            <EditPanelForm 
+            <EditPanelForm
+              key={`${editingPanel.id}-${Date.now()}`}
               panel={editingPanel}
               onSubmit={handleEditPanel}
             />
