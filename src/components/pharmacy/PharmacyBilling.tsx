@@ -454,13 +454,13 @@ const PharmacyBilling: React.FC = () => {
         batch_number: medicine.batch_number || 'BATCH-001',
         expiry_date: medicine.expiry_date || '',
         mrp: medicine.mrp || medicine.price_per_strip || 0,
-        unit_price: medicine.price_per_strip || 0, // Price per piece
+        unit_price: (medicine.price_per_strip || 0) / piecesPerPack, // Price per tablet = strip price ÷ pieces per pack
         quantity: piecesPerPack, // Start with 1 strip worth of tablets
         qty_strips: 1, // Default to 1 strip
         qty_tablets: 0, // Default to 0 loose tablets
         discount_percentage: 0,
         discount_amount: 0,
-        tax_percentage: medicine.tax_percentage || 12,
+        tax_percentage: 0, // Selling price already includes tax
         tax_amount: 0,
         total_amount: 0,
         available_stock: medicine.stock || 0, // Now in pieces (tablets)
@@ -798,206 +798,206 @@ const PharmacyBilling: React.FC = () => {
     const printWindow = window.open('', '', 'width=800,height=600');
     if (!printWindow) return;
 
+    const billDate = new Date(completedSale.sale_date);
+    const formattedDate = `${billDate.getDate().toString().padStart(2, '0')}/${(billDate.getMonth() + 1).toString().padStart(2, '0')}/${billDate.getFullYear()} ${billDate.getHours().toString().padStart(2, '0')}:${billDate.getMinutes().toString().padStart(2, '0')}:${billDate.getSeconds().toString().padStart(2, '0')}`;
+
     const receiptHTML = `
       <!DOCTYPE html>
       <html>
       <head>
-        <title>Pharmacy Receipt</title>
+        <title>Sales Bill - ${completedSale.bill_number}</title>
         <style>
+          * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+          }
           body {
-            font-family: 'Courier New', monospace;
+            font-family: Arial, sans-serif;
             padding: 20px;
             max-width: 800px;
             margin: 0 auto;
-          }
-          .header {
-            text-align: center;
-            border-bottom: 2px solid #000;
-            padding-bottom: 10px;
-            margin-bottom: 20px;
-          }
-          .header h1 {
-            margin: 0;
-            font-size: 24px;
-          }
-          .header p {
-            margin: 5px 0;
             font-size: 12px;
           }
-          .bill-info {
-            margin: 20px 0;
+          .header-container {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 10px;
           }
-          .bill-info table {
+          .header-image {
             width: 100%;
+            max-width: 100%;
+            height: auto;
+            margin-bottom: 5px;
           }
-          .bill-info td {
-            padding: 5px 0;
-          }
-          .bill-info td:first-child {
+          .bill-title {
+            text-align: center;
+            color: #cc0000;
+            font-size: 16px;
             font-weight: bold;
-            width: 150px;
+            margin: 15px 0;
+            border-bottom: 2px solid #333;
+            padding: 8px 0;
+          }
+          .bill-info {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #ccc;
+          }
+          .bill-info-left, .bill-info-right {
+            width: 48%;
+          }
+          .bill-info-row {
+            display: flex;
+            margin-bottom: 4px;
+          }
+          .bill-info-label {
+            font-weight: bold;
+            width: 100px;
+          }
+          .bill-info-value {
+            flex: 1;
           }
           .items-table {
             width: 100%;
             border-collapse: collapse;
-            margin: 20px 0;
+            margin: 15px 0;
+            font-size: 11px;
           }
           .items-table th,
           .items-table td {
-            border: 1px solid #000;
-            padding: 8px;
+            border: 1px solid #999;
+            padding: 6px 8px;
             text-align: left;
           }
           .items-table th {
-            background-color: #f0f0f0;
+            background-color: #f5f5f5;
             font-weight: bold;
+            font-size: 10px;
           }
-          .items-table td:last-child,
-          .items-table th:last-child {
+          .items-table td.amount,
+          .items-table th.amount {
             text-align: right;
           }
-          .totals {
-            margin-top: 20px;
-            float: right;
-            width: 300px;
+          .items-table td.center,
+          .items-table th.center {
+            text-align: center;
           }
-          .totals table {
-            width: 100%;
-          }
-          .totals td {
-            padding: 5px 0;
-          }
-          .totals td:first-child {
-            text-align: left;
-          }
-          .totals td:last-child {
+          .total-section {
             text-align: right;
-          }
-          .totals .grand-total {
-            font-size: 18px;
+            margin: 15px 0;
+            font-size: 14px;
             font-weight: bold;
-            border-top: 2px solid #000;
+          }
+          .signatures {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 50px;
             padding-top: 10px;
           }
-          .footer {
-            clear: both;
-            margin-top: 40px;
-            padding-top: 20px;
-            border-top: 2px solid #000;
-            text-align: center;
-            font-size: 12px;
+          .signature-box {
+            width: 45%;
+          }
+          .signature-line {
+            border-top: 1px solid #000;
+            padding-top: 5px;
+            font-size: 11px;
+          }
+          .footer-info {
+            margin-top: 30px;
+            font-size: 9px;
+            color: #666;
           }
           @media print {
             body {
-              padding: 0;
+              padding: 10px;
             }
           }
         </style>
       </head>
       <body>
-        <div class="header">
-          <h1>${hospitalConfig?.name || 'Hospital Pharmacy'}</h1>
-          <p>${hospitalConfig?.address || 'Hospital Address'}</p>
-          <p>Phone: ${hospitalConfig?.phone || 'N/A'} | Email: ${hospitalConfig?.email || 'N/A'}</p>
+        <div class="header-container">
+          <img src="/pharmacy_header.png" alt="Hope Pharmacy Header" class="header-image" />
         </div>
 
+        <div class="bill-title">Sales Bill</div>
+
         <div class="bill-info">
-          <table>
-            <tr>
-              <td>Bill Number:</td>
-              <td>${completedSale.bill_number}</td>
-            </tr>
-            <tr>
-              <td>Date & Time:</td>
-              <td>${new Date(completedSale.sale_date).toLocaleString()}</td>
-            </tr>
-            ${completedSale.patient_name ? `
-            <tr>
-              <td>Patient Name:</td>
-              <td>${completedSale.patient_name}</td>
-            </tr>
-            ` : ''}
-            ${completedSale.patient_id ? `
-            <tr>
-              <td>Patient ID:</td>
-              <td>${completedSale.patient_id}</td>
-            </tr>
-            ` : ''}
-            <tr>
-              <td>Payment Method:</td>
-              <td>${completedSale.payment_method}</td>
-            </tr>
-            ${completedSale.payment_reference ? `
-            <tr>
-              <td>Payment Ref:</td>
-              <td>${completedSale.payment_reference}</td>
-            </tr>
-            ` : ''}
-            <tr>
-              <td>Cashier:</td>
-              <td>${completedSale.cashier_name}</td>
-            </tr>
-          </table>
+          <div class="bill-info-left">
+            <div class="bill-info-row">
+              <span class="bill-info-label">Bill No:</span>
+              <span class="bill-info-value">${completedSale.bill_number}</span>
+            </div>
+            <div class="bill-info-row">
+              <span class="bill-info-label">Date:</span>
+              <span class="bill-info-value">${formattedDate}</span>
+            </div>
+            <div class="bill-info-row">
+              <span class="bill-info-label">Patient:</span>
+              <span class="bill-info-value">${completedSale.patient_name || '-'}</span>
+            </div>
+            <div class="bill-info-row">
+              <span class="bill-info-label">Prescribed by:</span>
+              <span class="bill-info-value">${completedSale.doctor_name || '-'}</span>
+            </div>
+          </div>
+          <div class="bill-info-right">
+            <div class="bill-info-row">
+              <span class="bill-info-label">Payment:</span>
+              <span class="bill-info-value">${completedSale.payment_method}</span>
+            </div>
+          </div>
         </div>
 
         <table class="items-table">
           <thead>
             <tr>
-              <th>Medicine Name</th>
-              <th>Batch</th>
-              <th>Qty</th>
-              <th>Rate</th>
-              <th>Disc</th>
-              <th>Amount</th>
+              <th style="width: 40%">Item Name</th>
+              <th class="center" style="width: 8%">Pkg</th>
+              <th class="center" style="width: 15%">Batch No.</th>
+              <th class="center" style="width: 12%">Exp Date</th>
+              <th class="center" style="width: 8%">Qty</th>
+              <th class="amount" style="width: 17%">Amount</th>
             </tr>
           </thead>
           <tbody>
             ${completedSale.items.map(item => `
               <tr>
-                <td>
-                  <strong>${item.medicine_name}</strong><br>
-                  <small>${item.generic_name || ''} ${item.strength ? '- ' + item.strength : ''}</small>
-                </td>
-                <td>${item.batch_number}</td>
-                <td>${item.quantity}</td>
-                <td>${formatCurrency(item.unit_price)}</td>
-                <td>${item.discount_percentage > 0 ? item.discount_percentage + '%' : '-'}</td>
-                <td>${formatCurrency(item.total_amount)}</td>
+                <td>${item.medicine_name}</td>
+                <td class="center">${item.pieces_per_pack || '1'}</td>
+                <td class="center">${item.batch_number || 'N/A'}</td>
+                <td class="center">${item.expiry_date || 'N/A'}</td>
+                <td class="center">${item.quantity}</td>
+                <td class="amount">${parseFloat(String(item.total_amount || 0)).toFixed(2)}</td>
               </tr>
             `).join('')}
           </tbody>
         </table>
 
-        <div class="totals">
-          <table>
-            <tr>
-              <td>Subtotal:</td>
-              <td>${formatCurrency(completedSale.subtotal)}</td>
-            </tr>
-            <tr>
-              <td>Discount:</td>
-              <td>-${formatCurrency(completedSale.discount_amount)}</td>
-            </tr>
-            <tr>
-              <td>Tax (GST):</td>
-              <td>${formatCurrency(completedSale.tax_amount)}</td>
-            </tr>
-            <tr class="grand-total">
-              <td>TOTAL:</td>
-              <td>${formatCurrency(completedSale.total_amount)}</td>
-            </tr>
-          </table>
+        <div class="total-section">
+          Total: Rs ${completedSale.total_amount.toFixed(2)}
         </div>
 
-        <div class="footer">
-          <p>Thank you for your purchase!</p>
-          <p>For any queries, please contact the pharmacy</p>
+        <div class="signatures">
+          <div class="signature-box">
+            <div class="signature-line">Patient Signature</div>
+          </div>
+          <div class="signature-box" style="text-align: right;">
+            <div class="signature-line">Pharmacist Signature</div>
+          </div>
+        </div>
+
+        <div class="footer-info">
+          <div>GST No. 27ACLPV4078L1ZQ</div>
+          <div>D.L. No. 20-NAG/136/2009, 21-NAG/136/2009</div>
         </div>
 
         <script>
           window.onload = function() {
             window.print();
-            // window.close(); // Uncomment to auto-close after print
           };
         </script>
       </body>
@@ -1226,7 +1226,7 @@ const PharmacyBilling: React.FC = () => {
                               Batch: <span className="font-semibold">{medicine.batch_number}</span> | Exp: <span className={medicine.expiry_date && new Date(medicine.expiry_date) < new Date() ? 'text-red-500 font-semibold' : ''}>{medicine.expiry_date || 'N/A'}</span>
                             </div>
                             <div className="text-xs text-muted-foreground">
-                              Stock: <span className={medicine.stock < 10 ? 'text-orange-500 font-semibold' : 'text-green-600'}>{medicine.stock}</span> | MRP: {formatCurrency(medicine.mrp || 0)}
+                              Stock: <span className={medicine.stock < 10 ? 'text-orange-500 font-semibold' : 'text-green-600'}>{Math.floor(medicine.stock / (medicine.pieces_per_pack || 1))} Strips + {medicine.stock % (medicine.pieces_per_pack || 1)} Tablets</span> | MRP: {formatCurrency(medicine.mrp || 0)}
                             </div>
                           </div>
                           <div className="text-right">
@@ -1590,10 +1590,6 @@ const PharmacyBilling: React.FC = () => {
                 <span>Discount:</span>
                 <span>-{formatCurrency(totals.totalDiscount)}</span>
               </div>
-              <div className="flex justify-between">
-                <span>Tax (GST):</span>
-                <span>{formatCurrency(totals.totalTax)}</span>
-              </div>
               <hr />
               <div className="flex justify-between font-bold text-lg">
                 <span>Total:</span>
@@ -1656,26 +1652,6 @@ const PharmacyBilling: React.FC = () => {
             </CardContent>
           </Card>
 
-          {/* Quick Stats */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Today's Stats</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              <div className="flex justify-between">
-                <span className="text-sm">Sales:</span>
-                <span className="font-medium">45</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-sm">Revenue:</span>
-                <span className="font-medium">{formatCurrency(125750)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-sm">Avg Bill:</span>
-                <span className="font-medium">{formatCurrency(2794)}</span>
-              </div>
-            </CardContent>
-          </Card>
         </div>
       </div>
 
@@ -1715,13 +1691,9 @@ const PharmacyBilling: React.FC = () => {
               </div>
               
               <div className="flex gap-2">
-                <Button className="flex-1" onClick={printReceipt}>
+                <Button className="w-full" onClick={printReceipt}>
                   <Printer className="h-4 w-4 mr-2" />
                   Print Receipt
-                </Button>
-                <Button variant="outline" className="flex-1">
-                  <FileText className="h-4 w-4 mr-2" />
-                  Email Receipt
                 </Button>
               </div>
             </div>

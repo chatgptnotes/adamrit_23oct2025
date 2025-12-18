@@ -3,6 +3,7 @@ import { supabaseClient } from '@/utils/supabase-client';
 export interface ManufacturerCompany {
   id: number;
   name: string;
+  address?: string;
   created_at?: string;
 }
 
@@ -23,10 +24,10 @@ export class ManufacturerService {
   }
 
   // Add a new manufacturer
-  static async create(name: string): Promise<ManufacturerCompany> {
+  static async create(name: string, address?: string): Promise<ManufacturerCompany> {
     const { data, error } = await supabaseClient
       .from('manufacturer_companies')
-      .insert([{ name }])
+      .insert([{ name, address: address || null }])
       .select()
       .single();
 
@@ -39,10 +40,10 @@ export class ManufacturerService {
   }
 
   // Update a manufacturer
-  static async update(id: number, name: string): Promise<ManufacturerCompany> {
+  static async update(id: number, name: string, address?: string): Promise<ManufacturerCompany> {
     const { data, error } = await supabaseClient
       .from('manufacturer_companies')
-      .update({ name })
+      .update({ name, address: address || null })
       .eq('id', id)
       .select()
       .single();

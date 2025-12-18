@@ -88,6 +88,7 @@ const SupplierMaster: React.FC<SupplierMasterProps> = ({ activeTab: propActiveTa
   const [manufacturers, setManufacturers] = useState<ManufacturerCompany[]>([]);
   const [filteredManufacturers, setFilteredManufacturers] = useState<ManufacturerCompany[]>([]);
   const [manufacturerName, setManufacturerName] = useState('');
+  const [manufacturerAddress, setManufacturerAddress] = useState('');
   const [manufacturerSearch, setManufacturerSearch] = useState('');
   const [editingManufacturer, setEditingManufacturer] = useState<ManufacturerCompany | null>(null);
 
@@ -291,19 +292,20 @@ const SupplierMaster: React.FC<SupplierMasterProps> = ({ activeTab: propActiveTa
     try {
       setIsLoading(true);
       if (editingManufacturer) {
-        await ManufacturerService.update(editingManufacturer.id, manufacturerName);
+        await ManufacturerService.update(editingManufacturer.id, manufacturerName, manufacturerAddress);
         toast({
           title: 'Success',
           description: 'Manufacturer updated successfully',
         });
       } else {
-        await ManufacturerService.create(manufacturerName);
+        await ManufacturerService.create(manufacturerName, manufacturerAddress);
         toast({
           title: 'Success',
           description: 'Manufacturer added successfully',
         });
       }
       setManufacturerName('');
+      setManufacturerAddress('');
       setEditingManufacturer(null);
       await loadManufacturers();
     } catch (error) {
@@ -320,6 +322,7 @@ const SupplierMaster: React.FC<SupplierMasterProps> = ({ activeTab: propActiveTa
   const handleEditManufacturer = (manufacturer: ManufacturerCompany) => {
     setEditingManufacturer(manufacturer);
     setManufacturerName(manufacturer.name);
+    setManufacturerAddress(manufacturer.address || '');
   };
 
   const handleDeleteManufacturer = async (id: number) => {
@@ -349,6 +352,7 @@ const SupplierMaster: React.FC<SupplierMasterProps> = ({ activeTab: propActiveTa
   const handleCancelEdit = () => {
     setEditingManufacturer(null);
     setManufacturerName('');
+    setManufacturerAddress('');
   };
 
   return (
@@ -738,34 +742,50 @@ const SupplierMaster: React.FC<SupplierMasterProps> = ({ activeTab: propActiveTa
             </div>
           </div>
 
-          <form onSubmit={handleAddOrUpdateManufacturer} className="flex items-center justify-end gap-4 mb-6">
-            <label className="font-semibold text-gray-700 mr-2 whitespace-nowrap">
-              Manufacture Company Name<span className="text-red-500">*</span>
-            </label>
-            <input
-              className="border border-gray-400 rounded px-4 py-2 text-lg flex-1 max-w-2xl"
-              placeholder="add new manufacturer company name"
-              value={manufacturerName}
-              onChange={(e) => setManufacturerName(e.target.value)}
-              disabled={isLoading}
-              required
-            />
-            <button
-              type="submit"
-              className="bg-blue-600 text-white px-6 py-2 rounded font-bold hover:bg-blue-700 disabled:opacity-50"
-              disabled={isLoading}
-            >
-              {editingManufacturer ? 'Update' : 'Submit'}
-            </button>
-            {editingManufacturer && (
+          <form onSubmit={handleAddOrUpdateManufacturer} className="flex flex-col gap-4 mb-6 p-4 bg-gray-50 rounded-md border border-gray-200">
+            <div className="flex items-center gap-4">
+              <label className="font-semibold text-gray-700 whitespace-nowrap w-48">
+                Manufacture Company Name<span className="text-red-500">*</span>
+              </label>
+              <input
+                className="border border-gray-400 rounded px-4 py-2 text-lg flex-1"
+                placeholder="add new manufacturer company name"
+                value={manufacturerName}
+                onChange={(e) => setManufacturerName(e.target.value)}
+                disabled={isLoading}
+                required
+              />
+            </div>
+            <div className="flex items-center gap-4">
+              <label className="font-semibold text-gray-700 whitespace-nowrap w-48">
+                Address
+              </label>
+              <input
+                className="border border-gray-400 rounded px-4 py-2 text-lg flex-1"
+                placeholder="enter manufacturer address"
+                value={manufacturerAddress}
+                onChange={(e) => setManufacturerAddress(e.target.value)}
+                disabled={isLoading}
+              />
+            </div>
+            <div className="flex justify-end gap-2">
               <button
-                type="button"
-                className="bg-gray-600 text-white px-6 py-2 rounded font-bold hover:bg-gray-700"
-                onClick={handleCancelEdit}
+                type="submit"
+                className="bg-blue-600 text-white px-6 py-2 rounded font-bold hover:bg-blue-700 disabled:opacity-50"
+                disabled={isLoading}
               >
-                Cancel
+                {editingManufacturer ? 'Update' : 'Submit'}
               </button>
-            )}
+              {editingManufacturer && (
+                <button
+                  type="button"
+                  className="bg-gray-600 text-white px-6 py-2 rounded font-bold hover:bg-gray-700"
+                  onClick={handleCancelEdit}
+                >
+                  Cancel
+                </button>
+              )}
+            </div>
           </form>
           <div className="overflow-x-auto">
             {isLoading && !manufacturers.length ? (
@@ -777,6 +797,7 @@ const SupplierMaster: React.FC<SupplierMasterProps> = ({ activeTab: propActiveTa
                 <thead>
                   <tr className="bg-blue-100 text-blue-900 text-base font-bold">
                     <th className="px-4 py-2 border">Manufacture Company Name</th>
+                    <th className="px-4 py-2 border">Address</th>
                     <th className="px-4 py-2 border">Edit</th>
                     <th className="px-4 py-2 border">Delete</th>
                   </tr>
@@ -784,7 +805,7 @@ const SupplierMaster: React.FC<SupplierMasterProps> = ({ activeTab: propActiveTa
                 <tbody>
                   {filteredManufacturers.length === 0 ? (
                     <tr>
-                      <td colSpan={3} className="px-4 py-8 text-center text-gray-500">
+                      <td colSpan={4} className="px-4 py-8 text-center text-gray-500">
                         {manufacturerSearch ? 'No manufacturers found matching your search.' : 'No manufacturers found. Add one using the form above.'}
                       </td>
                     </tr>
@@ -792,6 +813,7 @@ const SupplierMaster: React.FC<SupplierMasterProps> = ({ activeTab: propActiveTa
                     paginatedManufacturers.map((manufacturer, idx) => (
                       <tr key={manufacturer.id} className={idx % 2 === 0 ? "bg-gray-100" : "bg-white"}>
                         <td className="px-4 py-2 border font-semibold">{manufacturer.name}</td>
+                        <td className="px-4 py-2 border">{manufacturer.address || '-'}</td>
                         <td className="px-4 py-2 border text-center">
                           <button
                             onClick={() => handleEditManufacturer(manufacturer)}
