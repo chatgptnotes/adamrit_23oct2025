@@ -4,7 +4,9 @@ import TreatmentSheetPrintView from './TreatmentSheetPrintView';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import { FileText, Printer, Eye, Download, Search, Calendar, ChevronLeft, ChevronRight, Receipt, X, Pencil, Copy, Trash2, User, RotateCcw, Wallet, Pill } from 'lucide-react';
+import { FileText, Printer, Eye, Download, Search, Calendar, ChevronLeft, ChevronRight, Receipt, X, Pencil, Copy, Trash2, User, RotateCcw, Wallet, Pill, FileSpreadsheet } from 'lucide-react';
+import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -228,7 +230,7 @@ export const SalesDetails: React.FC = () => {
       if (match) {
         query = query.eq('patient_id', match[1]);
       } else {
-        query = query.ilike('patient_name', `%${patientName.trim()}%`);
+        query = query.or(`patient_name.ilike.%${patientName.trim()}%,patient_id.ilike.%${patientName.trim()}%`);
       }
     }
 
@@ -245,7 +247,44 @@ export const SalesDetails: React.FC = () => {
     }
 
     const { data, error } = await query.order('sale_date', { ascending: false });
-    setTableData(!error && data ? data : []);
+
+    if (!error && data) {
+      setTableData(data);
+
+      // Group sales by patient (same logic as initial fetch)
+      const grouped: { [key: string]: PatientGroup } = {};
+      data.forEach((sale: any) => {
+        const key = sale.patient_id || 'walk-in';
+        if (!grouped[key]) {
+          grouped[key] = {
+            patient_id: sale.patient_id || 'walk-in',
+            patient_name: sale.patient_name || 'Walk-in',
+            total_amount: 0,
+            total_discount: 0,
+            total_paid: 0,
+            latest_date: sale.sale_date,
+            bill_count: 0,
+            bills: []
+          };
+        }
+        grouped[key].bills.push(sale);
+        grouped[key].total_amount += sale.total_amount || 0;
+        grouped[key].total_discount += sale.discount || 0;
+        grouped[key].total_paid += sale.total_amount || 0;
+        grouped[key].bill_count += 1;
+        if (sale.sale_date && sale.sale_date > grouped[key].latest_date) {
+          grouped[key].latest_date = sale.sale_date;
+        }
+      });
+
+      const groupedArray = Object.values(grouped).sort((a, b) =>
+        new Date(b.latest_date).getTime() - new Date(a.latest_date).getTime()
+      );
+      setPatientGroups(groupedArray);
+    } else {
+      setTableData([]);
+      setPatientGroups([]);
+    }
   };
 
   const totalBalance = dummyData.reduce((sum, row) => sum + row.bal, 0);
@@ -840,6 +879,529 @@ export const SalesDetails: React.FC = () => {
     }
   };
 
+  // Print payment details table
+  const printPaymentDetails = () => {
+    if (!selectedPatient || !selectedPatient.bills) return;
+
+    const bills = selectedPatient.bills;
+
+    // Calculate totals
+    const totalPaid = bills.reduce((sum: number, b: any) => {
+      const isCredit = b.payment_method === 'CREDIT';
+      return sum + (isCredit ? 0 : (b.total_amount || 0));
+    }, 0);
+    const totalDiscount = bills.reduce((sum: number, b: any) => sum + (b.discount || 0), 0);
+    const totalBalance = bills.reduce((sum: number, b: any) => {
+      const isCredit = b.payment_method === 'CREDIT';
+      return sum + (isCredit ? (b.total_amount || 0) : 0);
+    }, 0);
+
+    const printWindow = window.open('', '', 'width=800,height=600');
+    if (!printWindow) return;
+
+    const rowsHTML = bills.map((bill: any) => {
+      const isCredit = bill.payment_method === 'CREDIT';
+      const paidAmt = isCredit ? 0 : (bill.total_amount || 0);
+      const balance = isCredit ? (bill.total_amount || 0) : 0;
+      return `
+        <tr>
+          <td>${bill.sale_date ? new Date(bill.sale_date).toLocaleDateString('en-IN') : '-'}</td>
+          <td class="right">${paidAmt.toFixed(2)}</td>
+          <td class="right">${(bill.discount || 0).toFixed(2)}</td>
+          <td class="right balance">${balance.toFixed(2)}</td>
+        </tr>
+      `;
+    }).join('');
+
+    const printHTML = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Payment Details - ${selectedPatient.patient_name || 'Walk-in'}</title>
+        <style>
+          * { margin: 0; padding: 0; box-sizing: border-box; }
+          body { font-family: Arial, sans-serif; padding: 20px; }
+          .header { margin-bottom: 20px; }
+          .patient-name { font-size: 16px; font-weight: bold; margin-bottom: 5px; }
+          .patient-id { font-size: 12px; color: #666; }
+          table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+          th, td { border: 1px solid #333; padding: 8px; text-align: left; font-size: 12px; }
+          th { background-color: #0891b2; color: white; }
+          .right { text-align: right; }
+          .balance { color: #dc2626; }
+          tfoot td { font-weight: bold; background-color: #f3f4f6; }
+          @media print { body { padding: 10px; } }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <div class="patient-name">Patient Name: ${selectedPatient.patient_name || 'Walk-in'}</div>
+          <div class="patient-id">Patient ID: ${selectedPatient.patient_id || '-'}</div>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th class="right">Paid Amt</th>
+              <th class="right">Discount</th>
+              <th class="right">Balance</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsHTML}
+          </tbody>
+          <tfoot>
+            <tr>
+              <td>Total</td>
+              <td class="right">${totalPaid.toFixed(2)}</td>
+              <td class="right">${totalDiscount.toFixed(2)}</td>
+              <td class="right balance">${totalBalance.toFixed(2)}</td>
+            </tr>
+          </tfoot>
+        </table>
+        <script>window.onload = function() { window.print(); };</script>
+      </body>
+      </html>
+    `;
+
+    printWindow.document.write(printHTML);
+    printWindow.document.close();
+  };
+
+  // Print sale details table
+  const printSaleDetails = () => {
+    if (!selectedPatient || !selectedPatient.bills) return;
+
+    const bills = selectedPatient.bills;
+
+    // Sort bills by date ascending
+    const sortedBills = [...bills].sort((a: any, b: any) =>
+      new Date(a.sale_date).getTime() - new Date(b.sale_date).getTime()
+    );
+
+    // Calculate totals
+    const totalDebit = bills.reduce((sum: number, b: any) => {
+      return sum + (b.payment_method !== 'CREDIT' ? (b.total_amount || 0) : 0);
+    }, 0);
+    const totalCredit = bills.reduce((sum: number, b: any) => {
+      return sum + (b.payment_method === 'CREDIT' ? (b.total_amount || 0) : 0);
+    }, 0);
+    const totalBalance = totalCredit;
+
+    // Get date range
+    const startDate = sortedBills.length > 0 ? new Date(sortedBills[0]?.sale_date).toLocaleDateString('en-IN') : '-';
+    const endDate = sortedBills.length > 0 ? new Date(sortedBills[sortedBills.length - 1]?.sale_date).toLocaleDateString('en-IN') : '-';
+
+    const printWindow = window.open('', '', 'width=900,height=700');
+    if (!printWindow) return;
+
+    let runningBalance = 0;
+    const rowsHTML = sortedBills.map((bill: any) => {
+      const amount = bill.total_amount || 0;
+      const isCredit = bill.payment_method === 'CREDIT';
+      const credit = isCredit ? amount : 0;
+      const debit = isCredit ? 0 : amount;
+      runningBalance = runningBalance + credit;
+      return `
+        <tr>
+          <td style="border: 1px solid #333; padding: 8px;">${bill.sale_date ? new Date(bill.sale_date).toLocaleDateString('en-IN') : '-'}</td>
+          <td style="border: 1px solid #333; padding: 8px; text-align: center;">SB-${bill.sale_id}</td>
+          <td style="border: 1px solid #333; padding: 8px; text-align: right;">${debit.toFixed(2)}</td>
+          <td style="border: 1px solid #333; padding: 8px; text-align: right;">${credit.toFixed(2)}</td>
+          <td style="border: 1px solid #333; padding: 8px; text-align: right;">${runningBalance.toFixed(2)}</td>
+        </tr>
+      `;
+    }).join('');
+
+    const printHTML = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Sale Details - ${selectedPatient.patient_name || 'Walk-in'}</title>
+        <style>
+          * { margin: 0; padding: 0; box-sizing: border-box; }
+          body { font-family: Arial, sans-serif; padding: 10px; }
+          table { width: 100%; border-collapse: collapse; }
+          .header { text-align: center; font-weight: bold; padding: 8px; border: 1px solid #333; }
+          .subheader { text-align: center; padding: 6px; border: 1px solid #333; border-top: none; }
+          .col-header { background-color: #67b7c7; color: #0c4a5c; padding: 8px; border: 1px solid #333; font-size: 12px; font-weight: bold; }
+          td { font-size: 12px; }
+          .total-row td { font-weight: bold; background-color: #f3f4f6; }
+          @media print { body { padding: 5px; } }
+        </style>
+      </head>
+      <body>
+        <table>
+          <tbody>
+            <tr>
+              <td colspan="5" class="header">HOPE HOSPITAL PHARMACY</td>
+            </tr>
+            <tr>
+              <td colspan="5" class="subheader">List Of Pharmacy Sale Bills from : ${startDate} TO ${endDate}</td>
+            </tr>
+            <tr>
+              <td colspan="5" class="subheader" style="font-weight: 500;">${selectedPatient.patient_id || '-'} ${selectedPatient.patient_name || 'Walk-in'}</td>
+            </tr>
+            <tr>
+              <td class="col-header" style="text-align: left;">Date</td>
+              <td class="col-header" style="text-align: center;">Bill No</td>
+              <td class="col-header" style="text-align: right;">Debit</td>
+              <td class="col-header" style="text-align: right;">Credit</td>
+              <td class="col-header" style="text-align: right;">Balance</td>
+            </tr>
+            ${rowsHTML}
+            <tr class="total-row">
+              <td style="border: 1px solid #333; padding: 8px; font-weight: bold;">Total</td>
+              <td style="border: 1px solid #333; padding: 8px;"></td>
+              <td style="border: 1px solid #333; padding: 8px; text-align: right;">${totalDebit.toFixed(2)}</td>
+              <td style="border: 1px solid #333; padding: 8px; text-align: right;">${totalCredit.toFixed(2)}</td>
+              <td style="border: 1px solid #333; padding: 8px; text-align: right; font-weight: bold;">${totalBalance.toFixed(2)}</td>
+            </tr>
+          </tbody>
+        </table>
+        <script>window.onload = function() { window.print(); };</script>
+      </body>
+      </html>
+    `;
+
+    printWindow.document.write(printHTML);
+    printWindow.document.close();
+  };
+
+  // Print medications details table
+  const printMedicationDetails = () => {
+    if (!selectedPatient || saleItems.length === 0) return;
+
+    // Get date range
+    const startDate = selectedPatient.bills && selectedPatient.bills.length > 0
+      ? new Date(selectedPatient.bills[selectedPatient.bills.length - 1]?.sale_date).toLocaleDateString('en-IN')
+      : '-';
+    const endDate = selectedPatient.bills && selectedPatient.bills.length > 0
+      ? new Date(selectedPatient.bills[0]?.sale_date).toLocaleDateString('en-IN')
+      : '-';
+
+    const printWindow = window.open('', '', 'width=900,height=700');
+    if (!printWindow) return;
+
+    const rowsHTML = saleItems.map((item: any, idx: number) => {
+      const amount = (item.unit_price || 0) * (item.quantity || 0);
+      return `
+        <tr>
+          <td style="border: 1px solid #333; padding: 6px;">${idx + 1}</td>
+          <td style="border: 1px solid #333; padding: 6px;">${item.medication_name || item.medicine_name}</td>
+          <td style="border: 1px solid #333; padding: 6px; text-align: center;">${item.pharmacy_sales?.sale_date ? new Date(item.pharmacy_sales.sale_date).toLocaleDateString('en-IN') : '-'}</td>
+          <td style="border: 1px solid #333; padding: 6px; text-align: center;">${item.quantity}</td>
+          <td style="border: 1px solid #333; padding: 6px; text-align: right;">${amount.toFixed(2)}</td>
+        </tr>
+      `;
+    }).join('');
+
+    // Calculate total
+    const totalAmount = saleItems.reduce((sum: number, item: any) => sum + ((item.unit_price || 0) * (item.quantity || 0)), 0);
+
+    const printHTML = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Medication Details - ${selectedPatient.patient_name || 'Walk-in'}</title>
+        <style>
+          * { margin: 0; padding: 0; box-sizing: border-box; }
+          body { font-family: Arial, sans-serif; padding: 10px; }
+          table { width: 100%; border-collapse: collapse; }
+          .header { text-align: center; font-weight: bold; padding: 8px; border: 1px solid #333; background-color: #ffe4e6; }
+          .subheader { text-align: center; padding: 6px; border: 1px solid #333; border-top: none; }
+          .col-header { background-color: #67b7c7; color: #0c4a5c; padding: 6px; border: 1px solid #333; font-size: 11px; font-weight: bold; }
+          td { font-size: 11px; }
+          @media print { body { padding: 5px; } }
+        </style>
+      </head>
+      <body>
+        <table>
+          <tbody>
+            <tr>
+              <td colspan="5" class="header">HOPE MULTISPECIALITY HOSPITAL & RESEARCH CENTER</td>
+            </tr>
+            <tr>
+              <td colspan="5" class="subheader" style="font-weight: bold;">PHARMACY STATEMENT</td>
+            </tr>
+            <tr>
+              <td colspan="5" class="subheader" style="font-weight: 500;">${selectedPatient.patient_name || 'Walk-in'}</td>
+            </tr>
+            <tr>
+              <td colspan="5" class="subheader">List Of Issued Drugs From : ${startDate} To ${endDate}</td>
+            </tr>
+            <tr>
+              <td class="col-header" style="text-align: left;">Sr.No.</td>
+              <td class="col-header" style="text-align: left;">Service Name</td>
+              <td class="col-header" style="text-align: center;">Date</td>
+              <td class="col-header" style="text-align: center;">Quantity</td>
+              <td class="col-header" style="text-align: right;">Amount</td>
+            </tr>
+            ${rowsHTML}
+            <tr style="background-color: #f3f4f6; font-weight: bold; border-top: 2px solid #333;">
+              <td colspan="4" style="border: 1px solid #333; padding: 6px; text-align: right;">Total</td>
+              <td style="border: 1px solid #333; padding: 6px; text-align: right;">${totalAmount.toFixed(2)}</td>
+            </tr>
+          </tbody>
+        </table>
+        <script>window.onload = function() { window.print(); };</script>
+      </body>
+      </html>
+    `;
+
+    printWindow.document.write(printHTML);
+    printWindow.document.close();
+  };
+
+  // Export medication details to Excel using ExcelJS for proper styling
+  const exportMedicationToExcel = async () => {
+    if (!selectedPatient || saleItems.length === 0) return;
+
+    // Get date range
+    const startDate = selectedPatient.bills && selectedPatient.bills.length > 0
+      ? new Date(selectedPatient.bills[selectedPatient.bills.length - 1]?.sale_date).toLocaleDateString('en-IN')
+      : '-';
+    const endDate = selectedPatient.bills && selectedPatient.bills.length > 0
+      ? new Date(selectedPatient.bills[0]?.sale_date).toLocaleDateString('en-IN')
+      : '-';
+
+    // Create workbook and worksheet
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Medication Details');
+
+    // Set column widths
+    worksheet.columns = [
+      { key: 'srno', width: 8 },
+      { key: 'service', width: 35 },
+      { key: 'date', width: 15 },
+      { key: 'quantity', width: 12 },
+      { key: 'amount', width: 12 }
+    ];
+
+    // Add header rows with center alignment
+    const headerRow1 = worksheet.addRow(['HOPE MULTISPECIALITY HOSPITAL & RESEARCH CENTER']);
+    worksheet.mergeCells('A1:E1');
+    headerRow1.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' };
+    headerRow1.getCell(1).font = { bold: true, size: 12 };
+
+    const headerRow2 = worksheet.addRow(['PHARMACY STATEMENT']);
+    worksheet.mergeCells('A2:E2');
+    headerRow2.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' };
+    headerRow2.getCell(1).font = { bold: true };
+
+    const headerRow3 = worksheet.addRow([selectedPatient.patient_name || 'Walk-in']);
+    worksheet.mergeCells('A3:E3');
+    headerRow3.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' };
+
+    const headerRow4 = worksheet.addRow([`List Of Issued Drugs From : ${startDate} To ${endDate}`]);
+    worksheet.mergeCells('A4:E4');
+    headerRow4.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' };
+
+    // Add empty row
+    worksheet.addRow([]);
+
+    // Add column headers
+    const columnHeaderRow = worksheet.addRow(['Sr.No.', 'Service Name', 'Date', 'Quantity', 'Amount']);
+    columnHeaderRow.eachCell((cell) => {
+      cell.font = { bold: true };
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF67B7C7' }
+      };
+      cell.alignment = { horizontal: 'center', vertical: 'middle' };
+      cell.border = {
+        top: { style: 'thin' },
+        left: { style: 'thin' },
+        bottom: { style: 'thin' },
+        right: { style: 'thin' }
+      };
+    });
+
+    // Add data rows
+    let totalAmount = 0;
+    saleItems.forEach((item: any, idx: number) => {
+      const amount = (item.unit_price || 0) * (item.quantity || 0);
+      totalAmount += amount;
+      const row = worksheet.addRow([
+        idx + 1,
+        item.medication_name || item.medicine_name,
+        item.pharmacy_sales?.sale_date ? new Date(item.pharmacy_sales.sale_date).toLocaleDateString('en-IN') : '-',
+        item.quantity,
+        amount.toFixed(2)
+      ]);
+      row.eachCell((cell) => {
+        cell.border = {
+          top: { style: 'thin' },
+          left: { style: 'thin' },
+          bottom: { style: 'thin' },
+          right: { style: 'thin' }
+        };
+      });
+      // Right align amount
+      row.getCell(5).alignment = { horizontal: 'right' };
+      row.getCell(4).alignment = { horizontal: 'center' };
+      row.getCell(3).alignment = { horizontal: 'center' };
+    });
+
+    // Add total row
+    const totalRow = worksheet.addRow(['', '', '', 'Total', totalAmount.toFixed(2)]);
+    totalRow.eachCell((cell, colNumber) => {
+      cell.font = { bold: true };
+      cell.border = {
+        top: { style: 'thin' },
+        left: { style: 'thin' },
+        bottom: { style: 'thin' },
+        right: { style: 'thin' }
+      };
+      if (colNumber === 5) {
+        cell.alignment = { horizontal: 'right' };
+      }
+    });
+
+    // Generate filename
+    const fileName = `Pharmacy_Statement_${(selectedPatient.patient_name || 'Walk-in').replace(/\s+/g, '_')}_${new Date().toLocaleDateString('en-IN').replace(/\//g, '-')}.xlsx`;
+
+    // Download the file
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+    link.click();
+    window.URL.revokeObjectURL(url);
+  };
+
+  // Export sale details to Excel using ExcelJS
+  const exportSaleDetailsToExcel = async () => {
+    if (!selectedPatient || !selectedPatient.bills || selectedPatient.bills.length === 0) return;
+
+    const bills = selectedPatient.bills;
+
+    // Sort bills by date ascending
+    const sortedBills = [...bills].sort((a: any, b: any) =>
+      new Date(a.sale_date).getTime() - new Date(b.sale_date).getTime()
+    );
+
+    // Get date range
+    const startDate = sortedBills.length > 0 ? new Date(sortedBills[0]?.sale_date).toLocaleDateString('en-IN') : '-';
+    const endDate = sortedBills.length > 0 ? new Date(sortedBills[sortedBills.length - 1]?.sale_date).toLocaleDateString('en-IN') : '-';
+
+    // Create workbook and worksheet
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Sale Details');
+
+    // Set column widths
+    worksheet.columns = [
+      { key: 'date', width: 15 },
+      { key: 'billno', width: 15 },
+      { key: 'debit', width: 12 },
+      { key: 'credit', width: 12 },
+      { key: 'balance', width: 12 }
+    ];
+
+    // Add header rows with center alignment
+    const headerRow1 = worksheet.addRow(['HOPE HOSPITAL PHARMACY']);
+    worksheet.mergeCells('A1:E1');
+    headerRow1.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' };
+    headerRow1.getCell(1).font = { bold: true, size: 12 };
+
+    const headerRow2 = worksheet.addRow([`List Of Pharmacy Sale Bills from : ${startDate} TO ${endDate}`]);
+    worksheet.mergeCells('A2:E2');
+    headerRow2.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' };
+
+    const headerRow3 = worksheet.addRow([`${selectedPatient.patient_id || ''} ${selectedPatient.patient_name || 'Walk-in'}`]);
+    worksheet.mergeCells('A3:E3');
+    headerRow3.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' };
+    headerRow3.getCell(1).font = { bold: true };
+
+    // Add empty row
+    worksheet.addRow([]);
+
+    // Add column headers
+    const columnHeaderRow = worksheet.addRow(['Date', 'Bill No', 'Debit', 'Credit', 'Balance']);
+    columnHeaderRow.eachCell((cell) => {
+      cell.font = { bold: true };
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF67B7C7' }
+      };
+      cell.alignment = { horizontal: 'center', vertical: 'middle' };
+      cell.border = {
+        top: { style: 'thin' },
+        left: { style: 'thin' },
+        bottom: { style: 'thin' },
+        right: { style: 'thin' }
+      };
+    });
+
+    // Add data rows with running balance
+    let runningBalance = 0;
+    let totalDebit = 0;
+    let totalCredit = 0;
+
+    sortedBills.forEach((bill: any) => {
+      const amount = bill.total_amount || 0;
+      const isCredit = bill.payment_method === 'CREDIT';
+      const credit = isCredit ? amount : 0;
+      const debit = isCredit ? 0 : amount;
+      runningBalance = runningBalance + credit;
+      totalDebit += debit;
+      totalCredit += credit;
+
+      const row = worksheet.addRow([
+        bill.sale_date ? new Date(bill.sale_date).toLocaleDateString('en-IN') : '-',
+        `SB-${bill.sale_id}`,
+        debit.toFixed(2),
+        credit.toFixed(2),
+        runningBalance.toFixed(2)
+      ]);
+      row.eachCell((cell) => {
+        cell.border = {
+          top: { style: 'thin' },
+          left: { style: 'thin' },
+          bottom: { style: 'thin' },
+          right: { style: 'thin' }
+        };
+      });
+      // Right align numeric columns
+      row.getCell(3).alignment = { horizontal: 'right' };
+      row.getCell(4).alignment = { horizontal: 'right' };
+      row.getCell(5).alignment = { horizontal: 'right' };
+      row.getCell(2).alignment = { horizontal: 'center' };
+    });
+
+    // Add total row
+    const totalRow = worksheet.addRow(['Total', '', totalDebit.toFixed(2), totalCredit.toFixed(2), runningBalance.toFixed(2)]);
+    totalRow.eachCell((cell, colNumber) => {
+      cell.font = { bold: true };
+      cell.border = {
+        top: { style: 'thin' },
+        left: { style: 'thin' },
+        bottom: { style: 'thin' },
+        right: { style: 'thin' }
+      };
+      if (colNumber >= 3) {
+        cell.alignment = { horizontal: 'right' };
+      }
+    });
+
+    // Generate filename
+    const fileName = `Sale_Details_${(selectedPatient.patient_name || 'Walk-in').replace(/\s+/g, '_')}_${new Date().toLocaleDateString('en-IN').replace(/\//g, '-')}.xlsx`;
+
+    // Download the file
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+    link.click();
+    window.URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="p-6 flex gap-6 bg-gray-50 min-h-screen">
       {/* Left Side - Sales List */}
@@ -1027,9 +1589,8 @@ export const SalesDetails: React.FC = () => {
                             size="sm"
                             onClick={(e) => {
                               e.stopPropagation();
-                              // Use latest bill for payment details
-                              const latestBill = group.bills[0];
-                              setSelectedPatient({ ...latestBill, patient_name: group.patient_name });
+                              // Pass full group with all bills for payment details table
+                              setSelectedPatient(group);
                               setPanelType('payment');
                               setShowSidePanel(true);
                             }}
@@ -1043,9 +1604,10 @@ export const SalesDetails: React.FC = () => {
                             size="sm"
                             onClick={(e) => {
                               e.stopPropagation();
-                              // Use latest bill for items
-                              const latestBill = group.bills[0];
-                              handleOpenPanel(latestBill, 'items');
+                              // Pass full group with all bills for sale details
+                              setSelectedPatient(group);
+                              setPanelType('items');
+                              setShowSidePanel(true);
                             }}
                             className="h-8 w-8 p-0 hover:bg-blue-100 hover:text-blue-600"
                             title="Sale Details"
@@ -1055,11 +1617,23 @@ export const SalesDetails: React.FC = () => {
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={(e) => {
+                            onClick={async (e) => {
                               e.stopPropagation();
-                              // Use latest bill for medications
-                              const latestBill = group.bills[0];
-                              handleOpenPanel(latestBill, 'medications');
+                              // Fetch all medications from all bills for this patient
+                              const allSaleIds = group.bills.map((b: any) => b.sale_id);
+                              const { data, error } = await supabase
+                                .from('pharmacy_sale_items')
+                                .select('*, pharmacy_sales!inner(sale_date)')
+                                .in('sale_id', allSaleIds);
+
+                              if (!error && data) {
+                                setSaleItems(data);
+                              } else {
+                                setSaleItems([]);
+                              }
+                              setSelectedPatient(group);
+                              setPanelType('medications');
+                              setShowSidePanel(true);
                             }}
                             className="h-8 w-8 p-0 hover:bg-purple-100 hover:text-purple-600"
                             title="Medication Details"
@@ -1130,11 +1704,32 @@ export const SalesDetails: React.FC = () => {
             <div className="flex justify-between items-center px-4 py-3 bg-gray-200 border-b mb-2">
               <span className="font-medium text-gray-800">Patient Name : {selectedPatient.patient_name || 'Walk-in'}</span>
               <div className="flex items-center gap-2">
+                {/* Export Excel button - for medications and sale details panels */}
+                {(panelType === 'medications' || panelType === 'items') && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 w-8 p-0 hover:bg-green-100 hover:text-green-600"
+                    title="Export as Excel"
+                    onClick={panelType === 'medications' ? exportMedicationToExcel : exportSaleDetailsToExcel}
+                  >
+                    <FileSpreadsheet className="h-4 w-4 text-green-600" />
+                  </Button>
+                )}
                 <Button
                   variant="ghost"
                   size="sm"
                   className="h-8 w-8 p-0 hover:bg-gray-300"
-                  title="Print All"
+                  title="Print"
+                  onClick={() => {
+                    if (panelType === 'payment') {
+                      printPaymentDetails();
+                    } else if (panelType === 'items') {
+                      printSaleDetails();
+                    } else if (panelType === 'medications') {
+                      printMedicationDetails();
+                    }
+                  }}
                 >
                   <Printer className="h-4 w-4 text-gray-600" />
                 </Button>
@@ -1285,148 +1880,231 @@ export const SalesDetails: React.FC = () => {
 
             {/* Money Collected Panel */}
             {panelType === 'payment' && (
-              <Card className="mb-4 border-0 shadow-sm">
-                <CardHeader className="py-3 px-4 bg-green-600 rounded-t-lg">
-                  <CardTitle className="text-sm font-semibold text-white flex items-center gap-2">
-                    <Wallet className="h-4 w-4" />
-                    Payment Details
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="p-4">
-                  <div className="space-y-4">
-                    <div className="bg-green-50 p-4 rounded-lg text-center">
-                      <p className="text-sm text-green-600">Amount Collected</p>
-                      <p className="text-3xl font-bold text-green-700">₹{selectedPatient.total_amount?.toFixed(2) || '0.00'}</p>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="bg-gray-50 p-3 rounded-lg">
-                        <p className="text-xs text-gray-500">Payment Method</p>
-                        <p className="text-lg font-semibold text-gray-800">{selectedPatient.payment_method || 'CASH'}</p>
-                      </div>
-                      <div className="bg-gray-50 p-3 rounded-lg">
-                        <p className="text-xs text-gray-500">Payment Status</p>
-                        <p className="text-lg font-semibold text-green-600">Paid</p>
-                      </div>
-                      <div className="bg-gray-50 p-3 rounded-lg">
-                        <p className="text-xs text-gray-500">Bill Amount</p>
-                        <p className="text-lg font-semibold text-gray-800">₹{selectedPatient.subtotal?.toFixed(2) || '0.00'}</p>
-                      </div>
-                      <div className="bg-gray-50 p-3 rounded-lg">
-                        <p className="text-xs text-gray-500">Discount Given</p>
-                        <p className="text-lg font-semibold text-red-600">₹{selectedPatient.discount?.toFixed(2) || '0.00'}</p>
-                      </div>
-                    </div>
-                    <div className="bg-gray-50 p-3 rounded-lg">
-                      <p className="text-xs text-gray-500">Transaction Date & Time</p>
-                      <p className="text-lg font-semibold text-gray-800">{selectedPatient.sale_date ? new Date(selectedPatient.sale_date).toLocaleString() : '-'}</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+              <>
+                <div className="bg-cyan-700 py-2 px-4">
+                  <span className="text-sm font-semibold text-white">Patient Name : {selectedPatient.patient_name || 'Walk-in'}</span>
+                </div>
+                <div className="overflow-x-auto bg-white">
+                  <table className="min-w-full text-sm">
+                    <thead>
+                      <tr className="bg-cyan-600 text-white">
+                        <th className="px-3 py-2 text-left text-xs font-semibold">Date</th>
+                        <th className="px-3 py-2 text-right text-xs font-semibold">Paid Amt</th>
+                        <th className="px-3 py-2 text-right text-xs font-semibold">Discount</th>
+                        <th className="px-3 py-2 text-right text-xs font-semibold">Balance</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {selectedPatient.bills && selectedPatient.bills.length > 0 ? (
+                        selectedPatient.bills.map((bill: any, idx: number) => {
+                          const isCredit = bill.payment_method === 'CREDIT';
+                          const paidAmt = isCredit ? 0 : (bill.total_amount || 0);
+                          const balance = isCredit ? (bill.total_amount || 0) : 0;
+                          return (
+                            <tr key={bill.sale_id || idx} className="bg-white border-b hover:bg-gray-50">
+                              <td className="px-3 py-2 text-gray-800">
+                                {bill.sale_date ? new Date(bill.sale_date).toLocaleDateString('en-IN') : '-'}
+                              </td>
+                              <td className="px-3 py-2 text-right text-gray-800">{paidAmt.toFixed(2)}</td>
+                              <td className="px-3 py-2 text-right text-gray-600">{(bill.discount || 0).toFixed(2)}</td>
+                              <td className="px-3 py-2 text-right text-red-600 font-medium">{balance.toFixed(2)}</td>
+                            </tr>
+                          );
+                        })
+                      ) : (
+                        <tr>
+                          <td colSpan={4} className="px-3 py-4 text-center text-gray-500">No payment records found</td>
+                        </tr>
+                      )}
+                      {/* Total Row */}
+                      {selectedPatient.bills && selectedPatient.bills.length > 0 && (
+                        <tr className="bg-gray-100 font-semibold border-t">
+                          <td className="px-3 py-2 text-gray-700">Total</td>
+                          <td className="px-3 py-2 text-right text-gray-800">
+                            {selectedPatient.bills.reduce((sum: number, b: any) => {
+                              const isCredit = b.payment_method === 'CREDIT';
+                              return sum + (isCredit ? 0 : (b.total_amount || 0));
+                            }, 0).toFixed(2)}
+                          </td>
+                          <td className="px-3 py-2 text-right text-gray-600">
+                            {selectedPatient.bills.reduce((sum: number, b: any) => sum + (b.discount || 0), 0).toFixed(2)}
+                          </td>
+                          <td className="px-3 py-2 text-right text-red-600 font-bold">
+                            {selectedPatient.bills.reduce((sum: number, b: any) => {
+                              const isCredit = b.payment_method === 'CREDIT';
+                              return sum + (isCredit ? (b.total_amount || 0) : 0);
+                            }, 0).toFixed(2)}
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </>
             )}
 
             {/* Sale Details (Items) Panel */}
             {panelType === 'items' && (
-              <Card className="mb-4 border-0 shadow-sm">
-                <CardHeader className="py-3 px-4 bg-blue-600 rounded-t-lg">
-                  <CardTitle className="text-sm font-semibold text-white flex items-center gap-2">
-                    <Receipt className="h-4 w-4" />
-                    Itemized Sale Details
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="p-0">
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full text-sm">
-                      <thead>
-                        <tr className="bg-gray-100 border-b">
-                          <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">#</th>
-                          <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">Item</th>
-                          <th className="px-3 py-2 text-right text-xs font-semibold text-gray-600">Qty</th>
-                          <th className="px-3 py-2 text-right text-xs font-semibold text-gray-600">Rate</th>
-                          <th className="px-3 py-2 text-right text-xs font-semibold text-gray-600">Disc%</th>
-                          <th className="px-3 py-2 text-right text-xs font-semibold text-gray-600">Amount</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {saleItems.length === 0 ? (
-                          <tr>
-                            <td colSpan={6} className="px-3 py-4 text-center text-gray-500">No items found</td>
-                          </tr>
-                        ) : (
-                          saleItems.map((item, idx) => (
-                            <tr key={idx} className="bg-white border-b hover:bg-gray-50">
-                              <td className="px-3 py-2 text-gray-500">{idx + 1}</td>
-                              <td className="px-3 py-2">
-                                <div className="font-medium text-gray-800">{item.medication_name || item.medicine_name}</div>
-                                <div className="text-xs text-gray-500">Batch: {item.batch_number || '-'}</div>
-                              </td>
-                              <td className="px-3 py-2 text-right text-gray-800">{item.quantity}</td>
-                              <td className="px-3 py-2 text-right text-gray-800">₹{item.unit_price?.toFixed(2) || '0.00'}</td>
-                              <td className="px-3 py-2 text-right text-gray-600">{item.discount_percentage || 0}%</td>
-                              <td className="px-3 py-2 text-right font-medium text-gray-800">₹{item.total_amount?.toFixed(2) || '0.00'}</td>
-                            </tr>
-                          ))
-                        )}
-                      </tbody>
-                      {saleItems.length > 0 && (
-                        <tfoot>
-                          <tr className="bg-blue-50 font-semibold">
-                            <td colSpan={5} className="px-3 py-2 text-right text-gray-700">Total:</td>
-                            <td className="px-3 py-2 text-right text-blue-700">₹{saleItems.reduce((sum, item) => sum + (item.total_amount || 0), 0).toFixed(2)}</td>
-                          </tr>
-                        </tfoot>
-                      )}
-                    </table>
+              <>
+                {/* Header Section */}
+                <div className="bg-white border border-gray-300">
+                  <div className="text-center py-2 border-b border-gray-300 font-bold text-sm">
+                    HOPE HOSPITAL PHARMACY
                   </div>
-                </CardContent>
-              </Card>
+                  <div className="text-center py-1 border-b border-gray-300 text-xs">
+                    List Of Pharmacy Sale Bills from : {
+                      selectedPatient.bills && selectedPatient.bills.length > 0
+                        ? `${new Date(selectedPatient.bills[selectedPatient.bills.length - 1]?.sale_date).toLocaleDateString('en-IN')} TO ${new Date(selectedPatient.bills[0]?.sale_date).toLocaleDateString('en-IN')}`
+                        : '-'
+                    }
+                  </div>
+                  <div className="text-center py-1 border-b border-gray-300 text-xs font-medium">
+                    {selectedPatient.patient_id || '-'} {selectedPatient.patient_name || 'Walk-in'}
+                  </div>
+                </div>
+
+                {/* Table */}
+                <div className="overflow-x-auto bg-white border-x border-gray-300">
+                  <table className="min-w-full text-sm">
+                    <thead>
+                      <tr className="bg-cyan-100">
+                        <th className="px-3 py-2 text-left text-xs font-semibold text-cyan-800 border-b border-gray-300">Date</th>
+                        <th className="px-3 py-2 text-center text-xs font-semibold text-cyan-800 border-b border-gray-300">Bill No</th>
+                        <th className="px-3 py-2 text-right text-xs font-semibold text-cyan-800 border-b border-gray-300">Debit</th>
+                        <th className="px-3 py-2 text-right text-xs font-semibold text-cyan-800 border-b border-gray-300">Credit</th>
+                        <th className="px-3 py-2 text-right text-xs font-semibold text-cyan-800 border-b border-gray-300">Balance</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {selectedPatient.bills && selectedPatient.bills.length > 0 ? (
+                        (() => {
+                          let runningBalance = 0;
+                          // Sort bills by date ascending for running balance
+                          const sortedBills = [...selectedPatient.bills].sort((a: any, b: any) =>
+                            new Date(a.sale_date).getTime() - new Date(b.sale_date).getTime()
+                          );
+                          return sortedBills.map((bill: any, idx: number) => {
+                            const amount = bill.total_amount || 0;
+                            const isCredit = bill.payment_method === 'CREDIT';
+                            // Credit = unpaid (CREDIT payment method), Debit = paid (other methods)
+                            const credit = isCredit ? amount : 0;
+                            const debit = isCredit ? 0 : amount;
+                            runningBalance = runningBalance + credit;
+                            return (
+                              <tr key={bill.sale_id || idx} className="bg-white border-b border-gray-200 hover:bg-gray-50">
+                                <td className="px-3 py-2 text-gray-800">
+                                  {bill.sale_date ? new Date(bill.sale_date).toLocaleDateString('en-IN') : '-'}
+                                </td>
+                                <td className="px-3 py-2 text-center text-gray-800">SB-{bill.sale_id}</td>
+                                <td className="px-3 py-2 text-right text-gray-800">{debit.toFixed(2)}</td>
+                                <td className="px-3 py-2 text-right text-gray-800">{credit.toFixed(2)}</td>
+                                <td className="px-3 py-2 text-right text-gray-800">{runningBalance.toFixed(2)}</td>
+                              </tr>
+                            );
+                          });
+                        })()
+                      ) : (
+                        <tr>
+                          <td colSpan={5} className="px-3 py-4 text-center text-gray-500">No bills found</td>
+                        </tr>
+                      )}
+                      {/* Total Row */}
+                      {selectedPatient.bills && selectedPatient.bills.length > 0 && (
+                        <tr className="bg-gray-100 font-semibold border-t-2 border-gray-400">
+                          <td className="px-3 py-2 text-gray-700">Total</td>
+                          <td className="px-3 py-2"></td>
+                          <td className="px-3 py-2 text-right text-gray-800">
+                            {selectedPatient.bills.reduce((sum: number, b: any) => {
+                              return sum + (b.payment_method !== 'CREDIT' ? (b.total_amount || 0) : 0);
+                            }, 0).toFixed(2)}
+                          </td>
+                          <td className="px-3 py-2 text-right text-gray-800">
+                            {selectedPatient.bills.reduce((sum: number, b: any) => {
+                              return sum + (b.payment_method === 'CREDIT' ? (b.total_amount || 0) : 0);
+                            }, 0).toFixed(2)}
+                          </td>
+                          <td className="px-3 py-2 text-right font-bold text-gray-800">
+                            {selectedPatient.bills.reduce((sum: number, b: any) => {
+                              return sum + (b.payment_method === 'CREDIT' ? (b.total_amount || 0) : 0);
+                            }, 0).toFixed(2)}
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </>
             )}
 
             {/* Medication Details Panel */}
             {panelType === 'medications' && (
-              <Card className="mb-4 border-0 shadow-sm">
-                <CardHeader className="py-3 px-4 bg-purple-600 rounded-t-lg">
-                  <CardTitle className="text-sm font-semibold text-white flex items-center gap-2">
-                    <Pill className="h-4 w-4" />
-                    Medications Dispensed
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="p-4">
-                  {saleItems.length === 0 ? (
-                    <p className="text-center text-gray-500 py-4">No medications found</p>
-                  ) : (
-                    <div className="space-y-3">
-                      {saleItems.map((item, idx) => (
-                        <div key={idx} className="bg-purple-50 p-4 rounded-lg border border-purple-100">
-                          <div className="flex justify-between items-start">
-                            <div>
-                              <h4 className="font-semibold text-purple-900">{item.medication_name || item.medicine_name}</h4>
-                              <p className="text-sm text-purple-700">{item.generic_name || ''}</p>
-                            </div>
-                            <span className="bg-purple-200 text-purple-800 text-xs font-medium px-2.5 py-0.5 rounded">
-                              Qty: {item.quantity}
-                            </span>
-                          </div>
-                          <div className="mt-2 grid grid-cols-3 gap-2 text-xs">
-                            <div>
-                              <span className="text-purple-600">Batch:</span>
-                              <span className="ml-1 font-medium text-purple-800">{item.batch_number || '-'}</span>
-                            </div>
-                            <div>
-                              <span className="text-purple-600">Expiry:</span>
-                              <span className="ml-1 font-medium text-purple-800">{item.expiry_date ? new Date(item.expiry_date).toLocaleDateString() : '-'}</span>
-                            </div>
-                            <div>
-                              <span className="text-purple-600">Price:</span>
-                              <span className="ml-1 font-medium text-purple-800">₹{item.unit_price?.toFixed(2) || '0.00'}</span>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
+              <>
+                {/* Header Section */}
+                <div className="bg-white border border-gray-300">
+                  <div className="text-center py-2 border-b border-gray-300 font-bold text-sm bg-pink-50">
+                    HOPE MULTISPECIALITY HOSPITAL & RESEARCH CENTER
+                  </div>
+                  <div className="text-center py-1 border-b border-gray-300 text-xs font-semibold">
+                    PHARMACY STATEMENT
+                  </div>
+                  <div className="text-center py-1 border-b border-gray-300 text-xs font-medium">
+                    {selectedPatient.patient_name || 'Walk-in'}
+                  </div>
+                  <div className="text-center py-1 border-b border-gray-300 text-xs">
+                    List Of Issued Drugs From : {
+                      selectedPatient.bills && selectedPatient.bills.length > 0
+                        ? `${new Date(selectedPatient.bills[selectedPatient.bills.length - 1]?.sale_date).toLocaleDateString('en-IN')} To ${new Date(selectedPatient.bills[0]?.sale_date).toLocaleDateString('en-IN')}`
+                        : '-'
+                    }
+                  </div>
+                </div>
+
+                {/* Table */}
+                <div className="overflow-x-auto bg-white border-x border-b border-gray-300">
+                  <table className="min-w-full text-sm">
+                    <thead>
+                      <tr className="bg-cyan-100">
+                        <th className="px-2 py-2 text-left text-xs font-semibold text-cyan-800 border-b border-gray-300">Sr.No.</th>
+                        <th className="px-2 py-2 text-left text-xs font-semibold text-cyan-800 border-b border-gray-300">Service Name</th>
+                        <th className="px-2 py-2 text-center text-xs font-semibold text-cyan-800 border-b border-gray-300">Date</th>
+                        <th className="px-2 py-2 text-center text-xs font-semibold text-cyan-800 border-b border-gray-300">Quantity</th>
+                        <th className="px-2 py-2 text-right text-xs font-semibold text-cyan-800 border-b border-gray-300">Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {saleItems.length === 0 ? (
+                        <tr>
+                          <td colSpan={5} className="px-3 py-4 text-center text-gray-500">No medications found</td>
+                        </tr>
+                      ) : (
+                        <>
+                          {saleItems.map((item: any, idx: number) => {
+                            const amount = (item.unit_price || 0) * (item.quantity || 0);
+                            return (
+                              <tr key={idx} className="bg-white border-b border-gray-200 hover:bg-gray-50">
+                                <td className="px-2 py-2 text-gray-800">{idx + 1}</td>
+                                <td className="px-2 py-2 text-gray-800">{item.medication_name || item.medicine_name}</td>
+                                <td className="px-2 py-2 text-center text-gray-800">
+                                  {item.pharmacy_sales?.sale_date ? new Date(item.pharmacy_sales.sale_date).toLocaleDateString('en-IN') : '-'}
+                                </td>
+                                <td className="px-2 py-2 text-center text-gray-800">{item.quantity}</td>
+                                <td className="px-2 py-2 text-right text-gray-800">{amount.toFixed(2)}</td>
+                              </tr>
+                            );
+                          })}
+                          {/* Total Row */}
+                          <tr className="bg-gray-100 font-semibold border-t-2 border-gray-400">
+                            <td colSpan={4} className="px-2 py-2 text-right text-gray-700">Total</td>
+                            <td className="px-2 py-2 text-right text-gray-800">
+                              {saleItems.reduce((sum: number, item: any) => sum + ((item.unit_price || 0) * (item.quantity || 0)), 0).toFixed(2)}
+                            </td>
+                          </tr>
+                        </>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </>
             )}
           </div>
         </div>
@@ -1530,11 +2208,52 @@ export const SalesDetails: React.FC = () => {
       <Dialog open={showTreatmentSheet} onOpenChange={setShowTreatmentSheet}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="flex items-center justify-between">
+            <DialogTitle className="flex items-center justify-between pr-8">
               <span>Treatment Sheet</span>
               <Button
                 size="sm"
-                onClick={() => window.print()}
+                onClick={() => {
+                  // Get the treatment sheet content and print in new window
+                  const printContent = document.querySelector('[data-treatment-sheet]');
+                  if (printContent) {
+                    const printWindow = window.open('', '_blank');
+                    if (printWindow) {
+                      printWindow.document.write(`
+                        <!DOCTYPE html>
+                        <html>
+                        <head>
+                          <title>Treatment Sheet</title>
+                          <style>
+                            * { box-sizing: border-box; margin: 0; padding: 0; }
+                            body { font-family: Arial, sans-serif; padding: 10px; }
+                            .ts-table { width: 100%; border-collapse: collapse; border: 2px solid #000; table-layout: fixed; }
+                            .ts-table th, .ts-table td { border: 1px solid #000; padding: 3px 4px; text-align: left; font-size: 11px; vertical-align: middle; }
+                            .ts-table th { font-weight: bold; text-align: center; background-color: #f0f0f0; }
+                            .ts-header { text-align: center; font-size: 14px; font-weight: bold; text-decoration: underline; margin-bottom: 6px; }
+                            .ts-time-box { display: inline-block; width: 35px; height: 26px; border: 1px solid #000; margin: 1px; text-align: center; padding: 1px; font-size: 9px; vertical-align: top; }
+                            .ts-time-label { font-size: 8px; display: block; line-height: 1.1; }
+                            .date-section { margin-bottom: 20px; }
+                            .mb-2 { margin-bottom: 8px; }
+                            @media print {
+                              @page { size: A4 portrait; margin: 12mm 10mm; }
+                              .date-section { page-break-inside: avoid; }
+                            }
+                          </style>
+                        </head>
+                        <body>
+                          ${printContent.innerHTML}
+                        </body>
+                        </html>
+                      `);
+                      printWindow.document.close();
+                      printWindow.focus();
+                      setTimeout(() => {
+                        printWindow.print();
+                        printWindow.close();
+                      }, 250);
+                    }
+                  }
+                }}
                 className="flex items-center gap-2"
               >
                 <Printer className="h-4 w-4" />
