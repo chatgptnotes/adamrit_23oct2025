@@ -573,6 +573,7 @@ const AddMedicineForm: React.FC<{ hospitalName: string; onSuccess: () => void }>
                 <SelectItem value="Syrup">Syrup</SelectItem>
                 <SelectItem value="Syringe">Syringe</SelectItem>
                 <SelectItem value="Tablets">Tablets</SelectItem>
+                <SelectItem value="Other">Other</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -750,6 +751,7 @@ const EditMedicineForm: React.FC<{
                 <SelectItem value="Syrup">Syrup</SelectItem>
                 <SelectItem value="Syringe">Syringe</SelectItem>
                 <SelectItem value="Tablets">Tablets</SelectItem>
+                <SelectItem value="Other">Other</SelectItem>
               </SelectContent>
             </Select>
           </div>

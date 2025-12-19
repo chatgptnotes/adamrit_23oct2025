@@ -123,7 +123,7 @@ const TreatmentSheetPrintView: React.FC<TreatmentSheetPrintViewProps> = ({ visit
   }
 
   return (
-    <div className="bg-white p-4" style={{ fontFamily: 'Arial, sans-serif', fontSize: '11px', maxWidth: '210mm', margin: '0 auto' }}>
+    <div data-treatment-sheet className="bg-white p-4" style={{ fontFamily: 'Arial, sans-serif', fontSize: '11px', maxWidth: '210mm', margin: '0 auto' }}>
       <style>{`
         * {
           box-sizing: border-box;
@@ -360,56 +360,25 @@ const TreatmentSheetPrintView: React.FC<TreatmentSheetPrintViewProps> = ({ visit
         }
       `}</style>
 
-      <div className="ts-header">TREATMENT SHEET</div>
-
-      {/* Patient Info Table */}
-      <table className="ts-table patient-info-table mb-2">
-        <tbody>
-          <tr>
-            <td style={{ width: '20%' }}><strong>Name Of the Patient :</strong></td>
-            <td style={{ width: '30%' }}>{patientName}</td>
-            <td style={{ width: '20%' }}><strong>Reg. No. :</strong></td>
-            <td style={{ width: '30%' }}>{regNo}</td>
-          </tr>
-          <tr>
-            <td><strong>Special Instruction</strong></td>
-            <td colSpan={3}>{specialInstruction}</td>
-          </tr>
-          <tr>
-            <td><strong>Diet</strong></td>
-            <td>{diet}</td>
-            <td><strong>Date of Admission:</strong></td>
-            <td>{admissionDate}</td>
-          </tr>
-          <tr>
-            <td><strong>Diagnosis</strong></td>
-            <td colSpan={3}>{diagnosis}</td>
-          </tr>
-          <tr>
-            <td><strong>Date :</strong></td>
-            <td>{date}</td>
-            <td><strong>Consultant :</strong></td>
-            <td>{consultant}</td>
-          </tr>
-        </tbody>
-      </table>
-
-      {/* Intensive Care Section */}
-      {intensiveCare && (
-        <div style={{ border: '1px solid #000', padding: '4px', marginBottom: '8px' }}>
-          <strong>Intensive care services :</strong> {intensiveCare}
-        </div>
-      )}
-
       {/* Medications Table - Group by Date */}
       {(() => {
-        // Group medications by date
+        // Group medications by date - use local date string to avoid timezone issues
+        const getLocalDateString = (dateStr: string) => {
+          if (!dateStr) return '';
+          // If it's already just a date string (YYYY-MM-DD), use it directly
+          if (dateStr.length === 10 && dateStr.includes('-')) {
+            return dateStr;
+          }
+          // Otherwise extract the date part before 'T'
+          return dateStr.split('T')[0];
+        };
+
         const groupedByDate: { [key: string]: any[] } = {};
         medications.forEach(med => {
           const dateKey = med.sale_date
-            ? new Date(med.sale_date).toISOString().split('T')[0]
+            ? getLocalDateString(med.sale_date)
             : med.created_at
-            ? new Date(med.created_at).toISOString().split('T')[0]
+            ? getLocalDateString(med.created_at)
             : date;
           if (!groupedByDate[dateKey]) {
             groupedByDate[dateKey] = [];
@@ -418,52 +387,49 @@ const TreatmentSheetPrintView: React.FC<TreatmentSheetPrintViewProps> = ({ visit
         });
 
         return Object.entries(groupedByDate).map(([dateKey, meds], groupIdx) => (
-          <div key={groupIdx} className="date-section" style={{ marginBottom: '20px' }}>
-            {groupIdx > 0 && (
-              <>
-                <div className="ts-header" style={{ marginTop: '20px' }}>TREATMENT SHEET</div>
-                {/* Repeat Patient Info Table for each date */}
-                <table className="ts-table patient-info-table mb-2">
-                  <tbody>
-                    <tr>
-                      <td style={{ width: '20%' }}><strong>Name Of the Patient :</strong></td>
-                      <td style={{ width: '30%' }}>{patientName}</td>
-                      <td style={{ width: '20%' }}><strong>Reg. No. :</strong></td>
-                      <td style={{ width: '30%' }}>{regNo}</td>
-                    </tr>
-                    <tr>
-                      <td><strong>Special Instruction</strong></td>
-                      <td colSpan={3}>{specialInstruction}</td>
-                    </tr>
-                    <tr>
-                      <td><strong>Diet</strong></td>
-                      <td>{diet}</td>
-                      <td><strong>Date of Admission:</strong></td>
-                      <td>{admissionDate}</td>
-                    </tr>
-                    <tr>
-                      <td><strong>Diagnosis</strong></td>
-                      <td colSpan={3}>{diagnosis}</td>
-                    </tr>
-                    <tr>
-                      <td><strong>Date :</strong></td>
-                      <td>{dateKey}</td>
-                      <td><strong>Consultant :</strong></td>
-                      <td>{consultant}</td>
-                    </tr>
-                  </tbody>
-                </table>
-                {intensiveCare && (
-                  <div style={{ border: '1px solid #000', padding: '4px', marginBottom: '8px' }}>
-                    <strong>Intensive care services :</strong> {intensiveCare}
-                  </div>
-                )}
-              </>
-            )}
-
-            {groupIdx === 0 && (
-              <div style={{ marginBottom: '8px', fontWeight: 'bold', fontSize: '14px' }}>
-                Date: {dateKey}
+          <div
+            key={groupIdx}
+            className="date-section"
+            style={{
+              marginBottom: '20px',
+              pageBreakBefore: groupIdx > 0 ? 'always' : 'auto'
+            }}
+          >
+            <div className="ts-header">TREATMENT SHEET</div>
+            {/* Patient Info Table - uses actual bill date (dateKey) */}
+            <table className="ts-table patient-info-table mb-2">
+              <tbody>
+                <tr>
+                  <td style={{ width: '20%' }}><strong>Name Of the Patient :</strong></td>
+                  <td style={{ width: '30%' }}>{patientName}</td>
+                  <td style={{ width: '20%' }}><strong>Reg. No. :</strong></td>
+                  <td style={{ width: '30%' }}>{regNo}</td>
+                </tr>
+                <tr>
+                  <td><strong>Special Instruction</strong></td>
+                  <td colSpan={3}>{specialInstruction}</td>
+                </tr>
+                <tr>
+                  <td><strong>Diet</strong></td>
+                  <td>{diet}</td>
+                  <td><strong>Date of Admission:</strong></td>
+                  <td>{admissionDate}</td>
+                </tr>
+                <tr>
+                  <td><strong>Diagnosis</strong></td>
+                  <td colSpan={3}>{diagnosis}</td>
+                </tr>
+                <tr>
+                  <td><strong>Date :</strong></td>
+                  <td>{dateKey}</td>
+                  <td><strong>Consultant :</strong></td>
+                  <td>{consultant}</td>
+                </tr>
+              </tbody>
+            </table>
+            {intensiveCare && (
+              <div style={{ border: '1px solid #000', padding: '4px', marginBottom: '8px' }}>
+                <strong>Intensive care services :</strong> {intensiveCare}
               </div>
             )}
 
@@ -503,25 +469,45 @@ const TreatmentSheetPrintView: React.FC<TreatmentSheetPrintViewProps> = ({ visit
                         </>
                       )}
                     </td>
-                    <td className="text-center">{med.route || 'BD'}</td>
-                    <td className="text-center">{med.dosage || med.quantity || ''}</td>
+                    <td className="text-center"></td>
+                    <td className="text-center">
+                      {(() => {
+                        const qty = med.quantity || 1;
+                        if (qty === 1) return 'OD';
+                        if (qty === 2) return 'BD';
+                        if (qty === 3) return 'TDS';
+                        return 'QID';
+                      })()}
+                    </td>
                     <td className="text-center" style={{ whiteSpace: 'nowrap' }}>
-                      <div className="ts-time-box">
-                        <span className="ts-time-label">6</span>
-                        <span className="ts-time-label">AM</span>
-                      </div>
-                      <div className="ts-time-box">
-                        <span className="ts-time-label">2</span>
-                        <span className="ts-time-label">PM</span>
-                      </div>
-                      <div className="ts-time-box">
-                        <span className="ts-time-label">6</span>
-                        <span className="ts-time-label">PM</span>
-                      </div>
-                      <div className="ts-time-box">
-                        <span className="ts-time-label">10</span>
-                        <span className="ts-time-label">PM</span>
-                      </div>
+                      {(() => {
+                        const qty = med.quantity || 1;
+                        // OD: 6 AM only
+                        // BD: 6 AM, 6 PM
+                        // TDS: 6 AM, 2 PM, 10 PM
+                        // QID: 6 AM, 12 PM, 6 PM, 10 PM
+                        const timeSlots = [
+                          { time: '6', period: 'AM', show: qty >= 1 },
+                          { time: qty >= 4 ? '12' : '2', period: 'PM', show: qty >= 3 },
+                          { time: '6', period: 'PM', show: qty >= 2 },
+                          { time: '10', period: 'PM', show: qty >= 3 }
+                        ];
+                        return timeSlots.map((slot, idx) => (
+                          <div key={idx} className="ts-time-box">
+                            {slot.show ? (
+                              <>
+                                <span className="ts-time-label">{slot.time}</span>
+                                <span className="ts-time-label">{slot.period}</span>
+                              </>
+                            ) : (
+                              <>
+                                <span className="ts-time-label">&nbsp;</span>
+                                <span className="ts-time-label">&nbsp;</span>
+                              </>
+                            )}
+                          </div>
+                        ));
+                      })()}
                     </td>
                     <td className="text-center" style={{ color: 'blue' }}>
                       Medication<br/>Administered
@@ -555,14 +541,10 @@ const TreatmentSheetPrintView: React.FC<TreatmentSheetPrintViewProps> = ({ visit
                     <strong>Signature/Name of Doctor :</strong> {consultant ? `Dr. ${consultant}` : ''}
                   </td>
                   <td style={{ width: '40%' }}>
-                    <strong>Date/Time:</strong> {new Date().toLocaleString('en-IN', {
-                      day: '2-digit',
-                      month: '2-digit',
-                      year: 'numeric',
-                      hour: '2-digit',
-                      minute: '2-digit',
-                      hour12: true
-                    })}
+                    <strong>Date/Time:</strong> {(() => {
+                      const d = new Date(dateKey);
+                      return `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}/${d.getFullYear()}, 06:00 am`;
+                    })()}
                   </td>
                 </tr>
               </tbody>
