@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -13,6 +13,8 @@ import { ActionButtons } from '@/components/dashboard/ActionButtons';
 import { PatientsTable } from '@/components/dashboard/PatientsTable';
 import { PatientWorkflowVisual } from '@/components/dashboard/PatientWorkflowVisual';
 import { DeletePatientDialog } from '@/components/dashboard/DeletePatientDialog';
+import { Button } from '@/components/ui/button';
+import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
 
 const PatientDashboard = () => {
   const { hospitalConfig } = useAuth();
