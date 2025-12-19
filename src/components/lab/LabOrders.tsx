@@ -149,8 +149,8 @@ const formatNormalRange = (minValue: number | null | undefined, maxValue: number
   const displayUnit = unit && unit.toLowerCase() !== 'unit' ? ` ${unit}` : '';
 
   if (!hasMin && hasMax) {
-    // No minimum, only maximum - "Up to X" format
-    return `Up to ${maxValue}${displayUnit}`;
+    // No minimum, only maximum - "- Up to X" format
+    return `- Up to ${maxValue}${displayUnit}`;
   } else if (hasMin && !hasMax) {
     // Only minimum, no maximum - "X and above" format
     return `${minValue} and above${displayUnit}`;
@@ -602,11 +602,14 @@ const LabOrders = () => {
     try {
       console.log('🔍 Calculating reference range for:', { testName, patientAge, patientGender });
 
+      // Extract first word for partial matching (e.g., "CBC" from "CBC (Complete Hemogram)")
+      const firstWord = testName.split(/[\s(]/)[0];
+
       // Fetch lab test config data
       const { data: labConfigData, error: labError } = await supabase
         .from('lab_test_config')
         .select('*')
-        .eq('test_name', testName)
+        .or(`test_name.ilike.${testName},test_name.ilike.${firstWord},test_name.ilike.%${firstWord}%`)
         .order('display_order', { ascending: true })
         .order('id', { ascending: true });
 
@@ -618,10 +621,19 @@ const LabOrders = () => {
       // Process lab test config data to create reference ranges
       console.log('📊 Lab config data found:', labConfigData);
 
-      // For now, return a simple range with the unit from the database
       const firstConfig = labConfigData[0];
-      if (firstConfig.unit) {
-        return `Consult reference values (${firstConfig.unit})`;
+
+      // Try to get range from normal_ranges JSONB first
+      if (firstConfig.normal_ranges && Array.isArray(firstConfig.normal_ranges) && firstConfig.normal_ranges.length > 0) {
+        const rangeData = findNormalRangeForGender(firstConfig.normal_ranges, patientGender, firstConfig.unit || '');
+        if (rangeData && (rangeData.min !== null || rangeData.max !== null)) {
+          return formatNormalRange(rangeData.min, rangeData.max, rangeData.unit);
+        }
+      }
+
+      // Fallback to direct min_value/max_value columns
+      if (firstConfig.min_value !== null || firstConfig.max_value !== null) {
+        return formatNormalRange(firstConfig.min_value, firstConfig.max_value, firstConfig.unit || '');
       }
 
       // Process multiple test configs if available
@@ -748,10 +760,14 @@ const LabOrders = () => {
     try {
       console.log('🔍 Fetching sub-tests for:', testName, 'Patient:', { age: patientAge, gender: patientGender });
 
+      // Extract first word for partial matching (e.g., "CBC" from "CBC (Complete Hemogram)")
+      const firstWord = testName.split(/[\s(]/)[0];
+      console.log('🔍 First word for matching:', firstWord);
+
       const { data: subTestsData, error } = await supabase
         .from('lab_test_config')
         .select('*')
-        .eq('test_name', testName)
+        .or(`test_name.ilike.${testName},test_name.ilike.${firstWord},test_name.ilike.%${firstWord}%`)
         .order('display_order', { ascending: true })
         .order('id', { ascending: true });
 
@@ -4850,7 +4866,7 @@ const LabOrders = () => {
                             </div>
                             <div className="p-2 text-center">
                               <div className="text-sm text-gray-700">
-                                {mainTestFormData.reference_range || calculatedRanges[testRow.id] || '-'}
+                                {calculatedRanges[testRow.id] || mainTestFormData.reference_range || '-'}
                               </div>
                             </div>
                           </div>
@@ -5001,7 +5017,7 @@ const LabOrders = () => {
                                   <span className="text-gray-400 text-sm"></span>
                                 ) : (
                                   <div className="text-sm text-gray-700">
-                                    {subTestFormData.reference_range || subTest.range || '-'}
+                                    {subTest.range || subTestFormData.reference_range || '-'}
                                   </div>
                                 )}
                               </div>

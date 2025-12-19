@@ -1873,8 +1873,8 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
         console.warn('⚠️ No patient details found to add to summary');
       }
 
-      // Fetch lab results for this visit
-      const { data: labTestResults } = await supabase
+      // Fetch lab results for this visit - try UUID first, then string visit_id
+      let { data: labTestResults } = await supabase
         .from('lab_results')
         .select(`
           id,
@@ -1889,7 +1889,29 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
         .eq('visit_id', visitData.id)
         .order('created_at', { ascending: false });
 
-      console.log('🧪 Lab results fetched:', labTestResults?.length || 0);
+      console.log('🧪 Lab results fetched with UUID:', labTestResults?.length || 0);
+
+      // If no results with UUID, try with string visit_id
+      if (!labTestResults || labTestResults.length === 0) {
+        console.log('🔄 Trying with string visit_id:', visitId);
+        const { data: labResultsByStringId } = await supabase
+          .from('lab_results')
+          .select(`
+            id,
+            visit_id,
+            test_name,
+            test_category,
+            result_value,
+            result_unit,
+            main_test_name,
+            created_at
+          `)
+          .eq('visit_id', visitId)
+          .order('created_at', { ascending: false });
+
+        labTestResults = labResultsByStringId;
+        console.log('🧪 Lab results fetched with string ID:', labTestResults?.length || 0);
+      }
 
       // Format lab results
       let formattedLabResults = null;
@@ -1989,7 +2011,28 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
       }
 
       // Generate print HTML - pass current form surgery data
-      const printHTML = generatePrintHTML(summaryData, patientInfo, visitId, formattedLabResults, surgeryRows, sharedSurgeryDescription);
+      // Get surgeryRows and description from state, or fallback to saved data
+      let surgeryRowsToUse = surgeryRows;
+      let descriptionToUse = sharedSurgeryDescription;
+
+      if (summaryData.surgery_details) {
+        try {
+          const surgeryData = JSON.parse(summaryData.surgery_details);
+          // Use saved surgeryRows if state is empty
+          if ((!surgeryRowsToUse || surgeryRowsToUse.length === 0) && surgeryData.surgeryRows) {
+            surgeryRowsToUse = surgeryData.surgeryRows;
+          }
+          // Use saved description if state is empty
+          if (!descriptionToUse) {
+            descriptionToUse = surgeryData.sharedDescription || surgeryData.description || '';
+          }
+        } catch (e) {
+          console.log('Error parsing surgery_details:', e);
+        }
+      }
+      console.log('🔍 Surgery rows for print:', surgeryRowsToUse?.length || 0);
+      console.log('🔍 Surgery description for print:', descriptionToUse ? 'Found (' + descriptionToUse.substring(0, 50) + '...)' : 'Empty');
+      const printHTML = generatePrintHTML(summaryData, patientInfo, visitId, formattedLabResults, surgeryRowsToUse, descriptionToUse);
 
       // Open print preview in new window
       const printWindow = window.open('', '_blank');
@@ -2479,35 +2522,46 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
   })()}
 
   ${(() => {
-    // Use current form data (surgeryRows from state) - show as paragraphs
+    // Use current form data (surgeryRows from state) - show as table
     if (currentSurgeryRows && currentSurgeryRows.length > 0) {
       const surgeries = currentSurgeryRows.filter((s: any) => s.date || s.procedurePerformed);
       if (surgeries.length === 0) return '';
 
-      let html = '<div class="section"><div class="section-subtitle">Operation Notes</div><div class="section-content">';
+      let html = '<div class="section" style="page-break-inside: auto;"><div class="section-subtitle">Operation Notes</div>';
+
+      // Surgery details table
+      html += '<table style="width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 11px;">';
+      html += '<thead><tr style="background-color: #f0f0f0;">';
+      html += '<th style="border: 1px solid #ddd; padding: 6px; text-align: left;">S.No</th>';
+      html += '<th style="border: 1px solid #ddd; padding: 6px; text-align: left;">Procedure</th>';
+      html += '<th style="border: 1px solid #ddd; padding: 6px; text-align: left;">Date/Time</th>';
+      html += '<th style="border: 1px solid #ddd; padding: 6px; text-align: left;">Surgeon</th>';
+      html += '<th style="border: 1px solid #ddd; padding: 6px; text-align: left;">Anesthetist</th>';
+      html += '<th style="border: 1px solid #ddd; padding: 6px; text-align: left;">Anesthesia</th>';
+      html += '<th style="border: 1px solid #ddd; padding: 6px; text-align: left;">Implant</th>';
+      html += '</tr></thead><tbody>';
 
       surgeries.forEach((surgery: any, index: number) => {
-        const dateStr = surgery.date ? format(new Date(surgery.date), 'dd/MM/yyyy, HH:mm') + ' hours' : '';
-
-        // Build paragraph text
-        let paragraph = '<strong>Surgery ' + (index + 1) + ': ' + (surgery.procedurePerformed || 'N/A') + '</strong>';
-        if (dateStr) paragraph += ' was performed on ' + dateStr;
-        if (surgery.surgeon) paragraph += ' by ' + surgery.surgeon;
-        if (surgery.anesthesia) paragraph += ' under ' + surgery.anesthesia;
-        paragraph += '.';
-
-        if (surgery.anesthetist) paragraph += ' Anaesthetist: ' + surgery.anesthetist + '.';
-        if (surgery.implant) paragraph += ' Implant: ' + surgery.implant + '.';
-
-        html += '<p style="margin-bottom: 10px;">' + paragraph + '</p>';
+        const dateStr = surgery.date ? format(new Date(surgery.date), 'dd/MM/yyyy, HH:mm') : '-';
+        html += '<tr>';
+        html += '<td style="border: 1px solid #ddd; padding: 6px;">' + (index + 1) + '</td>';
+        html += '<td style="border: 1px solid #ddd; padding: 6px;">' + (surgery.procedurePerformed || '-') + '</td>';
+        html += '<td style="border: 1px solid #ddd; padding: 6px;">' + dateStr + '</td>';
+        html += '<td style="border: 1px solid #ddd; padding: 6px;">' + (surgery.surgeon || '-') + '</td>';
+        html += '<td style="border: 1px solid #ddd; padding: 6px;">' + (surgery.anesthetist || '-') + '</td>';
+        html += '<td style="border: 1px solid #ddd; padding: 6px;">' + (surgery.anesthesia || '-') + '</td>';
+        html += '<td style="border: 1px solid #ddd; padding: 6px;">' + (surgery.implant || '-') + '</td>';
+        html += '</tr>';
       });
+
+      html += '</tbody></table>';
 
       // Add description at the end
       if (currentSurgeryDescription) {
-        html += '<p style="margin-top: 15px;"><strong>Description:</strong><br>' + currentSurgeryDescription.replace(/\n/g, '<br>').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') + '</p>';
+        html += '<div class="section-content" style="margin-top: 15px;"><strong>Description:</strong><br>' + currentSurgeryDescription.replace(/\n/g, '<br>').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') + '</div>';
       }
 
-      html += '</div></div>';
+      html += '</div>';
       return html;
     }
 
@@ -4102,11 +4156,18 @@ DD/MM/YYYY:-Test Category: Test1:Value1 unit, Test2:Value2 unit`);
                       `Surgery ${i + 1}: ${s.procedurePerformed || 'Not specified'} (Surgeon: ${s.surgeon || 'Not specified'}, Anesthesia: ${s.anesthesia || 'Not specified'})`
                     ).join('\n');
 
-                    const prompt = `You are a medical specialist. Write a brief, professional surgical summary in 5-8 lines only for the following procedures:
+                    const prompt = `You are a medical specialist. Write a comprehensive, detailed surgical summary for each procedure listed below:
 ${allProcedures}
 
-Include: procedures performed, key findings, patient's condition post-procedure, complications (if none, state "uneventful recovery").
-Keep it concise - maximum 150 words. Write in paragraph form only. No tables or bullet points.`;
+For EACH surgery, write a separate detailed paragraph (3-5 sentences) including:
+1. Full procedure name and indication/reason for surgery
+2. Surgical approach and technique used
+3. Key intraoperative findings
+4. Any implants/hardware used (if applicable)
+5. Estimated blood loss and patient's hemodynamic stability
+6. Immediate post-operative condition and recovery status
+
+Write in professional medical terminology. Do NOT use placeholders like "[insert reason]" - if information is not provided, write general medical facts about the procedure. Write each surgery as "Surgery 1:", "Surgery 2:", etc.`;
 
                     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${import.meta.env.VITE_GEMINI_API_KEY}`, {
                       method: 'POST',
@@ -4121,7 +4182,7 @@ Keep it concise - maximum 150 words. Write in paragraph form only. No tables or 
                         }],
                         generationConfig: {
                           temperature: 0.7,
-                          maxOutputTokens: 400
+                          maxOutputTokens: 1000
                         }
                       })
                     });
@@ -4411,9 +4472,9 @@ IMPORTANT INSTRUCTIONS:
 4. Do NOT include MEDICATIONS section - it is displayed separately in a table.
 5. Do NOT include the emergency contact line in the ADVICE section.
 6. For DIAGNOSIS: Keep as is in simple format. Do NOT expand into detailed sentences.
-7. For CLINICAL HISTORY: Keep as is in simple format. Do NOT expand into detailed paragraphs.
-8. For EXAMINATION: Keep as is in simple format. Do NOT expand into detailed paragraphs.
-9. For HOSPITAL STAY NOTES: Keep as is in simple format. Do NOT expand into detailed paragraphs.
+7. For CLINICAL HISTORY: Write a comprehensive 4-5 sentence medical paragraph. Include: presenting complaints with severity, associated symptoms, time of onset, duration, aggravating/relieving factors, relevant past medical history, and any risk factors. Use professional medical terminology.
+8. For EXAMINATION: Write a comprehensive 4-5 sentence medical paragraph. Include: general appearance, vital signs with clinical interpretation (e.g., "tachycardia suggesting..." or "normotensive"), systemic examination findings, and overall clinical impression. Use professional medical terminology.
+9. For HOSPITAL STAY NOTES: Write a brief 2-3 sentence summary of the patient's hospital stay and treatment. Keep it concise.
 10. For ADVICE: Write ONLY a SHORT 2-3 sentence paragraph with general post-operative care instructions. Example: "The patient is advised to follow up after 3 days or sooner if symptoms worsen. They are instructed to perform dressing changes and to use an LS belt for support. Follow up after 7 days/SOS." Do NOT include medications list, do NOT include numbered lists, do NOT include detailed wound care instructions.`;
 
                           // Call Google Gemini API
