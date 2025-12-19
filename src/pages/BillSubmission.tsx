@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Receipt, Pencil, Trash2, Search, User, Loader2, Download, Filter } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -31,6 +32,7 @@ import {
 import * as XLSX from 'xlsx';
 
 const BillSubmissionPage: React.FC = () => {
+  const { hospitalConfig } = useAuth();
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editData, setEditData] = useState<BillSubmission | null>(null);
   const [selectedPatient, setSelectedPatient] = useState<PatientData | null>(null);
@@ -43,8 +45,8 @@ const BillSubmissionPage: React.FC = () => {
   const [dateFrom, setDateFrom] = useState<string>('');
   const [dateTo, setDateTo] = useState<string>('');
 
-  // Fetch bill submissions from Supabase
-  const { data: submissions = [], isLoading } = useBillSubmissions();
+  // Fetch bill submissions from Supabase, filtered by hospital
+  const { data: submissions = [], isLoading } = useBillSubmissions(hospitalConfig?.name);
 
   // Get unique corporate values for filter dropdown
   const uniqueCorporates = useMemo(() => {
@@ -62,14 +64,14 @@ const BillSubmissionPage: React.FC = () => {
         return false;
       }
 
-      // Date filter
-      if (dateFrom && submission.date_of_submission) {
-        if (submission.date_of_submission < dateFrom) {
+      // Date filter - filters by "Expect to Receive Payment" date
+      if (dateFrom && submission.expected_payment_date) {
+        if (submission.expected_payment_date < dateFrom) {
           return false;
         }
       }
-      if (dateTo && submission.date_of_submission) {
-        if (submission.date_of_submission > dateTo) {
+      if (dateTo && submission.expected_payment_date) {
+        if (submission.expected_payment_date > dateTo) {
           return false;
         }
       }
@@ -84,16 +86,39 @@ const BillSubmissionPage: React.FC = () => {
       'Visit ID': s.visit_id,
       'Patient Name': s.patient_name,
       'Corporate': s.patient_corporate || '-',
+      'Date of Admission': s.admission_date || '-',
+      'Date of Discharge': s.discharge_date || '-',
       'Bill Amount': s.bill_amount || 0,
       'Submitted By': s.executive_who_submitted || '-',
       'Submission Date': s.date_of_submission || '-',
       'Expected Payment Date': s.expected_payment_date || '-',
+      'Received Amount': s.received_amount || 0,
+      'Deduction Amount': s.deduction_amount || 0,
+      'Amount Received On': s.received_date || '-',
     }));
 
     const ws = XLSX.utils.json_to_sheet(exportData);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Bill Submissions');
     XLSX.writeFile(wb, `Bill_Submissions_${new Date().toISOString().split('T')[0]}.xlsx`);
+  };
+
+  // Export Received Amount report
+  const handleExportReceivedAmount = () => {
+    const exportData = filteredSubmissions.map((s: any) => ({
+      'Visit ID': s.visit_id,
+      'Name': s.patient_name,
+      'Corporate': s.patient_corporate || '-',
+      'Bill Amount': s.bill_amount || 0,
+      'Received Amount': s.received_amount || 0,
+      'Deduction Amount': s.deduction_amount || 0,
+      'Received Amount On Date': s.received_date || '-',
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Received Amount Report');
+    XLSX.writeFile(wb, `Received_Amount_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
   // Clear all filters
@@ -106,11 +131,11 @@ const BillSubmissionPage: React.FC = () => {
   const updateMutation = useUpdateBillSubmission();
   const deleteMutation = useDeleteBillSubmission();
 
-  // Search visits from database with patient info
+  // Search visits from database with patient info, filtered by hospital
   const { data: visits = [], isLoading: isSearching } = useQuery({
-    queryKey: ['visits-search', searchTerm],
+    queryKey: ['visits-search', searchTerm, hospitalConfig?.name],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from('visits')
         .select(`
           id,
@@ -118,11 +143,18 @@ const BillSubmissionPage: React.FC = () => {
           patients!inner(
             id,
             name,
-            corporate
+            corporate,
+            hospital_name
           )
         `)
-        .ilike('patients.name', `%${searchTerm}%`)
-        .limit(10);
+        .ilike('patients.name', `%${searchTerm}%`);
+
+      // Filter by hospital if provided
+      if (hospitalConfig?.name) {
+        query = query.eq('patients.hospital_name', hospitalConfig.name);
+      }
+
+      const { data, error } = await query.limit(10);
 
       if (error) throw error;
       return data || [];
@@ -165,6 +197,9 @@ const BillSubmissionPage: React.FC = () => {
       submittedBy: submission.executive_who_submitted || '',
       submissionDate: submission.date_of_submission || '',
       expectedPaymentDate: submission.expected_payment_date || '',
+      receivedAmount: submission.received_amount || 0,
+      deductionAmount: submission.deduction_amount || 0,
+      receivedDate: submission.received_date || '',
     });
     setIsFormOpen(true);
   };
@@ -184,6 +219,9 @@ const BillSubmissionPage: React.FC = () => {
       executive_who_submitted: data.submittedBy,
       date_of_submission: data.submissionDate,
       expected_payment_date: data.expectedPaymentDate,
+      received_amount: data.receivedAmount,
+      deduction_amount: data.deductionAmount,
+      received_date: data.receivedDate,
     };
 
     if (editData) {
@@ -321,7 +359,11 @@ const BillSubmissionPage: React.FC = () => {
               Clear Filters
             </Button>
 
-            <div className="ml-auto">
+            <div className="ml-auto flex gap-2">
+              <Button onClick={handleExportReceivedAmount} className="bg-blue-600 hover:bg-blue-700">
+                <Download className="h-4 w-4 mr-2" />
+                Received Amount
+              </Button>
               <Button onClick={handleExportExcel} className="bg-green-600 hover:bg-green-700">
                 <Download className="h-4 w-4 mr-2" />
                 Export to Excel
@@ -336,23 +378,28 @@ const BillSubmissionPage: React.FC = () => {
                   <TableHead>Visit ID</TableHead>
                   <TableHead>Patient Name</TableHead>
                   <TableHead>Corporate</TableHead>
+                  <TableHead>Date of Admission</TableHead>
+                  <TableHead>Date of Discharge</TableHead>
                   <TableHead className="text-right">Bill Amount</TableHead>
                   <TableHead>Submitted By</TableHead>
                   <TableHead>Submission Date</TableHead>
                   <TableHead>Expect to Receive Payment</TableHead>
+                  <TableHead className="text-right">Received Amount</TableHead>
+                  <TableHead className="text-right">Deduction Amount</TableHead>
+                  <TableHead>Amount Received On</TableHead>
                   <TableHead className="text-center">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {isLoading ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center py-8">
+                    <TableCell colSpan={13} className="text-center py-8">
                       <Loader2 className="h-6 w-6 animate-spin mx-auto" />
                     </TableCell>
                   </TableRow>
                 ) : filteredSubmissions.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center py-8 text-gray-500">
+                    <TableCell colSpan={13} className="text-center py-8 text-gray-500">
                       {submissions.length === 0
                         ? 'No bill submissions yet. Search for a patient above to create one.'
                         : 'No records match the selected filters.'}
@@ -364,10 +411,15 @@ const BillSubmissionPage: React.FC = () => {
                       <TableCell className="font-medium">{submission.visit_id}</TableCell>
                       <TableCell>{submission.patient_name}</TableCell>
                       <TableCell>{submission.patient_corporate || '-'}</TableCell>
+                      <TableCell>{formatDate(submission.admission_date)}</TableCell>
+                      <TableCell>{formatDate(submission.discharge_date)}</TableCell>
                       <TableCell className="text-right">{formatAmount(submission.bill_amount)}</TableCell>
                       <TableCell>{submission.executive_who_submitted || '-'}</TableCell>
                       <TableCell>{formatDate(submission.date_of_submission)}</TableCell>
                       <TableCell>{formatDate(submission.expected_payment_date)}</TableCell>
+                      <TableCell className="text-right">{formatAmount(submission.received_amount)}</TableCell>
+                      <TableCell className="text-right">{formatAmount(submission.deduction_amount)}</TableCell>
+                      <TableCell>{formatDate(submission.received_date)}</TableCell>
                       <TableCell>
                         <div className="flex justify-center gap-2">
                           <Button

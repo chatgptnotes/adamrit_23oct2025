@@ -18,6 +18,9 @@ export interface BillSubmission {
   submittedBy: string;
   submissionDate: string;
   expectedPaymentDate: string;
+  receivedAmount: number;
+  deductionAmount: number;
+  receivedDate: string;
 }
 
 export interface PatientData {
@@ -49,6 +52,9 @@ const BillSubmissionForm: React.FC<BillSubmissionFormProps> = ({
     submittedBy: '',
     submissionDate: new Date().toISOString().split('T')[0],
     expectedPaymentDate: '',
+    receivedAmount: 0,
+    deductionAmount: 0,
+    receivedDate: '',
   });
 
   const isPrefilledMode = !!prefilledPatient && !editData;
@@ -63,6 +69,9 @@ const BillSubmissionForm: React.FC<BillSubmissionFormProps> = ({
         submittedBy: editData.submittedBy,
         submissionDate: editData.submissionDate,
         expectedPaymentDate: editData.expectedPaymentDate,
+        receivedAmount: editData.receivedAmount || 0,
+        deductionAmount: editData.deductionAmount || 0,
+        receivedDate: editData.receivedDate || '',
       });
     } else if (prefilledPatient) {
       setFormData({
@@ -73,6 +82,9 @@ const BillSubmissionForm: React.FC<BillSubmissionFormProps> = ({
         submittedBy: '',
         submissionDate: new Date().toISOString().split('T')[0],
         expectedPaymentDate: '',
+        receivedAmount: 0,
+        deductionAmount: 0,
+        receivedDate: '',
       });
     } else {
       setFormData({
@@ -83,6 +95,9 @@ const BillSubmissionForm: React.FC<BillSubmissionFormProps> = ({
         submittedBy: '',
         submissionDate: new Date().toISOString().split('T')[0],
         expectedPaymentDate: '',
+        receivedAmount: 0,
+        deductionAmount: 0,
+        receivedDate: '',
       });
     }
   }, [editData, prefilledPatient, open]);
@@ -194,6 +209,37 @@ const BillSubmissionForm: React.FC<BillSubmissionFormProps> = ({
                 required
               />
             </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="receivedAmount">Received Amount</Label>
+              <Input
+                id="receivedAmount"
+                type="number"
+                value={formData.receivedAmount}
+                onChange={(e) => handleChange('receivedAmount', parseFloat(e.target.value) || 0)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="deductionAmount">Deduction Amount</Label>
+              <Input
+                id="deductionAmount"
+                type="number"
+                value={formData.deductionAmount}
+                onChange={(e) => handleChange('deductionAmount', parseFloat(e.target.value) || 0)}
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="receivedDate">Amount Received On</Label>
+            <Input
+              id="receivedDate"
+              type="date"
+              value={formData.receivedDate}
+              onChange={(e) => handleChange('receivedDate', e.target.value)}
+            />
           </div>
 
           <div className="flex justify-end gap-2 pt-4">
