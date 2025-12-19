@@ -1,5 +1,6 @@
 // Enterprise Pharmacy Dashboard
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -35,10 +36,20 @@ import AddPurchaseOrder from './AddPurchaseOrder';
 import EditPurchaseOrder from './EditPurchaseOrder';
 
 const PharmacyDashboard: React.FC = () => {
-  const [selectedTab, setSelectedTab] = useState('overview');
+  const [searchParams] = useSearchParams();
+  const initialTab = searchParams.get('tab') || 'overview';
+  const [selectedTab, setSelectedTab] = useState(initialTab);
   const [directSaleSubTab, setDirectSaleSubTab] = useState('bill'); // 'bill' or 'view'
   const [purchaseOrderView, setPurchaseOrderView] = useState<'list' | 'add' | 'edit'>('list');
   const [selectedPurchaseOrderId, setSelectedPurchaseOrderId] = useState<string | null>(null);
+
+  // Update tab when URL changes (e.g., returning from Edit Sale Bill)
+  useEffect(() => {
+    const tab = searchParams.get('tab');
+    if (tab) {
+      setSelectedTab(tab);
+    }
+  }, [searchParams]);
 
   // Mock data for dashboard - will be replaced with real data from hooks
   const dashboardData = {

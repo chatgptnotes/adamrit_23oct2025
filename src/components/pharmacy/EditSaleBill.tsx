@@ -11,7 +11,8 @@ interface SaleItem {
   medication_name: string;
   generic_name?: string;
   quantity: number;
-  pack: string;
+  pack?: string;
+  pack_size?: number;
   administration_time?: string;
   batch_number: string;
   expiry_date: string;
@@ -45,62 +46,12 @@ export const EditSaleBill: React.FC = () => {
   const [sale, setSale] = useState<Sale | null>(null);
   const [items, setItems] = useState<SaleItem[]>([]);
   const [loading, setLoading] = useState(true);
-
-  // Medicine search state
-  const [medicineSearch, setMedicineSearch] = useState('');
-  const [medicineResults, setMedicineResults] = useState<any[]>([]);
-  const [showMedicineDropdown, setShowMedicineDropdown] = useState(false);
+  const [billDate, setBillDate] = useState<string>('');
+  const [deletedItemIds, setDeletedItemIds] = useState<number[]>([]);
 
   useEffect(() => {
     fetchSaleData();
   }, [saleId]);
-
-  // Search medicines
-  useEffect(() => {
-    const searchMedicines = async () => {
-      if (medicineSearch.length < 2) {
-        setMedicineResults([]);
-        setShowMedicineDropdown(false);
-        return;
-      }
-
-      console.log('Searching medicines for:', medicineSearch);
-
-      // Try medications table first (more common) - MASTER table, no hospital filter
-      const { data: medData, error: medError } = await supabase
-        .from('medications')
-        .select('*')
-        .or(`name.ilike.%${medicineSearch}%,generic.ilike.%${medicineSearch}%`)
-        .eq('is_deleted', false)
-        .limit(10);
-
-      console.log('Medications search result:', medData, medError);
-
-      if (!medError && medData && medData.length > 0) {
-        setMedicineResults(medData);
-        setShowMedicineDropdown(true);
-        return;
-      }
-
-      // Fallback to pharmacy_items table - MASTER table, no hospital filter
-      const { data: pharmData, error: pharmError } = await supabase
-        .from('pharmacy_items')
-        .select('*')
-        .or(`name.ilike.%${medicineSearch}%,generic.ilike.%${medicineSearch}%`)
-        .eq('is_deleted', false)
-        .limit(10);
-
-      console.log('Pharmacy items search result:', pharmData, pharmError);
-
-      if (!pharmError && pharmData) {
-        setMedicineResults(pharmData);
-        setShowMedicineDropdown(pharmData.length > 0);
-      }
-    };
-
-    const debounce = setTimeout(searchMedicines, 300);
-    return () => clearTimeout(debounce);
-  }, [medicineSearch]);
 
   const fetchSaleData = async () => {
     if (!saleId) return;
@@ -124,6 +75,11 @@ export const EditSaleBill: React.FC = () => {
     }
 
     setSale(saleData);
+
+    // Initialize billDate from sale data
+    if (saleData.sale_date) {
+      setBillDate(new Date(saleData.sale_date).toISOString().split('T')[0]);
+    }
 
     // Fetch sale items
     const { data: itemsData, error: itemsError } = await supabase
@@ -159,39 +115,18 @@ export const EditSaleBill: React.FC = () => {
   };
 
   const calculateTotals = () => {
-    const subtotal = items.reduce((sum, item) => sum + (item.unit_price * item.quantity), 0);
-    const totalDiscount = items.reduce((sum, item) => sum + ((item.unit_price * item.quantity * item.discount_percentage) / 100), 0);
-    const totalAmount = items.reduce((sum, item) => sum + item.total_amount, 0);
+    const subtotal = items.reduce((sum, item) => sum + ((item.unit_price || 0) * (item.quantity || 0)), 0);
+    const totalDiscount = items.reduce((sum, item) => sum + (((item.unit_price || 0) * (item.quantity || 0) * (item.discount_percentage || 0)) / 100), 0);
+    const totalAmount = subtotal - totalDiscount;
     return { subtotal, totalDiscount, totalAmount };
   };
 
-  const addMedicineToList = (medicine: any) => {
-    console.log('Adding medicine to list:', medicine);
-
-    const newItem: any = {
-      sale_item_id: Date.now(), // Temporary ID for new items
-      medication_id: medicine.id, // Store actual medication ID
-      medication_name: medicine.name,
-      generic_name: medicine.generic || medicine.generic_name || '',
-      quantity: 1,
-      pack: medicine.pack || '',
-      administration_time: '',
-      batch_number: medicine.batch_number || 'BATCH-001',
-      expiry_date: medicine.expiry_date || '',
-      mrp: medicine.price_per_strip || medicine.unit_price || 0,
-      unit_price: medicine.price_per_strip || medicine.unit_price || 0,
-      discount_percentage: 0,
-      total_amount: medicine.price_per_strip || medicine.unit_price || 0
-    };
-
-    console.log('New item created:', newItem);
-
-    setItems(prev => [...prev, newItem]);
-    setMedicineSearch('');
-    setShowMedicineDropdown(false);
-  };
-
   const removeItem = (itemId: number) => {
+    // Track deletion for existing items (not temporary new ones)
+    const isExistingItem = itemId < Date.now() - 3600000;
+    if (isExistingItem) {
+      setDeletedItemIds(prev => [...prev, itemId]);
+    }
     setItems(prev => prev.filter(item => item.sale_item_id !== itemId));
   };
 
@@ -200,6 +135,18 @@ export const EditSaleBill: React.FC = () => {
 
     const totals = calculateTotals();
 
+    // Delete removed items from database
+    for (const itemId of deletedItemIds) {
+      const { error: deleteError } = await supabase
+        .from('pharmacy_sale_items')
+        .delete()
+        .eq('sale_item_id', itemId);
+
+      if (deleteError) {
+        console.error('Error deleting item:', deleteError);
+      }
+    }
+
     // Update sale
     const { error: saleError } = await supabase
       .from('pharmacy_sales')
@@ -207,6 +154,7 @@ export const EditSaleBill: React.FC = () => {
         subtotal: totals.subtotal,
         discount: totals.totalDiscount,
         total_amount: totals.totalAmount,
+        sale_date: billDate,
         updated_at: new Date().toISOString()
       })
       .eq('sale_id', sale.sale_id);
@@ -286,7 +234,7 @@ export const EditSaleBill: React.FC = () => {
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-2xl font-bold">Edit Sale Bill</h2>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={() => navigate(-1)}>Back</Button>
+          <Button variant="outline" onClick={() => navigate(`/pharmacy?tab=view_sales&saleId=${saleId}`)}>Back</Button>
           <Button onClick={handleSubmit}>Submit</Button>
         </div>
       </div>
@@ -295,7 +243,7 @@ export const EditSaleBill: React.FC = () => {
       <div className="bg-white border rounded mb-4">
         <h3 className="text-lg font-semibold bg-gray-100 p-3 border-b">Sale Information</h3>
         <div className="p-4">
-          <div className="grid grid-cols-3 gap-4 mb-4">
+          <div className="grid grid-cols-4 gap-4 mb-4">
             <div>
               <label className="text-sm font-medium">Patient Name / ID</label>
               <Input
@@ -317,6 +265,14 @@ export const EditSaleBill: React.FC = () => {
                 value={sale.doctor_name || 'N/A'}
                 readOnly
                 className="bg-gray-50"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Bill Date</label>
+              <Input
+                type="date"
+                value={billDate}
+                onChange={(e) => setBillDate(e.target.value)}
               />
             </div>
           </div>
@@ -349,41 +305,6 @@ export const EditSaleBill: React.FC = () => {
         </div>
       </div>
 
-      {/* Add Medicines Section */}
-      <div className="mb-4 bg-white border rounded">
-        <h3 className="text-lg font-semibold bg-gray-100 p-3 border-b">Add Medicines</h3>
-        <div className="p-4">
-          <div className="relative max-w-lg">
-            <Input
-              placeholder="Search medicines by name or generic name..."
-              value={medicineSearch}
-              onChange={(e) => setMedicineSearch(e.target.value)}
-              onFocus={() => { if (medicineResults.length > 0) setShowMedicineDropdown(true); }}
-              onBlur={() => setTimeout(() => setShowMedicineDropdown(false), 200)}
-              className="pl-10"
-            />
-            <span className="absolute left-3 top-2.5 text-gray-400">🔍</span>
-          {showMedicineDropdown && medicineResults.length > 0 && (
-            <div className="absolute z-10 w-full bg-white border rounded mt-1 max-h-60 overflow-y-auto shadow-lg">
-              {medicineResults.map((med) => (
-                <div
-                  key={med.id}
-                  className="p-2 hover:bg-blue-100 cursor-pointer border-b"
-                  onMouseDown={() => addMedicineToList(med)}
-
-                >
-                  <div className="font-semibold">{med.name}</div>
-                  <div className="text-xs text-gray-600">
-                    {med.generic || med.generic_name} • Stock: {med.stock || 0} • ₹{med.price_per_strip || med.unit_price || 0}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-          </div>
-        </div>
-      </div>
-
       {/* Items Table */}
       <div className="mb-4">
         <h3 className="text-lg font-semibold mb-2">Item List</h3>
@@ -410,59 +331,14 @@ export const EditSaleBill: React.FC = () => {
                     <div className="font-medium">{item.medication_name}</div>
                     <div className="text-xs text-gray-500">{item.generic_name}</div>
                   </TableCell>
-                  <TableCell>
-                    <Input
-                      type="number"
-                      className="w-20"
-                      value={item.quantity}
-                      onChange={(e) => updateItem(item.sale_item_id, 'quantity', parseInt(e.target.value) || 0)}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <Input
-                      className="w-20"
-                      value={item.pack || ''}
-                      onChange={(e) => updateItem(item.sale_item_id, 'pack', e.target.value)}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <select
-                      className="border rounded p-1 w-32"
-                      value={item.administration_time || ''}
-                      onChange={(e) => updateItem(item.sale_item_id, 'administration_time', e.target.value)}
-                    >
-                      <option value="">Please Select</option>
-                      <option value="BREAKFAST TIME">BREAKFAST TIME</option>
-                      <option value="LUNCH TIME">LUNCH TIME</option>
-                      <option value="HS">HS</option>
-                      <option value="SOS">SOS</option>
-                    </select>
-                  </TableCell>
-                  <TableCell>
-                    <Input
-                      className="w-32"
-                      value={item.batch_number}
-                      onChange={(e) => updateItem(item.sale_item_id, 'batch_number', e.target.value)}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <Input
-                      type="date"
-                      className="w-32"
-                      value={item.expiry_date || ''}
-                      onChange={(e) => updateItem(item.sale_item_id, 'expiry_date', e.target.value)}
-                    />
-                  </TableCell>
-                  <TableCell>{formatCurrency(item.mrp)}</TableCell>
-                  <TableCell>
-                    <Input
-                      type="number"
-                      className="w-20"
-                      value={item.unit_price}
-                      onChange={(e) => updateItem(item.sale_item_id, 'unit_price', parseFloat(e.target.value) || 0)}
-                    />
-                  </TableCell>
-                  <TableCell>{formatCurrency(item.total_amount)}</TableCell>
+                  <TableCell>{item.quantity}</TableCell>
+                  <TableCell>{item.pack_size || item.pack || '-'}</TableCell>
+                  <TableCell>{item.administration_time || '-'}</TableCell>
+                  <TableCell>{item.batch_number || '-'}</TableCell>
+                  <TableCell>{item.expiry_date || '-'}</TableCell>
+                  <TableCell>{formatCurrency(item.mrp || 0)}</TableCell>
+                  <TableCell>{formatCurrency(item.unit_price || 0)}</TableCell>
+                  <TableCell>{formatCurrency((item.unit_price || 0) * (item.quantity || 0))}</TableCell>
                   <TableCell>
                     <Button
                       variant="ghost"
@@ -485,11 +361,11 @@ export const EditSaleBill: React.FC = () => {
         <div className="grid grid-cols-3 gap-4 max-w-xl ml-auto">
           <div>
             <label className="text-sm font-medium">Total Amount</label>
-            <Input value={formatCurrency(totals.subtotal)} readOnly />
+            <Input value={formatCurrency(totals.subtotal || 0)} readOnly />
           </div>
           <div>
             <label className="text-sm font-medium">Net Amount</label>
-            <Input value={formatCurrency(totals.totalAmount)} readOnly />
+            <Input value={formatCurrency(totals.totalAmount || 0)} readOnly />
           </div>
           <div>
             <label className="text-sm font-medium">Payment Mode</label>

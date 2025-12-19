@@ -643,6 +643,7 @@ const PharmacyBilling: React.FC = () => {
       patient_name: patientInfo.name || undefined,
       prescription_number: prescriptionId || undefined,
       hospital_name: hospitalConfig?.name || undefined, // Add hospital name
+      bill_number: billNumber, // Save bill number to database
       subtotal: totals.subtotal,
       discount: totals.totalDiscount,
       discount_percentage: discountPercentage,
@@ -1605,7 +1606,7 @@ const PharmacyBilling: React.FC = () => {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-2 gap-2">
-                {['CASH', 'CARD', 'UPI', 'INSURANCE'].map((method) => (
+                {['CASH', 'CARD', 'UPI', 'CREDIT'].map((method) => (
                   <Button
                     key={method}
                     variant={paymentMethod === method ? "default" : "outline"}

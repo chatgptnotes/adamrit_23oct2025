@@ -41,6 +41,7 @@ export interface SaleData {
   ward_type?: string;
   remarks?: string;
   hospital_name?: string; // Add hospital name field
+  bill_number?: string; // Unique bill number (e.g., BILL1766125832838)
   subtotal: number;
   discount: number;
   discount_percentage?: number;
@@ -87,6 +88,7 @@ export async function savePharmacySale(saleData: SaleData): Promise<SaleResponse
         ward_type: saleData.ward_type,
         remarks: saleData.remarks,
         hospital_name: saleData.hospital_name, // Add hospital name
+        bill_number: saleData.bill_number, // Unique bill number
         subtotal: saleData.subtotal,
         discount: saleData.discount,
         discount_percentage: saleData.discount_percentage || 0,
