@@ -602,11 +602,14 @@ const LabOrders = () => {
     try {
       console.log('🔍 Calculating reference range for:', { testName, patientAge, patientGender });
 
+      // Extract first word for partial matching (e.g., "CBC" from "CBC (Complete Hemogram)")
+      const firstWord = testName.split(/[\s(]/)[0];
+
       // Fetch lab test config data
       const { data: labConfigData, error: labError } = await supabase
         .from('lab_test_config')
         .select('*')
-        .eq('test_name', testName)
+        .or(`test_name.ilike.${testName},test_name.ilike.${firstWord},test_name.ilike.%${firstWord}%`)
         .order('display_order', { ascending: true })
         .order('id', { ascending: true });
 
@@ -757,10 +760,14 @@ const LabOrders = () => {
     try {
       console.log('🔍 Fetching sub-tests for:', testName, 'Patient:', { age: patientAge, gender: patientGender });
 
+      // Extract first word for partial matching (e.g., "CBC" from "CBC (Complete Hemogram)")
+      const firstWord = testName.split(/[\s(]/)[0];
+      console.log('🔍 First word for matching:', firstWord);
+
       const { data: subTestsData, error } = await supabase
         .from('lab_test_config')
         .select('*')
-        .eq('test_name', testName)
+        .or(`test_name.ilike.${testName},test_name.ilike.${firstWord},test_name.ilike.%${firstWord}%`)
         .order('display_order', { ascending: true })
         .order('id', { ascending: true });
 
