@@ -375,7 +375,8 @@ const DetailedInvoice = () => {
               age,
               gender,
               phone,
-              address
+              address,
+              corporate
             )
           `)
           .eq('id', visitId)
@@ -395,7 +396,8 @@ const DetailedInvoice = () => {
               age,
               gender,
               phone,
-              address
+              address,
+              corporate
             )
           `)
           .eq('visit_id', visitId)
@@ -671,6 +673,8 @@ const DetailedInvoice = () => {
             rate_type,
             amount,
             selected_at,
+            start_date,
+            end_date,
             mandatory_services!mandatory_service_id (
               id,
               service_name,
@@ -778,7 +782,8 @@ const DetailedInvoice = () => {
         dateOfDischarge: visit.discharge_date ? format(new Date(visit.discharge_date), 'dd/MM/yyyy') : 'N/A',
         primaryConsultant: visit.appointment_with || 'N/A',
         totalAmount: totalAmount,
-        amountInWords: convertNumberToWords(totalAmount)
+        amountInWords: convertNumberToWords(totalAmount),
+        tariff: patient?.corporate || 'Private'
       };
 
       console.log('📋 Final processed patient data:', processedData);
@@ -841,17 +846,48 @@ const DetailedInvoice = () => {
       qty: 1,
       rate: parseFloat(String(surgery.cghs_surgery?.NABH_NABL_Rate || '0').replace(/[^\d.]/g, '')) || 0
     })) || [],
-    mandatory: visitData?.mandatoryServices?.map((service, index) => ({
-      item: service.mandatory_services?.service_name || 'Mandatory Service',
-      dateTime: service.selected_at ? format(new Date(service.selected_at), 'dd/MM/yyyy HH:mm:ss') : '',
-      qty: service.quantity || 1,
-      rate: parseFloat(service.amount) || parseFloat(service.rate_used) || 0
-    })) || [],
+    mandatory: visitData?.mandatoryServices?.map((service, index) => {
+      // Calculate days from start_date to end_date
+      let days = service.quantity || 1;
+      let dateTimeStr = service.selected_at ? format(new Date(service.selected_at), 'dd/MM/yyyy HH:mm:ss') : '';
+
+      if (service.start_date && service.end_date) {
+        const start = new Date(service.start_date);
+        const end = new Date(service.end_date);
+        days = Math.max(1, Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+        dateTimeStr = `${format(start, 'dd/MM/yyyy')} - ${format(end, 'dd/MM/yyyy')}`;
+      }
+
+      // Get per-day rate
+      const perDayRate = parseFloat(service.rate_used) || 0;
+      // Calculate total = rate × days
+      const totalAmount = perDayRate * days;
+
+      return {
+        item: service.mandatory_services?.service_name || 'Mandatory Service',
+        dateTime: dateTimeStr,
+        qty: days,
+        rate: totalAmount
+      };
+    }) || [],
     totalAmount: patientData?.totalAmount || 0,
     discount: 0,
     amountPaid: 0,
     balance: patientData?.totalAmount || 0
   };
+
+  // Calculate total from displayed serviceData values
+  const calculatedTotal =
+    serviceData.roomTariff.reduce((sum, item) => sum + (item.rate || 0), 0) +
+    serviceData.services.reduce((sum, item) => sum + (item.rate || 0), 0) +
+    serviceData.laboratory.reduce((sum, item) => sum + (item.rate || 0), 0) +
+    serviceData.radiology.reduce((sum, item) => sum + (item.rate || 0), 0) +
+    serviceData.surgery.reduce((sum, item) => sum + (item.rate || 0), 0) +
+    serviceData.mandatory.reduce((sum, item) => sum + (item.rate || 0), 0) +
+    serviceData.pharmacy.reduce((sum, item) => sum + (item.rate || 0), 0);
+
+  // Convert to words
+  const totalInWords = convertNumberToWords(calculatedTotal);
 
   console.log('🎯 ServiceData radiology array:', {
     length: serviceData.radiology.length,
@@ -943,7 +979,7 @@ const DetailedInvoice = () => {
           {/* Header */}
           <div className="text-center border-b border-gray-400 py-3">
             <h1 className="text-lg font-bold">Final Bill</h1>
-            <h2 className="text-base font-semibold">Private</h2>
+            <h2 className="text-base font-semibold">{patientData.tariff}</h2>
             <h3 className="text-sm">CLAIM ID: {patientData.claimId}</h3>
           </div>
 
@@ -1222,7 +1258,7 @@ const DetailedInvoice = () => {
               <tbody>
                 <tr>
                   <td className="border border-gray-400 p-2 font-bold text-right">Total Amount</td>
-                  <td className="border border-gray-400 p-2 text-center font-bold">{serviceData.totalAmount}</td>
+                  <td className="border border-gray-400 p-2 text-center font-bold">{calculatedTotal}</td>
                 </tr>
               </tbody>
             </table>
@@ -1230,7 +1266,7 @@ const DetailedInvoice = () => {
 
           {/* Amount in Words */}
           <div className="text-xs mb-6">
-            <strong>In Words:</strong> {patientData.amountInWords}
+            <strong>In Words:</strong> {totalInWords}
           </div>
 
           {/* Footer Signatures */}
