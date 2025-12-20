@@ -144,9 +144,9 @@ const EditPurchaseOrder: React.FC<EditPurchaseOrderProps> = ({ purchaseOrderId, 
         setDiscount(poHeader.discount || 0);
       }
 
-      // Set current date for goods received date
+      // Set current date for goods received date (format: YYYY-MM-DDTHH:MM for datetime-local input)
       const now = new Date();
-      const formattedDate = `${now.getDate().toString().padStart(2, '0')}/${(now.getMonth() + 1).toString().padStart(2, '0')}/${now.getFullYear()} ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
+      const formattedDate = `${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, '0')}-${now.getDate().toString().padStart(2, '0')}T${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
       setGoodsReceivedDate(formattedDate);
     } catch (error) {
       console.error('Error fetching purchase order:', error);
@@ -394,7 +394,7 @@ const EditPurchaseOrder: React.FC<EditPurchaseOrderProps> = ({ purchaseOrderId, 
         console.log('Creating new GRN for PO:', purchaseOrderId);
         const grnPayload = {
           purchase_order_id: purchaseOrderId,
-          grn_date: new Date().toISOString().split('T')[0],
+          grn_date: goodsReceivedDate.split('T')[0],
           invoice_number: partyInvoiceNumber || undefined,
           invoice_date: undefined,
           invoice_amount: undefined,
@@ -637,10 +637,10 @@ const EditPurchaseOrder: React.FC<EditPurchaseOrderProps> = ({ purchaseOrderId, 
                     Goods Received Date
                   </label>
                   <Input
-                    type="text"
-                    className="border-gray-300 bg-gray-50"
+                    type="datetime-local"
+                    className="border-gray-300"
                     value={goodsReceivedDate}
-                    readOnly
+                    onChange={(e) => setGoodsReceivedDate(e.target.value)}
                   />
                 </div>
               </div>

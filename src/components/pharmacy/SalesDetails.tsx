@@ -1769,15 +1769,19 @@ export const SalesDetails: React.FC = () => {
                 <tbody>
                   {/* Show all bills for this patient */}
                   {selectedPatient.bills && selectedPatient.bills.length > 0 ? (
-                    selectedPatient.bills.map((bill: any, idx: number) => (
+                    selectedPatient.bills.map((bill: any, idx: number) => {
+                      const isCredit = bill.payment_method === 'CREDIT';
+                      const amount = bill.total_amount || 0;
+                      const paid = isCredit ? 0 : amount;
+                      return (
                       <tr key={bill.sale_id || idx} className="bg-white border-b hover:bg-gray-50">
                         <td className="px-2 py-2 text-gray-800">SB-{bill.sale_id}</td>
                         <td className="px-2 py-2 text-gray-600">{bill.payment_method || 'Cash'}</td>
                         <td className="px-2 py-2 text-gray-600">{bill.sale_date ? new Date(bill.sale_date).toLocaleDateString('en-IN') : '-'}</td>
                         <td className="px-2 py-2 text-right text-gray-800">{(bill.subtotal || bill.total_amount || 0).toFixed(2)}</td>
-                        <td className="px-2 py-2 text-right text-gray-800">{(bill.total_amount || 0).toFixed(2)}</td>
+                        <td className="px-2 py-2 text-right text-gray-800">{paid.toFixed(2)}</td>
                         <td className="px-2 py-2 text-right text-gray-600">{(bill.discount || 0).toFixed(2)}</td>
-                        <td className="px-2 py-2 text-right font-medium text-gray-800">{(bill.total_amount || 0).toFixed(2)}</td>
+                        <td className="px-2 py-2 text-right font-medium text-gray-800">{amount.toFixed(2)}</td>
                         <td className="px-2 py-2">
                           <div className="flex items-center justify-center gap-1">
                             {/* 1. Edit */}
@@ -1837,7 +1841,7 @@ export const SalesDetails: React.FC = () => {
                           />
                         </td>
                       </tr>
-                    ))
+                    );})
                   ) : (
                     <tr>
                       <td colSpan={9} className="px-4 py-4 text-center text-gray-500">No bills found</td>
@@ -1851,7 +1855,7 @@ export const SalesDetails: React.FC = () => {
                         {selectedPatient.bills.reduce((sum: number, b: any) => sum + (b.subtotal || b.total_amount || 0), 0).toFixed(2)}
                       </td>
                       <td className="px-2 py-2 text-right text-gray-800">
-                        {selectedPatient.bills.reduce((sum: number, b: any) => sum + (b.total_amount || 0), 0).toFixed(2)}
+                        {selectedPatient.bills.reduce((sum: number, b: any) => sum + (b.payment_method === 'CREDIT' ? 0 : (b.total_amount || 0)), 0).toFixed(2)}
                       </td>
                       <td className="px-2 py-2 text-right text-gray-600">
                         {selectedPatient.bills.reduce((sum: number, b: any) => sum + (b.discount || 0), 0).toFixed(2)}

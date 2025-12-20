@@ -61,6 +61,7 @@ const PurchaseOrders: React.FC<PurchaseOrdersProps> = ({ onAddClick, onEditClick
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [postedGRNs, setPostedGRNs] = useState<Set<string>>(new Set()); // Track POs with POSTED GRNs
+  const [grnDatesMap, setGrnDatesMap] = useState<Map<string, string>>(new Map()); // Track GRN dates by PO ID
 
   // View modal state
   const [viewModalOpen, setViewModalOpen] = useState(false);
@@ -108,17 +109,22 @@ const PurchaseOrders: React.FC<PurchaseOrdersProps> = ({ onAddClick, onEditClick
         };
       });
 
-      // Track which POs have POSTED GRNs
+      // Track which POs have POSTED GRNs and GRN dates
       const postedSet = new Set<string>();
+      const grnDates = new Map<string, string>();
       grnsData.forEach(grn => {
         if (grn.status === 'POSTED' && grn.purchase_order_id) {
           postedSet.add(grn.purchase_order_id);
+        }
+        if (grn.purchase_order_id && grn.grn_date) {
+          grnDates.set(grn.purchase_order_id, grn.grn_date);
         }
       });
 
       setPurchaseOrders(ordersWithSuppliers);
       setSuppliers(suppliersData);
       setPostedGRNs(postedSet);
+      setGrnDatesMap(grnDates);
     } catch (error) {
       console.error('Error fetching purchase orders:', error);
       toast({
@@ -371,6 +377,9 @@ const PurchaseOrders: React.FC<PurchaseOrdersProps> = ({ onAddClick, onEditClick
                   <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                     Created Date
                   </th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                    Goods Received Date
+                  </th>
                   <th className="px-6 py-4 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">
                     Actions
                   </th>
@@ -379,7 +388,7 @@ const PurchaseOrders: React.FC<PurchaseOrdersProps> = ({ onAddClick, onEditClick
               <tbody className="bg-white divide-y divide-gray-200">
                 {isLoading ? (
                   <tr>
-                    <td colSpan={8} className="px-6 py-12 text-center">
+                    <td colSpan={9} className="px-6 py-12 text-center">
                       <div className="flex items-center justify-center gap-3">
                         <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
                         <span className="text-gray-600">Loading purchase orders...</span>
@@ -388,7 +397,7 @@ const PurchaseOrders: React.FC<PurchaseOrdersProps> = ({ onAddClick, onEditClick
                   </tr>
                 ) : currentOrders.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="px-6 py-12 text-center">
+                    <td colSpan={9} className="px-6 py-12 text-center">
                       <div className="text-gray-500">
                         <FileText className="h-12 w-12 mx-auto mb-3 text-gray-300" />
                         <p className="font-medium">
@@ -447,6 +456,9 @@ const PurchaseOrders: React.FC<PurchaseOrdersProps> = ({ onAddClick, onEditClick
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                         {formatDate(order.created_at)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                        {grnDatesMap.get(order.id) ? formatDate(grnDatesMap.get(order.id)!) : '-'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-center">
                         <div className="flex items-center justify-center gap-2">
@@ -605,9 +617,9 @@ const PurchaseOrders: React.FC<PurchaseOrdersProps> = ({ onAddClick, onEditClick
                         </Badge>
                       </div>
                       <div className="text-sm">
-                        <span className="font-medium text-gray-600">Created:</span>
+                        <span className="font-medium text-gray-600">Goods Received Date:</span>
                         <span className="ml-2 text-gray-900">
-                          {formatDate(selectedPO.created_at)}
+                          {selectedGRN ? formatDate(selectedGRN.grn_date) : 'N/A'}
                         </span>
                       </div>
                     </div>

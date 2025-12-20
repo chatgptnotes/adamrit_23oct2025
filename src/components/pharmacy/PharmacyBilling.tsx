@@ -112,6 +112,7 @@ const PharmacyBilling: React.FC = () => {
   const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'CARD' | 'UPI' | 'INSURANCE' | 'CREDIT'>('CASH');
   const [paymentReference, setPaymentReference] = useState('');
   const [discountPercentage, setDiscountPercentage] = useState(0);
+  const [orderDiscount, setOrderDiscount] = useState(0); // Order-level discount amount
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
   const [completedSale, setCompletedSale] = useState<Sale | null>(null);
   
@@ -556,17 +557,20 @@ const PharmacyBilling: React.FC = () => {
     setPatientInfo({ id: '', name: '', phone: '' });
     setPrescriptionId('');
     setDiscountPercentage(0);
+    setOrderDiscount(0); // Reset order-level discount
     setPaymentReference('');
     setVisitId('');
   };
 
   const calculateTotals = () => {
     const subtotal = cart.reduce((sum, item) => sum + (item.unit_price * item.quantity), 0);
-    const totalDiscount = cart.reduce((sum, item) => sum + item.discount_amount, 0);
+    const itemDiscount = cart.reduce((sum, item) => sum + item.discount_amount, 0);
+    const totalDiscount = itemDiscount + orderDiscount; // Include order-level discount
     const totalTax = cart.reduce((sum, item) => sum + item.tax_amount, 0);
-    const totalAmount = cart.reduce((sum, item) => sum + item.total_amount, 0);
-    
-    return { subtotal, totalDiscount, totalTax, totalAmount };
+    const itemTotal = cart.reduce((sum, item) => sum + item.total_amount, 0);
+    const totalAmount = Math.max(0, itemTotal - orderDiscount); // Subtract order discount from total
+
+    return { subtotal, totalDiscount, totalTax, totalAmount, orderDiscount };
   };
 
   const getVisitUUID = async (visitIdString: string) => {
@@ -1587,10 +1591,27 @@ const PharmacyBilling: React.FC = () => {
                 <span>Subtotal:</span>
                 <span>{formatCurrency(totals.subtotal)}</span>
               </div>
-              <div className="flex justify-between text-green-600">
+              <div className="flex justify-between items-center text-green-600">
                 <span>Discount:</span>
-                <span>-{formatCurrency(totals.totalDiscount)}</span>
+                <div className="flex items-center gap-2">
+                  <span>₹</span>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={orderDiscount || ''}
+                    onChange={(e) => setOrderDiscount(parseFloat(e.target.value) || 0)}
+                    placeholder="0.00"
+                    className="w-24 h-8 text-right text-green-600"
+                  />
+                </div>
               </div>
+              {totals.totalDiscount > 0 && (
+                <div className="flex justify-between text-sm text-gray-500">
+                  <span>Total Discount:</span>
+                  <span>-{formatCurrency(totals.totalDiscount)}</span>
+                </div>
+              )}
               <hr />
               <div className="flex justify-between font-bold text-lg">
                 <span>Total:</span>

@@ -28,6 +28,7 @@ import PharmacyReports from './PharmacyReports';
 import SupplierMaster from './SupplierMaster';
 import SalesDetails from './SalesDetails';
 import TreatmentSheetList from './TreatmentSheetList';
+import ReturnSales from './ReturnSales';
 import MedicineItems from './MedicineItems';
 import DirectSaleBill from './DirectSaleBill';
 import DirectSaleView from './DirectSaleView';
@@ -115,8 +116,8 @@ const PharmacyDashboard: React.FC = () => {
           <TabsTrigger value="direct-sale">Direct Sale</TabsTrigger>
           <TabsTrigger value="billing">Sale Bill</TabsTrigger>
           <TabsTrigger value="view_sales">View Sales</TabsTrigger>
+          <TabsTrigger value="return-sales">Return Sales</TabsTrigger>
             <TabsTrigger value="stock-mgmt">Stock Mgmt</TabsTrigger>
-          <TabsTrigger value="treatment-sheet">Treatment Sheet</TabsTrigger>
           <TabsTrigger value="manufacturer">Manufacturer</TabsTrigger>
           <TabsTrigger value="supplier">Supplier</TabsTrigger>
           <TabsTrigger value="purchase-order">Purchase Order</TabsTrigger>
@@ -429,8 +430,8 @@ const PharmacyDashboard: React.FC = () => {
           <SalesDetails />
         </TabsContent>
 
-        <TabsContent value="treatment-sheet">
-          <TreatmentSheetList />
+        <TabsContent value="return-sales">
+          <ReturnSales />
         </TabsContent>
 
         <TabsContent value="purchase-order">
