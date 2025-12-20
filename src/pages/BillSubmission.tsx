@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { Receipt, Pencil, Trash2, Search, User, Loader2, Download, Filter } from 'lucide-react';
+import { Receipt, Pencil, Trash2, Search, User, Loader2, Download, Filter, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -45,6 +45,10 @@ const BillSubmissionPage: React.FC = () => {
   const [dateFrom, setDateFrom] = useState<string>('');
   const [dateTo, setDateTo] = useState<string>('');
 
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage] = useState(10);
+
   // Fetch bill submissions from Supabase, filtered by hospital
   const { data: submissions = [], isLoading } = useBillSubmissions(hospitalConfig?.name);
 
@@ -79,6 +83,37 @@ const BillSubmissionPage: React.FC = () => {
       return true;
     });
   }, [submissions, corporateFilter, dateFrom, dateTo]);
+
+  // Pagination calculations
+  const totalPages = Math.ceil(filteredSubmissions.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedSubmissions = filteredSubmissions.slice(startIndex, endIndex);
+
+  // Pagination navigation functions
+  const goToFirstPage = () => setCurrentPage(1);
+  const goToLastPage = () => setCurrentPage(totalPages);
+  const goToPreviousPage = () => setCurrentPage(Math.max(1, currentPage - 1));
+  const goToNextPage = () => setCurrentPage(Math.min(totalPages, currentPage + 1));
+
+  const getPageNumbers = () => {
+    const pages: number[] = [];
+    const maxVisiblePages = 5;
+    let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
+    const endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+    if (endPage - startPage < maxVisiblePages - 1) {
+      startPage = Math.max(1, endPage - maxVisiblePages + 1);
+    }
+    for (let i = startPage; i <= endPage; i++) {
+      pages.push(i);
+    }
+    return pages;
+  };
+
+  // Reset page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [corporateFilter, dateFrom, dateTo]);
 
   // Export to Excel function
   const handleExportExcel = () => {
@@ -406,7 +441,7 @@ const BillSubmissionPage: React.FC = () => {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filteredSubmissions.map((submission: any) => (
+                  paginatedSubmissions.map((submission: any) => (
                     <TableRow key={submission.id}>
                       <TableCell className="font-medium">{submission.visit_id}</TableCell>
                       <TableCell>{submission.patient_name}</TableCell>
@@ -439,9 +474,39 @@ const BillSubmissionPage: React.FC = () => {
             </Table>
           </div>
 
-          {submissions.length > 0 && (
-            <div className="mt-4 text-sm text-gray-500">
-              Showing {filteredSubmissions.length} of {submissions.length} records
+          {filteredSubmissions.length > 0 && (
+            <div className="flex items-center justify-between mt-4">
+              <div className="text-sm text-gray-600">
+                Showing {startIndex + 1} to {Math.min(endIndex, filteredSubmissions.length)} of {filteredSubmissions.length} records
+                {totalPages > 1 && <span className="ml-2">| Page {currentPage} of {totalPages}</span>}
+              </div>
+
+              {totalPages > 1 && (
+                <div className="flex items-center gap-1">
+                  <Button variant="outline" size="sm" onClick={goToFirstPage} disabled={currentPage === 1}>
+                    <ChevronsLeft className="h-4 w-4" />
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={goToPreviousPage} disabled={currentPage === 1}>
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  {getPageNumbers().map((pageNum) => (
+                    <Button
+                      key={pageNum}
+                      variant={currentPage === pageNum ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setCurrentPage(pageNum)}
+                    >
+                      {pageNum}
+                    </Button>
+                  ))}
+                  <Button variant="outline" size="sm" onClick={goToNextPage} disabled={currentPage === totalPages}>
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={goToLastPage} disabled={currentPage === totalPages}>
+                    <ChevronsRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              )}
             </div>
           )}
         </CardContent>
