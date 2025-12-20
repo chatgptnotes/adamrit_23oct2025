@@ -1420,7 +1420,7 @@ const Invoice = () => {
     dischargeDate: visitData.discharge_date ? format(new Date(visitData.discharge_date), 'dd/MM/yyyy HH:mm:ss') : '',
     invoiceNo: billData?.bill_no || visitData.visit_id || 'N/A',
     registrationNo: patient?.patients_id || visitData.visit_id || 'N/A',
-    category: billData?.category || 'Private',
+    category: visitData?.patients?.corporate || billData?.category || 'Private',
     primaryConsultant: visitData.referring_doctor
       || visitData.appointment_with
       || visitData.consultant
