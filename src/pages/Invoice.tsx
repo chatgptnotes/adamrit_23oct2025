@@ -1182,7 +1182,10 @@ const Invoice = () => {
 
         // Use rate_used from junction table (actual rate that was selected and saved)
         const rate = mandatoryService.rate_used || mandatoryService.amount || 0;
-        const amount = mandatoryService.amount || (rate * days);
+        // Calculate amount = rate × days when dates exist, else use stored amount
+        const amount = (mandatoryService.start_date && mandatoryService.end_date)
+          ? (rate * days)
+          : (mandatoryService.amount || (rate * days));
 
         // Format item with date range
         const dateRange = startDate && endDate ? ` (${startDate} to ${endDate})` : '';
@@ -1240,7 +1243,10 @@ const Invoice = () => {
 
         // Use rate_used from junction table (actual rate that was selected and saved)
         const rate = clinicalService.rate_used || clinicalService.amount || 0;
-        const amount = clinicalService.amount || (rate * days);
+        // Calculate amount = rate × days when dates exist, else use stored amount
+        const amount = (clinicalService.start_date && clinicalService.end_date)
+          ? (rate * days)
+          : (clinicalService.amount || (rate * days));
 
         // Format item with date range
         const dateRange = startDate && endDate ? ` (${startDate} to ${endDate})` : '';
