@@ -563,6 +563,8 @@ const Invoice = () => {
           rate_type,
           amount,
           selected_at,
+          start_date,
+          end_date,
           mandatory_services!mandatory_service_id (
             id,
             service_name,
@@ -595,7 +597,9 @@ const Invoice = () => {
         rate_used: item.rate_used,
         rate_type: item.rate_type,
         amount: item.amount,
-        selected_at: item.selected_at
+        selected_at: item.selected_at,
+        start_date: item.start_date,
+        end_date: item.end_date
       }));
 
       console.log('Mandatory services data mapped:', mappedData);
@@ -640,6 +644,8 @@ const Invoice = () => {
           rate_type,
           amount,
           selected_at,
+          start_date,
+          end_date,
           clinical_services!clinical_service_id (
             id,
             service_name,
@@ -672,7 +678,9 @@ const Invoice = () => {
         rate_used: item.rate_used,
         rate_type: item.rate_type,
         amount: item.amount,
-        selected_at: item.selected_at
+        selected_at: item.selected_at,
+        start_date: item.start_date,
+        end_date: item.end_date
       }));
 
       console.log('Clinical services data mapped:', mappedData);
@@ -1159,27 +1167,44 @@ const Invoice = () => {
       console.log('Adding mandatory services from junction table');
       mandatoryServicesData.forEach((mandatoryService) => {
         console.log('Processing saved mandatory service:', mandatoryService);
-        
+
+        // Format dates like accommodation
+        const startDate = mandatoryService.start_date ? format(new Date(mandatoryService.start_date), 'dd-MM-yyyy') : '';
+        const endDate = mandatoryService.end_date ? format(new Date(mandatoryService.end_date), 'dd-MM-yyyy') : '';
+
+        // Calculate days between start and end date
+        let days = mandatoryService.quantity || 1;
+        if (mandatoryService.start_date && mandatoryService.end_date) {
+          const start = new Date(mandatoryService.start_date);
+          const end = new Date(mandatoryService.end_date);
+          days = Math.max(1, Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+        }
+
         // Use rate_used from junction table (actual rate that was selected and saved)
         const rate = mandatoryService.rate_used || mandatoryService.amount || 0;
-        const quantity = mandatoryService.quantity || 1;
-        const amount = mandatoryService.amount || (rate * quantity);
-        
+        const amount = mandatoryService.amount || (rate * days);
+
+        // Format item with date range
+        const dateRange = startDate && endDate ? ` (${startDate} to ${endDate})` : '';
+        const itemDescription = `${mandatoryService.service_name}${dateRange}`;
+
         console.log('Junction table service data:', {
           name: mandatoryService.service_name,
           rate: rate,
-          quantity: quantity,
+          days: days,
           amount: amount,
-          rateType: mandatoryService.rate_type
+          rateType: mandatoryService.rate_type,
+          startDate,
+          endDate
         });
 
         if (rate > 0) {
-          console.log('Adding mandatory service to invoice:', mandatoryService.service_name, 'Rate:', rate);
+          console.log('Adding mandatory service to invoice:', itemDescription, 'Rate:', rate);
           services.push({
             srNo: srNo++,
-            item: mandatoryService.service_name,
+            item: itemDescription,
             rate: rate,
-            qty: quantity,
+            qty: days,
             amount: amount,
             type: 'other'
           });
@@ -1201,26 +1226,43 @@ const Invoice = () => {
       clinicalServicesData.forEach((clinicalService) => {
         console.log('Processing saved clinical service:', clinicalService);
 
+        // Format dates like accommodation
+        const startDate = clinicalService.start_date ? format(new Date(clinicalService.start_date), 'dd-MM-yyyy') : '';
+        const endDate = clinicalService.end_date ? format(new Date(clinicalService.end_date), 'dd-MM-yyyy') : '';
+
+        // Calculate days between start and end date
+        let days = clinicalService.quantity || 1;
+        if (clinicalService.start_date && clinicalService.end_date) {
+          const start = new Date(clinicalService.start_date);
+          const end = new Date(clinicalService.end_date);
+          days = Math.max(1, Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+        }
+
         // Use rate_used from junction table (actual rate that was selected and saved)
         const rate = clinicalService.rate_used || clinicalService.amount || 0;
-        const quantity = clinicalService.quantity || 1;
-        const amount = clinicalService.amount || (rate * quantity);
+        const amount = clinicalService.amount || (rate * days);
+
+        // Format item with date range
+        const dateRange = startDate && endDate ? ` (${startDate} to ${endDate})` : '';
+        const itemDescription = `${clinicalService.service_name}${dateRange}`;
 
         console.log('Junction table clinical service data:', {
           name: clinicalService.service_name,
           rate: rate,
-          quantity: quantity,
+          days: days,
           amount: amount,
-          rateType: clinicalService.rate_type
+          rateType: clinicalService.rate_type,
+          startDate,
+          endDate
         });
 
         if (rate > 0) {
-          console.log('Adding clinical service to invoice:', clinicalService.service_name, 'Rate:', rate);
+          console.log('Adding clinical service to invoice:', itemDescription, 'Rate:', rate);
           services.push({
             srNo: srNo++,
-            item: clinicalService.service_name,
+            item: itemDescription,
             rate: rate,
-            qty: quantity,
+            qty: days,
             amount: amount,
             type: 'other'
           });

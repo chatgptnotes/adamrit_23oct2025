@@ -2322,9 +2322,9 @@ const FinalBill = () => {
         return;
       }
 
-      // Update local state
+      // Update local state (match by junction_id since serviceId is the junction table id)
       setSavedMandatoryServicesData(prev => prev.map(service =>
-        service.id === serviceId ? { ...service, [field]: value } : service
+        service.junction_id === serviceId ? { ...service, [field]: value } : service
       ));
 
       toast.success('Mandatory service date updated successfully');
@@ -5586,15 +5586,19 @@ INSTRUCTIONS:
                 corporate.includes('ordnance factory') ||
                 corporate.includes('ordnance factory itarsi'));
 
-              // Check if patient has other corporate (not CGHS/ECHS/ESIC, not MP Police/Ordnance Factory)
-              const usesNABHRate = hasCorporate && !usesNonNABHRate && !usesBhopaliNABHRate;
+              // Check if corporate uses Private rates (ICICI Lombard)
+              const usesPrivateRate = hasCorporate &&
+                (corporate.includes('icici lombard') || corporate.includes('icici'));
+
+              // Check if patient has other corporate (not CGHS/ECHS/ESIC, not MP Police/Ordnance Factory, not ICICI)
+              const usesNABHRate = hasCorporate && !usesNonNABHRate && !usesBhopaliNABHRate && !usesPrivateRate;
 
               // Select appropriate rate based on corporate (priority: Private > Non-NABH > Bhopal NABH > NABH > Fallback)
               let correctRate = 100; // Default fallback
               let rateSource = 'fallback';
 
-              // ALWAYS check private patient FIRST
-              if (isPrivatePatient && labDetail?.private && labDetail.private > 0) {
+              // ALWAYS check private patient or ICICI Lombard FIRST
+              if ((isPrivatePatient || usesPrivateRate) && labDetail?.private && labDetail.private > 0) {
                 correctRate = labDetail.private;
                 rateSource = 'private';
               } else if (usesNonNABHRate && labDetail?.['Non-NABH_rates_in_rupee'] && labDetail['Non-NABH_rates_in_rupee'] > 0) {
@@ -7244,6 +7248,8 @@ INSTRUCTIONS:
           amount,
           external_requisition,
           selected_at,
+          start_date,
+          end_date,
           clinical_services!clinical_service_id (
             id,
             service_name,
@@ -7287,6 +7293,8 @@ INSTRUCTIONS:
             amount: item.amount,
             external_requisition: item.external_requisition,
             selected_at: item.selected_at,
+            start_date: item.start_date || '',
+            end_date: item.end_date || '',
             junction_id: item.id,
             // For compatibility with existing UI
             selectedRate: item.rate_used,
@@ -7448,6 +7456,7 @@ INSTRUCTIONS:
 
               return {
                 id: serviceDetail?.id,
+                junction_id: rawService.id,  // Junction table primary key for updates
                 service_name: serviceDetail?.service_name,
                 selectedRate: finalAmount,
                 cost: finalAmount,
@@ -7455,6 +7464,8 @@ INSTRUCTIONS:
                 rate_used: rawService.rate_used,
                 rate_type: rawService.rate_type,
                 selected_at: rawService.selected_at,
+                start_date: rawService.start_date || '',
+                end_date: rawService.end_date || '',
                 quantity: rawService.quantity || 1,
                 patientCategory: rawService.rate_type?.toUpperCase() || 'PRIVATE',
                 // Include all service detail fields
@@ -7806,34 +7817,48 @@ INSTRUCTIONS:
             console.log('💰 [AMOUNT CALC] Junction table data empty, calculating from service rates...');
 
             if (serviceDetails) {
-              // Match patient category to appropriate rate
-              switch (patientCategory?.toLowerCase()) {
-                case 'private':
-                  calculatedAmount = serviceDetails.private_rate || 0;
-                  rateType = 'private';
-                  break;
-                case 'tpa':
-                case 'insurance':
-                  calculatedAmount = serviceDetails.tpa_rate || 0;
-                  rateType = 'tpa';
-                  break;
-                case 'nabh':
-                  calculatedAmount = serviceDetails.nabh_rate || 0;
-                  rateType = 'nabh';
-                  break;
-                case 'non_nabh':
-                case 'non-nabh':
-                  calculatedAmount = serviceDetails.non_nabh_rate || 0;
-                  rateType = 'non_nabh';
-                  break;
-                default:
-                  // Default to private rate for unknown patient categories
-                  calculatedAmount = serviceDetails.private_rate || serviceDetails.tpa_rate || 0;
-                  rateType = 'private';
-                  break;
+              // Check for ICICI Lombard - always use private rate
+              const corporate = (patientInfo?.corporate || '').toLowerCase().trim();
+              const hasCorporate = corporate.length > 0 && corporate !== 'private';
+              const usesPrivateRate = hasCorporate &&
+                (corporate.includes('icici lombard') || corporate.includes('icici'));
+
+              // ICICI Lombard always uses private rate
+              if (usesPrivateRate) {
+                calculatedAmount = serviceDetails.private_rate || 0;
+                rateType = 'private';
+              } else {
+                // Match patient category to appropriate rate
+                switch (patientCategory?.toLowerCase()) {
+                  case 'private':
+                    calculatedAmount = serviceDetails.private_rate || 0;
+                    rateType = 'private';
+                    break;
+                  case 'tpa':
+                  case 'insurance':
+                    calculatedAmount = serviceDetails.tpa_rate || 0;
+                    rateType = 'tpa';
+                    break;
+                  case 'nabh':
+                    calculatedAmount = serviceDetails.nabh_rate || 0;
+                    rateType = 'nabh';
+                    break;
+                  case 'non_nabh':
+                  case 'non-nabh':
+                    calculatedAmount = serviceDetails.non_nabh_rate || 0;
+                    rateType = 'non_nabh';
+                    break;
+                  default:
+                    // Default to private rate for unknown patient categories
+                    calculatedAmount = serviceDetails.private_rate || serviceDetails.tpa_rate || 0;
+                    rateType = 'private';
+                    break;
+                }
               }
               console.log('💰 [AMOUNT CALC] Calculated from service rates:', {
                 patientCategory,
+                corporate,
+                usesPrivateRate,
                 selectedRate: calculatedAmount,
                 rateType
               });
@@ -7874,6 +7899,8 @@ INSTRUCTIONS:
             amount: item.amount,
             external_requisition: item.external_requisition,
             selected_at: item.selected_at,
+            start_date: item.start_date || '',
+            end_date: item.end_date || '',
             junction_id: item.id,
             // For compatibility with existing UI - PRIORITIZE SAVED VALUES
             selectedRate: finalAmount,
@@ -8075,8 +8102,23 @@ INSTRUCTIONS:
 
       // Use default values - user will edit dates in the table
       const today = new Date().toISOString().split('T')[0];
+
+      // Check for ICICI Lombard - always use private rate
+      const corporate = (patientInfo?.corporate || '').toLowerCase().trim();
+      const hasCorporate = corporate.length > 0 && corporate !== 'private';
+      const usesPrivateRate = hasCorporate &&
+        (corporate.includes('icici lombard') || corporate.includes('icici'));
+
+      // ICICI Lombard and private patients always use private rate
       const defaultRateType = 'private';
       const rate = accommodation.private_rate || 0;
+
+      console.log('🏨 [ACCOMMODATION ADD] Rate selection:', {
+        corporate,
+        usesPrivateRate,
+        rateType: defaultRateType,
+        rate
+      });
 
       // Insert into visit_accommodations with default dates
       const accommodationData = {
@@ -9278,15 +9320,19 @@ INSTRUCTIONS:
             corporate.includes('ordnance factory') ||
             corporate.includes('ordnance factory itarsi'));
 
-          // Check if patient has other corporate (not CGHS/ECHS/ESIC, not MP Police/Ordnance Factory)
-          const usesNABHRate = hasCorporate && !usesNonNABHRate && !usesBhopaliNABHRate;
+          // Check if corporate uses Private rates (ICICI Lombard)
+          const usesPrivateRate = hasCorporate &&
+            (corporate.includes('icici lombard') || corporate.includes('icici'));
+
+          // Check if patient has other corporate (not CGHS/ECHS/ESIC, not MP Police/Ordnance Factory, not ICICI)
+          const usesNABHRate = hasCorporate && !usesNonNABHRate && !usesBhopaliNABHRate && !usesPrivateRate;
 
           // Select appropriate rate based on patient type (priority: Private > Non-NABH > Bhopal NABH > NABH > Fallback)
           let cost = 100; // Default fallback
           let rateSource = 'fallback';
 
-          // ALWAYS check private patient FIRST
-          if (isPrivatePatient && item.private && item.private > 0) {
+          // ALWAYS check private patient or ICICI Lombard FIRST
+          if ((isPrivatePatient || usesPrivateRate) && item.private && item.private > 0) {
             cost = item.private;
             rateSource = 'private';
           } else if (usesNonNABHRate && item['Non-NABH_rates_in_rupee'] && item['Non-NABH_rates_in_rupee'] > 0) {
@@ -9627,7 +9673,7 @@ INSTRUCTIONS:
 
   // Clinical services search query with patient type-based rates
   const { data: searchedClinicalServices = [], isLoading: isSearchingClinicalServices, error: clinicalServicesError } = useQuery({
-    queryKey: ['clinical-services-search', serviceSearchTerm, hospitalConfig.name, visitId],
+    queryKey: ['clinical-services-search', serviceSearchTerm, hospitalConfig.name, visitId, patientInfo?.corporate],
     queryFn: async () => {
       console.log('🔍 Clinical services search triggered:', {
         serviceSearchTerm,
@@ -9837,10 +9883,22 @@ INSTRUCTIONS:
         let selectedRate = 0;
         let rateType = 'private'; // Default
 
+        // Get corporate for ICICI Lombard check
+        const corporate = (patientInfo?.corporate || '').toLowerCase().trim();
+        const hasCorporate = corporate.length > 0 && corporate !== 'private';
+
+        // Check if ICICI Lombard - always use private rate
+        const usesPrivateRate = hasCorporate &&
+          (corporate.includes('icici lombard') || corporate.includes('icici'));
+
         // Map patient categories to rate fields
         const categoryLower = patientCategory.toLowerCase();
 
-        if (categoryLower.includes('corporate') || categoryLower.includes('company')) {
+        // ICICI Lombard always uses private rate
+        if (usesPrivateRate) {
+          selectedRate = item.private_rate || item.tpa_rate || item.amount || item.rate || item.cost || 0;
+          rateType = 'private';
+        } else if (categoryLower.includes('corporate') || categoryLower.includes('company')) {
           selectedRate = item.private_rate || item.tpa_rate || item.amount || item.rate || item.cost || 0;
           rateType = 'corporate';
         } else if (categoryLower.includes('tpa') || categoryLower.includes('insurance')) {
@@ -9874,9 +9932,11 @@ INSTRUCTIONS:
           id: item.id || `temp-${Date.now()}-${index}`
         };
 
-        console.log(`🔧 Transformed service ${index + 1} for ${patientCategory} patient:`, {
+        console.log(`🔧 Transformed clinical service ${index + 1} for ${patientCategory} patient:`, {
           serviceName: item.service_name,
           patientCategory,
+          corporate,
+          usesPrivateRate,
           rateType,
           selectedRate,
           availableRates: {
@@ -9902,7 +9962,7 @@ INSTRUCTIONS:
 
   // Mandatory services search query with patient type-based rates
   const { data: searchedMandatoryServices = [], isLoading: isSearchingMandatoryServices, error: mandatoryServicesError } = useQuery({
-    queryKey: ['mandatory-services-search', serviceSearchTerm, hospitalConfig.name, visitId],
+    queryKey: ['mandatory-services-search', serviceSearchTerm, hospitalConfig.name, visitId, patientInfo?.corporate],
     queryFn: async () => {
       console.log('🔍 Mandatory services search triggered:', {
         serviceSearchTerm,
@@ -10057,10 +10117,22 @@ INSTRUCTIONS:
         let selectedRate = 0;
         let rateType = 'private'; // Default
 
+        // Get corporate for ICICI Lombard check
+        const corporate = (patientInfo?.corporate || '').toLowerCase().trim();
+        const hasCorporate = corporate.length > 0 && corporate !== 'private';
+
+        // Check if ICICI Lombard - always use private rate
+        const usesPrivateRate = hasCorporate &&
+          (corporate.includes('icici lombard') || corporate.includes('icici'));
+
         // Map patient categories to rate fields
         const categoryLower = patientCategory.toLowerCase();
 
-        if (categoryLower.includes('corporate') || categoryLower.includes('company')) {
+        // ICICI Lombard always uses private rate
+        if (usesPrivateRate) {
+          selectedRate = item.private_rate || item.rate || item.amount || 0;
+          rateType = 'private';
+        } else if (categoryLower.includes('corporate') || categoryLower.includes('company')) {
           selectedRate = item.private_rate || item.rate || item.amount || 0;
           rateType = 'corporate';
         } else if (categoryLower.includes('tpa') || categoryLower.includes('insurance')) {
@@ -10938,8 +11010,12 @@ INSTRUCTIONS:
         corporate.includes('ordnance factory') ||
         corporate.includes('ordnance factory itarsi'));
 
-      // Check if patient has other corporate
-      const usesNABHRate = hasCorporate && !usesNonNABHRate && !usesBhopaliNABHRate;
+      // Check if corporate uses Private rates (ICICI Lombard)
+      const usesPrivateRate = hasCorporate &&
+        (corporate.includes('icici lombard') || corporate.includes('icici'));
+
+      // Check if patient has other corporate (not CGHS/ECHS/ESIC, not MP Police/Ordnance Factory, not ICICI)
+      const usesNABHRate = hasCorporate && !usesNonNABHRate && !usesBhopaliNABHRate && !usesPrivateRate;
 
       console.log('🔍 Patient Type Check in fetchSavedLabs:', {
         patientType,
@@ -10961,8 +11037,8 @@ INSTRUCTIONS:
         let correctUnitRate = 100; // Default fallback
         let rateSource = 'fallback';
 
-        // ALWAYS check private patient FIRST
-        if (isPrivatePatient && labDetail?.private && labDetail.private > 0) {
+        // ALWAYS check private patient or ICICI Lombard FIRST
+        if ((isPrivatePatient || usesPrivateRate) && labDetail?.private && labDetail.private > 0) {
           correctUnitRate = labDetail.private;
           rateSource = 'private';
         } else if (usesNonNABHRate && labDetail?.['Non-NABH_rates_in_rupee'] && labDetail['Non-NABH_rates_in_rupee'] > 0) {
@@ -12349,8 +12425,12 @@ Format the response as JSON:
         corporate.includes('ordnance factory') ||
         corporate.includes('ordnance factory itarsi'));
 
-      // Check if patient has other corporate (not CGHS/ECHS/ESIC, not MP Police/Ordnance Factory)
-      const usesNABHRate = hasCorporate && !usesNonNABHRate && !usesBhopaliNABHRate;
+      // Check if corporate uses Private rates (ICICI Lombard)
+      const usesPrivateRate = hasCorporate &&
+        (corporate.includes('icici lombard') || corporate.includes('icici'));
+
+      // Check if patient has other corporate (not CGHS/ECHS/ESIC, not MP Police/Ordnance Factory, not ICICI)
+      const usesNABHRate = hasCorporate && !usesNonNABHRate && !usesBhopaliNABHRate && !usesPrivateRate;
 
       console.log('🔍 Patient Type Check in saveLabsToVisit:', {
         patientType,
@@ -12359,6 +12439,7 @@ Format the response as JSON:
         hasCorporate,
         usesNonNABHRate,
         usesBhopaliNABHRate,
+        usesPrivateRate,
         usesNABHRate
       });
 
@@ -12368,8 +12449,8 @@ Format the response as JSON:
         let correctRate = 100; // Default fallback
         let rateSource = 'fallback';
 
-        // ALWAYS check private patient FIRST when saving labs
-        if (isPrivatePatient && lab.private && lab.private > 0) {
+        // ALWAYS check private patient or ICICI Lombard FIRST when saving labs
+        if ((isPrivatePatient || usesPrivateRate) && lab.private && lab.private > 0) {
           correctRate = lab.private;
           rateSource = 'private';
         } else if (usesNonNABHRate && lab['Non-NABH_rates_in_rupee'] && lab['Non-NABH_rates_in_rupee'] > 0) {
@@ -17946,7 +18027,8 @@ Dr. Murali B K
                                     <tr className="bg-gray-100">
                                       <th className="border border-gray-300 px-4 py-2 text-left text-sm font-medium text-gray-900">Service Name</th>
                                       <th className="border border-gray-300 px-4 py-2 text-left text-sm font-medium text-gray-900">Amount</th>
-                                      <th className="border border-gray-300 px-4 py-2 text-left text-sm font-medium text-gray-900">Selected Date</th>
+                                      <th className="border border-gray-300 px-4 py-2 text-left text-sm font-medium text-gray-900">Start Date</th>
+                                      <th className="border border-gray-300 px-4 py-2 text-left text-sm font-medium text-gray-900">End Date</th>
                                       <th className="border border-gray-300 px-4 py-2 text-center text-sm font-medium text-gray-900">Action</th>
                                     </tr>
                                   </thead>
@@ -17959,12 +18041,20 @@ Dr. Murali B K
                                         <td className="border border-gray-300 px-4 py-2 text-sm font-medium text-green-600">
                                           ₹{service.selectedRate || service.amount}
                                         </td>
-                                        <td className="border border-gray-300 px-4 py-2 text-sm text-gray-600">
+                                        <td className="border border-gray-300 px-2 py-2 text-sm text-gray-600">
                                           <input
                                             type="date"
-                                            value={service.selected_at ? new Date(service.selected_at).toISOString().split('T')[0] : ''}
-                                            onChange={(e) => updateClinicalServiceField(service.junction_id, 'selected_at', e.target.value)}
-                                            className="w-full px-2 py-1 text-xs border border-gray-200 rounded focus:outline-none focus:border-blue-500"
+                                            value={service.start_date || ''}
+                                            onChange={(e) => updateClinicalServiceField(service.junction_id, 'start_date', e.target.value)}
+                                            className="w-full border-0 bg-transparent text-sm px-1 focus:outline-none focus:ring-1 focus:ring-blue-500 rounded"
+                                          />
+                                        </td>
+                                        <td className="border border-gray-300 px-2 py-2 text-sm text-gray-600">
+                                          <input
+                                            type="date"
+                                            value={service.end_date || ''}
+                                            onChange={(e) => updateClinicalServiceField(service.junction_id, 'end_date', e.target.value)}
+                                            className="w-full border-0 bg-transparent text-sm px-1 focus:outline-none focus:ring-1 focus:ring-blue-500 rounded"
                                           />
                                         </td>
                                         <td className="border border-gray-300 px-4 py-2 text-sm text-center">
@@ -18005,8 +18095,13 @@ Dr. Murali B K
                                   console.log(`🔍 [TOTAL CALC] Services data:`, savedMandatoryServicesData);
 
                                   const total = savedMandatoryServicesData.reduce((total, service, index) => {
-                                    // Get quantity and rate for proper calculation
-                                    const quantity = service.quantity || 1;
+                                    // Calculate quantity from start_date and end_date
+                                    let quantity = service.quantity || 1;
+                                    if (service.start_date && service.end_date) {
+                                      const start = new Date(service.start_date);
+                                      const end = new Date(service.end_date);
+                                      quantity = Math.max(1, Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+                                    }
                                     const rate = service.selectedRate || service.rate_used || service.cost || service.rate || 0;
                                     const numericRate = typeof rate === 'string' ? parseFloat(rate.replace(/[^\d.-]/g, '')) : parseFloat(rate);
                                     const validRate = isNaN(numericRate) ? 0 : numericRate;
@@ -18037,7 +18132,8 @@ Dr. Murali B K
                                       <th className="border border-gray-300 px-4 py-2 text-center text-sm font-medium text-gray-900">Qty</th>
                                       <th className="border border-gray-300 px-4 py-2 text-left text-sm font-medium text-gray-900">Rate</th>
                                       <th className="border border-gray-300 px-4 py-2 text-left text-sm font-medium text-gray-900">Amount</th>
-                                      <th className="border border-gray-300 px-4 py-2 text-left text-sm font-medium text-gray-900">Selected Date</th>
+                                      <th className="border border-gray-300 px-4 py-2 text-left text-sm font-medium text-gray-900">Start Date</th>
+                                      <th className="border border-gray-300 px-4 py-2 text-left text-sm font-medium text-gray-900">End Date</th>
                                       <th className="border border-gray-300 px-4 py-2 text-center text-sm font-medium text-gray-900">Action</th>
                                     </tr>
                                   </thead>
@@ -18059,7 +18155,16 @@ Dr. Murali B K
                                             {service.service_name || 'Unknown Service'}
                                           </td>
                                           <td className="border border-gray-300 px-4 py-2 text-center text-sm font-medium text-purple-600">
-                                            {service.quantity || 1}
+                                            {(() => {
+                                              // Calculate days from start_date and end_date
+                                              if (service.start_date && service.end_date) {
+                                                const start = new Date(service.start_date);
+                                                const end = new Date(service.end_date);
+                                                const days = Math.max(1, Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+                                                return days;
+                                              }
+                                              return service.quantity || 1;
+                                            })()}
                                           </td>
                                           <td className="border border-gray-300 px-4 py-2 text-sm text-gray-700">
                                             ₹{(() => {
@@ -18071,7 +18176,13 @@ Dr. Murali B K
                                           </td>
                                           <td className="border border-gray-300 px-4 py-2 text-sm font-medium text-green-600">
                                             ₹{(() => {
-                                              const quantity = service.quantity || 1;
+                                              // Calculate days from start_date and end_date for amount
+                                              let quantity = service.quantity || 1;
+                                              if (service.start_date && service.end_date) {
+                                                const start = new Date(service.start_date);
+                                                const end = new Date(service.end_date);
+                                                quantity = Math.max(1, Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+                                              }
                                               const rate = service.selectedRate || service.rate_used || service.cost || service.rate || 0;
                                               const numericRate = typeof rate === 'string' ? parseFloat(rate.replace(/[^\d.-]/g, '')) : parseFloat(rate);
                                               const finalRate = isNaN(numericRate) ? 0 : numericRate;
@@ -18080,12 +18191,20 @@ Dr. Murali B K
                                               return totalAmount.toLocaleString('en-IN');
                                             })()}
                                           </td>
-                                          <td className="border border-gray-300 px-4 py-2 text-sm text-gray-600">
+                                          <td className="border border-gray-300 px-2 py-2 text-sm text-gray-600">
                                             <input
                                               type="date"
-                                              value={service.selected_at ? new Date(service.selected_at).toISOString().split('T')[0] : ''}
-                                              onChange={(e) => updateMandatoryServiceField(service.id, 'selected_at', e.target.value)}
-                                              className="w-full px-2 py-1 text-xs border border-gray-200 rounded focus:outline-none focus:border-blue-500"
+                                              value={service.start_date || ''}
+                                              onChange={(e) => updateMandatoryServiceField(service.junction_id, 'start_date', e.target.value)}
+                                              className="w-full border-0 bg-transparent text-sm px-1 focus:outline-none focus:ring-1 focus:ring-blue-500 rounded"
+                                            />
+                                          </td>
+                                          <td className="border border-gray-300 px-2 py-2 text-sm text-gray-600">
+                                            <input
+                                              type="date"
+                                              value={service.end_date || ''}
+                                              onChange={(e) => updateMandatoryServiceField(service.junction_id, 'end_date', e.target.value)}
+                                              className="w-full border-0 bg-transparent text-sm px-1 focus:outline-none focus:ring-1 focus:ring-blue-500 rounded"
                                             />
                                           </td>
                                           <td className="border border-gray-300 px-4 py-2 text-sm text-center">
@@ -18163,17 +18282,28 @@ Dr. Murali B K
                                           {accommodation.days}
                                         </td>
                                         <td className="border border-gray-300 px-2 py-2 text-sm text-gray-700">
-                                          <select
-                                            className="w-full border-0 bg-transparent text-sm px-1 focus:outline-none focus:ring-1 focus:ring-blue-500 rounded"
-                                            value={accommodation.rate_type}
-                                            onChange={(e) => updateAccommodationField(accommodation.id, 'rate_type', e.target.value)}
-                                          >
-                                            <option value="private">Private</option>
-                                            <option value="tpa">TPA</option>
-                                            <option value="nabh">NABH</option>
-                                            <option value="non_nabh">Non-NABH</option>
-                                          </select>
-                                          <div className="text-xs text-gray-500 mt-1">₹{accommodation.rate_used}</div>
+                                          {(() => {
+                                            // Check if ICICI Lombard - lock rate_type to private
+                                            const corporate = (patientInfo?.corporate || '').toLowerCase().trim();
+                                            const isICICILombard = corporate.includes('icici lombard') || corporate.includes('icici');
+                                            return (
+                                              <>
+                                                <select
+                                                  className="w-full border-0 bg-transparent text-sm px-1 focus:outline-none focus:ring-1 focus:ring-blue-500 rounded"
+                                                  value={isICICILombard ? 'private' : accommodation.rate_type}
+                                                  onChange={(e) => updateAccommodationField(accommodation.id, 'rate_type', e.target.value)}
+                                                  disabled={isICICILombard}
+                                                  title={isICICILombard ? 'ICICI Lombard uses Private rates only' : ''}
+                                                >
+                                                  <option value="private">Private</option>
+                                                  <option value="tpa">TPA</option>
+                                                  <option value="nabh">NABH</option>
+                                                  <option value="non_nabh">Non-NABH</option>
+                                                </select>
+                                                <div className="text-xs text-gray-500 mt-1">₹{accommodation.rate_used}</div>
+                                              </>
+                                            );
+                                          })()}
                                         </td>
                                         <td className="border border-gray-300 px-4 py-2 text-sm font-semibold text-green-600">
                                           ₹{accommodation.amount}
