@@ -9397,22 +9397,27 @@ INSTRUCTIONS:
           corporate.includes('echs') ||
           corporate.includes('esic'));
 
+        // Check if corporate uses Private rates (ICICI Lombard, etc.)
+        const usesPrivateRate = hasCorporate &&
+          (corporate.includes('icici lombard') ||
+          corporate.includes('icici'));
+
         // Check if corporate qualifies for Bhopal NABH rates
         const usesBhopaliNABHRate = hasCorporate &&
           (corporate.includes('mp police') ||
           corporate.includes('ordnance factory') ||
           corporate.includes('ordnance factory itarsi'));
 
-        // Check if patient has other corporate (not CGHS/ECHS/ESIC, not MP Police/Ordnance Factory)
-        const usesNABHRate = hasCorporate && !usesNonNABHRate && !usesBhopaliNABHRate;
+        // Check if patient has other corporate (not CGHS/ECHS/ESIC, not MP Police/Ordnance Factory, not ICICI)
+        const usesNABHRate = hasCorporate && !usesNonNABHRate && !usesBhopaliNABHRate && !usesPrivateRate;
 
         // Rate selection based on patient type (priority: Private > Non-NABH > Bhopal NABH > NABH > Fallback)
         let finalCost = 0;
         let rateSource = 'not_available';
 
-        // ALWAYS check private patient FIRST
-        if (isPrivatePatient) {
-          // Private patients - use private column
+        // ALWAYS check private patient FIRST (including ICICI Lombard)
+        if (isPrivatePatient || usesPrivateRate) {
+          // Private patients OR ICICI Lombard - use private column
           finalCost = (item.private && item.private > 0) ? item.private : 0;
           rateSource = finalCost > 0 ? 'private' : 'not_available';
         } else if (usesNonNABHRate) {
