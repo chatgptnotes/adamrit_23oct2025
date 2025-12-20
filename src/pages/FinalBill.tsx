@@ -9521,9 +9521,8 @@ INSTRUCTIONS:
   ).filter(service =>
     // Temporarily hide services that might have cross mark issues
     !service.name?.toLowerCase().includes('2d echocardiography') &&
-    !service.name?.toLowerCase().includes('2d echo charges') &&
-    // Hide services without valid rates
-    service.amount && service.amount > 0
+    !service.name?.toLowerCase().includes('2d echo charges')
+    // Allow services without rates - they will show with amount 0
   );
 
   // Debug logging for radiology services

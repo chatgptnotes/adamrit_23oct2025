@@ -1237,29 +1237,45 @@ const Invoice = () => {
     console.log('accommodationData:', accommodationData);
     console.log('accommodationData length:', accommodationData?.length);
 
-    let totalAccommodationCharges = 0;
     if (accommodationData && accommodationData.length > 0) {
       accommodationData.forEach((visitAccom: any) => {
-        const amount = parseFloat(visitAccom.amount) || parseFloat(visitAccom.rate_used) || 0;
-        totalAccommodationCharges += amount;
-        console.log('Adding accommodation to total:', {
-          room_type: visitAccom.accommodation?.room_type,
-          amount: amount
-        });
-      });
+        const roomType = visitAccom.accommodation?.room_type || 'Accommodation';
+        const startDate = visitAccom.start_date ? format(new Date(visitAccom.start_date), 'dd-MM-yyyy') : '';
+        const endDate = visitAccom.end_date ? format(new Date(visitAccom.end_date), 'dd-MM-yyyy') : '';
 
-      // Add single summary line for all accommodation charges
-      if (totalAccommodationCharges > 0) {
-        console.log('Adding Accommodation Charges summary line:', totalAccommodationCharges);
+        // Calculate days between start and end date
+        let days = 1;
+        if (visitAccom.start_date && visitAccom.end_date) {
+          const start = new Date(visitAccom.start_date);
+          const end = new Date(visitAccom.end_date);
+          days = Math.max(1, Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+        }
+
+        const ratePerDay = parseFloat(visitAccom.rate_used) || 0;
+        const totalAmount = parseFloat(visitAccom.amount) || (ratePerDay * days);
+
+        // Format item with room type and date range
+        const dateRange = startDate && endDate ? ` (${startDate} to ${endDate})` : '';
+        const itemDescription = `${roomType}${dateRange}`;
+
+        console.log('Adding accommodation line:', {
+          room_type: roomType,
+          startDate,
+          endDate,
+          days,
+          ratePerDay,
+          totalAmount
+        });
+
         services.push({
           srNo: srNo++,
-          item: 'Accommodation Charges',
-          rate: totalAccommodationCharges,
-          qty: 1,
-          amount: totalAccommodationCharges,
+          item: itemDescription,
+          rate: ratePerDay,
+          qty: days,
+          amount: totalAmount,
           type: 'accommodation'
         });
-      }
+      });
     } else {
       console.log('No accommodation data found for this visit');
     }
