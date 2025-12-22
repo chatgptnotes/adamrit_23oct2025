@@ -27,7 +27,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { format } from 'date-fns';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { EditPatientDialog } from '@/components/EditPatientDialog';
 import { DocumentUploadDialog } from '@/components/DocumentUploadDialog';
 import { usePatients } from '@/hooks/usePatients';
@@ -45,7 +45,55 @@ import '@/styles/print.css';
 
 const TodaysIpdDashboard = () => {
   const { isAdmin, hospitalConfig, user } = useAuth();
-  const [searchTerm, setSearchTerm] = useState('');
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // URL-persisted state
+  const searchTerm = searchParams.get('search') || '';
+  const billingExecutiveFilter = searchParams.get('executive') || '';
+  const billingStatusFilter = searchParams.get('billingStatus') || '';
+  const bunchFilter = searchParams.get('bunch') || '';
+  const corporateFilter = searchParams.get('corporate') || '';
+  const currentPage = parseInt(searchParams.get('page') || '1');
+  const itemsPerPage = parseInt(searchParams.get('perPage') || '10');
+  const hideColumns = searchParams.get('hideColumns') === 'true';
+  const sortBy = (searchParams.get('sortBy') || 'latest') as 'sr_no' | 'sr_no_desc' | 'latest' | 'oldest' | 'name_asc' | 'name_desc' | 'visit_id_asc' | 'visit_id_desc';
+  const fileStatusFilter = searchParams.get('fileStatus')?.split(',').filter(Boolean) || [];
+  const condonationSubmissionFilter = searchParams.get('condSub')?.split(',').filter(Boolean) || [];
+  const condonationIntimationFilter = searchParams.get('condInt')?.split(',').filter(Boolean) || [];
+  const extensionOfStayFilter = searchParams.get('extStay')?.split(',').filter(Boolean) || [];
+  const additionalApprovalsFilter = searchParams.get('addApproval')?.split(',').filter(Boolean) || [];
+
+  // Helper to update URL params
+  const updateParams = (updates: Record<string, string | null>) => {
+    const newParams = new URLSearchParams(searchParams);
+    Object.entries(updates).forEach(([key, value]) => {
+      if (value === null || value === '' || value === '1' && key === 'page') {
+        newParams.delete(key);
+      } else {
+        newParams.set(key, value);
+      }
+    });
+    setSearchParams(newParams, { replace: true });
+  };
+
+  // Setter functions for URL-persisted state
+  const setSearchTerm = (value: string) => updateParams({ search: value, page: '1' });
+  const setBillingExecutiveFilter = (value: string) => updateParams({ executive: value, page: '1' });
+  const setBillingStatusFilter = (value: string) => updateParams({ billingStatus: value, page: '1' });
+  const setBunchFilter = (value: string) => updateParams({ bunch: value, page: '1' });
+  const setCorporateFilter = (value: string) => updateParams({ corporate: value, page: '1' });
+  const setCurrentPage = (value: number) => updateParams({ page: value.toString() });
+  const setItemsPerPage = (value: number) => updateParams({ perPage: value.toString(), page: '1' });
+  const setHideColumns = (value: boolean) => updateParams({ hideColumns: value ? 'true' : null });
+  const setSortBy = (value: string) => updateParams({ sortBy: value });
+  const setFileStatusFilter = (value: string[]) => updateParams({ fileStatus: value.length ? value.join(',') : null });
+  const setCondonationSubmissionFilter = (value: string[]) => updateParams({ condSub: value.length ? value.join(',') : null });
+  const setCondonationIntimationFilter = (value: string[]) => updateParams({ condInt: value.length ? value.join(',') : null });
+  const setExtensionOfStayFilter = (value: string[]) => updateParams({ extStay: value.length ? value.join(',') : null });
+  const setAdditionalApprovalsFilter = (value: string[]) => updateParams({ addApproval: value.length ? value.join(',') : null });
+
+  // Non-persisted state (UI state that shouldn't persist)
   const [showEditPatientDialog, setShowEditPatientDialog] = useState(false);
   const [selectedPatientForEdit, setSelectedPatientForEdit] = useState(null);
   const [showDocumentUploadDialog, setShowDocumentUploadDialog] = useState(false);
@@ -54,31 +102,16 @@ const TodaysIpdDashboard = () => {
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
   const [srNo, setSrNo] = useState('');
   const [billingExecutiveInputs, setBillingExecutiveInputs] = useState({});
-  const [billingExecutiveFilter, setBillingExecutiveFilter] = useState('');
   const [billingStatusInputs, setBillingStatusInputs] = useState({});
-  const [billingStatusFilter, setBillingStatusFilter] = useState('');
   const [bunchNumberInputs, setBunchNumberInputs] = useState({});
-  const [bunchFilter, setBunchFilter] = useState('');
-  const [corporateFilter, setCorporateFilter] = useState('');
-  const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(10);
   const [referralLetterStatus, setReferralLetterStatus] = useState<Record<string, boolean>>({});
   const [commentDialogs, setCommentDialogs] = useState<Record<string, boolean>>({});
   const [commentTexts, setCommentTexts] = useState<Record<string, string>>({});
   const [originalComments, setOriginalComments] = useState<Record<string, string>>({});
   const [savingComments, setSavingComments] = useState<Record<string, boolean>>({});
   const [savedComments, setSavedComments] = useState<Record<string, boolean>>({});
-  const [sortBy, setSortBy] = useState<'sr_no' | 'sr_no_desc' | 'latest' | 'oldest' | 'name_asc' | 'name_desc' | 'visit_id_asc' | 'visit_id_desc'>('latest');
-  const navigate = useNavigate();
 
   const { diagnoses, updatePatient } = usePatients();
-
-  // Column filter states (top-level)
-  const [fileStatusFilter, setFileStatusFilter] = useState<string[]>([]);
-  const [condonationSubmissionFilter, setCondonationSubmissionFilter] = useState<string[]>([]);
-  const [condonationIntimationFilter, setCondonationIntimationFilter] = useState<string[]>([]);
-  const [extensionOfStayFilter, setExtensionOfStayFilter] = useState<string[]>([]);
-  const [additionalApprovalsFilter, setAdditionalApprovalsFilter] = useState<string[]>([]);
 
   // Advance payment status tracking
   const [advancePayments, setAdvancePayments] = useState<Record<string, number>>({});
@@ -2136,6 +2169,13 @@ const TodaysIpdDashboard = () => {
               <Printer className="h-4 w-4" />
               Print List
             </Button>
+            <Button
+              onClick={() => setHideColumns(!hideColumns)}
+              variant="outline"
+              className="flex items-center gap-2"
+            >
+              {hideColumns ? 'Show Columns' : 'Hide Columns'}
+            </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" className="flex items-center gap-2">
@@ -2321,8 +2361,8 @@ const TodaysIpdDashboard = () => {
           <Table>
             <TableHeader>
               <TableRow className="bg-muted/50">
-                <TableHead className="font-semibold">Sr No</TableHead>
-                <TableHead className="font-semibold">Bunch No.</TableHead>
+                {!hideColumns && <TableHead className="font-semibold">Sr No</TableHead>}
+                {!hideColumns && <TableHead className="font-semibold">Bunch No.</TableHead>}
                 <TableHead className="font-semibold">Visit ID</TableHead>
                 <TableHead className="font-semibold">Patient Name</TableHead>
                 <TableHead className="font-semibold">Claim ID</TableHead>
@@ -2331,18 +2371,18 @@ const TodaysIpdDashboard = () => {
                 <TableHead className="font-semibold">Bill</TableHead>
                 <TableHead className="font-semibold">Admission Notes</TableHead>
                 <TableHead className="font-semibold">Corporate</TableHead>
-                <TableHead className="font-semibold">Billing Executive</TableHead>
-                <TableHead className="font-semibold">Billing Status</TableHead>
-                <TableHead className="font-semibold">File Status</TableHead>
-                <TableHead className="font-semibold">Photos</TableHead>
-                <TableHead className="font-semibold">Sign</TableHead>
-                <TableHead className="font-semibold">HospitalStamp</TableHead>
-                <TableHead className="font-semibold">DrSurgeonStamp</TableHead>
-                <TableHead className="font-semibold">Condonation Delay -submission</TableHead>
-                <TableHead className="font-semibold">Condonation Delay -intimation</TableHead>
-                <TableHead className="font-semibold">Extension of Stay</TableHead>
-                <TableHead className="font-semibold">Additional Approvals</TableHead>
-                <TableHead className="font-semibold">Visit Type</TableHead>
+                {!hideColumns && <TableHead className="font-semibold">Billing Executive</TableHead>}
+                {!hideColumns && <TableHead className="font-semibold">Billing Status</TableHead>}
+                {!hideColumns && <TableHead className="font-semibold">File Status</TableHead>}
+                {!hideColumns && <TableHead className="font-semibold">Photos</TableHead>}
+                {!hideColumns && <TableHead className="font-semibold">Sign</TableHead>}
+                {!hideColumns && <TableHead className="font-semibold">HospitalStamp</TableHead>}
+                {!hideColumns && <TableHead className="font-semibold">DrSurgeonStamp</TableHead>}
+                {!hideColumns && <TableHead className="font-semibold">Condonation Delay -submission</TableHead>}
+                {!hideColumns && <TableHead className="font-semibold">Condonation Delay -intimation</TableHead>}
+                {!hideColumns && <TableHead className="font-semibold">Extension of Stay</TableHead>}
+                {!hideColumns && <TableHead className="font-semibold">Additional Approvals</TableHead>}
+                {!hideColumns && <TableHead className="font-semibold">Visit Type</TableHead>}
                 <TableHead className="font-semibold">Stickers</TableHead>
                 <TableHead className="font-semibold">Doctor</TableHead>
                 <TableHead className="font-semibold">Diagnosis</TableHead>
@@ -2353,6 +2393,8 @@ const TodaysIpdDashboard = () => {
                 {isAdmin && <TableHead className="font-semibold">Actions</TableHead>}
               </TableRow>
               <TableRow className="bg-muted/30">
+                {!hideColumns && <TableHead></TableHead>}
+                {!hideColumns && <TableHead></TableHead>}
                 <TableHead></TableHead>
                 <TableHead></TableHead>
                 <TableHead></TableHead>
@@ -2361,27 +2403,38 @@ const TodaysIpdDashboard = () => {
                 <TableHead></TableHead>
                 <TableHead></TableHead>
                 <TableHead></TableHead>
-                <TableHead></TableHead>
-                <TableHead></TableHead>
-                <TableHead>
-                  <ColumnFilter options={fileStatusOptions} selected={fileStatusFilter} onChange={setFileStatusFilter} />
-                </TableHead>
-                <TableHead></TableHead>
-                <TableHead></TableHead>
-                <TableHead></TableHead>
-                <TableHead>
-                  <ColumnFilter options={condonationSubmissionOptions} selected={condonationSubmissionFilter} onChange={setCondonationSubmissionFilter} />
-                </TableHead>
-                <TableHead>
-                  <ColumnFilter options={condonationIntimationOptions} selected={condonationIntimationFilter} onChange={setCondonationIntimationFilter} />
-                </TableHead>
-                <TableHead>
-                  <ColumnFilter options={extensionOfStayOptions} selected={extensionOfStayFilter} onChange={setExtensionOfStayFilter} />
-                </TableHead>
-                <TableHead>
-                  <ColumnFilter options={additionalApprovalsOptions} selected={additionalApprovalsFilter} onChange={setAdditionalApprovalsFilter} />
-                </TableHead>
-                <TableHead></TableHead>
+                {!hideColumns && <TableHead></TableHead>}
+                {!hideColumns && <TableHead></TableHead>}
+                {!hideColumns && (
+                  <TableHead>
+                    <ColumnFilter options={fileStatusOptions} selected={fileStatusFilter} onChange={setFileStatusFilter} />
+                  </TableHead>
+                )}
+                {!hideColumns && <TableHead></TableHead>}
+                {!hideColumns && <TableHead></TableHead>}
+                {!hideColumns && <TableHead></TableHead>}
+                {!hideColumns && <TableHead></TableHead>}
+                {!hideColumns && (
+                  <TableHead>
+                    <ColumnFilter options={condonationSubmissionOptions} selected={condonationSubmissionFilter} onChange={setCondonationSubmissionFilter} />
+                  </TableHead>
+                )}
+                {!hideColumns && (
+                  <TableHead>
+                    <ColumnFilter options={condonationIntimationOptions} selected={condonationIntimationFilter} onChange={setCondonationIntimationFilter} />
+                  </TableHead>
+                )}
+                {!hideColumns && (
+                  <TableHead>
+                    <ColumnFilter options={extensionOfStayOptions} selected={extensionOfStayFilter} onChange={setExtensionOfStayFilter} />
+                  </TableHead>
+                )}
+                {!hideColumns && (
+                  <TableHead>
+                    <ColumnFilter options={additionalApprovalsOptions} selected={additionalApprovalsFilter} onChange={setAdditionalApprovalsFilter} />
+                  </TableHead>
+                )}
+                {!hideColumns && <TableHead></TableHead>}
                 <TableHead></TableHead>
                 <TableHead></TableHead>
                 <TableHead></TableHead>
@@ -2397,22 +2450,26 @@ const TodaysIpdDashboard = () => {
             <TableBody>
               {paginatedVisits.map((visit) => (
                 <TableRow key={visit.id} className="hover:bg-muted/50">
-                  <TableCell>
-                    {isAdmin ? (
-                      <Input
-                        value={visit.sr_no || ''}
-                        onChange={(e) => handleSrNoSubmit(visit.visit_id, e.target.value)}
-                        onBlur={(e) => handleSrNoSubmit(visit.visit_id, e.target.value)}
-                        placeholder="Enter Sr No"
-                        className="w-20 h-8 text-sm"
-                      />
-                    ) : (
-                      <span className="text-sm">{visit.sr_no || '-'}</span>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <BunchNumberInput visit={visit} isAdmin={isAdmin} />
-                  </TableCell>
+                  {!hideColumns && (
+                    <TableCell>
+                      {isAdmin ? (
+                        <Input
+                          value={visit.sr_no || ''}
+                          onChange={(e) => handleSrNoSubmit(visit.visit_id, e.target.value)}
+                          onBlur={(e) => handleSrNoSubmit(visit.visit_id, e.target.value)}
+                          placeholder="Enter Sr No"
+                          className="w-20 h-8 text-sm"
+                        />
+                      ) : (
+                        <span className="text-sm">{visit.sr_no || '-'}</span>
+                      )}
+                    </TableCell>
+                  )}
+                  {!hideColumns && (
+                    <TableCell>
+                      <BunchNumberInput visit={visit} isAdmin={isAdmin} />
+                    </TableCell>
+                  )}
                   <TableCell className="font-mono text-sm">
                     <button
                       onClick={() => handleVisitIdClick(visit.patient_id, visit.visit_id)}
@@ -2546,54 +2603,78 @@ const TodaysIpdDashboard = () => {
                   <TableCell>
                     {visit.patients?.corporate || '—'}
                   </TableCell>
-                  <TableCell>
-                    <BillingExecutiveInput visit={visit} isAdmin={isAdmin} />
-                  </TableCell>
-                  <TableCell>
-                    <BillingStatusDropdown visit={visit} />
-                  </TableCell>
-                  <TableCell>
-                    {isAdmin ? <FileStatusToggle visit={visit} /> : (
-                      <Badge variant="outline" className="capitalize">{visit.file_status || '—'}</Badge>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <PhotosCountButton visit={visit} />
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <SignCountButton visit={visit} />
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <HospitalStampCountButton visit={visit} />
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <DrSurgeonStampCountButton visit={visit} />
-                  </TableCell>
-                  <TableCell>
-                    {isAdmin ? <CondonationDelayToggle visit={visit} /> : (
-                      <Badge variant="outline" className="capitalize">{visit.condonation_delay_claim || '—'}</Badge>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {isAdmin ? <CondonationDelayIntimationToggle visit={visit} /> : (
-                      <Badge variant="outline" className="capitalize">{visit.condonation_delay_intimation || '—'}</Badge>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {isAdmin ? <ExtensionOfStayToggle visit={visit} /> : (
-                      <Badge variant="outline" className="capitalize">{visit.extension_of_stay || '—'}</Badge>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {isAdmin ? <AdditionalApprovalsToggle visit={visit} /> : (
-                      <Badge variant="outline" className="capitalize">{visit.additional_approvals || '—'}</Badge>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className="capitalize">
-                      {visit.visit_type}
-                    </Badge>
-                  </TableCell>
+                  {!hideColumns && (
+                    <TableCell>
+                      <BillingExecutiveInput visit={visit} isAdmin={isAdmin} />
+                    </TableCell>
+                  )}
+                  {!hideColumns && (
+                    <TableCell>
+                      <BillingStatusDropdown visit={visit} />
+                    </TableCell>
+                  )}
+                  {!hideColumns && (
+                    <TableCell>
+                      {isAdmin ? <FileStatusToggle visit={visit} /> : (
+                        <Badge variant="outline" className="capitalize">{visit.file_status || '—'}</Badge>
+                      )}
+                    </TableCell>
+                  )}
+                  {!hideColumns && (
+                    <TableCell className="text-center">
+                      <PhotosCountButton visit={visit} />
+                    </TableCell>
+                  )}
+                  {!hideColumns && (
+                    <TableCell className="text-center">
+                      <SignCountButton visit={visit} />
+                    </TableCell>
+                  )}
+                  {!hideColumns && (
+                    <TableCell className="text-center">
+                      <HospitalStampCountButton visit={visit} />
+                    </TableCell>
+                  )}
+                  {!hideColumns && (
+                    <TableCell className="text-center">
+                      <DrSurgeonStampCountButton visit={visit} />
+                    </TableCell>
+                  )}
+                  {!hideColumns && (
+                    <TableCell>
+                      {isAdmin ? <CondonationDelayToggle visit={visit} /> : (
+                        <Badge variant="outline" className="capitalize">{visit.condonation_delay_claim || '—'}</Badge>
+                      )}
+                    </TableCell>
+                  )}
+                  {!hideColumns && (
+                    <TableCell>
+                      {isAdmin ? <CondonationDelayIntimationToggle visit={visit} /> : (
+                        <Badge variant="outline" className="capitalize">{visit.condonation_delay_intimation || '—'}</Badge>
+                      )}
+                    </TableCell>
+                  )}
+                  {!hideColumns && (
+                    <TableCell>
+                      {isAdmin ? <ExtensionOfStayToggle visit={visit} /> : (
+                        <Badge variant="outline" className="capitalize">{visit.extension_of_stay || '—'}</Badge>
+                      )}
+                    </TableCell>
+                  )}
+                  {!hideColumns && (
+                    <TableCell>
+                      {isAdmin ? <AdditionalApprovalsToggle visit={visit} /> : (
+                        <Badge variant="outline" className="capitalize">{visit.additional_approvals || '—'}</Badge>
+                      )}
+                    </TableCell>
+                  )}
+                  {!hideColumns && (
+                    <TableCell>
+                      <Badge variant="outline" className="capitalize">
+                        {visit.visit_type}
+                      </Badge>
+                    </TableCell>
+                  )}
                   <TableCell>
                     <Button
                       variant="outline"

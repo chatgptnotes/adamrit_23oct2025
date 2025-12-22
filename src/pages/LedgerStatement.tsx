@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Calendar, Printer, Edit2, Trash2, Eye } from 'lucide-react';
 import { usePaymentByVoucherNo } from '@/hooks/useCashBookQueries';
 import { useLedgerStatementData, useLedgerBalances } from '@/hooks/useLedgerStatement';
@@ -15,17 +15,43 @@ const LedgerStatement: React.FC = () => {
   // Get today's date in YYYY-MM-DD format
   const today = new Date().toISOString().split('T')[0];
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
 
-  const [mrnNo, setMrnNo] = useState('');
-  const [accountName, setAccountName] = useState('STATE BANK OF INDIA (DRM)');
-  const [fromDate, setFromDate] = useState(today);
-  const [toDate, setToDate] = useState(today);
-  const [searchNarration, setSearchNarration] = useState('');
-  const [searchAmount, setSearchAmount] = useState('');
+  // URL-persisted state
+  const mrnNo = searchParams.get('mrn') || '';
+  const accountName = searchParams.get('account') || 'STATE BANK OF INDIA (DRM)';
+  const fromDate = searchParams.get('from') || today;
+  const toDate = searchParams.get('to') || today;
+  const searchNarration = searchParams.get('narration') || '';
+  const searchAmount = searchParams.get('amount') || '';
+  const paymentModeFilter = searchParams.get('payMode') || 'ONLINE';
+
+  // Helper to update URL params
+  const updateParams = (updates: Record<string, string | null>) => {
+    const newParams = new URLSearchParams(searchParams);
+    Object.entries(updates).forEach(([key, value]) => {
+      if (value === null || value === '' || (key === 'from' && value === today) || (key === 'to' && value === today) || (key === 'account' && value === 'STATE BANK OF INDIA (DRM)') || (key === 'payMode' && value === 'ONLINE')) {
+        newParams.delete(key);
+      } else {
+        newParams.set(key, value);
+      }
+    });
+    setSearchParams(newParams, { replace: true });
+  };
+
+  // Setter functions
+  const setMrnNo = (value: string) => updateParams({ mrn: value });
+  const setAccountName = (value: string) => updateParams({ account: value });
+  const setFromDate = (value: string) => updateParams({ from: value });
+  const setToDate = (value: string) => updateParams({ to: value });
+  const setSearchNarration = (value: string) => updateParams({ narration: value });
+  const setSearchAmount = (value: string) => updateParams({ amount: value });
+  const setPaymentModeFilter = (value: string | undefined) => updateParams({ payMode: value || null });
+
+  // Non-persisted state
   const [hideNarration, setHideNarration] = useState(false);
   const [activeMenuItem, setActiveMenuItem] = useState('Ledger Statement');
   const [printingVoucherNo, setPrintingVoucherNo] = useState<string | undefined>(undefined);
-  const [paymentModeFilter, setPaymentModeFilter] = useState<string | undefined>('ONLINE');
   const [bankAccounts, setBankAccounts] = useState<Array<{ id: string; account_name: string }>>([]);
 
   // Fetch bank accounts from database
@@ -143,6 +169,7 @@ const LedgerStatement: React.FC = () => {
     { label: 'Ledger Statement', bgColor: 'bg-gray-400' },
     { label: 'Cash Book', bgColor: 'bg-gray-300' },
     { label: 'Day Book', bgColor: 'bg-gray-300' },
+    { label: 'Patient Ledger', bgColor: 'bg-gray-300' },
   ];
 
   const handleMenuClick = (menuLabel: string) => {
@@ -158,6 +185,9 @@ const LedgerStatement: React.FC = () => {
         break;
       case 'Day Book':
         navigate('/day-book');
+        break;
+      case 'Patient Ledger':
+        navigate('/patient-ledger');
         break;
       default:
         break;

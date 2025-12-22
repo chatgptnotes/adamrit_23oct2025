@@ -17,7 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Loader2, Search, Users, Calendar, Clock, FileText, Building2, Shield } from "lucide-react";
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from "@/hooks/use-toast";
 import { DischargeWorkflowPanel } from '@/components/discharge/DischargeWorkflowPanel';
 
@@ -118,9 +118,32 @@ const getDaysAdmitted = (admissionDate?: string): string => {
 const CurrentlyAdmittedPatients = () => {
   const navigate = useNavigate();
   const { hospitalConfig } = useAuth();
-  const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [corporateFilter, setCorporateFilter] = useState('all');
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // URL-persisted state
+  const searchTerm = searchParams.get('search') || '';
+  const statusFilter = searchParams.get('status') || 'all';
+  const corporateFilter = searchParams.get('corporate') || 'all';
+
+  // Helper to update URL params
+  const updateParams = (updates: Record<string, string | null>) => {
+    const newParams = new URLSearchParams(searchParams);
+    Object.entries(updates).forEach(([key, value]) => {
+      if (value === null || value === '' || value === 'all') {
+        newParams.delete(key);
+      } else {
+        newParams.set(key, value);
+      }
+    });
+    setSearchParams(newParams, { replace: true });
+  };
+
+  // Setter functions
+  const setSearchTerm = (value: string) => updateParams({ search: value });
+  const setStatusFilter = (value: string) => updateParams({ status: value });
+  const setCorporateFilter = (value: string) => updateParams({ corporate: value });
+
+  // Non-persisted state
   const [selectedVisitForDischarge, setSelectedVisitForDischarge] = useState<Visit | null>(null);
 
   // Fetch available corporates for filter dropdown

@@ -5,7 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ArrowLeft, FileText, Search, Download, Printer } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { format } from 'date-fns';
 import {
   Table,
@@ -20,10 +20,31 @@ import '@/styles/print.css';
 const AdvanceStatementReport = () => {
   const navigate = useNavigate();
   const { hospitalConfig, hospitalType } = useAuth();
-  const [searchTerm, setSearchTerm] = useState('');
-  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
-  const [dateFrom, setDateFrom] = useState('');
-  const [dateTo, setDateTo] = useState('');
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // URL-persisted state
+  const searchTerm = searchParams.get('search') || '';
+  const dateFrom = searchParams.get('from') || '';
+  const dateTo = searchParams.get('to') || '';
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState(searchTerm);
+
+  // Helper to update URL params
+  const updateParams = (updates: Record<string, string | null>) => {
+    const newParams = new URLSearchParams(searchParams);
+    Object.entries(updates).forEach(([key, value]) => {
+      if (value === null || value === '') {
+        newParams.delete(key);
+      } else {
+        newParams.set(key, value);
+      }
+    });
+    setSearchParams(newParams, { replace: true });
+  };
+
+  // Setter functions
+  const setSearchTerm = (value: string) => updateParams({ search: value });
+  const setDateFrom = (value: string) => updateParams({ from: value });
+  const setDateTo = (value: string) => updateParams({ to: value });
 
   // Financial data for print report
   const [billsData, setBillsData] = useState<Record<string, number>>({});

@@ -25,10 +25,11 @@ export interface PatientTransactionDetail {
 export const usePatientServiceTransactions = (
   patientId?: string,
   visitId?: string,
-  filterDate?: string
+  filterDate?: string,
+  hospitalName?: string
 ) => {
   return useQuery({
-    queryKey: ['patient-service-transactions', patientId, visitId, filterDate],
+    queryKey: ['patient-service-transactions', patientId, visitId, filterDate, hospitalName],
     queryFn: async () => {
       if (!patientId && !visitId) {
         return [];
@@ -40,7 +41,8 @@ export const usePatientServiceTransactions = (
           p_from_date: filterDate || null,
           p_to_date: filterDate || null,
           p_transaction_type: null,
-          p_patient_id: patientId || null
+          p_patient_id: patientId || null,
+          p_hospital_name: hospitalName || null
         });
 
       if (error) {

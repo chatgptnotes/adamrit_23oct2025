@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { FileText, AlertCircle, Plus, Edit, Eye, Trash2, X, ChevronLeft, ChevronRight, Download, Upload } from 'lucide-react';
@@ -37,19 +37,38 @@ const CghsSurgeryMaster = () => {
   const { hospitalConfig } = useAuth();
   const { canEditMasters } = usePermissions();
   const queryClient = useQueryClient();
+  const [searchParams, setSearchParams] = useSearchParams();
 
-  // State for modals and forms
+  // URL-persisted state
+  const searchTerm = searchParams.get('search') || '';
+  const currentPage = parseInt(searchParams.get('page') || '1');
+  const itemsPerPage = parseInt(searchParams.get('perPage') || '10');
+
+  // Helper to update URL params
+  const updateParams = (updates: Record<string, string | null>) => {
+    const newParams = new URLSearchParams(searchParams);
+    Object.entries(updates).forEach(([key, value]) => {
+      if (value === null || value === '' || (key === 'page' && value === '1') || (key === 'perPage' && value === '10')) {
+        newParams.delete(key);
+      } else {
+        newParams.set(key, value);
+      }
+    });
+    setSearchParams(newParams, { replace: true });
+  };
+
+  // Setter functions
+  const setSearchTerm = (value: string) => updateParams({ search: value, page: '1' });
+  const setCurrentPage = (value: number) => updateParams({ page: value.toString() });
+  const setItemsPerPage = (value: number) => updateParams({ perPage: value.toString(), page: '1' });
+
+  // Non-persisted state
+  const [totalCount, setTotalCount] = useState(0);
   const [viewingSurgery, setViewingSurgery] = useState<CghsSurgery | null>(null);
   const [editingSurgery, setEditingSurgery] = useState<CghsSurgery | null>(null);
   const [deletingSurgery, setDeletingSurgery] = useState<CghsSurgery | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
-
-  // Pagination state
-  const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(10);
-  const [totalCount, setTotalCount] = useState(0);
 
   // Create form state
   const [createFormData, setCreateFormData] = useState({

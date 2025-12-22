@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { Calendar, FileText, DollarSign, User, Clock, CheckCircle, AlertCircle, Receipt, Link, Printer } from 'lucide-react';
 import { format } from 'date-fns';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Table,
   TableBody,
@@ -43,11 +43,33 @@ interface BillPreparationData {
 const BillManagement: React.FC = () => {
   const { hospitalConfig } = useAuth();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // URL-persisted state
+  const filterDate = searchParams.get('date') || '';
+  const searchTerm = searchParams.get('search') || '';
+
+  // Helper to update URL params
+  const updateParams = (updates: Record<string, string | null>) => {
+    const newParams = new URLSearchParams(searchParams);
+    Object.entries(updates).forEach(([key, value]) => {
+      if (value === null || value === '') {
+        newParams.delete(key);
+      } else {
+        newParams.set(key, value);
+      }
+    });
+    setSearchParams(newParams, { replace: true });
+  };
+
+  // Setter functions
+  const setFilterDate = (value: string) => updateParams({ date: value });
+  const setSearchTerm = (value: string) => updateParams({ search: value });
+
+  // Non-persisted state
   const [billData, setBillData] = useState<BillPreparationData[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedBill, setSelectedBill] = useState<BillPreparationData | null>(null);
-  const [filterDate, setFilterDate] = useState('');
-  const [searchTerm, setSearchTerm] = useState('');
 
   // Handle print functionality
   const handlePrintAll = () => {

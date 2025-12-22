@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -11,9 +12,31 @@ import { OpdPatientTable } from '@/components/opd/OpdPatientTable';
 
 const TodaysOpd = () => {
   const { hospitalConfig } = useAuth();
-  const [searchTerm, setSearchTerm] = useState('');
-  const [corporateFilter, setCorporateFilter] = useState('');
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const today = new Date().toISOString().split('T')[0];
+
+  // URL-persisted state
+  const searchTerm = searchParams.get('search') || '';
+  const corporateFilter = searchParams.get('corporate') || '';
+  const selectedDate = searchParams.get('date') || today;
+
+  // Helper to update URL params
+  const updateParams = (updates: Record<string, string | null>) => {
+    const newParams = new URLSearchParams(searchParams);
+    Object.entries(updates).forEach(([key, value]) => {
+      if (value === null || value === '' || (key === 'date' && value === today)) {
+        newParams.delete(key);
+      } else {
+        newParams.set(key, value);
+      }
+    });
+    setSearchParams(newParams, { replace: true });
+  };
+
+  // Setter functions
+  const setSearchTerm = (value: string) => updateParams({ search: value });
+  const setCorporateFilter = (value: string) => updateParams({ corporate: value });
+  const setSelectedDate = (value: string) => updateParams({ date: value });
 
   // Fetch corporates from corporate table
   const { data: corporates = [] } = useQuery({

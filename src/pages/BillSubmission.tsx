@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Receipt, Pencil, Trash2, Search, User, Loader2, Download, Filter, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -33,21 +34,42 @@ import * as XLSX from 'xlsx';
 
 const BillSubmissionPage: React.FC = () => {
   const { hospitalConfig } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // URL-persisted state
+  const searchTerm = searchParams.get('search') || '';
+  const corporateFilter = searchParams.get('corporate') || 'all';
+  const dateFrom = searchParams.get('from') || '';
+  const dateTo = searchParams.get('to') || '';
+  const currentPage = parseInt(searchParams.get('page') || '1');
+  const itemsPerPage = 10;
+
+  // Helper to update URL params
+  const updateParams = (updates: Record<string, string | null>) => {
+    const newParams = new URLSearchParams(searchParams);
+    Object.entries(updates).forEach(([key, value]) => {
+      if (value === null || value === '' || (key === 'corporate' && value === 'all') || (key === 'page' && value === '1')) {
+        newParams.delete(key);
+      } else {
+        newParams.set(key, value);
+      }
+    });
+    setSearchParams(newParams, { replace: true });
+  };
+
+  // Setter functions
+  const setSearchTerm = (value: string) => updateParams({ search: value, page: '1' });
+  const setCorporateFilter = (value: string) => updateParams({ corporate: value, page: '1' });
+  const setDateFrom = (value: string) => updateParams({ from: value, page: '1' });
+  const setDateTo = (value: string) => updateParams({ to: value, page: '1' });
+  const setCurrentPage = (value: number) => updateParams({ page: value.toString() });
+
+  // Non-persisted state
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editData, setEditData] = useState<BillSubmission | null>(null);
   const [selectedPatient, setSelectedPatient] = useState<PatientData | null>(null);
-  const [searchTerm, setSearchTerm] = useState('');
   const [showDropdown, setShowDropdown] = useState(false);
   const searchRef = useRef<HTMLDivElement>(null);
-
-  // Filter states
-  const [corporateFilter, setCorporateFilter] = useState<string>('all');
-  const [dateFrom, setDateFrom] = useState<string>('');
-  const [dateTo, setDateTo] = useState<string>('');
-
-  // Pagination state
-  const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage] = useState(10);
 
   // Fetch bill submissions from Supabase, filtered by hospital
   const { data: submissions = [], isLoading } = useBillSubmissions(hospitalConfig?.name);

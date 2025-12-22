@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Calendar, Loader2, ArrowLeft } from 'lucide-react';
 import { useCashBookEntries, useAllDailyTransactions, DailyTransaction } from '@/hooks/useCashBookQueries';
 import PatientTransactionModal from '@/components/PatientTransactionModal';
@@ -11,11 +11,32 @@ const DayBook: React.FC = () => {
   const today = new Date().toISOString().split('T')[0];
   const navigate = useNavigate();
   const { hospitalConfig } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
 
-  const [fromDate, setFromDate] = useState(today);
-  const [toDate, setToDate] = useState(today);
-  const [searchNarration, setSearchNarration] = useState('');
-  const [selectedPaymentMode, setSelectedPaymentMode] = useState('');
+  // URL-persisted state
+  const fromDate = searchParams.get('from') || today;
+  const toDate = searchParams.get('to') || today;
+  const searchNarration = searchParams.get('narration') || '';
+  const selectedPaymentMode = searchParams.get('payMode') || '';
+
+  // Helper to update URL params
+  const updateParams = (updates: Record<string, string | null>) => {
+    const newParams = new URLSearchParams(searchParams);
+    Object.entries(updates).forEach(([key, value]) => {
+      if (value === null || value === '' || (key === 'from' && value === today) || (key === 'to' && value === today)) {
+        newParams.delete(key);
+      } else {
+        newParams.set(key, value);
+      }
+    });
+    setSearchParams(newParams, { replace: true });
+  };
+
+  // Setter functions
+  const setFromDate = (value: string) => updateParams({ from: value });
+  const setToDate = (value: string) => updateParams({ to: value });
+  const setSearchNarration = (value: string) => updateParams({ narration: value });
+  const setSelectedPaymentMode = (value: string) => updateParams({ payMode: value });
 
   // Modal state for patient transaction details
   const [isModalOpen, setIsModalOpen] = useState(false);
