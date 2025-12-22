@@ -860,19 +860,8 @@ const Invoice = () => {
           const labDetail = visitLab.lab;
           const quantity = visitLab.quantity || 1;
 
-          // Recalculate rate based on patient type
-          let correctUnitRate = 100;
-          if (isPrivatePatient && labDetail?.private && labDetail.private > 0) {
-            correctUnitRate = labDetail.private;
-          } else if (usesNonNABHRate && labDetail?.['Non-NABH_rates_in_rupee'] && labDetail['Non-NABH_rates_in_rupee'] > 0) {
-            correctUnitRate = labDetail['Non-NABH_rates_in_rupee'];
-          } else if (usesBhopaliNABHRate && labDetail?.bhopal_nabh_rate && labDetail.bhopal_nabh_rate > 0) {
-            correctUnitRate = labDetail.bhopal_nabh_rate;
-          } else if (usesNABHRate && labDetail?.['NABH_rates_in_rupee'] && labDetail['NABH_rates_in_rupee'] > 0) {
-            correctUnitRate = labDetail['NABH_rates_in_rupee'];
-          } else if (labDetail?.private && labDetail.private > 0) {
-            correctUnitRate = labDetail.private;
-          }
+          // Use saved rate from visit_labs instead of recalculating
+          const correctUnitRate = visitLab.cost || visitLab.unit_rate || 100;
 
           const finalCost = correctUnitRate * quantity;
 

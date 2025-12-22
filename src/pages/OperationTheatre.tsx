@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { PatientWorkflowBoard } from '@/components/operation-room/workflows/PatientWorkflowBoard';
 import { ResourceAllocationDashboard } from '@/components/operation-room/resource-allocation/ResourceAllocationDashboard';
@@ -14,7 +15,13 @@ import {
 } from '@/types/operation-theatre';
 
 const OperationTheatre: React.FC = () => {
-  const [activeTab, setActiveTab] = useState('workflow');
+  // Use URL params for tab state persistence
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab = searchParams.get('tab') || 'workflow';
+
+  const setActiveTab = (tab: string) => {
+    setSearchParams({ tab });
+  };
 
   // Mock data for development - replace with actual API calls
   const [patients] = useState<OperationTheatrePatient[]>([]);

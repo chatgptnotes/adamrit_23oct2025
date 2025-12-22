@@ -479,7 +479,11 @@ const DetailedInvoice = () => {
             lab:lab_id (
               name,
               CGHS_code,
-              private
+              private,
+              "NABH_rates_in_rupee",
+              "Non-NABH_rates_in_rupee",
+              bhopal_nabh_rate,
+              bhopal_non_nabh_rate
             )
           `)
           .eq('visit_id', actualVisitId);
@@ -826,7 +830,7 @@ const DetailedInvoice = () => {
       item: lab.lab?.name || 'Lab Test',
       dateTime: lab.ordered_date ? format(new Date(lab.ordered_date), 'dd/MM/yyyy HH:mm:ss') : '',
       qty: 1,
-      rate: (lab.lab?.private && lab.lab.private > 0) ? lab.lab.private : 100
+      rate: lab.cost || lab.unit_rate || 100  // Use saved rate from visit_labs
     })) || [],
     radiology: visitData?.radiologyOrders?.map((radio, index) => ({
       item: radio.radiology?.name || 'Radiology Test',

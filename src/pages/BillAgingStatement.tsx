@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useMemo } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { format } from 'date-fns';
 import * as XLSX from 'xlsx';
 import {
@@ -95,6 +95,45 @@ const getAgingBucketBadgeClass = (bucket: AgingBucket): string => {
   }
 };
 
+// Aging bucket order (most days first)
+const AGING_BUCKET_ORDER: AgingBucket[] = ['365+', '181-365', '91-180', '61-90', '31-60', '0-30'];
+
+// Heading row colors based on aging severity
+const getHeadingRowClass = (bucket: AgingBucket): string => {
+  switch (bucket) {
+    case '365+':
+    case '181-365':
+      return 'bg-red-100 hover:bg-red-100 border-t-2 border-red-300';
+    case '91-180':
+    case '61-90':
+      return 'bg-orange-100 hover:bg-orange-100 border-t-2 border-orange-300';
+    case '31-60':
+      return 'bg-yellow-100 hover:bg-yellow-100 border-t-2 border-yellow-300';
+    case '0-30':
+      return 'bg-blue-100 hover:bg-blue-100 border-t-2 border-blue-300';
+    default:
+      return 'bg-gray-100';
+  }
+};
+
+// Print heading row colors
+const getPrintHeadingRowClass = (bucket: AgingBucket): string => {
+  switch (bucket) {
+    case '365+':
+    case '181-365':
+      return 'bg-red-200';
+    case '91-180':
+    case '61-90':
+      return 'bg-orange-200';
+    case '31-60':
+      return 'bg-yellow-200';
+    case '0-30':
+      return 'bg-blue-200';
+    default:
+      return 'bg-gray-200';
+  }
+};
+
 const BillAgingStatement: React.FC = () => {
   const navigate = useNavigate();
   const { hospitalConfig } = useAuth();
@@ -113,15 +152,50 @@ const BillAgingStatement: React.FC = () => {
     refetch,
   } = useBillAgingReport(hospitalConfig?.name);
 
-  // Pagination state
-  const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(10);
+  // URL-persisted pagination state
+  const [searchParams, setSearchParams] = useSearchParams();
+  const currentPage = parseInt(searchParams.get('page') || '1');
+  const itemsPerPage = parseInt(searchParams.get('perPage') || '10');
+
+  // Helper to update URL params
+  const updateParams = (updates: Record<string, string | null>) => {
+    const newParams = new URLSearchParams(searchParams);
+    Object.entries(updates).forEach(([key, value]) => {
+      if (value === null || value === '' || (key === 'page' && value === '1') || (key === 'perPage' && value === '10')) {
+        newParams.delete(key);
+      } else {
+        newParams.set(key, value);
+      }
+    });
+    setSearchParams(newParams, { replace: true });
+  };
+
+  const setCurrentPage = (value: number) => updateParams({ page: value.toString() });
+  const setItemsPerPage = (value: number) => updateParams({ perPage: value.toString(), page: '1' });
 
   // Pagination calculations
   const totalPages = Math.ceil(data.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
   const paginatedData = data.slice(startIndex, endIndex);
+
+  // Group data by aging bucket
+  const groupedData = useMemo(() => {
+    const grouped: Record<AgingBucket, BillAgingRecord[]> = {
+      '365+': [],
+      '181-365': [],
+      '91-180': [],
+      '61-90': [],
+      '31-60': [],
+      '0-30': [],
+    };
+
+    data.forEach(record => {
+      grouped[record.aging_bucket].push(record);
+    });
+
+    return grouped;
+  }, [data]);
 
   // Pagination navigation functions
   const goToFirstPage = () => setCurrentPage(1);
@@ -554,44 +628,76 @@ const BillAgingStatement: React.FC = () => {
                       </TableCell>
                     </TableRow>
                   ) : (
-                    paginatedData.map((record, index) => (
-                      <TableRow key={record.id} className="hover:bg-muted/30">
-                        <TableCell className="text-center text-muted-foreground">
-                          {startIndex + index + 1}
-                        </TableCell>
-                        <TableCell className="font-medium">{record.visit_id}</TableCell>
-                        <TableCell>{record.patient_name}</TableCell>
-                        <TableCell>{record.corporate || '-'}</TableCell>
-                        <TableCell className="text-right">
-                          {formatCurrency(record.bill_amount)}
-                        </TableCell>
-                        <TableCell className="text-right text-green-600">
-                          {formatCurrency(record.received_amount)}
-                        </TableCell>
-                        <TableCell className="text-right text-orange-600">
-                          {formatCurrency(record.deduction_amount)}
-                        </TableCell>
-                        <TableCell className="text-right font-medium text-blue-600">
-                          {formatCurrency(record.outstanding_amount)}
-                        </TableCell>
-                        <TableCell>{formatDate(record.date_of_submission)}</TableCell>
-                        <TableCell>{formatDate(record.received_date)}</TableCell>
-                        <TableCell className="text-center">{record.days_outstanding}</TableCell>
-                        <TableCell className="text-center">
-                          <Badge
-                            className={getAgingBucketBadgeClass(record.aging_bucket)}
-                            variant="outline"
-                          >
-                            {record.aging_bucket}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <Badge className={getStatusBadgeClass(record.status)} variant="outline">
-                            {record.status}
-                          </Badge>
-                        </TableCell>
-                      </TableRow>
-                    ))
+                    (() => {
+                      let serialNo = 0;
+                      return AGING_BUCKET_ORDER.map((bucket) => {
+                        const bucketRecords = groupedData[bucket];
+                        if (bucketRecords.length === 0) return null;
+
+                        return (
+                          <React.Fragment key={bucket}>
+                            {/* Bucket Heading Row */}
+                            <TableRow className={getHeadingRowClass(bucket)}>
+                              <TableCell colSpan={13} className="py-3">
+                                <div className="flex items-center gap-2">
+                                  <Badge
+                                    className={`${getAgingBucketBadgeClass(bucket)} text-sm px-3 py-1`}
+                                    variant="outline"
+                                  >
+                                    {bucket} Days
+                                  </Badge>
+                                  <span className="font-semibold text-gray-700">
+                                    ({bucketRecords.length} {bucketRecords.length === 1 ? 'patient' : 'patients'})
+                                  </span>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                            {/* Patient Rows for this bucket */}
+                            {bucketRecords.map((record) => {
+                              serialNo++;
+                              return (
+                                <TableRow key={record.id} className="hover:bg-muted/30">
+                                  <TableCell className="text-center text-muted-foreground">
+                                    {serialNo}
+                                  </TableCell>
+                                  <TableCell className="font-medium">{record.visit_id}</TableCell>
+                                  <TableCell>{record.patient_name}</TableCell>
+                                  <TableCell>{record.corporate || '-'}</TableCell>
+                                  <TableCell className="text-right">
+                                    {formatCurrency(record.bill_amount)}
+                                  </TableCell>
+                                  <TableCell className="text-right text-green-600">
+                                    {formatCurrency(record.received_amount)}
+                                  </TableCell>
+                                  <TableCell className="text-right text-orange-600">
+                                    {formatCurrency(record.deduction_amount)}
+                                  </TableCell>
+                                  <TableCell className="text-right font-medium text-blue-600">
+                                    {formatCurrency(record.outstanding_amount)}
+                                  </TableCell>
+                                  <TableCell>{formatDate(record.date_of_submission)}</TableCell>
+                                  <TableCell>{formatDate(record.received_date)}</TableCell>
+                                  <TableCell className="text-center">{record.days_outstanding}</TableCell>
+                                  <TableCell className="text-center">
+                                    <Badge
+                                      className={getAgingBucketBadgeClass(record.aging_bucket)}
+                                      variant="outline"
+                                    >
+                                      {record.aging_bucket}
+                                    </Badge>
+                                  </TableCell>
+                                  <TableCell className="text-center">
+                                    <Badge className={getStatusBadgeClass(record.status)} variant="outline">
+                                      {record.status}
+                                    </Badge>
+                                  </TableCell>
+                                </TableRow>
+                              );
+                            })}
+                          </React.Fragment>
+                        );
+                      });
+                    })()
                   )}
                 </TableBody>
               </Table>
@@ -680,23 +786,45 @@ const BillAgingStatement: React.FC = () => {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {data.map((record, index) => (
-              <TableRow key={record.id}>
-                <TableCell className="text-center">{index + 1}</TableCell>
-                <TableCell className="font-medium">{record.visit_id}</TableCell>
-                <TableCell>{record.patient_name}</TableCell>
-                <TableCell>{record.corporate || '-'}</TableCell>
-                <TableCell className="text-right">{formatCurrency(record.bill_amount)}</TableCell>
-                <TableCell className="text-right">{formatCurrency(record.received_amount)}</TableCell>
-                <TableCell className="text-right">{formatCurrency(record.deduction_amount)}</TableCell>
-                <TableCell className="text-right">{formatCurrency(record.outstanding_amount)}</TableCell>
-                <TableCell>{formatDate(record.date_of_submission)}</TableCell>
-                <TableCell>{formatDate(record.received_date)}</TableCell>
-                <TableCell className="text-center">{record.days_outstanding}</TableCell>
-                <TableCell className="text-center">{record.aging_bucket}</TableCell>
-                <TableCell className="text-center">{record.status}</TableCell>
-              </TableRow>
-            ))}
+            {(() => {
+              let serialNo = 0;
+              return AGING_BUCKET_ORDER.map((bucket) => {
+                const bucketRecords = groupedData[bucket];
+                if (bucketRecords.length === 0) return null;
+
+                return (
+                  <React.Fragment key={bucket}>
+                    {/* Bucket Heading Row */}
+                    <TableRow className={getPrintHeadingRowClass(bucket)}>
+                      <TableCell colSpan={13} className="py-2 font-bold">
+                        {bucket} Days ({bucketRecords.length} {bucketRecords.length === 1 ? 'patient' : 'patients'})
+                      </TableCell>
+                    </TableRow>
+                    {/* Patient Rows */}
+                    {bucketRecords.map((record) => {
+                      serialNo++;
+                      return (
+                        <TableRow key={record.id}>
+                          <TableCell className="text-center">{serialNo}</TableCell>
+                          <TableCell className="font-medium">{record.visit_id}</TableCell>
+                          <TableCell>{record.patient_name}</TableCell>
+                          <TableCell>{record.corporate || '-'}</TableCell>
+                          <TableCell className="text-right">{formatCurrency(record.bill_amount)}</TableCell>
+                          <TableCell className="text-right">{formatCurrency(record.received_amount)}</TableCell>
+                          <TableCell className="text-right">{formatCurrency(record.deduction_amount)}</TableCell>
+                          <TableCell className="text-right">{formatCurrency(record.outstanding_amount)}</TableCell>
+                          <TableCell>{formatDate(record.date_of_submission)}</TableCell>
+                          <TableCell>{formatDate(record.received_date)}</TableCell>
+                          <TableCell className="text-center">{record.days_outstanding}</TableCell>
+                          <TableCell className="text-center">{record.aging_bucket}</TableCell>
+                          <TableCell className="text-center">{record.status}</TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </React.Fragment>
+                );
+              });
+            })()}
           </TableBody>
         </Table>
       </div>

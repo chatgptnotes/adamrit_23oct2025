@@ -19,7 +19,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuCheckboxItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { Loader2, Search, Users, Calendar, Clock, UserCheck, Shield, AlertTriangle, Filter, RotateCcw, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from "@/hooks/use-toast";
 import { CascadingBillingStatusDropdown } from '@/components/shared/CascadingBillingStatusDropdown';
 
@@ -69,19 +69,41 @@ const DischargedPatients = () => {
   const navigate = useNavigate();
   const { user, hospitalConfig } = useAuth();
   const queryClient = useQueryClient();
+  const [searchParams, setSearchParams] = useSearchParams();
 
-  // State for filters and search
-  const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [patientTypeFilter, setPatientTypeFilter] = useState<string>('all');
-  const [billingStatusFilter, setBillingStatusFilter] = useState<string>('all');
-  const [corporateFilter, setCorporateFilter] = useState<string>('all');
-  const [sortBy, setSortBy] = useState<string>('discharge_date');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  // URL-persisted state
+  const searchTerm = searchParams.get('search') || '';
+  const statusFilter = searchParams.get('status') || 'all';
+  const patientTypeFilter = searchParams.get('patientType') || 'all';
+  const billingStatusFilter = searchParams.get('billingStatus') || 'all';
+  const corporateFilter = searchParams.get('corporate') || 'all';
+  const sortBy = searchParams.get('sortBy') || 'discharge_date';
+  const sortOrder = (searchParams.get('sortOrder') || 'desc') as 'asc' | 'desc';
+  const currentPage = parseInt(searchParams.get('page') || '1');
+  const itemsPerPage = 10;
 
-  // Pagination state
-  const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage] = useState(10);
+  // Helper to update URL params
+  const updateParams = (updates: Record<string, string | null>) => {
+    const newParams = new URLSearchParams(searchParams);
+    Object.entries(updates).forEach(([key, value]) => {
+      if (value === null || value === '' || (key === 'page' && value === '1') || (value === 'all' && key !== 'page')) {
+        newParams.delete(key);
+      } else {
+        newParams.set(key, value);
+      }
+    });
+    setSearchParams(newParams, { replace: true });
+  };
+
+  // Setter functions
+  const setSearchTerm = (value: string) => updateParams({ search: value, page: '1' });
+  const setStatusFilter = (value: string) => updateParams({ status: value, page: '1' });
+  const setPatientTypeFilter = (value: string) => updateParams({ patientType: value, page: '1' });
+  const setBillingStatusFilter = (value: string) => updateParams({ billingStatus: value, page: '1' });
+  const setCorporateFilter = (value: string) => updateParams({ corporate: value, page: '1' });
+  const setSortBy = (value: string) => updateParams({ sortBy: value });
+  const setSortOrder = (value: 'asc' | 'desc') => updateParams({ sortOrder: value });
+  const setCurrentPage = (value: number) => updateParams({ page: value.toString() });
 
   // State for undischarge functionality
   const [isUndischargeDialogOpen, setIsUndischargeDialogOpen] = useState(false);

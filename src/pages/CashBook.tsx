@@ -1,9 +1,10 @@
-import React, { useState, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Calendar, Loader2, ArrowLeft } from 'lucide-react';
 import { useCashBookEntries, useCashBookUsers, useCashBookVoucherTypes, useAllDailyTransactions, DailyTransaction } from '@/hooks/useCashBookQueries';
 import PatientTransactionModal from '@/components/PatientTransactionModal';
 import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
 import * as XLSX from 'xlsx';
 
 const CashBook: React.FC = () => {
@@ -11,15 +12,46 @@ const CashBook: React.FC = () => {
   const today = new Date().toISOString().split('T')[0];
   const navigate = useNavigate();
   const { hospitalConfig } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
 
-  const [fromDate, setFromDate] = useState(today);
-  const [toDate, setToDate] = useState(today);
-  const [searchNarration, setSearchNarration] = useState('');
-  const [searchAmount, setSearchAmount] = useState('');
-  const [selectedType, setSelectedType] = useState('');
-  const [selectedUser, setSelectedUser] = useState('');
-  const [selectedPaymentMode, setSelectedPaymentMode] = useState('');
-  const [hideNarration, setHideNarration] = useState(false);
+  // URL-persisted state
+  const fromDate = searchParams.get('from') || today;
+  const toDate = searchParams.get('to') || today;
+  const searchNarration = searchParams.get('narration') || '';
+  const searchAmount = searchParams.get('amount') || '';
+  const selectedType = searchParams.get('type') || '';
+  const selectedUser = searchParams.get('user') || '';
+  const selectedPaymentMode = searchParams.get('payMode') || '';
+  const hideNarration = searchParams.get('hideNarration') === 'true';
+
+  // Helper to update URL params
+  const updateParams = (updates: Record<string, string | null>) => {
+    const newParams = new URLSearchParams(searchParams);
+    Object.entries(updates).forEach(([key, value]) => {
+      if (value === null || value === '') {
+        newParams.delete(key);
+      } else {
+        newParams.set(key, value);
+      }
+    });
+    setSearchParams(newParams, { replace: true });
+  };
+
+  // Setter functions
+  const setFromDate = (value: string) => updateParams({ from: value === today ? null : value });
+  const setToDate = (value: string) => updateParams({ to: value === today ? null : value });
+  const setSearchNarration = (value: string) => updateParams({ narration: value });
+  const setSearchAmount = (value: string) => updateParams({ amount: value });
+  const setSelectedType = (value: string) => updateParams({ type: value });
+  const setSelectedUser = (value: string) => updateParams({ user: value });
+  const setSelectedPaymentMode = (value: string) => updateParams({ payMode: value });
+  const setHideNarration = (value: boolean) => updateParams({ hideNarration: value ? 'true' : null });
+
+  // Patient autocomplete state
+  const [patientSuggestions, setPatientSuggestions] = useState<Array<{id: string, name: string}>>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [isSearchingPatients, setIsSearchingPatients] = useState(false);
+  const suggestionRef = useRef<HTMLDivElement>(null);
 
   // Modal state for patient transaction details
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -54,6 +86,41 @@ const CashBook: React.FC = () => {
     setSelectedPatient({ patientId, visitId, patientName, transactionDate });
     setIsModalOpen(true);
   };
+
+  // Patient autocomplete search function
+  const searchPatients = async (term: string) => {
+    if (term.length < 2) {
+      setPatientSuggestions([]);
+      setShowSuggestions(false);
+      return;
+    }
+    setIsSearchingPatients(true);
+    try {
+      const { data } = await supabase
+        .from('patients')
+        .select('id, name')
+        .eq('hospital_name', hospitalConfig.name)
+        .ilike('name', `%${term}%`)
+        .order('name')
+        .limit(10);
+      setPatientSuggestions(data || []);
+      setShowSuggestions(true);
+    } catch (error) {
+      console.error('Error searching patients:', error);
+    }
+    setIsSearchingPatients(false);
+  };
+
+  // Click outside handler to close suggestions dropdown
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (suggestionRef.current && !suggestionRef.current.contains(event.target as Node)) {
+        setShowSuggestions(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Handler to navigate back to Ledger Statement
   const handleBack = () => {
@@ -323,6 +390,47 @@ const CashBook: React.FC = () => {
               onChange={(e) => setToDate(e.target.value)}
               className="w-32 outline-none text-sm"
             />
+          </div>
+
+          {/* Patient Name Search with Autocomplete */}
+          <div className="relative" ref={suggestionRef}>
+            <input
+              type="text"
+              placeholder="Search Patient Name..."
+              value={searchNarration}
+              onChange={(e) => {
+                setSearchNarration(e.target.value);
+                searchPatients(e.target.value);
+              }}
+              onFocus={() => {
+                if (searchNarration.length >= 2 && patientSuggestions.length > 0) {
+                  setShowSuggestions(true);
+                }
+              }}
+              className="px-3 py-1.5 border border-gray-300 rounded bg-white text-sm outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 w-48"
+            />
+            {/* Suggestions Dropdown */}
+            {showSuggestions && patientSuggestions.length > 0 && (
+              <div className="absolute top-full left-0 right-0 z-50 bg-white border border-gray-300 rounded-b shadow-lg max-h-48 overflow-y-auto">
+                {patientSuggestions.map((patient) => (
+                  <div
+                    key={patient.id}
+                    onClick={() => {
+                      setSearchNarration(patient.name);
+                      setShowSuggestions(false);
+                    }}
+                    className="px-3 py-2 hover:bg-blue-50 cursor-pointer text-sm border-b border-gray-100 last:border-b-0"
+                  >
+                    {patient.name}
+                  </div>
+                ))}
+              </div>
+            )}
+            {isSearchingPatients && (
+              <div className="absolute top-full left-0 right-0 z-50 bg-white border border-gray-300 rounded-b shadow-lg px-3 py-2 text-sm text-gray-500">
+                Searching...
+              </div>
+            )}
           </div>
 
           {/* Search Button */}
