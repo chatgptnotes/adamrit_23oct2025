@@ -81,11 +81,12 @@ const MedicineItems: React.FC = () => {
     } else {
       setMedicines(data || []);
 
-      // Fetch batch inventory stock for all medicines with pieces_per_pack
+      // Fetch batch inventory stock for all medicines with pieces_per_pack (only sellable stock)
       const { data: batchData, error: batchError } = await supabase
         .from('medicine_batch_inventory')
         .select('medicine_id, current_stock, pieces_per_pack')
-        .eq('is_active', true);
+        .eq('is_active', true)
+        .gt('current_stock', 0); // Only include batches with actual sellable stock
 
       if (!batchError && batchData) {
         // Aggregate stock by medicine_id and get pieces_per_pack from first batch

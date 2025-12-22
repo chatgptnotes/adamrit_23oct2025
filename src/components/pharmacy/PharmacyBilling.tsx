@@ -176,6 +176,12 @@ const PharmacyBilling: React.FC = () => {
 
         // Step 2: Get batch inventory for these medicines
         const medicineIds = medicines.map((m: any) => m.id);
+        console.log('🔍 DEBUG: Found medicines in medicine_master:', medicines.map(m => ({ 
+          name: m.medicine_name, 
+          id: m.id 
+        })));
+        console.log('🔍 DEBUG: Searching for batch inventory with medicine_ids:', medicineIds);
+        
         const { data: batches, error: batchError } = await supabase
           .from('medicine_batch_inventory')
           .select('id, medicine_id, batch_number, expiry_date, current_stock, selling_price, mrp, pieces_per_pack')
@@ -184,6 +190,13 @@ const PharmacyBilling: React.FC = () => {
           .eq('is_expired', false)
           .gt('current_stock', 0)
           .order('expiry_date', { ascending: true }); // FEFO - First Expiry First Out
+          
+        console.log('🔍 DEBUG: Found batches in medicine_batch_inventory:', batches?.map(b => ({ 
+          medicine_id: b.medicine_id, 
+          batch: b.batch_number, 
+          stock: b.current_stock 
+        })) || []);
+        console.log('🔍 DEBUG: Batch query error:', batchError);
 
         if (batchError) {
           console.error('Error fetching batches:', batchError);
