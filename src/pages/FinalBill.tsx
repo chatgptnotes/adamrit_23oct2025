@@ -557,6 +557,7 @@ const FinalBill = () => {
   const [isSavingFinalPayment, setIsSavingFinalPayment] = useState(false);
   const [isPatientDischarged, setIsPatientDischarged] = useState(false);
   const [finalPaymentSelectedBank, setFinalPaymentSelectedBank] = useState('');
+  const [finalPaymentDischargeDate, setFinalPaymentDischargeDate] = useState(new Date().toISOString().split('T')[0]);
   const [bankAccounts, setBankAccounts] = useState<Array<{ id: string; account_name: string }>>([]);
 
   // Patient Data and Invoice Items State (moved to top to prevent initialization errors)
@@ -642,6 +643,7 @@ const FinalBill = () => {
           setFinalPaymentMode(data.mode_of_payment || '');
           setFinalPaymentReason(data.reason_of_discharge || '');
           setFinalPaymentRemark(data.payment_remark || '');
+          setFinalPaymentDischargeDate(visitData.discharge_date);
           setIsPatientDischarged(true);
           toast.info('Patient already discharged - View only mode');
         } else if (data && !visitData?.discharge_date) {
@@ -651,6 +653,7 @@ const FinalBill = () => {
           setFinalPaymentMode(data.mode_of_payment || '');
           setFinalPaymentReason(data.reason_of_discharge || '');
           setFinalPaymentRemark(data.payment_remark || '');
+          setFinalPaymentDischargeDate(new Date().toISOString().split('T')[0]);
           setIsPatientDischarged(false);
           toast.info('Previous payment found. Patient re-admitted - You can make a new final payment');
         } else {
@@ -660,6 +663,7 @@ const FinalBill = () => {
           setFinalPaymentMode('');
           setFinalPaymentReason('');
           setFinalPaymentRemark('');
+          setFinalPaymentDischargeDate(new Date().toISOString().split('T')[0]);
           setIsPatientDischarged(false);
         }
       } catch (error) {
@@ -3013,18 +3017,15 @@ const FinalBill = () => {
         return;
       }
 
-      // Use current date for discharge (YYYY-MM-DD format)
-      const currentDate = new Date().toISOString().split('T')[0];
-
       // Log discharge update
       console.log('💾 Starting discharge update for visitId:', visitId);
-      console.log('📅 Setting discharge date to:', currentDate);
+      console.log('📅 Setting discharge date to:', finalPaymentDischargeDate);
 
       // Update visit discharge status and discharge date
       const { error: visitError } = await supabase
         .from('visits')
         .update({
-          discharge_date: currentDate, // Set discharge date to today (DATE format: YYYY-MM-DD)
+          discharge_date: finalPaymentDischargeDate, // Use selected discharge date (DATE format: YYYY-MM-DD)
           discharge_mode: finalPaymentReason?.toLowerCase().includes('death') ? 'death' :
                          finalPaymentReason?.toLowerCase().includes('dama') ? 'dama' : 'recovery',
           bill_paid: true,
@@ -3050,6 +3051,7 @@ const FinalBill = () => {
       setFinalPaymentReason('');
       setFinalPaymentRemark('');
       setFinalPaymentSelectedBank('');
+      setFinalPaymentDischargeDate(new Date().toISOString().split('T')[0]);
       setIsFinalPaymentModalOpen(false);
 
       // Invalidate queries to refresh data without full page reload
@@ -20061,7 +20063,10 @@ Dr. Murali B K
                     Corporate Bill
                   </button>
                   <button
-                    onClick={() => setIsFinalPaymentModalOpen(true)}
+                    onClick={() => {
+                      setFinalPaymentDischargeDate(new Date().toISOString().split('T')[0]);
+                      setIsFinalPaymentModalOpen(true);
+                    }}
                     className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
                   >
                     Final Payment
@@ -22163,9 +22168,9 @@ Dr. Murali B K
                   </span>
                 </div>
                 <div className="flex flex-col">
-                  <span className="text-xs font-medium text-gray-500 mb-1">Today's Date</span>
+                  <span className="text-xs font-medium text-gray-500 mb-1">Discharge Date</span>
                   <span className="text-base font-semibold text-gray-900">
-                    {format(new Date(), 'dd/MM/yyyy')}
+                    {finalPaymentDischargeDate ? format(new Date(finalPaymentDischargeDate), 'dd/MM/yyyy') : format(new Date(), 'dd/MM/yyyy')}
                   </span>
                 </div>
                 <div className="flex flex-col">
@@ -22173,12 +22178,11 @@ Dr. Murali B K
                   <span className="text-base font-semibold text-indigo-600">
                     {(() => {
                       const admissionDate = visitData?.admission_date || visitData?.visit_date || visitData?.created_at;
-                      const dischargeDate = visitData?.discharge_date;
 
                       if (!admissionDate) return '0 Days';
 
                       const startDate = new Date(admissionDate);
-                      const endDate = dischargeDate ? new Date(dischargeDate) : new Date();
+                      const endDate = finalPaymentDischargeDate ? new Date(finalPaymentDischargeDate) : new Date();
                       const days = differenceInDays(endDate, startDate) + 1;
 
                       return `${days} Days`;
@@ -22274,6 +22278,20 @@ Dr. Murali B K
                     <option value="DD">Demand Draft</option>
                     <option value="CREDIT">Credit</option>
                   </select>
+                </div>
+
+                {/* Discharge Date */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Discharge Date <span className="text-red-600">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    value={finalPaymentDischargeDate}
+                    onChange={(e) => setFinalPaymentDischargeDate(e.target.value)}
+                    disabled={isPatientDischarged}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  />
                 </div>
 
                 {/* Reason of Discharge */}
