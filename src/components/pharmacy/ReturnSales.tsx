@@ -164,7 +164,7 @@ const ReturnSales: React.FC = () => {
       const salesWithItems: PatientSale[] = [];
 
       for (const sale of salesData || []) {
-        const { data: itemsData } = await supabase
+        const { data: itemsData, error: itemsError } = await supabase
           .from('pharmacy_sale_items')
           .select(`
             sale_item_id,
@@ -173,18 +173,34 @@ const ReturnSales: React.FC = () => {
             generic_name,
             quantity,
             unit_price,
-            total_amount,
+            total_price,
             batch_number,
             expiry_date
           `)
           .eq('sale_id', sale.sale_id);
 
+        if (itemsError) {
+          console.error('Error fetching items:', itemsError);
+          continue;
+        }
+
         // Get existing returns for these items
         const itemIds = itemsData?.map(i => i.sale_item_id) || [];
-        const { data: existingReturns } = await supabase
-          .from('medicine_return_items')
-          .select('original_sale_item_id, quantity_returned')
-          .in('original_sale_item_id', itemIds);
+        let existingReturns = [];
+        
+        if (itemIds.length > 0) {
+          const { data: returnsData, error: returnsError } = await supabase
+            .from('medicine_return_items')
+            .select('original_sale_item_id, quantity_returned')
+            .in('original_sale_item_id', itemIds);
+          
+          if (returnsError) {
+            console.warn('Could not fetch existing returns:', returnsError);
+            // Continue without return data - treat as no returns exist
+          } else {
+            existingReturns = returnsData || [];
+          }
+        }
 
         const returnedQuantities = new Map<string, number>();
         existingReturns?.forEach(r => {
@@ -204,7 +220,7 @@ const ReturnSales: React.FC = () => {
             expiry_date: item.expiry_date || '',
             quantity_sold: item.quantity,
             unit_price: item.unit_price,
-            total_amount: item.total_amount,
+            total_amount: item.total_price,  // Use total_price from database
             quantity_returned: returned,
             quantity_available: item.quantity - returned,
           };
@@ -240,9 +256,12 @@ const ReturnSales: React.FC = () => {
   };
 
   const toggleSaleExpanded = (saleId: string) => {
-    setPatientSales(patientSales.map(sale =>
-      sale.sale_id === saleId ? { ...sale, expanded: !sale.expanded } : sale
-    ));
+    setPatientSales(patientSales.map(sale => {
+      if (sale.sale_id === saleId) {
+        return { ...sale, expanded: !sale.expanded };
+      }
+      return sale;
+    }));
   };
 
   const addItemToCart = (item: SaleItem, saleId: string) => {
@@ -324,6 +343,7 @@ const ReturnSales: React.FC = () => {
   };
 
   const processReturn = async () => {
+    // Validation checks
     if (!selectedPatient || returnCart.length === 0) {
       toast({
         title: 'Error',
@@ -342,6 +362,30 @@ const ReturnSales: React.FC = () => {
       return;
     }
 
+    // Validate return quantities
+    const invalidItems = returnCart.filter(item => 
+      item.quantity_to_return <= 0 || item.quantity_to_return > item.max_quantity
+    );
+    
+    if (invalidItems.length > 0) {
+      toast({
+        title: 'Error',
+        description: 'Invalid return quantities detected. Please check your cart.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    // Validate refund amount
+    if (netRefund < 0) {
+      toast({
+        title: 'Error',
+        description: 'Net refund cannot be negative. Please adjust processing fee.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     setIsProcessing(true);
 
     try {
@@ -354,7 +398,7 @@ const ReturnSales: React.FC = () => {
         .insert({
           return_number: returnNumber,
           original_sale_id: saleId,
-          patient_id: selectedPatient.id,
+          patient_id: selectedPatient.id, // Use UUID for return record
           return_date: new Date().toISOString().split('T')[0],
           return_reason: returnReason,
           return_type: 'PATIENT',
@@ -389,23 +433,53 @@ const ReturnSales: React.FC = () => {
 
       if (itemsError) throw itemsError;
 
-      // Update inventory for restockable items
+      // Update batch inventory stock for restockable items
       for (const item of returnCart) {
-        if (item.can_restock) {
-          const { data: inventoryData } = await supabase
-            .from('medicine_inventory')
-            .select('id, quantity_in_stock')
-            .eq('medicine_id', item.medicine_id)
-            .eq('batch_number', item.batch_number)
-            .single();
+        if (item.can_restock && item.condition === 'GOOD') {
+          try {
+            console.log(`🔄 Processing batch stock update for ${item.medicine_name}, returning ${item.quantity_to_return} units from batch ${item.batch_number}`);
+            
+            // Find the batch inventory record using batch_number and medicine_id
+            const { data: batchData, error: batchError } = await supabase
+              .from('medicine_batch_inventory')
+              .select('id, current_stock, sold_quantity, batch_number')
+              .eq('medicine_id', item.medicine_id)
+              .eq('batch_number', item.batch_number)
+              .single();
 
-          if (inventoryData) {
-            await supabase
-              .from('medicine_inventory')
-              .update({
-                quantity_in_stock: inventoryData.quantity_in_stock + item.quantity_to_return,
-              })
-              .eq('id', inventoryData.id);
+            if (batchError) {
+              console.error(`❌ Batch inventory lookup error for ${item.medicine_name} batch ${item.batch_number}:`, batchError);
+              continue;
+            }
+
+            if (batchData) {
+              const currentStock = batchData.current_stock || 0;
+              const currentSoldQty = batchData.sold_quantity || 0;
+              const newStock = currentStock + item.quantity_to_return;
+              const newSoldQty = currentSoldQty - item.quantity_to_return;
+              
+              console.log(`📊 Batch stock update: ${item.medicine_name} (${item.batch_number})`);
+              console.log(`   Current stock: ${currentStock}, Adding back: ${item.quantity_to_return}, New stock: ${newStock}`);
+              console.log(`   Current sold: ${currentSoldQty}, Reducing by: ${item.quantity_to_return}, New sold: ${newSoldQty}`);
+              
+              const { error: updateError } = await supabase
+                .from('medicine_batch_inventory')
+                .update({ 
+                  current_stock: newStock,
+                  sold_quantity: Math.max(0, newSoldQty),
+                  updated_at: new Date().toISOString()
+                })
+                .eq('id', batchData.id);
+
+              if (updateError) {
+                console.error(`❌ Batch stock update error for ${item.medicine_name}:`, updateError);
+              } else {
+                console.log(`✅ Batch stock updated successfully for ${item.medicine_name} (${item.batch_number}): ${currentStock} → ${newStock}`);
+              }
+            }
+          } catch (error) {
+            console.error(`❌ Batch stock processing error for ${item.medicine_name}:`, error);
+            // Continue processing other items even if one fails
           }
         }
       }
@@ -419,7 +493,7 @@ const ReturnSales: React.FC = () => {
       setReturnCart([]);
       setReturnReason('');
       setProcessingFee(0);
-      fetchPatientSales(selectedPatient.id); // Refresh sales
+      fetchPatientSales(selectedPatient.patients_id); // Refresh sales - use patients_id for pharmacy_sales queries
 
     } catch (error) {
       console.error('Error processing return:', error);
