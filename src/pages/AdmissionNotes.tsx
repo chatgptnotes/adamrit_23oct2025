@@ -30,6 +30,7 @@ interface PatientData {
   diagnosis?: string;
   reason_for_visit?: string;
   created_at?: string;
+  admission_date?: string;
 }
 
 interface AdmissionNotesData {
@@ -313,7 +314,7 @@ const AdmissionNotes = () => {
                 ADMISSION NOTES
               </CardTitle>
               <p className="text-sm text-gray-600 mt-1">
-                Visit ID: {patientData.visit_id} | Date: {formatDate(patientData.created_at)}
+                Visit ID: {patientData.visit_id} | Admission Date: {formatDate(patientData.admission_date)}
               </p>
             </div>
           </div>
@@ -345,8 +346,8 @@ const AdmissionNotes = () => {
               <p className="text-sm font-medium mt-1">{patientData.visit_id || 'N/A'}</p>
             </div>
             <div>
-              <Label className="text-xs font-semibold text-gray-600">Date</Label>
-              <p className="text-sm font-medium mt-1">{formatDate(patientData.created_at)}</p>
+              <Label className="text-xs font-semibold text-gray-600">Admission Date</Label>
+              <p className="text-sm font-medium mt-1">{formatDate(patientData.admission_date)}</p>
             </div>
             <div>
               <Label className="text-xs font-semibold text-gray-600">Address</Label>
