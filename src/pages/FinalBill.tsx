@@ -1,7 +1,7 @@
 // @ts-nocheck
 "use client"
 
-import React, { useState, useEffect, useCallback, useMemo } from "react"
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { supabase } from "@/integrations/supabase/client"
 import { format, differenceInDays } from "date-fns"
@@ -1467,6 +1467,9 @@ const FinalBill = () => {
     fetchAllSavedData();
   }, [visitId]);
 
+  // Track if draft was loaded from localStorage (using ref for synchronous updates)
+  const draftLoadedRef = useRef(false);
+
   // Draft: load from localStorage on mount/visit change
   useEffect(() => {
     const key = `final_bill_draft_${visitId}`;
@@ -1474,8 +1477,10 @@ const FinalBill = () => {
       const raw = localStorage.getItem(key);
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) {
+        if (Array.isArray(parsed) && parsed.length > 0) {
           setInvoiceItems(parsed as InvoiceItem[]);
+          draftLoadedRef.current = true;
+          toast.info('📋 Draft loaded from local storage');
         }
       }
     } catch {}
@@ -1484,12 +1489,14 @@ const FinalBill = () => {
   const saveDraft = () => {
     const key = `final_bill_draft_${visitId}`;
     localStorage.setItem(key, JSON.stringify(invoiceItems));
+    draftLoadedRef.current = true;
     toast.success('Draft saved');
   };
 
   const clearDraft = () => {
     const key = `final_bill_draft_${visitId}`;
     localStorage.removeItem(key);
+    draftLoadedRef.current = false;
     toast.success('Draft cleared');
   };
   const [totalAmount, setTotalAmount] = useState(0);
@@ -4825,15 +4832,15 @@ INSTRUCTIONS:
 
   // Ensure initial sections are always shown
   useEffect(() => {
-    // Always start with initial sections
-    if (invoiceItems.length === 0) {
+    // Always start with initial sections (but not if draft was loaded)
+    if (invoiceItems.length === 0 && !draftLoadedRef.current) {
       setInvoiceItems(initialInvoiceItems);
     }
   }, []);
 
   // Load bill data when available
   useEffect(() => {
-    if (billData && !isSavingBill) { // Don't reload during save process
+    if (billData && !isSavingBill && !draftLoadedRef.current) { // Don't reload during save process, or if draft loaded
       setPatientData(prev => ({
         ...prev,
         billNo: billData.bill_no,
