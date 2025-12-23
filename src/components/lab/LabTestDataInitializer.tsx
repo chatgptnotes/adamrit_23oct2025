@@ -83,6 +83,123 @@ export const LabTestDataInitializer: React.FC<LabTestDataInitializerProps> = ({ 
       min_value: 16.0,
       max_value: 20.0,
       normal_unit: "g/dl"
+    },
+    // CBC (Complete Blood Count) sub-tests
+    {
+      test_name: "CBC (Complete Blood Count)",
+      sub_test_name: "Haemoglobin",
+      unit: "g/dL",
+      min_age: 0,
+      max_age: 100,
+      gender: "Both",
+      min_value: 13.8,
+      max_value: 17.2,
+      normal_unit: "g/dL"
+    },
+    {
+      test_name: "CBC (Complete Blood Count)",
+      sub_test_name: "Packed Cell Volume",
+      unit: "%",
+      min_age: 0,
+      max_age: 100,
+      gender: "Both",
+      min_value: 35,
+      max_value: 55,
+      normal_unit: "%"
+    },
+    {
+      test_name: "CBC (Complete Blood Count)",
+      sub_test_name: "Red Cell Count",
+      unit: "millions/μL",
+      min_age: 0,
+      max_age: 100,
+      gender: "Both",
+      min_value: 4.0,
+      max_value: 6.2,
+      normal_unit: "millions/μL"
+    },
+    {
+      test_name: "CBC (Complete Blood Count)",
+      sub_test_name: "Mean Cell Volume",
+      unit: "fL",
+      min_age: 0,
+      max_age: 100,
+      gender: "Both",
+      min_value: 76,
+      max_value: 96,
+      normal_unit: "fL"
+    },
+    {
+      test_name: "CBC (Complete Blood Count)",
+      sub_test_name: "Mean Cell Haemoglobin",
+      unit: "pg",
+      min_age: 0,
+      max_age: 100,
+      gender: "Both",
+      min_value: 26,
+      max_value: 34,
+      normal_unit: "pg"
+    },
+    {
+      test_name: "CBC (Complete Blood Count)",
+      sub_test_name: "Mean Cell He. Concentration",
+      unit: "g/dL",
+      min_age: 0,
+      max_age: 100,
+      gender: "Both",
+      min_value: 31,
+      max_value: 35.5,
+      normal_unit: "g/dL"
+    },
+    {
+      test_name: "CBC (Complete Blood Count)",
+      sub_test_name: "Total Leukocyte Count",
+      unit: "/μL",
+      min_age: 0,
+      max_age: 100,
+      gender: "Both",
+      min_value: 4000,
+      max_value: 11000,
+      normal_unit: "/μL"
+    },
+    {
+      test_name: "CBC (Complete Blood Count)",
+      sub_test_name: "Platelet Count",
+      unit: "lakhs/μL",
+      min_age: 0,
+      max_age: 100,
+      gender: "Both",
+      min_value: 1.5,
+      max_value: 4.0,
+      normal_unit: "lakhs/μL"
+    },
+    {
+      test_name: "CBC (Complete Blood Count)",
+      sub_test_name: "E.S.R. (Wintrobe)",
+      unit: "mm/hr",
+      min_age: 0,
+      max_age: 100,
+      gender: "Both",
+      min_value: 0,
+      max_value: 9,
+      normal_unit: "mm/hr"
+    },
+    {
+      test_name: "CBC (Complete Blood Count)",
+      sub_test_name: "Differential Leukocyte Count",
+      unit: "%",
+      min_age: 0,
+      max_age: 100,
+      gender: "Both",
+      min_value: 0,
+      max_value: 0,
+      normal_unit: "%",
+      nested_sub_tests: [
+        { name: "Polymorphs", unit: "%", normal_ranges: [{ age_range: "0-100 Years", gender: "Both", min_value: 40, max_value: 75, unit: "%" }] },
+        { name: "Lymphocyte", unit: "%", normal_ranges: [{ age_range: "0-100 Years", gender: "Both", min_value: 20, max_value: 40, unit: "%" }] },
+        { name: "Eosinophils", unit: "%", normal_ranges: [{ age_range: "0-100 Years", gender: "Both", min_value: 1, max_value: 6, unit: "%" }] },
+        { name: "Monocyte", unit: "%", normal_ranges: [{ age_range: "0-100 Years", gender: "Both", min_value: 2, max_value: 8, unit: "%" }] }
+      ]
     }
   ];
 

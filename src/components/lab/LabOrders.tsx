@@ -609,7 +609,7 @@ const LabOrders = () => {
       const { data: labConfigData, error: labError } = await supabase
         .from('lab_test_config')
         .select('*')
-        .or(`test_name.ilike.${testName},test_name.ilike.${firstWord},test_name.ilike.%${firstWord}%`)
+        .or(`test_name.ilike.*${firstWord}*`)
         .order('display_order', { ascending: true })
         .order('id', { ascending: true });
 
@@ -767,7 +767,7 @@ const LabOrders = () => {
       const { data: subTestsData, error } = await supabase
         .from('lab_test_config')
         .select('*')
-        .or(`test_name.ilike.${testName},test_name.ilike.${firstWord},test_name.ilike.%${firstWord}%`)
+        .or(`test_name.ilike.*${firstWord}*`)
         .order('display_order', { ascending: true })
         .order('id', { ascending: true });
 
