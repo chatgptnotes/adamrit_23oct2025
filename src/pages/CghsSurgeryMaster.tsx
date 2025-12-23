@@ -112,13 +112,16 @@ const CghsSurgeryMaster = () => {
 
       let query = supabase
         .from('cghs_surgery')
-        .select('*', { count: 'exact' })
-        .order('name', { ascending: true })
-        .range(from, to);
+        .select('*', { count: 'exact' });
 
+      // Apply search filter BEFORE pagination
       if (searchTerm && searchTerm.trim()) {
-        query = query.or(`name.ilike.*${searchTerm}*,code.ilike.*${searchTerm}*,description.ilike.*${searchTerm}*,category.ilike.*${searchTerm}*`);
+        const search = searchTerm.trim();
+        query = query.or(`name.ilike.*${search}*,code.ilike.*${search}*,description.ilike.*${search}*,category.ilike.*${search}*`);
       }
+
+      // Apply ordering and pagination AFTER filters
+      query = query.order('name', { ascending: true }).range(from, to);
 
       const { data, error, count } = await query;
 
@@ -278,7 +281,7 @@ const CghsSurgeryMaster = () => {
 
   const handleSearchChange = (value: string) => {
     setSearchTerm(value);
-    setCurrentPage(1); // Reset to first page when searching
+    // Note: setSearchTerm already resets page to 1 via updateParams
   };
 
   // Export function - downloads all data as Excel

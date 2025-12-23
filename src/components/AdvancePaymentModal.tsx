@@ -696,13 +696,13 @@ export const AdvancePaymentModal: React.FC<AdvancePaymentModalProps> = ({
             }
             @page {
               size: 7in 5in;
-              margin: 0.25in;
+              margin: 0;
             }
             @media print {
               .print-btn { display: none; }
-              body {
-                margin: 0;
-                padding: 5px;
+              html, body {
+                margin: 0 !important;
+                padding: 0 !important;
                 width: 7in;
                 height: 5in;
               }
@@ -711,15 +711,30 @@ export const AdvancePaymentModal: React.FC<AdvancePaymentModalProps> = ({
                 width: 100%;
                 border: 1px solid #000;
                 box-sizing: border-box;
+                margin: 0;
+              }
+              .header {
+                padding: 5px 10px;
               }
               .receipt-content {
-                padding: 10px 15px;
+                padding: 8px 12px;
+              }
+              .receipt-info {
+                margin-bottom: 10px;
+              }
+              .info-row {
+                margin-bottom: 4px;
               }
               .signature-section {
-                margin-top: 30px;
+                margin-top: 15px;
+                padding-top: 10px;
               }
               .amount-section {
-                margin: 20px 0;
+                margin: 10px 0;
+                padding: 8px 0;
+              }
+              .username-section {
+                margin: 10px 0;
               }
             }
           </style>
