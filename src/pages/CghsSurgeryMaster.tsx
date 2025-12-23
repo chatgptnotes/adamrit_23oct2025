@@ -117,7 +117,7 @@ const CghsSurgeryMaster = () => {
         .range(from, to);
 
       if (searchTerm && searchTerm.trim()) {
-        query = query.or(`name.ilike.%${searchTerm}%,code.ilike.%${searchTerm}%,description.ilike.%${searchTerm}%,category.ilike.%${searchTerm}%`);
+        query = query.or(`name.ilike.*${searchTerm}*,code.ilike.*${searchTerm}*,description.ilike.*${searchTerm}*,category.ilike.*${searchTerm}*`);
       }
 
       const { data, error, count } = await query;

@@ -199,6 +199,10 @@ const LedgerStatement: React.FC = () => {
     console.log('Search clicked');
   };
 
+  const handlePrint = () => {
+    window.print();
+  };
+
   const handlePrintReceipt = (voucherNo: string) => {
     if (isLoadingPayment) {
       toast.info('Please wait, loading payment data...');
@@ -364,7 +368,10 @@ const LedgerStatement: React.FC = () => {
           >
             Export To Excel
           </button>
-          <button className="bg-blue-700 hover:bg-blue-800 text-white px-4 py-1.5 rounded text-sm font-medium">
+          <button
+            onClick={handlePrint}
+            className="bg-blue-700 hover:bg-blue-800 text-white px-4 py-1.5 rounded text-sm font-medium"
+          >
             Print
           </button>
         </div>

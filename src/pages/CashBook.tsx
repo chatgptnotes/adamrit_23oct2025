@@ -361,7 +361,10 @@ const CashBook: React.FC = () => {
           >
             Export To Excel
           </button>
-          <button className="bg-blue-700 hover:bg-blue-800 text-white px-4 py-1.5 rounded text-sm font-medium">
+          <button
+            onClick={() => window.print()}
+            className="bg-blue-700 hover:bg-blue-800 text-white px-4 py-1.5 rounded text-sm font-medium print:hidden"
+          >
             Print
           </button>
         </div>
