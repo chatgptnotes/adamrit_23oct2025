@@ -2817,7 +2817,7 @@ const TodaysIpdDashboard = () => {
                            </AlertDialogContent>
                          </AlertDialog>
                        )}
-                       {(user?.email === 'user@ayushmanhospital.com' || user?.email === 'user@hopehospital.com') && (
+                       {isAdmin && (
                          <Button
                            variant="ghost"
                            size="sm"
