@@ -460,7 +460,7 @@ const BillAgingStatement: React.FC = () => {
       </Card>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 print:grid-cols-5">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 no-print">
         <Card>
           <CardContent className="p-3">
             <div className="text-xs text-muted-foreground">Total Bills</div>
@@ -496,7 +496,7 @@ const BillAgingStatement: React.FC = () => {
       </div>
 
       {/* Aging Bucket Summary */}
-      <div className="grid grid-cols-3 md:grid-cols-6 gap-2 print:grid-cols-6">
+      <div className="grid grid-cols-3 md:grid-cols-6 gap-2 no-print">
         {summary.buckets.map((bucket) => (
           <Card
             key={bucket.bucket}
