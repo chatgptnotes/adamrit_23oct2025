@@ -67,7 +67,9 @@ const billingExecutives = [
   'Diksha',
   'Pragati',
   'Jagruti',
-  'Abhishekh'
+  'Abhishekh',
+  'Priyanka Tandekar',
+  'Sailesh'
 ];
 
 // UUID validation helper function

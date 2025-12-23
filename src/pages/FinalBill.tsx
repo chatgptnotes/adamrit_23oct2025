@@ -701,8 +701,9 @@ const FinalBill = () => {
 
   useEffect(() => {
     const fetchSurgeons = async () => {
+      const tableName = hospitalConfig?.name === 'hope' ? 'hope_surgeons' : 'ayushman_surgeons';
       const { data, error } = await supabase
-        .from('ayushman_surgeons')
+        .from(tableName)
         .select('id, name');
 
       if (error) {
@@ -21144,6 +21145,8 @@ Dr. Murali B K
                         <SelectItem value="pragati">Pragati</SelectItem>
                         <SelectItem value="jagruti">Jagruti</SelectItem>
                         <SelectItem value="abhishekh">Abhishekh</SelectItem>
+                        <SelectItem value="priyanka_tandekar">Priyanka Tandekar</SelectItem>
+                        <SelectItem value="sailesh">Sailesh</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
