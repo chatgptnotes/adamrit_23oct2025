@@ -2306,7 +2306,7 @@ const TodaysIpdDashboard = () => {
               <Input
                 placeholder="Search visits..."
                 value={searchTerm}
-                onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
+                onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-10 w-80"
               />
             </div>
