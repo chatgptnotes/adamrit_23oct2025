@@ -1031,8 +1031,12 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
         treatingConsultant: patientData.doctor_name || patientData.appointment_with || 'Unknown Doctor',
         otherConsultants: summary?.other_consultants || '',
         doa: patientData.admission_date ? format(new Date(patientData.admission_date), 'yyyy-MM-dd') : patientData.created_at ? format(new Date(patientData.created_at), 'yyyy-MM-dd') : '',
-        // Set discharge date to current date if not already set
-        dateOfDischarge: patientData.discharge_date ? format(new Date(patientData.discharge_date), 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd'),
+        // Set discharge date to admission date if not already set (to avoid constraint violation)
+        dateOfDischarge: patientData.discharge_date
+          ? format(new Date(patientData.discharge_date), 'yyyy-MM-dd')
+          : patientData.admission_date
+            ? format(new Date(patientData.admission_date), 'yyyy-MM-dd')
+            : format(new Date(), 'yyyy-MM-dd'),
         reasonOfDischarge: summary?.reason_of_discharge || 'Please select',
         // Fetch corporate type from patients table
         corporateType: patient?.corporate || patient?.corporate_type || patient?.insurance_company || ''
