@@ -12,11 +12,16 @@ const HopeConsultants = () => {
     setSearchTerm,
     isAddDialogOpen,
     setIsAddDialogOpen,
+    isEditDialogOpen,
+    setIsEditDialogOpen,
+    editingConsultant,
+    setEditingConsultant,
     isLoading,
     filteredConsultants,
     handleAdd,
     handleEdit,
     handleDelete,
+    handleUpdate,
     handleExport,
     handleImport
   } = useHopeConsultants();
@@ -58,6 +63,29 @@ const HopeConsultants = () => {
           title="Add Hope Consultant"
           fields={hopeConsultantFields}
         />
+
+        {editingConsultant && (
+          <AddItemDialog
+            isOpen={isEditDialogOpen}
+            onClose={() => {
+              setIsEditDialogOpen(false);
+              setEditingConsultant(null);
+            }}
+            onAdd={handleUpdate}
+            title="Edit Hope Consultant"
+            defaultValues={{
+              name: editingConsultant.name || '',
+              specialty: editingConsultant.specialty || '',
+              department: editingConsultant.department || '',
+              contact_info: editingConsultant.contact_info || '',
+              tpa_rate: editingConsultant.tpa_rate?.toString() || '',
+              non_nabh_rate: editingConsultant.non_nabh_rate?.toString() || '',
+              nabh_rate: editingConsultant.nabh_rate?.toString() || '',
+              private_rate: editingConsultant.private_rate?.toString() || ''
+            }}
+            fields={hopeConsultantFields}
+          />
+        )}
       </div>
     </div>
   );
