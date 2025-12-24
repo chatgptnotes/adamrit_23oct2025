@@ -1,12 +1,13 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { toast } from "@/hooks/use-toast";
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useDebounce } from 'use-debounce';
 import { Badge } from '@/components/ui/badge';
-import { Eye, FileText, Search, Calendar, DollarSign, Trash2, FolderOpen, FolderX, CheckCircle, XCircle, Clock, MinusCircle, RotateCcw, Printer, Filter, MessageSquare, ClipboardList, ArrowUpDown, Circle, ChevronLeft, ChevronRight, Upload } from 'lucide-react';
+import { Eye, FileText, Search, Calendar, DollarSign, Trash2, FolderOpen, FolderX, CheckCircle, XCircle, Clock, MinusCircle, RotateCcw, Printer, Filter, MessageSquare, ClipboardList, ArrowUpDown, Circle, ChevronLeft, ChevronRight, Upload, Bell } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -110,6 +111,63 @@ const TodaysIpdDashboard = () => {
   const [originalComments, setOriginalComments] = useState<Record<string, string>>({});
   const [savingComments, setSavingComments] = useState<Record<string, boolean>>({});
   const [savedComments, setSavedComments] = useState<Record<string, boolean>>({});
+
+  // Getpass Notification Modal State
+  const [isNotificationModalOpen, setIsNotificationModalOpen] = useState(false);
+  const [selectedVisitForNotification, setSelectedVisitForNotification] = useState<any>(null);
+  const [notificationReason, setNotificationReason] = useState('');
+  const [notificationCustomReason, setNotificationCustomReason] = useState('');
+  const [notificationPendingAmount, setNotificationPendingAmount] = useState('');
+
+  const queryClient = useQueryClient();
+
+  // Save notification mutation
+  const saveNotificationMutation = useMutation({
+    mutationFn: async (data: {
+      visit_id: string;
+      patient_id: string;
+      patient_name: string;
+      reason: string;
+      custom_reason: string | null;
+      pending_amount: number;
+    }) => {
+      const { error } = await supabase
+        .from('gatepass_notifications')
+        .insert(data);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast({ title: "Notification saved successfully" });
+      setIsNotificationModalOpen(false);
+      setNotificationReason('');
+      setNotificationCustomReason('');
+      setNotificationPendingAmount('');
+    },
+    onError: (error: any) => {
+      toast({ title: "Error saving notification", description: error.message, variant: "destructive" });
+    }
+  });
+
+  // Handle save notification
+  const handleSaveNotification = () => {
+    if (!notificationReason) {
+      toast({ title: "Please select a reason", variant: "destructive" });
+      return;
+    }
+    if (!notificationPendingAmount) {
+      toast({ title: "Please enter pending amount", variant: "destructive" });
+      return;
+    }
+
+    saveNotificationMutation.mutate({
+      visit_id: selectedVisitForNotification.visit_id,
+      patient_id: selectedVisitForNotification.patients?.id,
+      patient_name: selectedVisitForNotification.patients?.name,
+      reason: notificationReason,
+      custom_reason: notificationReason === 'other' ? notificationCustomReason : null,
+      pending_amount: parseFloat(notificationPendingAmount)
+    });
+  };
 
   const { diagnoses, updatePatient } = usePatients();
 
@@ -2390,6 +2448,7 @@ const TodaysIpdDashboard = () => {
                 <TableHead className="font-semibold">Days Admitted</TableHead>
                 <TableHead className="font-semibold">Discharge Date</TableHead>
                 <TableHead className="font-semibold">Summaries and Certificates</TableHead>
+                <TableHead className="font-semibold">Getpass Notification</TableHead>
                 {isAdmin && <TableHead className="font-semibold">Actions</TableHead>}
               </TableRow>
               <TableRow className="bg-muted/30">
@@ -2435,6 +2494,7 @@ const TodaysIpdDashboard = () => {
                   </TableHead>
                 )}
                 {!hideColumns && <TableHead></TableHead>}
+                <TableHead></TableHead>
                 <TableHead></TableHead>
                 <TableHead></TableHead>
                 <TableHead></TableHead>
@@ -2735,6 +2795,20 @@ const TodaysIpdDashboard = () => {
                         <SelectItem value="death-certificate">Death Certificate</SelectItem>
                       </SelectContent>
                     </Select>
+                  </TableCell>
+                  <TableCell>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setSelectedVisitForNotification(visit);
+                        setIsNotificationModalOpen(true);
+                      }}
+                      className="text-purple-600 hover:text-purple-700 hover:bg-purple-50"
+                    >
+                      <Bell className="h-4 w-4 mr-1" />
+                      Add Notification
+                    </Button>
                   </TableCell>
                   {isAdmin && (
                    <TableCell>
@@ -3130,6 +3204,81 @@ const TodaysIpdDashboard = () => {
             </DialogContent>
           </Dialog>
         )}
+
+        {/* Getpass Notification Modal */}
+        <Dialog open={isNotificationModalOpen} onOpenChange={(open) => {
+          setIsNotificationModalOpen(open);
+          if (!open) {
+            // Reset form when closing
+            setNotificationReason('');
+            setNotificationCustomReason('');
+            setNotificationPendingAmount('');
+          }
+        }}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Getpass Notification</DialogTitle>
+            </DialogHeader>
+            <div className="py-4 space-y-4">
+              <p className="text-gray-500">Patient: {selectedVisitForNotification?.patients?.name}</p>
+              <p className="text-gray-500">Visit ID: {selectedVisitForNotification?.visit_id}</p>
+
+              {/* Reason Dropdown */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Reason</label>
+                <Select value={notificationReason} onValueChange={setNotificationReason}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select reason" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="overstay">Overstay</SelectItem>
+                    <SelectItem value="higher_room">Higher room than entitlement</SelectItem>
+                    <SelectItem value="disposable_cost">Cost of disposable</SelectItem>
+                    <SelectItem value="implant_cost">Cost of implant other than empanel</SelectItem>
+                    <SelectItem value="food_relative">Food for relative</SelectItem>
+                    <SelectItem value="other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Custom Reason Input (shows when "Other" selected) */}
+              {notificationReason === 'other' && (
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Specify Reason</label>
+                  <Input
+                    placeholder="Enter your reason"
+                    value={notificationCustomReason}
+                    onChange={(e) => setNotificationCustomReason(e.target.value)}
+                  />
+                </div>
+              )}
+
+              {/* Pending Amount */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Pending Amount</label>
+                <Input
+                  type="number"
+                  placeholder="Enter pending amount"
+                  value={notificationPendingAmount}
+                  onChange={(e) => setNotificationPendingAmount(e.target.value)}
+                />
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex justify-end gap-2 pt-4 border-t">
+                <Button variant="outline" onClick={() => setIsNotificationModalOpen(false)}>
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleSaveNotification}
+                  disabled={saveNotificationMutation.isPending}
+                >
+                  {saveNotificationMutation.isPending ? 'Saving...' : 'Save Notification'}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
 
         {/* Print Column Picker Modal */}
         <ColumnPickerModal

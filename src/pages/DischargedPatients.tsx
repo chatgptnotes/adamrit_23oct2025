@@ -18,9 +18,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuCheckboxItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
-import { Loader2, Search, Users, Calendar, Clock, UserCheck, Shield, AlertTriangle, Filter, RotateCcw, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
+import { Loader2, Search, Users, Calendar, Clock, UserCheck, Shield, AlertTriangle, Filter, RotateCcw, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, FileText } from "lucide-react";
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from "@/hooks/use-toast";
+import { format } from 'date-fns';
 import { CascadingBillingStatusDropdown } from '@/components/shared/CascadingBillingStatusDropdown';
 
 interface Visit {
@@ -108,6 +109,261 @@ const DischargedPatients = () => {
   // State for undischarge functionality
   const [isUndischargeDialogOpen, setIsUndischargeDialogOpen] = useState(false);
   const [selectedVisitForUndischarge, setSelectedVisitForUndischarge] = useState<Visit | null>(null);
+
+  // State for gate pass modal
+  const [isGatePassModalOpen, setIsGatePassModalOpen] = useState(false);
+  const [selectedVisitForGatePass, setSelectedVisitForGatePass] = useState<Visit | null>(null);
+
+  // Fetch notifications for selected visit
+  const { data: gatePassNotifications, isLoading: notificationsLoading } = useQuery({
+    queryKey: ['gatepass-notifications', selectedVisitForGatePass?.visit_id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('gatepass_notifications')
+        .select('*')
+        .eq('visit_id', selectedVisitForGatePass?.visit_id)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!selectedVisitForGatePass?.visit_id && isGatePassModalOpen
+  });
+
+  // Mutation to mark notification as resolved
+  const markResolvedMutation = useMutation({
+    mutationFn: async (notificationId: string) => {
+      const { error } = await supabase
+        .from('gatepass_notifications')
+        .update({ resolved: true, resolved_at: new Date().toISOString() })
+        .eq('id', notificationId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['gatepass-notifications'] });
+      toast({ title: "Notification marked as resolved" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error marking resolved", description: error.message, variant: "destructive" });
+    }
+  });
+
+  // Print Gate Pass function
+  const handlePrintGatePass = () => {
+    if (!selectedVisitForGatePass) return;
+
+    const visit = selectedVisitForGatePass;
+    const gatePassNumber = `GP-${visit.visit_id}`;
+    const currentDate = new Date().toISOString();
+
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.write(`
+        <html>
+          <head>
+            <title>Gate Pass - ${gatePassNumber}</title>
+            <style>
+              body {
+                margin: 0;
+                padding: 15px;
+                font-family: Arial, sans-serif;
+                background: white;
+                font-size: 12px;
+              }
+              .gate-pass-card {
+                max-width: 750px;
+                margin: 0 auto;
+                border: 2px solid black;
+                padding: 20px;
+              }
+              .header { text-align: center; margin-bottom: 20px; }
+              .title { font-size: 24px; font-weight: bold; margin-bottom: 4px; }
+              .subtitle { color: #666; margin-bottom: 12px; font-size: 11px; }
+              .gate-pass-title {
+                border: 2px solid black;
+                padding: 12px;
+                margin-top: 12px;
+              }
+              .gate-pass-number {
+                font-size: 18px;
+                font-weight: bold;
+                color: #dc2626;
+                margin-bottom: 4px;
+              }
+              .section-title {
+                font-size: 14px;
+                font-weight: bold;
+                border-bottom: 2px solid black;
+                padding-bottom: 4px;
+                margin-bottom: 10px;
+              }
+              .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 25px; margin-bottom: 20px; }
+              .info-item { display: flex; margin-bottom: 6px; font-size: 11px; }
+              .info-label { font-weight: bold; width: 100px; }
+              .info-value { flex: 1; border-bottom: 1px dotted black; }
+              .clearance-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 20px; }
+              .clearance-item {
+                border: 2px solid black;
+                padding: 8px;
+                text-align: center;
+                font-size: 10px;
+              }
+              .signature-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 25px; margin-bottom: 20px; }
+              .signature-box { text-align: center; font-size: 10px; }
+              .signature-line { border-bottom: 2px solid black; height: 40px; margin-bottom: 4px; }
+              .security-section {
+                border: 3px solid #dc2626;
+                padding: 12px;
+                margin-bottom: 15px;
+              }
+              .security-title {
+                font-size: 14px;
+                font-weight: bold;
+                color: #dc2626;
+                text-align: center;
+                margin-bottom: 8px;
+              }
+              .security-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 10px; }
+              .checkbox-group { display: flex; gap: 10px; margin-top: 4px; }
+              .barcode-section { text-align: center; margin-bottom: 10px; }
+              .barcode-box {
+                border: 2px solid black;
+                padding: 8px;
+                display: inline-block;
+                font-family: monospace;
+                font-size: 10px;
+              }
+              .footer { text-align: center; margin-top: 15px; color: #666; font-size: 10px; }
+              .warning { font-weight: bold; color: #dc2626; }
+              .badge-cleared { background: #22c55e; color: white; padding: 2px 6px; border-radius: 3px; font-size: 9px; }
+              @page { margin: 0.4in; size: A4; }
+            </style>
+          </head>
+          <body>
+            <div class="gate-pass-card">
+              <div class="header">
+                <h1 class="title">HOPE HOSPITAL</h1>
+                <p class="subtitle">Hospital Management Information System</p>
+                <div class="gate-pass-title">
+                  <h2 class="gate-pass-number">DISCHARGE GATE PASS</h2>
+                  <p style="font-size: 16px; font-weight: 600;">Gate Pass No: ${gatePassNumber}</p>
+                </div>
+              </div>
+
+              <div class="info-grid">
+                <div>
+                  <h3 class="section-title">PATIENT INFORMATION</h3>
+                  <div class="info-item">
+                    <span class="info-label">Name:</span>
+                    <span class="info-value">${visit.patients?.name || ''}</span>
+                  </div>
+                  <div class="info-item">
+                    <span class="info-label">Patient ID:</span>
+                    <span class="info-value">${visit.patients?.insurance_person_no || visit.patients?.patients_id || ''}</span>
+                  </div>
+                  <div class="info-item">
+                    <span class="info-label">Visit ID:</span>
+                    <span class="info-value">${visit.visit_id}</span>
+                  </div>
+                  <div class="info-item">
+                    <span class="info-label">Age/Gender:</span>
+                    <span class="info-value">${visit.patients?.age || ''} years / ${visit.patients?.gender || ''}</span>
+                  </div>
+                </div>
+
+                <div>
+                  <h3 class="section-title">DISCHARGE DETAILS</h3>
+                  <div class="info-item">
+                    <span class="info-label">Discharge Date:</span>
+                    <span class="info-value">${visit.discharge_date ? format(new Date(visit.discharge_date), 'dd/MM/yyyy') : ''}</span>
+                  </div>
+                  <div class="info-item">
+                    <span class="info-label">Discharge Time:</span>
+                    <span class="info-value">${visit.discharge_date ? format(new Date(visit.discharge_date), 'HH:mm') : ''}</span>
+                  </div>
+                  <div class="info-item">
+                    <span class="info-label">Patient Type:</span>
+                    <span class="info-value">${visit.patient_type || ''}</span>
+                  </div>
+                  <div class="info-item">
+                    <span class="info-label">Corporate:</span>
+                    <span class="info-value">${visit.patients?.corporate || 'N/A'}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div style="margin-bottom: 20px;">
+                <h3 class="section-title">CLEARANCE STATUS</h3>
+                <div class="clearance-grid">
+                  <div class="clearance-item">
+                    <p style="font-weight: 600;">Medical Clearance</p>
+                    <span class="badge-cleared">CLEARED</span>
+                  </div>
+                  <div class="clearance-item">
+                    <p style="font-weight: 600;">Billing Clearance</p>
+                    <span class="badge-cleared">CLEARED</span>
+                  </div>
+                  <div class="clearance-item">
+                    <p style="font-weight: 600;">Administrative Clearance</p>
+                    <span class="badge-cleared">CLEARED</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="signature-grid">
+                <div class="signature-box">
+                  <div class="signature-line"></div>
+                  <p style="font-weight: 600;">RECEPTIONIST SIGNATURE</p>
+                  <p style="color: #666;">Name: ___________________</p>
+                  <p style="color: #666;">Date & Time: ___________</p>
+                </div>
+                <div class="signature-box">
+                  <div class="signature-line"></div>
+                  <p style="font-weight: 600;">BILLING OFFICER SIGNATURE</p>
+                  <p style="color: #666;">Name: ___________________</p>
+                  <p style="color: #666;">Date & Time: ___________</p>
+                </div>
+              </div>
+
+              <div class="security-section">
+                <h3 class="security-title">FOR SECURITY USE ONLY</h3>
+                <div class="security-grid">
+                  <div>
+                    <p style="font-weight: 600;">Gate Pass Verified:</p>
+                    <div class="checkbox-group">
+                      <label><input type="checkbox" style="margin-right: 4px;" />Yes</label>
+                      <label><input type="checkbox" style="margin-right: 4px;" />No</label>
+                    </div>
+                  </div>
+                  <div>
+                    <p style="font-weight: 600;">Exit Time:</p>
+                    <div style="border-bottom: 1px solid black; margin-top: 8px; height: 24px;"></div>
+                  </div>
+                </div>
+                <div style="margin-top: 12px;">
+                  <p style="font-weight: 600;">Security Officer Name & Signature:</p>
+                  <div style="border-bottom: 1px solid black; margin-top: 8px; height: 24px;"></div>
+                </div>
+              </div>
+
+              <div class="barcode-section">
+                <div class="barcode-box">
+                  <div>${gatePassNumber}</div>
+                  <div style="font-size: 9px; color: #666; margin-top: 4px;">Scan for verification</div>
+                </div>
+              </div>
+
+              <div class="footer">
+                <p>Generated on: ${format(new Date(), 'dd/MM/yyyy HH:mm')}</p>
+                <p class="warning">⚠️ This gate pass is valid only for the date of discharge mentioned above</p>
+              </div>
+            </div>
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
+      printWindow.print();
+    }
+  };
 
   // Fetch available corporates for filter
   const { data: availableCorporates, isLoading: corporatesLoading } = useQuery({
@@ -662,22 +918,36 @@ const DischargedPatients = () => {
                         {visit.patients?.corporate || '—'}
                       </TableCell>
                       <TableCell>
-                        {user?.role === 'admin' && (
+                        <div className="flex items-center gap-2">
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => handleUndischargeClick(visit)}
-                            className="text-orange-600 hover:text-orange-700 hover:bg-orange-50"
-                            disabled={undischargeMutation.isPending}
+                            onClick={() => {
+                              setSelectedVisitForGatePass(visit);
+                              setIsGatePassModalOpen(true);
+                            }}
+                            className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
                           >
-                            {undischargeMutation.isPending && selectedVisitForUndischarge?.id === visit.id ? (
-                              <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                            ) : (
-                              <RotateCcw className="h-4 w-4 mr-1" />
-                            )}
-                            Revoke Discharge
+                            <FileText className="h-4 w-4 mr-1" />
+                            Gate Pass
                           </Button>
-                        )}
+                          {user?.role === 'admin' && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleUndischargeClick(visit)}
+                              className="text-orange-600 hover:text-orange-700 hover:bg-orange-50"
+                              disabled={undischargeMutation.isPending}
+                            >
+                              {undischargeMutation.isPending && selectedVisitForUndischarge?.id === visit.id ? (
+                                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                              ) : (
+                                <RotateCcw className="h-4 w-4 mr-1" />
+                              )}
+                              Revoke Discharge
+                            </Button>
+                          )}
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -785,6 +1055,106 @@ const DischargedPatients = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Gate Pass Modal */}
+      <Dialog open={isGatePassModalOpen} onOpenChange={(open) => {
+        setIsGatePassModalOpen(open);
+        if (!open) setSelectedVisitForGatePass(null);
+      }}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Gate Pass - {selectedVisitForGatePass?.patients?.name}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="bg-muted p-4 rounded-lg space-y-2">
+              <div className="flex justify-between">
+                <span className="font-medium">Visit ID:</span>
+                <span>{selectedVisitForGatePass?.visit_id}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="font-medium">Patient ID:</span>
+                <span>{selectedVisitForGatePass?.patients?.insurance_person_no || selectedVisitForGatePass?.patients?.patients_id}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="font-medium">Discharge Date:</span>
+                <span>{selectedVisitForGatePass?.discharge_date && formatDateTime(selectedVisitForGatePass.discharge_date)}</span>
+              </div>
+            </div>
+
+            <div>
+              <h4 className="font-medium mb-2">Notifications</h4>
+              {notificationsLoading ? (
+                <div className="flex items-center justify-center py-4">
+                  <Loader2 className="h-6 w-6 animate-spin" />
+                </div>
+              ) : gatePassNotifications && gatePassNotifications.length > 0 ? (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Reason</TableHead>
+                      <TableHead>Pending Amount</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Action</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {gatePassNotifications.map((notification: any) => (
+                      <TableRow key={notification.id}>
+                        <TableCell>
+                          {notification.reason === 'Other' ? notification.custom_reason : notification.reason}
+                        </TableCell>
+                        <TableCell>₹{notification.pending_amount || 0}</TableCell>
+                        <TableCell>
+                          <Badge variant={notification.resolved ? "default" : "destructive"}>
+                            {notification.resolved ? "Resolved" : "Pending"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          {notification.resolved ? (
+                            <span className="text-green-600 text-sm">✓ Done</span>
+                          ) : (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => markResolvedMutation.mutate(notification.id)}
+                              disabled={markResolvedMutation.isPending}
+                              className="text-green-600 hover:text-green-700 hover:bg-green-50"
+                            >
+                              {markResolvedMutation.isPending ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                'Mark Resolved'
+                              )}
+                            </Button>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              ) : (
+                <p className="text-muted-foreground text-sm py-4 text-center">No notifications found for this patient.</p>
+              )}
+            </div>
+
+            <div className="flex items-center justify-between pt-4 border-t">
+              {gatePassNotifications && gatePassNotifications.length > 0 && !gatePassNotifications.every((n: any) => n.resolved) && (
+                <p className="text-sm text-orange-600">⚠️ Resolve all notifications to enable printing</p>
+              )}
+              {(!gatePassNotifications || gatePassNotifications.length === 0 || gatePassNotifications.every((n: any) => n.resolved)) && (
+                <div></div>
+              )}
+              <Button
+                onClick={handlePrintGatePass}
+                disabled={gatePassNotifications && gatePassNotifications.length > 0 && !gatePassNotifications.every((n: any) => n.resolved)}
+                className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+              >
+                Print Gate Pass
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
