@@ -3180,7 +3180,7 @@ const LabOrders = () => {
           }
           
           .results-content {
-            margin-bottom: 20px;
+            margin-bottom: 10px;
           }
 
           .header-row {
@@ -3189,10 +3189,10 @@ const LabOrders = () => {
             align-items: center;
             border-bottom: 1px solid #ccc;
             padding: 8px 0;
-            margin-bottom: 15px;
+            margin-bottom: 8px;
             font-weight: bold;
             font-size: 13px;
-            line-height: 1.5;
+            line-height: 1.2;
           }
 
           .header-col-1, .header-col-2, .header-col-3 {
@@ -3204,7 +3204,7 @@ const LabOrders = () => {
           }
 
           .main-test-section {
-            margin-bottom: 20px;
+            margin-bottom: 10px;
           }
 
           .main-test-header {
@@ -3219,9 +3219,9 @@ const LabOrders = () => {
             display: grid;
             grid-template-columns: 40% 25% 35%;
             align-items: center;
-            padding: 4px 0;
+            padding: 2px 0;
             font-size: 14px;
-            line-height: 1.5;
+            line-height: 1.2;
           }
 
           .test-name {
@@ -3231,11 +3231,11 @@ const LabOrders = () => {
           }
 
           .test-value, .test-range {
-            text-align: center;
+            text-align: left;
             font-weight: 500;
             display: flex;
             align-items: center;
-            justify-content: center;
+            justify-content: flex-start;
           }
           
           .abnormal {
@@ -3244,12 +3244,12 @@ const LabOrders = () => {
           }
           
           .method-section {
-            margin: 20px 0;
+            margin: 10px 0;
             font-size: 11px;
           }
-          
+
           .interpretation-section {
-            margin: 20px 0;
+            margin: 10px 0;
             font-size: 11px;
           }
           
@@ -3260,7 +3260,7 @@ const LabOrders = () => {
           }
           
           .signature-section {
-            margin-top: 150px;
+            margin-top: 30px;
             display: flex;
             justify-content: flex-end;
             padding-right: 50px;
@@ -3411,19 +3411,31 @@ const LabOrders = () => {
                     // TEXT TYPE FORMAT - Simple list without table
                     const textTestRows = subTests.map(subTest => {
                       const subTestKey = `${testRow.id}_subtest_${subTest.id}`;
-                      let subTestFormData = savedLabResults[subTestKey] || currentFormData[subTestKey];
+                      let subTestFormData = currentFormData[subTestKey] || savedLabResults[subTestKey];
 
-                      // Try alternative keys (only sub-test specific keys, avoid main test ID)
+                      // PRIORITY: Search currentFormData by sub-test NAME before using savedLabResults
+                      if (!subTestFormData || !subTestFormData.result_value) {
+                        const formKeys = Object.keys(currentFormData);
+                        for (const key of formKeys) {
+                          if (key.includes(subTest.name.trim()) && currentFormData[key]?.result_value) {
+                            subTestFormData = currentFormData[key];
+                            console.log('✅ Found by NAME search in currentFormData (Text):', subTest.name, key);
+                            break;
+                          }
+                        }
+                      }
+
+                      // If still not found, try alternative keys (only sub-test specific keys, no shared keys)
                       if (!subTestFormData || !subTestFormData.result_value) {
                         const alternativeKeys = [
-                          `${testRow.id}_subtest_main`,
                           subTest.name,
                           `${testRow.id}_${subTest.name}`,
-                          `${testRow.test_name}_${subTest.name}`
+                          `${testRow.test_name}_${subTest.name}`,
+                          `${testRow.id}_subtest_${subTest.name}`
                         ];
 
                         for (const altKey of alternativeKeys) {
-                          const altData = savedLabResults[altKey] || currentFormData[altKey];
+                          const altData = currentFormData[altKey] || savedLabResults[altKey];
                           if (altData && altData.result_value) {
                             subTestFormData = altData;
                             break;
@@ -3469,20 +3481,33 @@ const LabOrders = () => {
                       const subTestKey = `${testRow.id}_subtest_${subTest.id}`;
                       console.log('🔑 Looking for sub-test data with key:', subTestKey);
 
-                      // Try multiple approaches to find the data
-                      let subTestFormData = savedLabResults[subTestKey] || currentFormData[subTestKey];
+                      // Try multiple approaches to find the data (currentFormData first for fresh values)
+                      let subTestFormData = currentFormData[subTestKey] || savedLabResults[subTestKey];
 
-                      // If not found, try alternative keys (only sub-test specific keys, avoid main test ID)
+                      // PRIORITY: Search currentFormData by sub-test NAME before using savedLabResults
+                      if (!subTestFormData || !subTestFormData.result_value) {
+                        const formKeys = Object.keys(currentFormData);
+                        for (const key of formKeys) {
+                          if (key.includes(subTest.name.trim()) && currentFormData[key]?.result_value) {
+                            subTestFormData = currentFormData[key];
+                            console.log('✅ Found by NAME search in currentFormData:', subTest.name, key, subTestFormData);
+                            break;
+                          }
+                        }
+                      }
+
+                      // If still not found, try alternative keys (only sub-test specific keys, no shared keys)
                       if (!subTestFormData || !subTestFormData.result_value) {
                         const alternativeKeys = [
-                          `${testRow.id}_subtest_main`,
                           subTest.name,
                           `${testRow.id}_${subTest.name}`,
-                          `${testRow.test_name}_${subTest.name}`
+                          `${testRow.test_name}_${subTest.name}`,
+                          `${testRow.id}_subtest_${subTest.name}`
                         ];
 
                         for (const altKey of alternativeKeys) {
-                          const altData = savedLabResults[altKey] || currentFormData[altKey];
+                          // Search currentFormData first, then savedLabResults
+                          const altData = currentFormData[altKey] || savedLabResults[altKey];
                           if (altData && altData.result_value) {
                             subTestFormData = altData;
                             console.log('✅ Found data with alternative key:', altKey, altData);
@@ -3574,8 +3599,8 @@ const LabOrders = () => {
                   `;
                   }
 
-                  // Fallback to main test data
-                  const mainFormData = savedLabResults[testRow.id] || currentFormData[testRow.id];
+                  // Fallback to main test data (currentFormData first for fresh values)
+                  const mainFormData = currentFormData[testRow.id] || savedLabResults[testRow.id];
                   if (mainFormData && mainFormData.result_value) {
                     return `
                     <div class="main-test-section">
@@ -3589,8 +3614,8 @@ const LabOrders = () => {
                   `;
                   }
                 } else {
-                  // Display single test without sub-tests
-                  let formData = savedLabResults[testRow.id] || currentFormData[testRow.id];
+                  // Display single test without sub-tests (currentFormData first for fresh values)
+                  let formData = currentFormData[testRow.id] || savedLabResults[testRow.id];
 
                   // If no data found, try alternative keys
                   if (!formData || !formData.result_value) {
@@ -3603,7 +3628,7 @@ const LabOrders = () => {
                     ];
 
                     for (const altKey of alternativeKeys) {
-                      const altData = savedLabResults[altKey] || currentFormData[altKey];
+                      const altData = currentFormData[altKey] || savedLabResults[altKey];
                       if (altData && altData.result_value) {
                         formData = altData;
                         console.log('✅ Found single test data with key:', altKey, altData);
