@@ -248,6 +248,16 @@ const CreateGRN: React.FC = () => {
           return false;
         }
 
+        // Check if pieces_per_pack is provided
+        if (!item.pieces_per_pack || item.pieces_per_pack <= 0) {
+          toast({
+            title: 'Validation Error',
+            description: `Please enter pieces per pack for ${item.product_name}`,
+            variant: 'destructive',
+          });
+          return false;
+        }
+
         // Check if received quantity doesn't exceed balance
         if (item.received_quantity > item.balance_quantity) {
           toast({
