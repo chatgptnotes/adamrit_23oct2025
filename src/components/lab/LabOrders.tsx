@@ -100,10 +100,10 @@ interface PatientWithVisit {
 
 // Helper function to find correct normal range based on patient gender
 const findNormalRangeForGender = (
-  normalRanges: Array<{ gender?: string; min_value: number; max_value: number; unit?: string }> | undefined,
+  normalRanges: Array<{ gender?: string; min_value?: number; max_value?: number; minValue?: number; maxValue?: number; unit?: string; displayRange?: string }> | undefined,
   patientGender: string,
   defaultUnit: string
-): { min: number; max: number; unit: string } | null => {
+): { min: number; max: number; unit: string; displayRange?: string } | null => {
   if (!normalRanges || normalRanges.length === 0) {
     return null;
   }
@@ -115,9 +115,10 @@ const findNormalRangeForGender = (
 
   if (genderMatch) {
     return {
-      min: genderMatch.min_value,
-      max: genderMatch.max_value,
-      unit: genderMatch.unit || defaultUnit
+      min: genderMatch.min_value ?? genderMatch.minValue ?? 0,
+      max: genderMatch.max_value ?? genderMatch.maxValue ?? 0,
+      unit: genderMatch.unit || defaultUnit,
+      displayRange: genderMatch.displayRange
     };
   }
 
@@ -128,22 +129,29 @@ const findNormalRangeForGender = (
 
   if (bothMatch) {
     return {
-      min: bothMatch.min_value,
-      max: bothMatch.max_value,
-      unit: bothMatch.unit || defaultUnit
+      min: bothMatch.min_value ?? bothMatch.minValue ?? 0,
+      max: bothMatch.max_value ?? bothMatch.maxValue ?? 0,
+      unit: bothMatch.unit || defaultUnit,
+      displayRange: bothMatch.displayRange
     };
   }
 
   // Final fallback: use first available range
   return {
-    min: normalRanges[0].min_value,
-    max: normalRanges[0].max_value,
-    unit: normalRanges[0].unit || defaultUnit
+    min: normalRanges[0].min_value ?? normalRanges[0].minValue ?? 0,
+    max: normalRanges[0].max_value ?? normalRanges[0].maxValue ?? 0,
+    unit: normalRanges[0].unit || defaultUnit,
+    displayRange: normalRanges[0].displayRange
   };
 };
 
 // Helper function to format normal range display string
-const formatNormalRange = (minValue: number | null | undefined, maxValue: number | null | undefined, unit: string): string => {
+const formatNormalRange = (minValue: number | null | undefined, maxValue: number | null | undefined, unit: string, displayRange?: string): string => {
+  // If displayRange is provided, use it directly
+  if (displayRange && displayRange.trim() !== '') {
+    return displayRange;
+  }
+
   const hasMin = minValue !== null && minValue !== undefined && minValue !== 0;
   const hasMax = maxValue !== null && maxValue !== undefined && maxValue !== 0;
   const displayUnit = unit && unit.toLowerCase() !== 'unit' ? ` ${unit}` : '';
@@ -232,6 +240,7 @@ const LabOrders = () => {
   const [isCheckingSampleStatus, setIsCheckingSampleStatus] = useState(false); // Track sample status checking
   const [testSubTests, setTestSubTests] = useState<Record<string, any[]>>({});
   const [showCommentBoxes, setShowCommentBoxes] = useState<Record<string, boolean>>({}); // Track which comment boxes are visible
+  const [pendingPrint, setPendingPrint] = useState<LabTestRow[] | null>(null); // Track pending print requests waiting for sub-tests to load
 
   // Helper function to get patient key for a test
   const getPatientKey = (test: LabTestRow) => `${test.patient_name}_${test.order_number}`;
@@ -636,8 +645,8 @@ const LabOrders = () => {
       // Try to get range from normal_ranges JSONB first
       if (firstConfig.normal_ranges && Array.isArray(firstConfig.normal_ranges) && firstConfig.normal_ranges.length > 0) {
         const rangeData = findNormalRangeForGender(firstConfig.normal_ranges, patientGender, firstConfig.unit || '');
-        if (rangeData && (rangeData.min !== null || rangeData.max !== null)) {
-          return formatNormalRange(rangeData.min, rangeData.max, rangeData.unit);
+        if (rangeData && (rangeData.min !== null || rangeData.max !== null || rangeData.displayRange)) {
+          return formatNormalRange(rangeData.min, rangeData.max, rangeData.unit, rangeData.displayRange);
         }
       }
 
@@ -860,6 +869,7 @@ const LabOrders = () => {
         const parentUnit = parentRangeData?.unit || bestMatch.normal_unit || bestMatch.unit || '';
         const parentMinValue = parentRangeData?.min ?? bestMatch.min_value;
         const parentMaxValue = parentRangeData?.max ?? bestMatch.max_value;
+        const parentDisplayRange = parentRangeData?.displayRange;
         // Skip displaying "unit" placeholder text
         const parentDisplayUnit = parentUnit && parentUnit.toLowerCase() !== 'unit' ? parentUnit : '';
 
@@ -868,7 +878,7 @@ const LabOrders = () => {
           id: bestMatch.id,
           name: subTestName,
           unit: parentUnit,
-          range: formatNormalRange(parentMinValue, parentMaxValue, parentDisplayUnit),
+          range: formatNormalRange(parentMinValue, parentMaxValue, parentDisplayUnit, parentDisplayRange),
           minValue: parentMinValue,
           maxValue: parentMaxValue,
           gender: patientGender || 'Both',
@@ -906,7 +916,7 @@ const LabOrders = () => {
               if (nestedRangeData) {
                 // Skip displaying "unit" placeholder text
                 const displayUnit = nestedRangeData.unit && nestedRangeData.unit.toLowerCase() !== 'unit' ? nestedRangeData.unit : '';
-                nestedRange = formatNormalRange(nestedRangeData.min, nestedRangeData.max, displayUnit);
+                nestedRange = formatNormalRange(nestedRangeData.min, nestedRangeData.max, displayUnit, nestedRangeData.displayRange);
                 nestedMinValue = nestedRangeData.min;
                 nestedMaxValue = nestedRangeData.max;
               }
@@ -1061,6 +1071,23 @@ const LabOrders = () => {
       }
     }
   }, [testSubTests, selectedTestsForEntry]);
+
+  // NEW: Handle pending print once sub-tests are loaded
+  useEffect(() => {
+    if (pendingPrint && pendingPrint.length > 0) {
+      // Check if all sub-tests are loaded for pending print tests
+      const allLoaded = pendingPrint.every(t => {
+        const subTests = testSubTests[t.test_name];
+        return subTests && subTests.length > 0;
+      });
+
+      if (allLoaded) {
+        console.log('✅ Sub-tests loaded, proceeding with print for:', pendingPrint.map(t => t.test_name));
+        handlePreviewAndPrint(pendingPrint);
+        setPendingPrint(null);
+      }
+    }
+  }, [pendingPrint, testSubTests]);
 
   // NEW: Reset form saved state when new tests are selected
   useEffect(() => {
@@ -2969,6 +2996,16 @@ const LabOrders = () => {
     }
   };
 
+  // Format test_method text with proper line breaks for reference values, INTERPRETATION and KIT
+  const formatTestMethod = (text: string): string => {
+    if (!text) return '';
+    return text
+      .replace(/Standard\s*Therapy\s*:/gi, '<br/><strong>Standard Therapy:</strong>')
+      .replace(/High\s*Dose\s*Therapy\s*:/gi, '<br/><strong>High Dose Therapy:</strong>')
+      .replace(/INTERPRETATION\s*:/gi, '<br/><br/><strong>INTERPRETATION:</strong><br/>')
+      .replace(/KIT\s*:/gi, '<br/><strong>KIT:</strong>');
+  };
+
   // Generate Print Content
   const generatePrintContent = async (fetchedLabResults: any[] = [], testsForPrint: LabTestRow[] = selectedTestsForEntry, currentFormData: Record<string, any> = labResultsForm) => {
     console.log('🖨️ Generating print content...');
@@ -3457,7 +3494,7 @@ const LabOrders = () => {
                         </div>
                         ${testRow.test_method ? `
                           <div style="margin-left: 20px; margin-top: 5px; font-size: 12px;">
-                            <span style="font-weight: bold;">Method</span> ${testRow.test_method.replace('KIT :', '<br/>KIT :')}
+                            <span style="font-weight: bold;">Method</span> ${formatTestMethod(testRow.test_method)}
                           </div>
                         ` : ''}
                       </div>
@@ -3470,7 +3507,7 @@ const LabOrders = () => {
                       ${textTestRows}
                       ${testRow.test_method ? `
                         <div style="margin: 15px 20px; font-size: 13px; line-height: 1.6; text-align: justify;">
-                          ${testRow.test_method}
+                          ${formatTestMethod(testRow.test_method)}
                         </div>
                       ` : ''}
                     </div>
@@ -3502,7 +3539,9 @@ const LabOrders = () => {
                           subTest.name,
                           `${testRow.id}_${subTest.name}`,
                           `${testRow.test_name}_${subTest.name}`,
-                          `${testRow.id}_subtest_${subTest.name}`
+                          `${testRow.id}_subtest_${subTest.name}`,
+                          subTest.name.trim(),
+                          subTest.name.toLowerCase().trim()
                         ];
 
                         for (const altKey of alternativeKeys) {
@@ -3512,6 +3551,33 @@ const LabOrders = () => {
                             subTestFormData = altData;
                             console.log('✅ Found data with alternative key:', altKey, altData);
                             break;
+                          }
+                        }
+                      }
+
+                      // FINAL FALLBACK: Search all keys for any that contain the sub-test ID or partial name match
+                      if (!subTestFormData || !subTestFormData.result_value) {
+                        const allKeys = [...Object.keys(currentFormData), ...Object.keys(savedLabResults)];
+                        const subTestNameLower = subTest.name.trim().toLowerCase();
+
+                        for (const key of allKeys) {
+                          // Check if key contains the subtest ID
+                          if (key.includes(`_subtest_${subTest.id}`)) {
+                            const data = currentFormData[key] || savedLabResults[key];
+                            if (data && data.result_value) {
+                              subTestFormData = data;
+                              console.log('✅ Found by ID pattern match:', key, data);
+                              break;
+                            }
+                          }
+                          // Check if key contains the exact subtest name (case insensitive)
+                          if (key.toLowerCase().includes(subTestNameLower) && !key.includes('_main')) {
+                            const data = currentFormData[key] || savedLabResults[key];
+                            if (data && data.result_value) {
+                              subTestFormData = data;
+                              console.log('✅ Found by name pattern match:', key, data);
+                              break;
+                            }
                           }
                         }
                       }
@@ -3541,20 +3607,13 @@ const LabOrders = () => {
                       // Sub-tests = bold, Nested sub-tests = faint/light
                       const nameStyle = isNested ? 'font-weight: 300; color: #666;' : 'font-weight: bold;';
 
-                      // Check if this is a parent category row (no value should be displayed)
-                      if (subTest.isParent) {
-                        return `
-                        <div class="test-row">
-                          <div class="test-name" style="font-weight: bold;">${subTest.name.trim()}</div>
-                          <div class="test-value"></div>
-                          <div class="test-range"></div>
-                        </div>
-                      `;
-                      }
+                      // Parent sub-tests now show values too (removed empty value logic)
+                      // Use bold style for parent sub-tests
+                      const finalNameStyle = subTest.isParent ? 'font-weight: bold;' : nameStyle;
 
                       return `
                       <div class="test-row">
-                        <div class="test-name" style="${nameStyle}">${subTest.name.trim()}</div>
+                        <div class="test-name" style="${finalNameStyle}">${subTest.name.trim()}</div>
                         <div class="test-value ${subTestFormData.is_abnormal ? 'abnormal' : ''}">${displayValue}</div>
                         <div class="test-range">${referenceRange}</div>
                       </div>
@@ -3567,7 +3626,7 @@ const LabOrders = () => {
                       ${subTestRows}
                       ${testRow.test_method ? `
                         <div style="margin: 15px 20px; font-size: 13px; line-height: 1.6; text-align: justify;">
-                          ${testRow.test_method}
+                          ${formatTestMethod(testRow.test_method)}
                         </div>
                       ` : ''}
                     </div>
@@ -3665,7 +3724,7 @@ const LabOrders = () => {
                     </div>
                     ${testRow.test_method ? `
                       <div style="margin: 15px 20px; font-size: 13px; line-height: 1.6; text-align: justify;">
-                        ${testRow.test_method}
+                        ${formatTestMethod(testRow.test_method)}
                       </div>
                     ` : ''}
                   </div>
@@ -4356,13 +4415,24 @@ const LabOrders = () => {
                       return;
                     }
 
-                    // Clear cached sub-tests data to fetch fresh normal ranges from database
-                    setTestSubTests({});
-                    setSelectedTestsForEntry(selectedTests);
-                    // Pass tests directly to avoid stale closure issue
-                    setTimeout(() => {
+                    // Check if sub-tests are already loaded for all selected tests
+                    const alreadyLoaded = selectedTests.every(t => {
+                      const subTests = testSubTests[t.test_name];
+                      return subTests && subTests.length > 0;
+                    });
+
+                    if (alreadyLoaded) {
+                      // Sub-tests already loaded, print immediately
+                      console.log('✅ Sub-tests already loaded, printing immediately');
+                      setSelectedTestsForEntry(selectedTests);
                       handlePreviewAndPrint(selectedTests);
-                    }, 100);
+                    } else {
+                      // Need to fetch sub-tests first - use pendingPrint to wait
+                      console.log('⏳ Waiting for sub-tests to load before printing...');
+                      setTestSubTests({});
+                      setSelectedTestsForEntry(selectedTests);
+                      setPendingPrint(selectedTests); // Will trigger print via useEffect once sub-tests are loaded
+                    }
                   }
                 }}
                 title={includedTests.length === 0 ? "Select tests with 'Incl.' checkboxes to enable print" : "Print reports for selected tests"}
