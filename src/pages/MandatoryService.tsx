@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { ShieldCheck, AlertCircle, CheckCircle, Plus, Edit, Eye, Trash2, X, Download, Upload } from 'lucide-react';
+import { ShieldCheck, AlertCircle, CheckCircle, Plus, Edit, Eye, Trash2, X, Download, Upload, Search } from 'lucide-react';
+import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import * as XLSX from 'xlsx';
 import { useAuth } from '@/contexts/AuthContext';
@@ -22,6 +23,7 @@ const MandatoryService = () => {
   const [editingService, setEditingService] = useState<MandatoryServiceType | null>(null);
   const [deletingService, setDeletingService] = useState<MandatoryServiceType | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
   const [editFormData, setEditFormData] = useState({
     serviceName: '',
     tpaRate: '',
@@ -49,6 +51,11 @@ const MandatoryService = () => {
       return data as MandatoryServiceType[];
     }
   });
+
+  // Filter services based on search term
+  const filteredServices = mandatoryServices?.filter(service =>
+    service.service_name?.toLowerCase().includes(searchTerm.toLowerCase())
+  ) || [];
 
   // Handler functions for actions
   const handleView = (service: MandatoryServiceType) => {

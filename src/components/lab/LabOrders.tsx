@@ -100,13 +100,20 @@ interface PatientWithVisit {
 
 // Helper function to find correct normal range based on patient gender
 const findNormalRangeForGender = (
-  normalRanges: Array<{ gender?: string; min_value?: number; max_value?: number; minValue?: number; maxValue?: number; unit?: string; displayRange?: string }> | undefined,
+  normalRanges: Array<{ gender?: string; min_value?: number; max_value?: number; minValue?: number; maxValue?: number; unit?: string; normal_unit?: string; displayRange?: string }> | undefined,
   patientGender: string,
   defaultUnit: string
 ): { min: number; max: number; unit: string; displayRange?: string } | null => {
   if (!normalRanges || normalRanges.length === 0) {
     return null;
   }
+
+  // Helper to get valid unit (checks both 'unit' and 'normal_unit' fields, filters out 'unit' placeholder)
+  const getValidUnit = (rangeObj: { unit?: string; normal_unit?: string }): string => {
+    const unit = rangeObj.unit || rangeObj.normal_unit || '';
+    // Filter out "unit" placeholder
+    return unit && unit.toLowerCase() !== 'unit' ? unit : '';
+  };
 
   // First try to find exact gender match (Male/Female)
   const genderMatch = normalRanges.find(
@@ -117,7 +124,7 @@ const findNormalRangeForGender = (
     return {
       min: genderMatch.min_value ?? genderMatch.minValue ?? 0,
       max: genderMatch.max_value ?? genderMatch.maxValue ?? 0,
-      unit: genderMatch.unit || defaultUnit,
+      unit: getValidUnit(genderMatch) || defaultUnit,
       displayRange: genderMatch.displayRange
     };
   }
@@ -131,7 +138,7 @@ const findNormalRangeForGender = (
     return {
       min: bothMatch.min_value ?? bothMatch.minValue ?? 0,
       max: bothMatch.max_value ?? bothMatch.maxValue ?? 0,
-      unit: bothMatch.unit || defaultUnit,
+      unit: getValidUnit(bothMatch) || defaultUnit,
       displayRange: bothMatch.displayRange
     };
   }
@@ -140,7 +147,7 @@ const findNormalRangeForGender = (
   return {
     min: normalRanges[0].min_value ?? normalRanges[0].minValue ?? 0,
     max: normalRanges[0].max_value ?? normalRanges[0].maxValue ?? 0,
-    unit: normalRanges[0].unit || defaultUnit,
+    unit: getValidUnit(normalRanges[0]) || defaultUnit,
     displayRange: normalRanges[0].displayRange
   };
 };
@@ -858,7 +865,9 @@ const LabOrders = () => {
 
         // Get unit from normal_ranges JSONB array if available, otherwise use normal_unit column
         // Use gender-specific range lookup instead of just [0]
-        const parentRangeData = findNormalRangeForGender(bestMatch.normal_ranges, patientGender || 'Both', bestMatch.normal_unit || bestMatch.unit || '');
+        // Filter out "unit" placeholder from defaultUnit - only use actual unit values
+        const defaultUnit = bestMatch.normal_unit || (bestMatch.unit && bestMatch.unit.toLowerCase() !== 'unit' ? bestMatch.unit : '');
+        const parentRangeData = findNormalRangeForGender(bestMatch.normal_ranges, patientGender || 'Both', defaultUnit);
 
         // DEBUG: Log what's happening with gender-specific ranges
         console.log(`🔍 Parent sub-test: ${subTestName}`);
@@ -877,7 +886,7 @@ const LabOrders = () => {
         const parentSubTest = {
           id: bestMatch.id,
           name: subTestName,
-          unit: parentUnit,
+          unit: parentDisplayUnit,  // Use filtered unit (excludes "unit" placeholder)
           range: formatNormalRange(parentMinValue, parentMaxValue, parentDisplayUnit, parentDisplayRange),
           minValue: parentMinValue,
           maxValue: parentMaxValue,
@@ -2809,7 +2818,7 @@ const LabOrders = () => {
             test_name: subTest.name,
             test_category: testRow.test_category || 'GENERAL',
             result_value: subTestFormData.result_value || '',
-            result_unit: subTestFormData.result_unit || subTest.unit || '',
+            result_unit: subTestFormData.result_unit || (subTest.unit && subTest.unit.toLowerCase() !== 'unit' ? subTest.unit : ''),
             reference_range: referenceRange,
             comments: subTestFormData.comments || '',
             is_abnormal: subTestFormData.is_abnormal || false,
@@ -2964,10 +2973,34 @@ const LabOrders = () => {
       }
 
       // Create print content with fetched data or current form data
-      const printContent = await generatePrintContent(resultsToUse || [], testsForPrint, labResultsForm);
-      console.log('📄 Generated print content length:', printContent.length);
+      console.log('🖨️ Starting generatePrintContent...');
+      let printContent = '';
+      try {
+        printContent = await generatePrintContent(resultsToUse || [], testsForPrint, labResultsForm);
+        console.log('📄 Generated print content length:', printContent.length);
+      } catch (genError) {
+        console.error('❌ Error generating print content:', genError);
+        toast({
+          title: "Print Generation Error",
+          description: `Failed to generate print content: ${genError instanceof Error ? genError.message : 'Unknown error'}`,
+          variant: "destructive"
+        });
+        return;
+      }
+
+      // Validate print content
+      if (!printContent || printContent.length === 0) {
+        console.error('❌ Print content is empty');
+        toast({
+          title: "Print Error",
+          description: "Generated print content is empty. Please try again.",
+          variant: "destructive"
+        });
+        return;
+      }
 
       // Open print preview
+      console.log('🖨️ Opening print window...');
       const printWindow = window.open('', '_blank');
       if (printWindow) {
         printWindow.document.write(printContent);
@@ -2980,17 +3013,18 @@ const LabOrders = () => {
           description: "Report preview opened. Click Print button when ready.",
         });
       } else {
+        console.error('❌ window.open returned null - popup may be blocked');
         toast({
-          title: "Print Error",
-          description: "Unable to open print window. Please check your browser settings.",
+          title: "Popup Blocked",
+          description: "Print window was blocked. Please allow popups for this site in your browser settings.",
           variant: "destructive"
         });
       }
     } catch (error) {
       console.error('❌ Error in preview and print:', error);
       toast({
-        title: "Error Fetching Results",
-        description: "Failed to fetch lab results from database.",
+        title: "Error",
+        description: `Print failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
         variant: "destructive"
       });
     }
@@ -3480,7 +3514,36 @@ const LabOrders = () => {
                         }
                       }
 
-                      const displayValue = subTestFormData?.result_value || subTest.text_value || 'Not Available';
+                      // DATABASE FALLBACK for TEXT type tests: Search fetchedLabResults
+                      if (!subTestFormData || !subTestFormData.result_value) {
+                        const subTestNameLower = subTest.name.trim().toLowerCase();
+                        const dbResult = fetchedLabResults.find(r =>
+                          r.test_name?.toLowerCase().trim() === subTestNameLower ||
+                          r.test_name?.toLowerCase().includes(subTestNameLower) ||
+                          subTestNameLower.includes(r.test_name?.toLowerCase().trim() || '')
+                        );
+
+                        if (dbResult && dbResult.result_value) {
+                          let actualValue = dbResult.result_value;
+                          try {
+                            if (typeof actualValue === 'string' && actualValue.startsWith('{')) {
+                              const parsed = JSON.parse(actualValue);
+                              actualValue = parsed.value || parsed.result_value || actualValue;
+                            }
+                          } catch (e) {
+                            // Keep as is
+                          }
+                          subTestFormData = { result_value: actualValue };
+                          console.log('✅ Found in DATABASE (Text):', subTest.name, actualValue);
+                        }
+                      }
+
+                      const displayValue = subTestFormData?.result_value || subTest.text_value || '';
+
+                      // Skip text sub-tests without values - don't show "Not Available"
+                      if (!displayValue) {
+                        return '';
+                      }
 
                       return `
                       <div style="margin: 15px 0; position: relative;">
@@ -3499,7 +3562,12 @@ const LabOrders = () => {
                         ` : ''}
                       </div>
                     `;
-                    }).join('');
+                    }).filter(row => row !== '').join('');
+
+                    // Hide entire text test section if no sub-tests have values
+                    if (!textTestRows || textTestRows.trim() === '') {
+                      return '';
+                    }
 
                     return `
                     <div class="main-test-section" style="margin: 20px 0;">
@@ -3582,6 +3650,39 @@ const LabOrders = () => {
                         }
                       }
 
+                      // DATABASE FALLBACK: Search fetchedLabResults from database for matching test_name
+                      if (!subTestFormData || !subTestFormData.result_value) {
+                        const subTestNameLower = subTest.name.trim().toLowerCase();
+                        const dbResult = fetchedLabResults.find(r =>
+                          r.test_name?.toLowerCase().trim() === subTestNameLower ||
+                          r.test_name?.toLowerCase().includes(subTestNameLower) ||
+                          subTestNameLower.includes(r.test_name?.toLowerCase().trim() || '')
+                        );
+
+                        if (dbResult && dbResult.result_value) {
+                          // Parse JSON result_value if needed
+                          let actualValue = dbResult.result_value;
+                          try {
+                            if (typeof actualValue === 'string' && actualValue.startsWith('{')) {
+                              const parsed = JSON.parse(actualValue);
+                              actualValue = parsed.value || parsed.result_value || actualValue;
+                            }
+                          } catch (e) {
+                            // Keep as is
+                          }
+
+                          subTestFormData = {
+                            result_value: actualValue,
+                            result_unit: dbResult.result_unit || '',
+                            reference_range: dbResult.reference_range || '',
+                            comments: dbResult.comments || '',
+                            is_abnormal: dbResult.is_abnormal || false,
+                            result_status: dbResult.result_status || 'Preliminary'
+                          };
+                          console.log('✅ Found in DATABASE:', subTest.name, subTestFormData);
+                        }
+                      }
+
                       // Fallback to empty data
                       if (!subTestFormData) {
                         subTestFormData = {
@@ -3596,8 +3697,9 @@ const LabOrders = () => {
 
                       console.log('📝 Final sub-test form data:', subTestFormData);
 
+                      const displayUnit = subTest.unit && subTest.unit.toLowerCase() !== 'unit' ? subTest.unit : '';
                       const displayValue = subTestFormData.result_value ?
-                        `${subTestFormData.result_value} ${subTest.unit || ''}`.trim() :
+                        `${subTestFormData.result_value} ${displayUnit}`.trim() :
                         'Not Available';
 
                       const referenceRange = subTest.range || calculatedRanges[subTestKey] || 'Not Specified';
@@ -3611,6 +3713,22 @@ const LabOrders = () => {
                       // Use bold style for parent sub-tests
                       const finalNameStyle = subTest.isParent ? 'font-weight: bold;' : nameStyle;
 
+                      // Skip sub-tests without values - EXCEPT parent sub-tests which should show as headers
+                      if (!subTestFormData.result_value && !subTest.isParent) {
+                        return '';
+                      }
+
+                      // Parent sub-tests show as header only (no values)
+                      if (subTest.isParent) {
+                        return `
+                        <div class="test-row">
+                          <div class="test-name" style="font-weight: bold;">${subTest.name.trim()}</div>
+                          <div class="test-value"></div>
+                          <div class="test-range"></div>
+                        </div>
+                        `;
+                      }
+
                       return `
                       <div class="test-row">
                         <div class="test-name" style="${finalNameStyle}">${subTest.name.trim()}</div>
@@ -3618,7 +3736,12 @@ const LabOrders = () => {
                         <div class="test-range">${referenceRange}</div>
                       </div>
                     `;
-                    }).join('');
+                    }).filter(row => row !== '').join('');
+
+                    // Hide entire test section if no sub-tests have values
+                    if (!subTestRows || subTestRows.trim() === '') {
+                      return '';
+                    }
 
                     return `
                     <div class="main-test-section">
@@ -3708,9 +3831,12 @@ const LabOrders = () => {
                     };
                   }
 
-                  const displayValue = formData.result_value ?
-                    `${formData.result_value} ${formData.result_unit || ''}`.trim() :
-                    'Not Available';
+                  // Skip single tests without values - don't show "Not Available"
+                  if (!formData.result_value) {
+                    return '';
+                  }
+
+                  const displayValue = `${formData.result_value} ${formData.result_unit || ''}`.trim();
 
                   const referenceRange = calculatedRanges[testRow.id] || formData.reference_range || 'Not Specified';
 
@@ -3730,7 +3856,7 @@ const LabOrders = () => {
                   </div>
                 `;
                 }
-              }).join('')
+              }).filter(row => row !== '').join('')
             }
                   <div class="signature-section">
                     <div class="signature-box">
@@ -5124,7 +5250,7 @@ const LabOrders = () => {
                                         handleKeyNavigation(e, currentInputIndex);
                                       }}
                                     />
-                                    <span className="ml-2 text-xs text-gray-600 min-w-[55px]">{subTest.unit}</span>
+                                    <span className="ml-2 text-xs text-gray-600 min-w-[55px]">{subTest.unit && subTest.unit.toLowerCase() !== 'unit' ? subTest.unit : ''}</span>
                                     {isFormSaved && subTestFormData.result_value && (
                                       <span className="ml-1 text-green-600 text-xs">✓</span>
                                     )}

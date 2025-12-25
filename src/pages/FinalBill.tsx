@@ -10793,7 +10793,10 @@ INSTRUCTIONS:
             id,
             name,
             code,
-            NABH_NABL_Rate
+            NABH_NABL_Rate,
+            private,
+            Non_NABH_NABL_Rate,
+            bhopal_nabh_rate
           )
         `)
         .eq('visit_id', visitData.id);
@@ -10812,14 +10815,85 @@ INSTRUCTIONS:
         return;
       }
 
-      // Format the data
+      // Determine patient type for rate selection
+      const patientType = (patientInfo?.patient_type || '').toLowerCase().trim();
+      const corporate = (patientInfo?.corporate || '').toLowerCase().trim();
+
+      // Corporate field takes priority - check if patient has a corporate panel first
+      const hasCorporate = corporate.length > 0 && corporate !== 'private';
+
+      // Patient is private ONLY if they don't have a corporate panel
+      const isPrivatePatient = !hasCorporate && (patientType === 'private' || corporate === 'private');
+
+      // Check if corporate qualifies for Non-NABH rates (CGHS/ECHS/ESIC)
+      const usesNonNABHRate = hasCorporate &&
+        (corporate.includes('cghs') ||
+        corporate.includes('echs') ||
+        corporate.includes('esic'));
+
+      // Check if corporate qualifies for Bhopal NABH rates
+      const usesBhopaliNABHRate = hasCorporate &&
+        (corporate.includes('mp police') ||
+        corporate.includes('ordnance factory') ||
+        corporate.includes('ordnance factory itarsi'));
+
+      // Check if patient has other corporate (uses NABH rate)
+      const usesNABHRate = hasCorporate && !usesNonNABHRate && !usesBhopaliNABHRate;
+
+      console.log('🔍 fetchSavedSurgeriesFromVisit - Patient Type Detection:', {
+        patientType,
+        corporate,
+        isPrivatePatient,
+        hasCorporate,
+        usesNonNABHRate,
+        usesBhopaliNABHRate,
+        usesNABHRate
+      });
+
+      // Format the data with correct rate based on patient type
       const formattedSurgeries = visitSurgeriesData.map((visitSurgery: any) => {
         const surgeryDetail = visitSurgery.cghs_surgery;
+
+        // Select appropriate rate based on patient type
+        let selectedRate = 'N/A';
+        let rateSource = 'none';
+
+        if (isPrivatePatient) {
+          // Private patients - use private rate, fallback to NABH if private is null
+          if (surgeryDetail?.private !== null && surgeryDetail?.private !== undefined) {
+            selectedRate = surgeryDetail.private?.toString() || 'N/A';
+            rateSource = 'private';
+          } else if (surgeryDetail?.NABH_NABL_Rate) {
+            selectedRate = surgeryDetail.NABH_NABL_Rate;
+            rateSource = 'nabh_fallback';
+          }
+        } else if (usesNonNABHRate && surgeryDetail?.Non_NABH_NABL_Rate) {
+          selectedRate = surgeryDetail.Non_NABH_NABL_Rate?.toString() || 'N/A';
+          rateSource = 'non_nabh';
+        } else if (usesBhopaliNABHRate && surgeryDetail?.bhopal_nabh_rate) {
+          selectedRate = surgeryDetail.bhopal_nabh_rate?.toString() || 'N/A';
+          rateSource = 'bhopal_nabh';
+        } else if (surgeryDetail?.NABH_NABL_Rate) {
+          selectedRate = surgeryDetail.NABH_NABL_Rate;
+          rateSource = 'nabh';
+        }
+
+        console.log('🔍 Surgery rate selection:', {
+          surgery: surgeryDetail?.name,
+          privateRate: surgeryDetail?.private,
+          nabhRate: surgeryDetail?.NABH_NABL_Rate,
+          nonNabhRate: surgeryDetail?.Non_NABH_NABL_Rate,
+          bhopaliRate: surgeryDetail?.bhopal_nabh_rate,
+          selectedRate,
+          rateSource,
+          isPrivatePatient
+        });
+
         return {
           id: visitSurgery.surgery_id,
           name: surgeryDetail?.name || `Unknown Surgery (${visitSurgery.surgery_id})`,
           code: surgeryDetail?.code || 'Unknown',
-          nabh_nabl_rate: surgeryDetail?.NABH_NABL_Rate || 'N/A',
+          nabh_nabl_rate: selectedRate,
           is_primary: visitSurgery.is_primary || false,
           status: visitSurgery.status || 'planned',
           sanction_status: visitSurgery.sanction_status || 'Not Sanctioned',
