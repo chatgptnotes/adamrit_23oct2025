@@ -98,6 +98,27 @@ const getAgingBucketBadgeClass = (bucket: AgingBucket): string => {
 // Aging bucket order (most days first)
 const AGING_BUCKET_ORDER: AgingBucket[] = ['365+', '181-365', '91-180', '61-90', '31-60', '0-30'];
 
+// Corporate short name mapping for print format
+const getCorporateShortName = (fullName: string): string => {
+  const shortNameMap: Record<string, string> = {
+    // Government Healthcare Schemes
+    'Mahatma Jyotirao Phule jan Arogya Yojana (MJPJAY)': 'MJPJAY',
+    'Ayushman Bharat - Pradhan Mantri Jan Arogya Yojna (PM-JAY)': 'PM-JAY',
+    'Rashtriya Bal Swasthya Karyakram (RBSK)': 'RBSK',
+    'Central Government Health Scheme (CGHS)': 'CGHS',
+    'Ex Serviceman Contributory Health Scheme (ECHS)': 'ECHS',
+    'Maharashtra Police Kutumb Arogya Yojana (MPKAY)': 'MPKAY',
+    'MIKSSKAY - Maharashtra Karagruh Va Sudhar Sevabal Kutumb Arogya Yojana': 'MIKSSKAY',
+    'Maharashtra Dharmadaya Karmachari Kutumbe Seashya Yojana (MDKKSY)': 'MDKKSY',
+    // Government Organizations
+    'Coal India Limited (CIL)': 'CIL',
+    'Central Railways (C.Rly)': 'CR',
+    'South Eastern Central Railway (SECR)': 'SECR',
+    'Western Coalfield Limited (WCL)': 'WCL',
+  };
+  return shortNameMap[fullName] || fullName;
+};
+
 // Heading row colors based on aging severity
 const getHeadingRowClass = (bucket: AgingBucket): string => {
   switch (bucket) {
@@ -524,7 +545,7 @@ const BillAgingStatement: React.FC = () => {
       </div>
 
       {/* Data Table - Screen only (paginated) */}
-      <Card className="print:hidden">
+      <Card className="print:hidden no-print">
         <CardContent className="p-0">
           {isLoading ? (
             <div className="flex items-center justify-center py-8">
@@ -775,11 +796,7 @@ const BillAgingStatement: React.FC = () => {
               <TableHead>Patient Name</TableHead>
               <TableHead>Corporate</TableHead>
               <TableHead className="text-right">Bill Amt</TableHead>
-              <TableHead className="text-right">Received</TableHead>
-              <TableHead className="text-right">Deduction</TableHead>
-              <TableHead className="text-right">Outstanding</TableHead>
               <TableHead>Submit Date</TableHead>
-              <TableHead>Recv Date</TableHead>
               <TableHead className="text-center">Days</TableHead>
               <TableHead className="text-center">Aging</TableHead>
               <TableHead className="text-center">Status</TableHead>
@@ -796,7 +813,7 @@ const BillAgingStatement: React.FC = () => {
                   <React.Fragment key={bucket}>
                     {/* Bucket Heading Row */}
                     <TableRow className={getPrintHeadingRowClass(bucket)}>
-                      <TableCell colSpan={13} className="py-2 font-bold">
+                      <TableCell colSpan={9} className="py-2 font-bold">
                         {bucket} Days ({bucketRecords.length} {bucketRecords.length === 1 ? 'patient' : 'patients'})
                       </TableCell>
                     </TableRow>
@@ -808,13 +825,9 @@ const BillAgingStatement: React.FC = () => {
                           <TableCell className="text-center">{serialNo}</TableCell>
                           <TableCell className="font-medium">{record.visit_id}</TableCell>
                           <TableCell>{record.patient_name}</TableCell>
-                          <TableCell>{record.corporate || '-'}</TableCell>
+                          <TableCell>{getCorporateShortName(record.corporate || '-')}</TableCell>
                           <TableCell className="text-right">{formatCurrency(record.bill_amount)}</TableCell>
-                          <TableCell className="text-right">{formatCurrency(record.received_amount)}</TableCell>
-                          <TableCell className="text-right">{formatCurrency(record.deduction_amount)}</TableCell>
-                          <TableCell className="text-right">{formatCurrency(record.outstanding_amount)}</TableCell>
                           <TableCell>{formatDate(record.date_of_submission)}</TableCell>
-                          <TableCell>{formatDate(record.received_date)}</TableCell>
                           <TableCell className="text-center">{record.days_outstanding}</TableCell>
                           <TableCell className="text-center">{record.aging_bucket}</TableCell>
                           <TableCell className="text-center">{record.status}</TableCell>
@@ -834,8 +847,6 @@ const BillAgingStatement: React.FC = () => {
         <div className="flex justify-between border-t pt-2">
           <span>Total Bills: {summary.total_bills}</span>
           <span>Total Bill Amount: {formatCurrency(summary.total_bill_amount)}</span>
-          <span>Total Received: {formatCurrency(summary.total_received_amount)}</span>
-          <span>Total Outstanding: {formatCurrency(summary.total_outstanding_amount)}</span>
         </div>
       </div>
     </div>

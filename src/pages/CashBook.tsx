@@ -272,11 +272,13 @@ const CashBook: React.FC = () => {
       });
     }
 
-    // Show only CASH payment transactions (Advance + Final payments)
+    // Show only CASH payment transactions (Advance + Final payments + Pharmacy)
     if (dailyTransactions && dailyTransactions.length > 0) {
       // Filter to show ONLY payment transactions with CASH payment mode
       const cashPaymentTransactions = dailyTransactions.filter((txn: DailyTransaction) =>
-        (txn.transaction_type === 'ADVANCE_PAYMENT' || txn.transaction_type === 'FINAL_BILL') &&
+        (txn.transaction_type === 'ADVANCE_PAYMENT' ||
+         txn.transaction_type === 'FINAL_BILL' ||
+         txn.transaction_type === 'PHARMACY') &&
         txn.payment_mode === 'CASH'
       );
 
@@ -287,7 +289,11 @@ const CashBook: React.FC = () => {
         const formattedDate = `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}/${date.getFullYear()}`;
 
         // Determine payment type label
-        const paymentType = txn.transaction_type === 'FINAL_BILL' ? 'Final Payment' : 'Advance Payment';
+        const paymentType = txn.transaction_type === 'FINAL_BILL'
+          ? 'Final Payment'
+          : txn.transaction_type === 'PHARMACY'
+            ? 'Pharmacy Payment'
+            : 'Advance Payment';
 
         // Build summary line with payment details
         const remarksText = txn.description && txn.description !== 'Advance Payment' ? ` | ${txn.description}` : '';

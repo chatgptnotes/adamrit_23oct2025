@@ -1121,12 +1121,14 @@ const Invoice = () => {
     let totalSurgeryCharges = 0;
     if (surgeryOrdersData && surgeryOrdersData.length > 0) {
       surgeryOrdersData.forEach((visitSurgery: any) => {
-        const rateStr = visitSurgery.cghs_surgery?.NABH_NABL_Rate || '0';
-        const surgeryRate = parseFloat(String(rateStr).replace(/[^\d.]/g, '')) || 0;
+        // Use stored rate first, fallback to cghs_surgery.NABH_NABL_Rate
+        const surgeryRate = visitSurgery.rate && visitSurgery.rate > 0
+          ? Number(visitSurgery.rate)
+          : parseFloat(String(visitSurgery.cghs_surgery?.NABH_NABL_Rate || '0').replace(/[^\d.]/g, '')) || 0;
         totalSurgeryCharges += surgeryRate;
         console.log('Adding surgery to total:', {
           name: visitSurgery.cghs_surgery?.name,
-          rateStr: rateStr,
+          storedRate: visitSurgery.rate,
           surgeryRate: surgeryRate
         });
       });
