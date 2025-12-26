@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { format } from 'date-fns';
+import { format, startOfDay, addDays, endOfWeek, endOfMonth, isSameDay, isBefore, isAfter } from 'date-fns';
 import * as XLSX from 'xlsx';
 import {
   ArrowLeft,
@@ -39,8 +39,22 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { useBillAgingReport } from '@/hooks/useBillAgingReport';
 import { BillAgingRecord, BillAgingStatus } from '@/types/billAging';
-import { AgingBucket } from '@/types/accounting';
 import '@/styles/print.css';
+
+// Time period type
+type TimePeriod = 'Today' | 'Tomorrow' | 'This Week' | 'Next Week' | 'This Month' | 'Future' | 'Overdue' | 'No Date Set';
+
+// Time periods in display order (Today first, then Overdue, then chronologically)
+const TIME_PERIODS: TimePeriod[] = [
+  'Today',
+  'Overdue',
+  'Tomorrow',
+  'This Week',
+  'Next Week',
+  'This Month',
+  'Future',
+  'No Date Set'
+];
 
 const formatCurrency = (amount: number): string => {
   return new Intl.NumberFormat('en-IN', {
@@ -76,33 +90,77 @@ const getStatusBadgeClass = (status: BillAgingStatus): string => {
   }
 };
 
-// Aging bucket badge colors
-const getAgingBucketBadgeClass = (bucket: AgingBucket): string => {
-  switch (bucket) {
-    case '0-30':
-      return 'bg-green-100 text-green-800 border-green-300';
-    case '31-60':
+// Time period badge colors
+const getTimePeriodBadgeClass = (period: TimePeriod): string => {
+  switch (period) {
+    case 'Today':
       return 'bg-blue-100 text-blue-800 border-blue-300';
-    case '61-90':
+    case 'Tomorrow':
+      return 'bg-cyan-100 text-cyan-800 border-cyan-300';
+    case 'This Week':
+      return 'bg-green-100 text-green-800 border-green-300';
+    case 'Next Week':
       return 'bg-yellow-100 text-yellow-800 border-yellow-300';
-    case '91-180':
+    case 'This Month':
       return 'bg-orange-100 text-orange-800 border-orange-300';
-    case '181-365':
+    case 'Future':
+      return 'bg-gray-100 text-gray-800 border-gray-300';
+    case 'Overdue':
       return 'bg-red-100 text-red-800 border-red-300';
-    case '365+':
-      return 'bg-purple-100 text-purple-800 border-purple-300';
+    case 'No Date Set':
+      return 'bg-gray-100 text-gray-600 border-gray-300';
     default:
       return 'bg-gray-100 text-gray-800 border-gray-300';
   }
 };
 
-// Aging bucket order (most days first)
-const AGING_BUCKET_ORDER: AgingBucket[] = ['365+', '181-365', '91-180', '61-90', '31-60', '0-30'];
+// Heading row colors based on time period
+const getHeadingRowClass = (period: TimePeriod): string => {
+  switch (period) {
+    case 'Today':
+      return 'bg-blue-100 hover:bg-blue-100 border-t-2 border-blue-400';
+    case 'Tomorrow':
+      return 'bg-cyan-100 hover:bg-cyan-100 border-t-2 border-cyan-300';
+    case 'This Week':
+      return 'bg-green-100 hover:bg-green-100 border-t-2 border-green-300';
+    case 'Next Week':
+      return 'bg-yellow-100 hover:bg-yellow-100 border-t-2 border-yellow-300';
+    case 'This Month':
+      return 'bg-orange-100 hover:bg-orange-100 border-t-2 border-orange-300';
+    case 'Future':
+      return 'bg-gray-100 hover:bg-gray-100 border-t-2 border-gray-300';
+    case 'Overdue':
+      return 'bg-red-100 hover:bg-red-100 border-t-2 border-red-400';
+    case 'No Date Set':
+      return 'bg-gray-50 hover:bg-gray-50 border-t-2 border-gray-300';
+    default:
+      return 'bg-gray-100';
+  }
+};
+
+// Print heading row colors
+const getPrintHeadingRowClass = (period: TimePeriod): string => {
+  switch (period) {
+    case 'Today':
+      return 'bg-blue-200';
+    case 'Tomorrow':
+      return 'bg-cyan-200';
+    case 'This Week':
+      return 'bg-green-200';
+    case 'Next Week':
+      return 'bg-yellow-200';
+    case 'This Month':
+      return 'bg-orange-200';
+    case 'Overdue':
+      return 'bg-red-200';
+    default:
+      return 'bg-gray-200';
+  }
+};
 
 // Corporate short name mapping for print format
 const getCorporateShortName = (fullName: string): string => {
   const shortNameMap: Record<string, string> = {
-    // Government Healthcare Schemes
     'Mahatma Jyotirao Phule jan Arogya Yojana (MJPJAY)': 'MJPJAY',
     'Ayushman Bharat - Pradhan Mantri Jan Arogya Yojna (PM-JAY)': 'PM-JAY',
     'Rashtriya Bal Swasthya Karyakram (RBSK)': 'RBSK',
@@ -111,7 +169,6 @@ const getCorporateShortName = (fullName: string): string => {
     'Maharashtra Police Kutumb Arogya Yojana (MPKAY)': 'MPKAY',
     'MIKSSKAY - Maharashtra Karagruh Va Sudhar Sevabal Kutumb Arogya Yojana': 'MIKSSKAY',
     'Maharashtra Dharmadaya Karmachari Kutumbe Seashya Yojana (MDKKSY)': 'MDKKSY',
-    // Government Organizations
     'Coal India Limited (CIL)': 'CIL',
     'Central Railways (C.Rly)': 'CR',
     'South Eastern Central Railway (SECR)': 'SECR',
@@ -120,43 +177,7 @@ const getCorporateShortName = (fullName: string): string => {
   return shortNameMap[fullName] || fullName;
 };
 
-// Heading row colors based on aging severity
-const getHeadingRowClass = (bucket: AgingBucket): string => {
-  switch (bucket) {
-    case '365+':
-    case '181-365':
-      return 'bg-red-100 hover:bg-red-100 border-t-2 border-red-300';
-    case '91-180':
-    case '61-90':
-      return 'bg-orange-100 hover:bg-orange-100 border-t-2 border-orange-300';
-    case '31-60':
-      return 'bg-yellow-100 hover:bg-yellow-100 border-t-2 border-yellow-300';
-    case '0-30':
-      return 'bg-blue-100 hover:bg-blue-100 border-t-2 border-blue-300';
-    default:
-      return 'bg-gray-100';
-  }
-};
-
-// Print heading row colors
-const getPrintHeadingRowClass = (bucket: AgingBucket): string => {
-  switch (bucket) {
-    case '365+':
-    case '181-365':
-      return 'bg-red-200';
-    case '91-180':
-    case '61-90':
-      return 'bg-orange-200';
-    case '31-60':
-      return 'bg-yellow-200';
-    case '0-30':
-      return 'bg-blue-200';
-    default:
-      return 'bg-gray-200';
-  }
-};
-
-const BillAgingStatement: React.FC = () => {
+const ExpectedPaymentDateReport: React.FC = () => {
   const navigate = useNavigate();
   const { hospitalConfig } = useAuth();
 
@@ -179,6 +200,22 @@ const BillAgingStatement: React.FC = () => {
   const currentPage = parseInt(searchParams.get('page') || '1');
   const itemsPerPage = parseInt(searchParams.get('perPage') || '10');
 
+  // State to track collapsed sections
+  const [collapsedSections, setCollapsedSections] = useState<Set<TimePeriod>>(new Set());
+
+  // Toggle section collapse/expand
+  const toggleSection = (period: TimePeriod) => {
+    setCollapsedSections(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(period)) {
+        newSet.delete(period);
+      } else {
+        newSet.add(period);
+      }
+      return newSet;
+    });
+  };
+
   // Helper to update URL params
   const updateParams = (updates: Record<string, string | null>) => {
     const newParams = new URLSearchParams(searchParams);
@@ -199,25 +236,61 @@ const BillAgingStatement: React.FC = () => {
   const totalPages = Math.ceil(data.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
-  const paginatedData = data.slice(startIndex, endIndex);
 
-  // Group data by aging bucket
-  const groupedData = useMemo(() => {
-    const grouped: Record<AgingBucket, BillAgingRecord[]> = {
-      '365+': [],
-      '181-365': [],
-      '91-180': [],
-      '61-90': [],
-      '31-60': [],
-      '0-30': [],
+  // Group data by expected payment date time period
+  const groupedByPeriod = useMemo(() => {
+    const today = startOfDay(new Date());
+    const tomorrow = addDays(today, 1);
+    const thisWeekEnd = endOfWeek(today, { weekStartsOn: 1 }); // Monday as start of week
+    const nextWeekEnd = endOfWeek(addDays(today, 7), { weekStartsOn: 1 });
+    const thisMonthEnd = endOfMonth(today);
+
+    const groups: Record<TimePeriod, BillAgingRecord[]> = {
+      'Today': [],
+      'Tomorrow': [],
+      'This Week': [],
+      'Next Week': [],
+      'This Month': [],
+      'Future': [],
+      'Overdue': [],
+      'No Date Set': []
     };
 
     data.forEach(record => {
-      grouped[record.aging_bucket].push(record);
+      if (!record.expected_payment_date) {
+        groups['No Date Set'].push(record);
+      } else {
+        const expDate = startOfDay(new Date(record.expected_payment_date));
+
+        if (isSameDay(expDate, today)) {
+          groups['Today'].push(record);
+        } else if (isSameDay(expDate, tomorrow)) {
+          groups['Tomorrow'].push(record);
+        } else if (isBefore(expDate, today)) {
+          groups['Overdue'].push(record);
+        } else if (expDate <= thisWeekEnd) {
+          groups['This Week'].push(record);
+        } else if (expDate <= nextWeekEnd) {
+          groups['Next Week'].push(record);
+        } else if (expDate <= thisMonthEnd) {
+          groups['This Month'].push(record);
+        } else {
+          groups['Future'].push(record);
+        }
+      }
     });
 
-    return grouped;
+    return groups;
   }, [data]);
+
+  // Summary by period
+  const periodSummary = useMemo(() => {
+    return TIME_PERIODS.map(period => ({
+      period,
+      count: groupedByPeriod[period].length,
+      totalOutstanding: groupedByPeriod[period].reduce((sum, r) => sum + r.outstanding_amount, 0)
+    }));
+  }, [groupedByPeriod]);
 
   // Pagination navigation functions
   const goToFirstPage = () => setCurrentPage(1);
@@ -257,9 +330,9 @@ const BillAgingStatement: React.FC = () => {
       'Deduction': record.deduction_amount,
       'Outstanding': record.outstanding_amount,
       'Submission Date': formatDate(record.date_of_submission),
+      'Expected Payment Date': formatDate(record.expected_payment_date),
       'Received Date': formatDate(record.received_date),
       'Days': record.days_outstanding,
-      'Aging Bucket': record.aging_bucket,
       'Status': record.status,
     }));
 
@@ -275,16 +348,16 @@ const BillAgingStatement: React.FC = () => {
       'Deduction': 0,
       'Outstanding': summary.total_outstanding_amount,
       'Submission Date': '',
+      'Expected Payment Date': '',
       'Received Date': '',
       'Days': summary.average_days_to_payment as any,
-      'Aging Bucket': 'Avg Days' as any,
       'Status': '' as any,
     });
 
     const ws = XLSX.utils.json_to_sheet(exportData);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Bill Aging Statement');
-    XLSX.writeFile(wb, `Bill_Aging_Statement_${new Date().toISOString().split('T')[0]}.xlsx`);
+    XLSX.utils.book_append_sheet(wb, ws, 'Expected Payment Report');
+    XLSX.writeFile(wb, `Expected_Payment_Date_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
   // Print report
@@ -309,13 +382,13 @@ const BillAgingStatement: React.FC = () => {
       {/* Header - hide on print */}
       <div className="flex items-center justify-between print:hidden">
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
+          <Button variant="ghost" size="icon" onClick={() => navigate('/bill-aging-statement')}>
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <div>
-            <h1 className="text-2xl font-bold">Corporate Bill Aging Statement</h1>
+            <h1 className="text-2xl font-bold">Expected Payment Date Report</h1>
             <p className="text-muted-foreground text-sm">
-              Track bills from submission to payment receipt
+              Bills grouped by expected payment date
             </p>
           </div>
         </div>
@@ -332,17 +405,13 @@ const BillAgingStatement: React.FC = () => {
             <Printer className="h-4 w-4 mr-2" />
             Print
           </Button>
-          <Button variant="outline" onClick={() => navigate('/expected-payment-date-report')}>
-            <Calendar className="h-4 w-4 mr-2" />
-            Expected Date Report
-          </Button>
         </div>
       </div>
 
       {/* Print Header - show only on print */}
       <div className="hidden print:block text-center mb-4">
         <h1 className="text-xl font-bold">{hospitalConfig?.name || 'Hospital'}</h1>
-        <h2 className="text-lg">Corporate Bill Aging Statement</h2>
+        <h2 className="text-lg">Expected Payment Date Report</h2>
         <p className="text-sm">Generated on: {format(new Date(), 'dd/MM/yyyy HH:mm')}</p>
       </div>
 
@@ -355,7 +424,7 @@ const BillAgingStatement: React.FC = () => {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
             {/* Hospital Filter */}
             <div>
               <label className="text-xs text-muted-foreground">Hospital</label>
@@ -418,28 +487,6 @@ const BillAgingStatement: React.FC = () => {
               </Select>
             </div>
 
-            {/* Aging Bucket Filter */}
-            <div>
-              <label className="text-xs text-muted-foreground">Aging Bucket</label>
-              <Select
-                value={filters.agingBucket}
-                onValueChange={(value) => setFilters({ ...filters, agingBucket: value })}
-              >
-                <SelectTrigger className="h-9">
-                  <SelectValue placeholder="All Buckets" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Buckets</SelectItem>
-                  <SelectItem value="0-30">0-30 Days</SelectItem>
-                  <SelectItem value="31-60">31-60 Days</SelectItem>
-                  <SelectItem value="61-90">61-90 Days</SelectItem>
-                  <SelectItem value="91-180">91-180 Days</SelectItem>
-                  <SelectItem value="181-365">181-365 Days</SelectItem>
-                  <SelectItem value="365+">365+ Days</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
             {/* Date From */}
             <div>
               <label className="text-xs text-muted-foreground">From Date</label>
@@ -485,71 +532,50 @@ const BillAgingStatement: React.FC = () => {
         </CardContent>
       </Card>
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 no-print">
-        <Card>
-          <CardContent className="p-3">
-            <div className="text-xs text-muted-foreground">Total Bills</div>
-            <div className="text-xl font-bold">{summary.total_bills}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-3">
-            <div className="text-xs text-muted-foreground">Pending</div>
-            <div className="text-xl font-bold text-yellow-600">{summary.total_pending}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-3">
-            <div className="text-xs text-muted-foreground">Received</div>
-            <div className="text-xl font-bold text-green-600">{summary.total_received}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-3">
-            <div className="text-xs text-muted-foreground">Overdue</div>
-            <div className="text-xl font-bold text-red-600">{summary.total_overdue}</div>
-          </CardContent>
-        </Card>
-        <Card className="bg-blue-50">
-          <CardContent className="p-3">
-            <div className="text-xs text-muted-foreground">Total Outstanding</div>
-            <div className="text-xl font-bold text-blue-600">
-              {formatCurrency(summary.total_outstanding_amount)}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Aging Bucket Summary */}
-      <div className="grid grid-cols-3 md:grid-cols-6 gap-2 no-print">
-        {summary.buckets.map((bucket) => (
-          <Card
-            key={bucket.bucket}
-            className={`cursor-pointer transition-all ${
-              filters.agingBucket === bucket.bucket ? 'ring-2 ring-primary' : ''
-            }`}
-            onClick={() =>
-              setFilters({
-                ...filters,
-                agingBucket: filters.agingBucket === bucket.bucket ? 'all' : bucket.bucket,
-              })
-            }
-          >
+      {/* Summary Cards by Time Period */}
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-2 no-print">
+        {periodSummary.map(({ period, count, totalOutstanding }) => (
+          <Card key={period} className={count > 0 ? '' : 'opacity-50'}>
             <CardContent className="p-2 text-center">
-              <Badge className={getAgingBucketBadgeClass(bucket.bucket)} variant="outline">
-                {bucket.bucket} days
+              <Badge className={getTimePeriodBadgeClass(period)} variant="outline">
+                {period}
               </Badge>
-              <div className="text-lg font-semibold mt-1">{bucket.count}</div>
+              <div className="text-lg font-semibold mt-1">{count}</div>
               <div className="text-xs text-muted-foreground">
-                {formatCurrency(bucket.total_outstanding_amount)}
+                {formatCurrency(totalOutstanding)}
               </div>
             </CardContent>
           </Card>
         ))}
       </div>
 
-      {/* Data Table - Screen only (paginated) */}
+      {/* Total Outstanding Card */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 no-print">
+        <Card>
+          <CardContent className="p-3">
+            <div className="text-xs text-muted-foreground">Total Bills</div>
+            <div className="text-xl font-bold">{summary.total_bills}</div>
+          </CardContent>
+        </Card>
+        <Card className="bg-blue-50">
+          <CardContent className="p-3">
+            <div className="text-xs text-muted-foreground">Due Today</div>
+            <div className="text-xl font-bold text-blue-600">
+              {groupedByPeriod['Today'].length} bills - {formatCurrency(groupedByPeriod['Today'].reduce((sum, r) => sum + r.outstanding_amount, 0))}
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="bg-red-50">
+          <CardContent className="p-3">
+            <div className="text-xs text-muted-foreground">Overdue</div>
+            <div className="text-xl font-bold text-red-600">
+              {groupedByPeriod['Overdue'].length} bills - {formatCurrency(groupedByPeriod['Overdue'].reduce((sum, r) => sum + r.outstanding_amount, 0))}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Data Table - Screen only */}
       <Card className="print:hidden no-print">
         <CardContent className="p-0">
           {isLoading ? (
@@ -650,44 +676,71 @@ const BillAgingStatement: React.FC = () => {
                         Days {renderSortIcon('days_outstanding')}
                       </div>
                     </TableHead>
-                    <TableHead className="text-center">Aging</TableHead>
                     <TableHead className="text-center">Status</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {data.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={14} className="text-center py-8 text-muted-foreground">
+                      <TableCell colSpan={13} className="text-center py-8 text-muted-foreground">
                         No records found
                       </TableCell>
                     </TableRow>
                   ) : (
                     (() => {
                       let serialNo = 0;
-                      return AGING_BUCKET_ORDER.map((bucket) => {
-                        const bucketRecords = groupedData[bucket];
-                        if (bucketRecords.length === 0) return null;
+                      return TIME_PERIODS.map((period) => {
+                        const periodRecords = groupedByPeriod[period];
+
+                        // Always show "Today" section, skip other empty periods
+                        if (periodRecords.length === 0 && period !== 'Today') return null;
+
+                        const isCollapsed = collapsedSections.has(period);
 
                         return (
-                          <React.Fragment key={bucket}>
-                            {/* Bucket Heading Row */}
-                            <TableRow className={getHeadingRowClass(bucket)}>
-                              <TableCell colSpan={14} className="py-3">
+                          <React.Fragment key={period}>
+                            {/* Period Heading Row - Clickable to toggle */}
+                            <TableRow
+                              className={`${getHeadingRowClass(period)} cursor-pointer`}
+                              onClick={() => periodRecords.length > 0 && toggleSection(period)}
+                            >
+                              <TableCell colSpan={13} className="py-3">
                                 <div className="flex items-center gap-2">
+                                  {/* Collapse/Expand Icon */}
+                                  {periodRecords.length > 0 && (
+                                    <span className="text-gray-600">
+                                      {isCollapsed ? (
+                                        <ChevronRight className="h-5 w-5" />
+                                      ) : (
+                                        <ChevronDown className="h-5 w-5" />
+                                      )}
+                                    </span>
+                                  )}
                                   <Badge
-                                    className={`${getAgingBucketBadgeClass(bucket)} text-sm px-3 py-1`}
+                                    className={`${getTimePeriodBadgeClass(period)} text-sm px-3 py-1`}
                                     variant="outline"
                                   >
-                                    {bucket} Days
+                                    {period}
                                   </Badge>
-                                  <span className="font-semibold text-gray-700">
-                                    ({bucketRecords.length} {bucketRecords.length === 1 ? 'patient' : 'patients'})
-                                  </span>
+                                  {periodRecords.length === 0 ? (
+                                    <span className="font-semibold text-gray-500">
+                                      No bills for today
+                                    </span>
+                                  ) : (
+                                    <>
+                                      <span className="font-semibold text-gray-700">
+                                        ({periodRecords.length} {periodRecords.length === 1 ? 'bill' : 'bills'})
+                                      </span>
+                                      <span className="text-sm text-gray-600 ml-2">
+                                        Outstanding: {formatCurrency(periodRecords.reduce((sum, r) => sum + r.outstanding_amount, 0))}
+                                      </span>
+                                    </>
+                                  )}
                                 </div>
                               </TableCell>
                             </TableRow>
-                            {/* Patient Rows for this bucket */}
-                            {bucketRecords.map((record) => {
+                            {/* Record Rows for this period - Only show if not collapsed */}
+                            {!isCollapsed && periodRecords.map((record) => {
                               serialNo++;
                               return (
                                 <TableRow key={record.id} className="hover:bg-muted/30">
@@ -713,14 +766,6 @@ const BillAgingStatement: React.FC = () => {
                                   <TableCell>{formatDate(record.expected_payment_date)}</TableCell>
                                   <TableCell>{formatDate(record.received_date)}</TableCell>
                                   <TableCell className="text-center">{record.days_outstanding}</TableCell>
-                                  <TableCell className="text-center">
-                                    <Badge
-                                      className={getAgingBucketBadgeClass(record.aging_bucket)}
-                                      variant="outline"
-                                    >
-                                      {record.aging_bucket}
-                                    </Badge>
-                                  </TableCell>
                                   <TableCell className="text-center">
                                     <Badge className={getStatusBadgeClass(record.status)} variant="outline">
                                       {record.status}
@@ -800,7 +845,7 @@ const BillAgingStatement: React.FC = () => {
         </CardContent>
       </Card>
 
-      {/* Print Table - Shows ALL records (hidden on screen, visible on print) */}
+      {/* Print Table - Shows ALL records grouped by period (hidden on screen, visible on print) */}
       <div className="hidden print:block">
         <Table>
           <TableHeader>
@@ -810,29 +855,31 @@ const BillAgingStatement: React.FC = () => {
               <TableHead>Patient Name</TableHead>
               <TableHead>Corporate</TableHead>
               <TableHead className="text-right">Bill Amt</TableHead>
-              <TableHead>Submit Date</TableHead>
+              <TableHead>Exp. Payment</TableHead>
               <TableHead className="text-center">Days</TableHead>
-              <TableHead className="text-center">Aging</TableHead>
               <TableHead className="text-center">Status</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {(() => {
               let serialNo = 0;
-              return AGING_BUCKET_ORDER.map((bucket) => {
-                const bucketRecords = groupedData[bucket];
-                if (bucketRecords.length === 0) return null;
+              return TIME_PERIODS.map((period) => {
+                const periodRecords = groupedByPeriod[period];
+                if (periodRecords.length === 0) return null;
 
                 return (
-                  <React.Fragment key={bucket}>
-                    {/* Bucket Heading Row */}
-                    <TableRow className={getPrintHeadingRowClass(bucket)}>
-                      <TableCell colSpan={9} className="py-2 font-bold">
-                        {bucket} Days ({bucketRecords.length} {bucketRecords.length === 1 ? 'patient' : 'patients'})
+                  <React.Fragment key={period}>
+                    {/* Period Heading Row */}
+                    <TableRow
+                      className={getPrintHeadingRowClass(period)}
+                      style={{ WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } as React.CSSProperties}
+                    >
+                      <TableCell colSpan={8} className="py-2 font-bold">
+                        {period} ({periodRecords.length} {periodRecords.length === 1 ? 'bill' : 'bills'}) - {formatCurrency(periodRecords.reduce((sum, r) => sum + r.outstanding_amount, 0))}
                       </TableCell>
                     </TableRow>
-                    {/* Patient Rows */}
-                    {bucketRecords.map((record) => {
+                    {/* Record Rows */}
+                    {periodRecords.map((record) => {
                       serialNo++;
                       return (
                         <TableRow key={record.id}>
@@ -841,9 +888,8 @@ const BillAgingStatement: React.FC = () => {
                           <TableCell>{record.patient_name}</TableCell>
                           <TableCell>{getCorporateShortName(record.corporate || '-')}</TableCell>
                           <TableCell className="text-right">{formatCurrency(record.bill_amount)}</TableCell>
-                          <TableCell>{formatDate(record.date_of_submission)}</TableCell>
+                          <TableCell>{formatDate(record.expected_payment_date)}</TableCell>
                           <TableCell className="text-center">{record.days_outstanding}</TableCell>
-                          <TableCell className="text-center">{record.aging_bucket}</TableCell>
                           <TableCell className="text-center">{record.status}</TableCell>
                         </TableRow>
                       );
@@ -860,11 +906,11 @@ const BillAgingStatement: React.FC = () => {
       <div className="hidden print:block mt-4 text-sm">
         <div className="flex justify-between border-t pt-2">
           <span>Total Bills: {summary.total_bills}</span>
-          <span>Total Bill Amount: {formatCurrency(summary.total_bill_amount)}</span>
+          <span>Total Outstanding: {formatCurrency(summary.total_outstanding_amount)}</span>
         </div>
       </div>
     </div>
   );
 };
 
-export default BillAgingStatement;
+export default ExpectedPaymentDateReport;
