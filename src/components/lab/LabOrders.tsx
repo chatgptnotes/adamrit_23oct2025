@@ -597,6 +597,9 @@ const LabOrders = () => {
   // NEW: Track if current form has been saved
   const [isFormSaved, setIsFormSaved] = useState(false);
 
+  // Track tests that have actual saved results in lab_results table
+  const [testsWithSavedResults, setTestsWithSavedResults] = useState<string[]>([]);
+
   const [authenticatedResult, setAuthenticatedResult] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
 
@@ -782,18 +785,23 @@ const LabOrders = () => {
   const [calculatedRanges, setCalculatedRanges] = useState<Record<string, string>>({});
 
   // NEW: Function to fetch sub-tests for a given test with patient-specific ranges
-  const fetchSubTestsForTest = useCallback(async (testName: string, patientAge?: number, patientGender?: string) => {
+  const fetchSubTestsForTest = useCallback(async (testName: string, patientAge?: number, patientGender?: string, testId?: string) => {
     try {
-      console.log('🔍 Fetching sub-tests for:', testName, 'Patient:', { age: patientAge, gender: patientGender });
+      console.log('🔍 Fetching sub-tests for:', testName, 'testId:', testId, 'Patient:', { age: patientAge, gender: patientGender });
 
-      // Extract first word for partial matching (e.g., "CBC" from "CBC (Complete Hemogram)")
-      const firstWord = testName.split(/[\s(]/)[0];
-      console.log('🔍 First word for matching:', firstWord);
-
-      const { data: subTestsData, error } = await supabase
+      // Build query - prefer lab_id match if available, fallback to test_name
+      let query = supabase
         .from('lab_test_config')
-        .select('*')
-        .or(`test_name.ilike.*${firstWord}*`)
+        .select('*');
+
+      // If we have test_id, use it for more accurate matching
+      if (testId) {
+        query = query.eq('lab_id', testId);
+      } else {
+        query = query.ilike('test_name', testName);
+      }
+
+      const { data: subTestsData, error } = await query
         .order('display_order', { ascending: true })
         .order('id', { ascending: true });
 
@@ -1017,7 +1025,8 @@ const LabOrders = () => {
             const subTests = await fetchSubTestsForTest(
               testRow.test_name,
               testRow.patient_age,
-              testRow.patient_gender
+              testRow.patient_gender,
+              testRow.test_id
             );
             if (subTests.length > 0) {
               subTestsMap[testRow.test_name] = subTests;
@@ -1212,17 +1221,12 @@ const LabOrders = () => {
                   });
                 }
 
-                // Check if this result belongs to this test row
-                const isMatch =
-                  result.test_name === testRow.test_name ||
-                  result.test_category === testRow.test_category ||
+                // Simplified matching - use patient_name + main_test_name (no visit_id required)
+                const isMatch = result.patient_name === testRow.patient_name && (
                   result.main_test_name === testRow.test_name ||
-                  result.main_test_name === testRow.test_category ||
-                  // Special handling for test1 and yyy relationship
-                  (result.test_name === 'test1' && testRow.test_name === 'yyy') ||
-                  (result.test_category === testRow.test_name) ||
-                  (result.test_name.toLowerCase().includes(testRow.test_name.toLowerCase())) ||
-                  (testRow.test_name.toLowerCase().includes(result.test_name.toLowerCase()));
+                  result.test_name === testRow.test_name ||
+                  result.test_category === testRow.test_category
+                );
 
                 if (isMatch) {
                   if (result.test_name === 'test1') {
@@ -1802,6 +1806,11 @@ const LabOrders = () => {
       });
 
       setSavedLabResults(savedResults);
+
+      // Immediately update testsWithSavedResults to show red tick
+      const savedTestIds = selectedTestsForEntry.map(testRow => testRow.id);
+      setTestsWithSavedResults(prev => [...new Set([...prev, ...savedTestIds])]);
+
       setIsFormSaved(true);
 
       toast({
@@ -1965,7 +1974,19 @@ const LabOrders = () => {
       }
       // If 'All', no additional filter is applied
 
-      const { data, error } = await query.order('ordered_date', { ascending: false });
+      // Filter to show only today's entries by default
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+
+      const todayStr = today.toISOString();
+      const tomorrowStr = tomorrow.toISOString();
+
+      const { data, error } = await query
+        .gte('ordered_date', todayStr)
+        .lt('ordered_date', tomorrowStr)
+        .order('ordered_date', { ascending: false });
 
       // 🏥 Only filter by patient hospital, lab tests are shared
 
@@ -2095,6 +2116,25 @@ const LabOrders = () => {
               // }
             }
           }
+
+          // Track tests that have actual saved results in lab_results table
+          const savedResultIds: string[] = [];
+          if (allLabResults && allLabResults.length > 0) {
+            for (const testRow of labTestRows) {
+              // Simplified matching - use patient_name + main_test_name (no visit_id required)
+              const hasActualResults = allLabResults.some(result =>
+                result.patient_name === testRow.patient_name &&
+                result.main_test_name === testRow.test_name &&
+                result.result_value &&
+                result.result_value.toString().trim() !== ''
+              );
+              if (hasActualResults) {
+                savedResultIds.push(testRow.id);
+              }
+            }
+          }
+          setTestsWithSavedResults(savedResultIds);
+          console.log('✅ Tests with saved results:', savedResultIds.length);
 
           setTestSampleStatus(statusMap);
           setIncludedTests(includedTestIds);
@@ -3555,11 +3595,6 @@ const LabOrders = () => {
                              : ${displayValue}
                            </span>
                         </div>
-                        ${testRow.test_method ? `
-                          <div style="margin-left: 20px; margin-top: 5px; font-size: 12px;">
-                            <span style="font-weight: bold;">Method</span> ${formatTestMethod(testRow.test_method)}
-                          </div>
-                        ` : ''}
                       </div>
                     `;
                     }).filter(row => row !== '').join('');
@@ -3575,7 +3610,7 @@ const LabOrders = () => {
                       ${textTestRows}
                       ${testRow.test_method ? `
                         <div style="margin: 15px 20px; font-size: 13px; line-height: 1.6; text-align: justify;">
-                          ${formatTestMethod(testRow.test_method)}
+                          <span style="font-weight: bold;">Method</span> ${formatTestMethod(testRow.test_method)}
                         </div>
                       ` : ''}
                     </div>
@@ -4383,27 +4418,32 @@ const LabOrders = () => {
                           </div>
                         </TableCell>
                         <TableCell>
-                          <Checkbox
-                            checked={includedTests.includes(testRow.id)}
-                            disabled={
-                              testSampleStatus[testRow.id] !== 'saved' ||
-                              (selectedPatientForSampling !== null && selectedPatientForSampling !== getPatientKey(testRow)) ||
-                              (isEntryModeOpen && !selectedTestsForEntry.some(t => getPatientKey(t) === getPatientKey(testRow))) ||
-                              (getSelectedPatientFromIncludedTests() !== null && getSelectedPatientFromIncludedTests() !== getPatientKey(testRow))
-                            }
-                            onCheckedChange={(checked) => {
-                              console.log('📝 Updating "Incl" status for test (local only):', testRow.id, checked);
-
-                              // Only update local state - no database saving
-                              if (checked) {
-                                setIncludedTests(prev => [...prev, testRow.id]);
-                              } else {
-                                setIncludedTests(prev => prev.filter(id => id !== testRow.id));
+                          <div className="flex items-center gap-1">
+                            <Checkbox
+                              checked={includedTests.includes(testRow.id)}
+                              disabled={
+                                testSampleStatus[testRow.id] !== 'saved' ||
+                                (selectedPatientForSampling !== null && selectedPatientForSampling !== getPatientKey(testRow)) ||
+                                (isEntryModeOpen && !selectedTestsForEntry.some(t => getPatientKey(t) === getPatientKey(testRow))) ||
+                                (getSelectedPatientFromIncludedTests() !== null && getSelectedPatientFromIncludedTests() !== getPatientKey(testRow))
                               }
+                              onCheckedChange={(checked) => {
+                                console.log('📝 Updating "Incl" status for test (local only):', testRow.id, checked);
 
-                              console.log('✅ Updated "Incl" status locally (no database save)');
-                            }}
-                          />
+                                // Only update local state - no database saving
+                                if (checked) {
+                                  setIncludedTests(prev => [...prev, testRow.id]);
+                                } else {
+                                  setIncludedTests(prev => prev.filter(id => id !== testRow.id));
+                                }
+
+                                console.log('✅ Updated "Incl" status locally (no database save)');
+                              }}
+                            />
+                            {testsWithSavedResults.includes(testRow.id) && (
+                              <span className="text-red-600 font-bold text-lg">✓</span>
+                            )}
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -5403,9 +5443,11 @@ const LabOrders = () => {
                     variant="outline"
                     className="px-8"
                     onClick={async () => {
-                      // Try to save first, then always open preview
-                      await handleSaveLabResults();
-                      handlePreviewAndPrint(selectedTestsForEntry);
+                      // Save first, only open preview if save is successful
+                      const saveSuccess = await handleSaveLabResults();
+                      if (saveSuccess) {
+                        handlePreviewAndPrint(selectedTestsForEntry);
+                      }
                     }}
                     disabled={selectedTestsForEntry.length === 0}
                     title="Save and print lab report"
