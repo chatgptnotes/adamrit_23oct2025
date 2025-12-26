@@ -4584,6 +4584,7 @@ IMPORTANT INSTRUCTIONS:
                     <SelectItem value="Satisfactory">Satisfactory</SelectItem>
                     <SelectItem value="Good">Good</SelectItem>
                     <SelectItem value="Critical">Critical</SelectItem>
+                    <SelectItem value="Unsatisfactory">Unsatisfactory</SelectItem>
                   </SelectContent>
                 </Select>
                 <Select value={treatmentStatus} onValueChange={setTreatmentStatus}>
@@ -4594,6 +4595,7 @@ IMPORTANT INSTRUCTIONS:
                     <SelectItem value="Please select">Please select</SelectItem>
                     <SelectItem value="Stable">Stable</SelectItem>
                     <SelectItem value="Improving">Improving</SelectItem>
+                    <SelectItem value="Unsatisfactory">Unsatisfactory</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
