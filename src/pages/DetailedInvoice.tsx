@@ -743,8 +743,10 @@ const DetailedInvoice = () => {
       }, 0) || 0;
       const roomTotal = visitData.visit?.room_charges || 0;
       const surgeryTotal = visitData.surgeryOrders?.reduce((sum, order) => {
-        const rateStr = order.cghs_surgery?.NABH_NABL_Rate || '0';
-        const rate = parseFloat(String(rateStr).replace(/[^\d.]/g, '')) || 0;
+        // Use stored rate first, fallback to cghs_surgery.NABH_NABL_Rate
+        const rate = order.rate && order.rate > 0
+          ? Number(order.rate)
+          : parseFloat(String(order.cghs_surgery?.NABH_NABL_Rate || '0').replace(/[^\d.]/g, '')) || 0;
         return sum + rate;
       }, 0) || 0;
       const mandatoryTotal = visitData.mandatoryServices?.reduce((sum, service) => {
@@ -848,7 +850,9 @@ const DetailedInvoice = () => {
       item: surgery.cghs_surgery?.name || 'Surgery',
       dateTime: surgery.created_at ? format(new Date(surgery.created_at), 'dd/MM/yyyy HH:mm:ss') : '',
       qty: 1,
-      rate: parseFloat(String(surgery.cghs_surgery?.NABH_NABL_Rate || '0').replace(/[^\d.]/g, '')) || 0
+      rate: surgery.rate && surgery.rate > 0
+        ? Number(surgery.rate)
+        : parseFloat(String(surgery.cghs_surgery?.NABH_NABL_Rate || '0').replace(/[^\d.]/g, '')) || 0
     })) || [],
     mandatory: visitData?.mandatoryServices?.map((service, index) => {
       // Calculate days from start_date to end_date
@@ -1069,7 +1073,7 @@ const DetailedInvoice = () => {
                 <th className="border border-gray-400 p-1 bg-gray-100 font-bold text-center">ITEM</th>
                 <th className="border border-gray-400 p-1 bg-gray-100 font-bold text-center w-32">Date & Time</th>
                 <th className="border border-gray-400 p-1 bg-gray-100 font-bold text-center w-16">QTY/DAYS</th>
-                <th className="border border-gray-400 p-1 bg-gray-100 font-bold text-center w-24">CGHS NABH RATE</th>
+                <th className="border border-gray-400 p-1 bg-gray-100 font-bold text-center w-24">RATE</th>
               </tr>
             </thead>
           </table>

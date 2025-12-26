@@ -3,8 +3,22 @@
 
 @media print {
   /* Show all content by default for discharge summary printing */
-  body * {
+  /* IMPORTANT: Exclude elements marked for hiding during print */
+  body *:not(.print\:hidden):not(.no-print):not([class*="print:hidden"]) {
     visibility: visible !important;
+  }
+
+  /* Ensure print-hidden elements and their children stay hidden */
+  .print\:hidden,
+  .print\:hidden *,
+  .no-print,
+  .no-print *,
+  [class*="print:hidden"],
+  [class*="print:hidden"] * {
+    visibility: hidden !important;
+    display: none !important;
+    height: 0 !important;
+    overflow: hidden !important;
   }
 
   /* Special handling for discharge summary content */
@@ -80,6 +94,7 @@
     display: none !important;
     visibility: hidden !important;
   }
+
 
   /* Explicitly hide any style tags in body (they should be in HEAD) */
   body style {

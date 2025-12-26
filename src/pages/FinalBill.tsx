@@ -12208,7 +12208,9 @@ Format the response as JSON:
         is_primary: false, // Don't automatically set as primary - let user choose
         status: 'planned',
         sanction_status: surgery.sanction_status || 'Not Sanctioned',
-        notes: null
+        notes: null,
+        rate: parseFloat(surgery.NABH_NABL_Rate?.toString().replace(/[^\d.]/g, '') || '0'),
+        rate_type: surgery.rateSource || 'private'
       }));
 
       console.log('New surgeries to save:', surgeriesToSave);
@@ -14944,7 +14946,7 @@ Dr. Murali B K
                                     {surgery.is_primary && " (Primary)"}
                                   </div>
                                   <div className="text-xs text-gray-600 mt-1">
-                                    <div>NABH/NABL Rate: <span className="font-medium text-blue-600">₹{surgery.nabh_nabl_rate}</span></div>
+                                    <div>Rate: <span className="font-medium text-blue-600">₹{surgery.nabh_nabl_rate}</span></div>
                                     <div>Status: <span className={surgery.sanction_status === 'Sanctioned' ? 'text-green-600 font-medium' : 'text-orange-600 font-medium'}>
                                       {surgery.sanction_status || 'Not Sanctioned'}
                                     </span></div>
@@ -18101,7 +18103,7 @@ Dr. Murali B K
                                 Saved Clinical Services ({savedClinicalServicesData.length})
                               </h5>
                               <div className="text-lg font-bold text-blue-600">
-                                Total: ₹{savedClinicalServicesData.reduce((total, service) => total + (parseFloat(service.selectedRate || service.amount) || 0), 0)}
+                                Total: ₹{savedClinicalServicesData.reduce((total, service) => total + ((parseFloat(service.selectedRate || service.amount) || 0) * (service.quantity || 1)), 0)}
                               </div>
                             </div>
                             {savedClinicalServicesData.length > 0 ? (
@@ -18111,6 +18113,7 @@ Dr. Murali B K
                                     <tr className="bg-gray-100">
                                       <th className="border border-gray-300 px-4 py-2 text-left text-sm font-medium text-gray-900">Service Name</th>
                                       <th className="border border-gray-300 px-4 py-2 text-left text-sm font-medium text-gray-900">Amount</th>
+                                      <th className="border border-gray-300 px-4 py-2 text-center text-sm font-medium text-gray-900">Qty</th>
                                       <th className="border border-gray-300 px-4 py-2 text-left text-sm font-medium text-gray-900">Start Date</th>
                                       <th className="border border-gray-300 px-4 py-2 text-left text-sm font-medium text-gray-900">End Date</th>
                                       <th className="border border-gray-300 px-4 py-2 text-center text-sm font-medium text-gray-900">Action</th>
@@ -18124,6 +18127,15 @@ Dr. Murali B K
                                         </td>
                                         <td className="border border-gray-300 px-4 py-2 text-sm font-medium text-green-600">
                                           ₹{service.selectedRate || service.amount}
+                                        </td>
+                                        <td className="border border-gray-300 px-2 py-2 text-sm text-center">
+                                          <input
+                                            type="number"
+                                            min="1"
+                                            value={service.quantity || 1}
+                                            onChange={(e) => updateClinicalServiceField(service.junction_id, 'quantity', parseInt(e.target.value) || 1)}
+                                            className="w-16 border border-gray-300 rounded text-center text-sm px-1 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                          />
                                         </td>
                                         <td className="border border-gray-300 px-2 py-2 text-sm text-gray-600">
                                           <input

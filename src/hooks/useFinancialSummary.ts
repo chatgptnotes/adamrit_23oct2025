@@ -547,11 +547,12 @@ export const useFinancialSummary = (billId?: string, visitId?: string, savedMedi
 
       if (visitError || !visitData) return 0;
 
-      // Fetch surgeries from visit_surgeries junction table with cghs_surgery rate
+      // Fetch surgeries from visit_surgeries junction table with stored rate and fallback to cghs_surgery rate
       const { data: surgeryData, error: surgeryError } = await supabase
         .from('visit_surgeries')
         .select(`
           surgery_id,
+          rate,
           cghs_surgery:surgery_id (
             NABH_NABL_Rate
           )
@@ -560,10 +561,15 @@ export const useFinancialSummary = (billId?: string, visitId?: string, savedMedi
 
       if (surgeryError || !surgeryData) return 0;
 
-      // Calculate total from NABH_NABL_Rate
+      // Calculate total - use stored rate first, fallback to NABH_NABL_Rate
       const total = surgeryData.reduce((sum, item: any) => {
+        // Use stored rate from visit_surgeries if available
+        if (item.rate && item.rate > 0) {
+          return sum + Number(item.rate);
+        }
+        // Fallback to cghs_surgery.NABH_NABL_Rate
         const rateStr = item.cghs_surgery?.NABH_NABL_Rate || '0';
-        const rate = parseFloat(rateStr.replace(/[^\d.]/g, '')) || 0;
+        const rate = parseFloat(rateStr.toString().replace(/[^\d.]/g, '')) || 0;
         return sum + rate;
       }, 0);
 
