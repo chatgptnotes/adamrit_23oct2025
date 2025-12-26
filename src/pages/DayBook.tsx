@@ -218,11 +218,17 @@ const DayBook: React.FC = () => {
 
     // Show ALL payment transactions (all payment modes)
     if (dailyTransactions && dailyTransactions.length > 0) {
-      // Filter to show payment transactions (Advance + Final payments + Pharmacy)
+      // Filter to show payment transactions (Advance + Final payments + Pharmacy for Hope only)
+      // IMPORTANT: Pharmacy transactions only show in Hope hospital, never in Ayushman
+      const allowedTransactionTypes = ['ADVANCE_PAYMENT', 'FINAL_BILL'];
+      
+      // Add pharmacy only for Hope hospital (case-insensitive check)
+      if (hospitalConfig?.name?.toLowerCase() === 'hope') {
+        allowedTransactionTypes.push('PHARMACY');
+      }
+
       const paymentTransactions = dailyTransactions.filter((txn: DailyTransaction) =>
-        txn.transaction_type === 'ADVANCE_PAYMENT' ||
-        txn.transaction_type === 'FINAL_BILL' ||
-        txn.transaction_type === 'PHARMACY'
+        allowedTransactionTypes.includes(txn.transaction_type)
       );
 
       // Create individual entries for each payment transaction
