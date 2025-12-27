@@ -1143,6 +1143,9 @@ const LabOrders = () => {
             .eq('visit_id', visitId)
             .order('created_at', { ascending: false });
 
+          // Results are already filtered by visit_id in the query above
+          // No additional filtering needed - visit_id is unique per order
+
           console.log('🔍 DEBUGGING: Query by visit_id result:', {
             visitId,
             resultCount: existingResults?.length || 0,
@@ -2132,10 +2135,11 @@ const LabOrders = () => {
           const savedResultIds: string[] = [];
           if (allLabResults && allLabResults.length > 0) {
             for (const testRow of labTestRows) {
-              // Simplified matching - use patient_name + main_test_name (no visit_id required)
+              // Match by patient_name + main_test_name + order_number (unique per order)
               const hasActualResults = allLabResults.some(result =>
                 result.patient_name === testRow.patient_name &&
                 result.main_test_name === testRow.test_name &&
+                result.order_number === testRow.order_number &&  // Only show red tick for THIS specific order
                 result.result_value &&
                 result.result_value.toString().trim() !== ''
               );
@@ -5304,7 +5308,10 @@ const LabOrders = () => {
                                         handleKeyNavigation(e, currentInputIndex);
                                       }}
                                     />
-                                    <span className="ml-2 text-xs text-gray-600 min-w-[55px]">{subTest.unit && subTest.unit.toLowerCase() !== 'unit' ? subTest.unit : ''}</span>
+                                    <span className="ml-2 text-xs text-gray-600 min-w-[55px]">
+                                      {(subTest.unit && subTest.unit.toLowerCase() !== 'unit' ? subTest.unit : '') ||
+                                       (subTestFormData.result_unit && subTestFormData.result_unit.toLowerCase() !== 'unit' ? subTestFormData.result_unit : '')}
+                                    </span>
                                     {isFormSaved && subTestFormData.result_value && (
                                       <span className="ml-1 text-green-600 text-xs">✓</span>
                                     )}
@@ -5319,7 +5326,16 @@ const LabOrders = () => {
                                   <span className="text-gray-400 text-sm"></span>
                                 ) : (
                                   <div className="text-sm text-gray-700">
-                                    {subTest.range || subTestFormData.reference_range || '-'}
+                                    {(() => {
+                                      const range = subTest.range || subTestFormData.reference_range || '-';
+                                      const unit = (subTest.unit && subTest.unit.toLowerCase() !== 'unit' ? subTest.unit : '') ||
+                                                   (subTestFormData.result_unit && subTestFormData.result_unit.toLowerCase() !== 'unit' ? subTestFormData.result_unit : '');
+                                      // If range doesn't already contain the unit, append it
+                                      if (unit && range !== '-' && !range.includes(unit)) {
+                                        return `${range} ${unit}`;
+                                      }
+                                      return range;
+                                    })()}
                                   </div>
                                 )}
                               </div>
