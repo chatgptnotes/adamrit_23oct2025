@@ -42,6 +42,8 @@ import { PrintPreview } from '@/components/print/PrintPreview';
 import { usePrintColumns } from '@/hooks/usePrintColumns';
 import { IPD_PRINT_COLUMNS, IPD_PRINT_PRESETS, generateIPDFilterSummary } from '@/config/ipdPrintColumns';
 import { printSticker } from '@/utils/stickerPrinter';
+import { DateRangePicker } from '@/components/ui/date-range-picker';
+import { DateRange } from 'react-day-picker';
 import '@/styles/print.css';
 
 const TodaysIpdDashboard = () => {
@@ -64,6 +66,8 @@ const TodaysIpdDashboard = () => {
   const condonationIntimationFilter = searchParams.get('condInt')?.split(',').filter(Boolean) || [];
   const extensionOfStayFilter = searchParams.get('extStay')?.split(',').filter(Boolean) || [];
   const additionalApprovalsFilter = searchParams.get('addApproval')?.split(',').filter(Boolean) || [];
+  const startDate = searchParams.get('startDate') || '';
+  const endDate = searchParams.get('endDate') || '';
 
   // Helper to update URL params
   const updateParams = (updates: Record<string, string | null>) => {
@@ -93,6 +97,23 @@ const TodaysIpdDashboard = () => {
   const setCondonationIntimationFilter = (value: string[]) => updateParams({ condInt: value.length ? value.join(',') : null });
   const setExtensionOfStayFilter = (value: string[]) => updateParams({ extStay: value.length ? value.join(',') : null });
   const setAdditionalApprovalsFilter = (value: string[]) => updateParams({ addApproval: value.length ? value.join(',') : null });
+
+  // Date range for filtering
+  const dateRange: DateRange | undefined = useMemo(() => {
+    if (!startDate && !endDate) return undefined;
+    return {
+      from: startDate ? new Date(startDate) : undefined,
+      to: endDate ? new Date(endDate) : undefined,
+    };
+  }, [startDate, endDate]);
+
+  const handleDateRangeChange = (range: DateRange | undefined) => {
+    updateParams({
+      startDate: range?.from ? format(range.from, 'yyyy-MM-dd') : null,
+      endDate: range?.to ? format(range.to, 'yyyy-MM-dd') : null,
+      page: '1'
+    });
+  };
 
   // Non-persisted state (UI state that shouldn't persist)
   const [showEditPatientDialog, setShowEditPatientDialog] = useState(false);
@@ -1254,7 +1275,7 @@ const TodaysIpdDashboard = () => {
   });
 
   const { data: todaysVisits = [], isLoading, refetch } = useQuery({
-    queryKey: ['todays-visits', hospitalConfig?.name],
+    queryKey: ['todays-visits', hospitalConfig?.name, startDate, endDate],
     queryFn: async () => {
       console.log('🏥 TodaysIpdDashboard: Fetching visits for hospital:', hospitalConfig?.name);
 
@@ -1285,6 +1306,16 @@ const TodaysIpdDashboard = () => {
       if (hospitalConfig?.name) {
         query = query.eq('patients.hospital_name', hospitalConfig.name);
         console.log('🏥 TodaysIpdDashboard: Applied hospital filter for:', hospitalConfig.name);
+      }
+
+      // Apply date range filter (with time component for proper timestamp comparison)
+      if (startDate) {
+        query = query.gte('visit_date', `${startDate}T00:00:00`);
+        console.log('📅 TodaysIpdDashboard: Applied start date filter:', `${startDate}T00:00:00`);
+      }
+      if (endDate) {
+        query = query.lte('visit_date', `${endDate}T23:59:59`);
+        console.log('📅 TodaysIpdDashboard: Applied end date filter:', `${endDate}T23:59:59`);
       }
 
       const { data, error } = await query;
@@ -2219,6 +2250,10 @@ const TodaysIpdDashboard = () => {
             </div>
           </div>
           <div className="flex items-center gap-4">
+            <DateRangePicker
+              date={dateRange}
+              onDateChange={handleDateRangeChange}
+            />
             <Button
               onClick={handlePrint}
               variant="outline"
