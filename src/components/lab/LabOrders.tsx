@@ -1913,7 +1913,7 @@ const LabOrders = () => {
 
   // Fetch lab test rows from visit_labs table (JOIN with visits and lab tables)
   const { data: labTestRows = [], isLoading: testRowsLoading, isFetching: testRowsFetching } = useQuery({
-    queryKey: ['visit-lab-orders', getHospitalFilter(), patientStatusFilter],
+    queryKey: ['visit-lab-orders', getHospitalFilter(), patientStatusFilter, dateRange.from, dateRange.to],
     queryFn: async () => {
       console.log('🔍 Fetching lab test data from visit_labs...');
 
@@ -1974,18 +1974,29 @@ const LabOrders = () => {
       }
       // If 'All', no additional filter is applied
 
-      // Filter to show only today's entries by default
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const tomorrow = new Date(today);
-      tomorrow.setDate(tomorrow.getDate() + 1);
+      // Use date range from filters, default to today if not set
+      let fromDate: Date;
+      let toDate: Date;
 
-      const todayStr = today.toISOString();
-      const tomorrowStr = tomorrow.toISOString();
+      if (dateRange.from) {
+        fromDate = new Date(dateRange.from);
+        fromDate.setHours(0, 0, 0, 0);
+      } else {
+        fromDate = new Date();
+        fromDate.setHours(0, 0, 0, 0);
+      }
+
+      if (dateRange.to) {
+        toDate = new Date(dateRange.to);
+        toDate.setHours(23, 59, 59, 999);
+      } else {
+        toDate = new Date();
+        toDate.setHours(23, 59, 59, 999);
+      }
 
       const { data, error } = await query
-        .gte('ordered_date', todayStr)
-        .lt('ordered_date', tomorrowStr)
+        .gte('ordered_date', fromDate.toISOString())
+        .lte('ordered_date', toDate.toISOString())
         .order('ordered_date', { ascending: false });
 
       // 🏥 Only filter by patient hospital, lab tests are shared
@@ -4102,6 +4113,9 @@ const LabOrders = () => {
                 variant="outline"
                 size="sm"
                 className="h-8 w-8 p-0"
+                onClick={() => {
+                  queryClient.invalidateQueries({ queryKey: ['visit-lab-orders'] });
+                }}
                 title="Search"
               >
                 <Search className="h-4 w-4" />
