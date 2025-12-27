@@ -895,8 +895,8 @@ const LabPanelManager: React.FC = () => {
         const normalRangesData = subTest.normalRanges?.map(nr => ({
           age_range: nr.ageRange || '- Years',
           gender: nr.gender || 'Both',
-          min_value: nr.minValue || '',
-          max_value: nr.maxValue || '',
+          min_value: parseFloat(nr.minValue || '') || 0,
+          max_value: parseFloat(nr.maxValue || '') || 0,
           unit: nr.unit || subTest.unit || 'unit'
         })) || [];
 
@@ -929,8 +929,8 @@ const LabPanelManager: React.FC = () => {
             normal_ranges: nst.normalRanges?.map(nr => ({
               age_range: nr.ageRange || '- Years',
               gender: nr.gender || 'Both',
-              min_value: nr.minValue || '',
-              max_value: nr.maxValue || '',
+              min_value: parseFloat(nr.minValue || '') || 0,
+              max_value: parseFloat(nr.maxValue || '') || 0,
               unit: nr.unit || nst.unit || null
             })) || []
           };
@@ -948,9 +948,9 @@ const LabPanelManager: React.FC = () => {
           age_unit: isTextType ? 'Years' : ageUnit, // Default for Text type
           age_description: isTextType ? null : (firstAgeRange?.description || null),
           gender: isTextType ? 'Both' : (firstNormalRange?.gender || 'Both'),
-          min_value: isTextType ? '' : (firstNormalRange?.minValue || ''),
-          max_value: isTextType ? '' : (firstNormalRange?.maxValue || ''),
-          normal_unit: subTest.unit || 'unit',
+          min_value: isTextType ? 0 : (parseFloat(firstNormalRange?.minValue || '') || 0),
+          max_value: isTextType ? 0 : (parseFloat(firstNormalRange?.maxValue || '') || 0),
+          normal_unit: firstNormalRange?.unit || subTest.unit || 'unit',
           test_level: 1,
           display_order: subTestIndex,
           is_active: true,
@@ -1050,8 +1050,8 @@ const LabPanelManager: React.FC = () => {
 
       // Try database first, fallback to local storage
       try {
-        // First create the panel
-        await createPanel({
+        // First create the panel and capture the returned panel with ID
+        const createdPanel = await createPanel({
           panel_name: newPanel.testName,
           panel_code: panelCode,
           description: newPanel.specificInstruction,
@@ -1086,9 +1086,9 @@ const LabPanelManager: React.FC = () => {
           attributes: newPanel.attributes // Save attributes to database
         });
 
-        // Then save sub-tests to lab_test_config table
+        // Then save sub-tests to lab_test_config table using the created panel's ID
         if (newPanel.subTests && newPanel.subTests.length > 0) {
-          await saveSubTestsToDatabase(newPanel.testName, newPanel.subTests, newPanel.id);
+          await saveSubTestsToDatabase(newPanel.testName, newPanel.subTests, createdPanel.id);
         }
 
         toast({
