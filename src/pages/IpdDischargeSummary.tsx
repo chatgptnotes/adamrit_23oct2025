@@ -1176,8 +1176,7 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
 
         setSurgeryRows(mappedSurgeryRows);
 
-        // Set shared description from OT notes
-        setSharedSurgeryDescription(otNotesData?.description || '');
+        // Don't set shared description from OT notes - it will be loaded from ipd_discharge_summary if saved
 
         console.log('✅ Surgery rows updated with data:', {
           count: mappedSurgeryRows.length,
@@ -1202,7 +1201,7 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
           implant: otNotesData?.implant || ''
         }]);
 
-        setSharedSurgeryDescription(otNotesData?.description || '');
+        // Don't set shared description from OT notes - it will be loaded from ipd_discharge_summary if saved
 
         console.log('✅ Surgery details populated from OT Notes only:', {
           surgeon: otNotesData?.surgeon,
@@ -1309,11 +1308,19 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
           setResidentOnDischarge(summary.resident_on_discharge || 'Please select');
           setEnableSmsAlert(summary.additional_data?.enable_sms_alert || false);
 
-          // Update patient info
+          // Update patient info - restore ALL saved fields from discharge summary
           setPatientInfo(prev => ({
             ...prev,
-            otherConsultants: summary.other_consultants || '',
-            reasonOfDischarge: summary.reason_of_discharge || 'Please select'
+            name: summary.patient_name || prev.name,
+            address: summary.address || prev.address,
+            regId: summary.reg_id || prev.regId,
+            ageSex: summary.age_sex || prev.ageSex,
+            treatingConsultant: summary.treating_consultant || prev.treatingConsultant,
+            otherConsultants: summary.other_consultants || prev.otherConsultants,
+            doa: summary.admission_date ? format(new Date(summary.admission_date), 'yyyy-MM-dd') : prev.doa,
+            dateOfDischarge: summary.date_of_discharge ? format(new Date(summary.date_of_discharge), 'yyyy-MM-dd') : prev.dateOfDischarge,
+            reasonOfDischarge: summary.reason_of_discharge || prev.reasonOfDischarge,
+            corporateType: summary.corporate_type || prev.corporateType
           }));
         }
 
@@ -1362,10 +1369,15 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
             anesthesia: surgery.anesthesia_type || '',
             implant: surgery.implant || ''
           }]);
-          setSharedSurgeryDescription(''); // Keep empty - user will generate via AI Generate button
           console.log('🏥 Populated surgery details from saved discharge summary (no OT notes available)');
         } else if (surgery && otNotesData) {
           console.log('🏥 Skipping saved surgery details - using fresh OT notes data instead');
+        }
+
+        // Always restore shared description from saved discharge summary (regardless of OT notes)
+        if (surgery?.sharedDescription) {
+          setSharedSurgeryDescription(surgery.sharedDescription);
+          console.log('📝 Restored shared description from saved discharge summary');
         }
 
         console.log('✅ Form populated with existing discharge summary data');
@@ -2560,9 +2572,20 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
 
       html += '</tbody></table>';
 
-      // Add description at the end
+      // Add description at the end - clean AI preamble first
       if (currentSurgeryDescription) {
-        html += '<div class="section-content" style="margin-top: 15px;"><strong>Description:</strong><br>' + currentSurgeryDescription.replace(/\n/g, '<br>').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') + '</div>';
+        // Remove common AI intro lines that shouldn't appear in print
+        const cleanedDescription = currentSurgeryDescription
+          .replace(/^Here are the surgical summaries based on the information provided:?\s*/i, '')
+          .replace(/^Based on the information provided:?\s*/i, '')
+          .replace(/^Here is the surgical summary:?\s*/i, '')
+          .replace(/^Here is a brief surgical summary:?\s*/i, '')
+          .replace(/^Surgical summary:?\s*/i, '')
+          .trim();
+
+        if (cleanedDescription) {
+          html += '<div class="section-content" style="margin-top: 15px;"><strong>Description:</strong><br>' + cleanedDescription.replace(/\n/g, '<br>').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') + '</div>';
+        }
       }
 
       html += '</div>';
@@ -4145,10 +4168,12 @@ DD/MM/YYYY:-Test Category: Test1:Value1 unit, Test2:Value2 unit`);
                 size="sm"
                 variant="outline"
                 className="bg-purple-50 border-purple-200 text-purple-700 hover:bg-purple-100"
+                disabled={isChatGptLoading}
                 onClick={async (e) => {
                   e.preventDefault();
                   e.stopPropagation();
 
+                  setIsChatGptLoading(true);
                   try {
                     toast({
                       title: "Processing",
@@ -4215,10 +4240,19 @@ Write in professional medical terminology. Do NOT use placeholders like "[insert
                       description: `Failed to generate description: ${error instanceof Error ? error.message : 'Unknown error'}`,
                       variant: "destructive"
                     });
+                  } finally {
+                    setIsChatGptLoading(false);
                   }
                 }}
               >
-                AI Generate
+                {isChatGptLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Generating...
+                  </>
+                ) : (
+                  'AI Generate'
+                )}
               </Button>
             </div>
             <Textarea
