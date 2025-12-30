@@ -35,6 +35,7 @@ import DirectSaleView from './DirectSaleView';
 import PurchaseOrders from './PurchaseOrders';
 import AddPurchaseOrder from './AddPurchaseOrder';
 import EditPurchaseOrder from './EditPurchaseOrder';
+import CreditPayments from './CreditPayments';
 
 const PharmacyDashboard: React.FC = () => {
   const [searchParams] = useSearchParams();
@@ -109,7 +110,7 @@ const PharmacyDashboard: React.FC = () => {
       </div>
 
       <Tabs value={selectedTab} onValueChange={setSelectedTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-10 bg-blue-50 rounded-md">
+        <TabsList className="grid w-full grid-cols-11 bg-blue-50 rounded-md">
           <div className="flex flex-row items-center gap-x-4 w-full">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="items">Items</TabsTrigger>
@@ -117,6 +118,7 @@ const PharmacyDashboard: React.FC = () => {
           <TabsTrigger value="billing">Sale Bill</TabsTrigger>
           <TabsTrigger value="view_sales">View Sales</TabsTrigger>
           <TabsTrigger value="return-sales">Return Sales</TabsTrigger>
+          <TabsTrigger value="credit-payments">Credit Payments</TabsTrigger>
             <TabsTrigger value="stock-mgmt">Stock Mgmt</TabsTrigger>
           <TabsTrigger value="manufacturer">Manufacturer</TabsTrigger>
           <TabsTrigger value="supplier">Supplier</TabsTrigger>
@@ -432,6 +434,10 @@ const PharmacyDashboard: React.FC = () => {
 
         <TabsContent value="return-sales">
           <ReturnSales />
+        </TabsContent>
+
+        <TabsContent value="credit-payments">
+          <CreditPayments />
         </TabsContent>
 
         <TabsContent value="purchase-order">

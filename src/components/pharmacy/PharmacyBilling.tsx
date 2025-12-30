@@ -581,7 +581,7 @@ const PharmacyBilling: React.FC = () => {
     const totalDiscount = itemDiscount + orderDiscount; // Include order-level discount
     const totalTax = cart.reduce((sum, item) => sum + item.tax_amount, 0);
     const itemTotal = cart.reduce((sum, item) => sum + item.total_amount, 0);
-    const totalAmount = Math.max(0, itemTotal - orderDiscount); // Subtract order discount from total
+    const totalAmount = Math.ceil(Math.max(0, itemTotal - orderDiscount)); // Round up to whole number
 
     return { subtotal, totalDiscount, totalTax, totalAmount, orderDiscount };
   };
@@ -1637,7 +1637,7 @@ const PharmacyBilling: React.FC = () => {
               <hr />
               <div className="flex justify-between font-bold text-lg">
                 <span>Total:</span>
-                <span>{formatCurrency(totals.totalAmount)}</span>
+                <span>₹{totals.totalAmount}</span>
               </div>
             </CardContent>
           </Card>
@@ -1689,7 +1689,7 @@ const PharmacyBilling: React.FC = () => {
                 ) : (
                   <>
                     <CheckCircle className="h-4 w-4 mr-2" />
-                    Complete Sale - {formatCurrency(totals.totalAmount)}
+                    Complete Sale - ₹{totals.totalAmount}
                   </>
                 )}
               </Button>

@@ -98,6 +98,7 @@ export const SalesDetails: React.FC = () => {
   const [selectedPatient, setSelectedPatient] = useState<any>(null);
   const [patientSales, setPatientSales] = useState<any[]>([]);
   const [patientReturns, setPatientReturns] = useState<any[]>([]);
+  const [patientCreditPayments, setPatientCreditPayments] = useState<any[]>([]);
   const [showSidePanel, setShowSidePanel] = useState(false);
 
   // Treatment Sheet dialog
@@ -160,6 +161,13 @@ export const SalesDetails: React.FC = () => {
       }
 
       const { data, error } = await query;
+
+      // Fetch credit payments
+      const { data: creditPayments } = await supabase
+        .from('pharmacy_credit_payments')
+        .select('patient_id, amount')
+        .eq('hospital_name', hospitalConfig?.name || '');
+
       if (!error && data) {
         setTableData(data);
 
@@ -187,6 +195,14 @@ export const SalesDetails: React.FC = () => {
           // Update latest_date if this sale is more recent
           if (sale.sale_date && sale.sale_date > grouped[key].latest_date) {
             grouped[key].latest_date = sale.sale_date;
+          }
+        });
+
+        // Add credit payments to total_paid
+        (creditPayments || []).forEach((payment: any) => {
+          const key = payment.patient_id || 'walk-in';
+          if (grouped[key]) {
+            grouped[key].total_paid += payment.amount || 0;
           }
         });
 
@@ -321,6 +337,27 @@ export const SalesDetails: React.FC = () => {
       setPatientReturns(data);
     } else {
       setPatientReturns([]);
+    }
+  };
+
+  // Fetch credit payments received for a patient
+  const fetchPatientCreditPayments = async (patientId: string) => {
+    if (!patientId || !hospitalConfig?.name) {
+      setPatientCreditPayments([]);
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from('pharmacy_credit_payments')
+      .select('*')
+      .eq('patient_id', patientId)
+      .eq('hospital_name', hospitalConfig.name)
+      .order('payment_date', { ascending: false });
+
+    if (!error && data) {
+      setPatientCreditPayments(data);
+    } else {
+      setPatientCreditPayments([]);
     }
   };
 
@@ -1594,6 +1631,7 @@ export const SalesDetails: React.FC = () => {
                         setPanelType('sales');
                         setShowSidePanel(true);
                         fetchPatientReturns(group.patient_id);
+                        fetchPatientCreditPayments(group.patient_id);
                       }}
                     >
                       <td className="px-4 py-3">
@@ -1615,6 +1653,7 @@ export const SalesDetails: React.FC = () => {
                               setPanelType('sales');
                               setShowSidePanel(true);
                               fetchPatientReturns(group.patient_id);
+                              fetchPatientCreditPayments(group.patient_id);
                             }}
                             className="h-8 w-8 p-0 hover:bg-cyan-100 hover:text-cyan-600"
                             title="View All Bills"
@@ -2001,14 +2040,17 @@ export const SalesDetails: React.FC = () => {
                       // Total Paid (non-credit payments)
                       selectedPatient.bills.reduce((sum: number, b: any) => sum + (b.payment_method === 'CREDIT' ? 0 : (b.total_amount || 0)), 0) -
                       // Total Returns
-                      (patientReturns?.reduce((sum: number, r: any) => sum + (r.net_refund || 0), 0) || 0)
+                      (patientReturns?.reduce((sum: number, r: any) => sum + (r.net_refund || 0), 0) || 0) -
+                      // Credit Payments Received
+                      (patientCreditPayments?.reduce((sum: number, p: any) => sum + (p.amount || 0), 0) || 0)
                     ).toFixed(2)}
                   </span>
                 </div>
                 <div className="text-xs text-gray-300 mt-1">
                   Total: ₹{selectedPatient.bills.reduce((sum: number, b: any) => sum + (b.total_amount || 0), 0).toFixed(2)} -
                   Paid: ₹{selectedPatient.bills.reduce((sum: number, b: any) => sum + (b.payment_method === 'CREDIT' ? 0 : (b.total_amount || 0)), 0).toFixed(2)} -
-                  Returns: ₹{(patientReturns?.reduce((sum: number, r: any) => sum + (r.net_refund || 0), 0) || 0).toFixed(2)}
+                  Returns: ₹{(patientReturns?.reduce((sum: number, r: any) => sum + (r.net_refund || 0), 0) || 0).toFixed(2)} -
+                  Credit Received: ₹{(patientCreditPayments?.reduce((sum: number, p: any) => sum + (p.amount || 0), 0) || 0).toFixed(2)}
                 </div>
               </div>
             )}
