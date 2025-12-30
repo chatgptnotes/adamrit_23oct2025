@@ -1528,8 +1528,8 @@ const LabOrders = () => {
 
             // Foreign keys for proper data linking (use UUID fields)
             visit_id: originalTestRow.visit_uuid || originalTestRow.order_id || null,
-            lab_id: originalTestRow.lab_uuid || originalTestRow.test_id || null,
-            visit_lab_id: originalTestRow.id  // Unique ID from visit_labs table
+            lab_id: originalTestRow.lab_uuid || originalTestRow.test_id || null
+            // Note: visit_lab_id column doesn't exist in lab_results table - removed to fix save error
           };
 
           // Remove any undefined values to prevent schema errors
@@ -1575,8 +1575,8 @@ const LabOrders = () => {
               patient_gender: originalTestRow.patient_gender || 'Unknown',
               // Foreign keys for proper data linking (use UUID fields)
               visit_id: originalTestRow.visit_uuid || originalTestRow.order_id || null,
-              lab_id: originalTestRow.lab_uuid || originalTestRow.test_id || null,
-              visit_lab_id: originalTestRow.id  // Unique ID from visit_labs table
+              lab_id: originalTestRow.lab_uuid || originalTestRow.test_id || null
+              // Note: visit_lab_id removed - column doesn't exist in lab_results table
             };
 
             const { data: minimalResult, error: minimalError } = await supabase
