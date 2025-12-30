@@ -965,9 +965,9 @@ const FinalBill = () => {
 
           // Map the field names to expected format using CORRECT rate based on patient type
           const mappedData = data.map(item => {
-            // Select appropriate rate based on patient type (priority: Private > Non-NABH > Bhopal NABH > NABH > Fallback)
-            let cost = 100; // Default fallback
-            let rateSource = 'fallback';
+            // Select appropriate rate based on patient type (priority: Private > Non-NABH > Bhopal NABH > NABH > Fallback to any available rate)
+            let cost = 0; // Default to 0 - no hardcoded values
+            let rateSource = 'none';
 
             // ALWAYS check private patient FIRST
             if (isPrivatePatient && item.private && item.private > 0) {
@@ -982,6 +982,17 @@ const FinalBill = () => {
             } else if (usesNABHRate && item['NABH_rates_in_rupee'] && item['NABH_rates_in_rupee'] > 0) {
               cost = item['NABH_rates_in_rupee'];
               rateSource = 'nabh';
+            }
+            // Fallback chain: use first available non-zero database rate
+            else if (item['Non-NABH_rates_in_rupee'] && item['Non-NABH_rates_in_rupee'] > 0) {
+              cost = item['Non-NABH_rates_in_rupee'];
+              rateSource = 'non_nabh_fallback';
+            } else if (item['NABH_rates_in_rupee'] && item['NABH_rates_in_rupee'] > 0) {
+              cost = item['NABH_rates_in_rupee'];
+              rateSource = 'nabh_fallback';
+            } else if (item.bhopal_nabh_rate && item.bhopal_nabh_rate > 0) {
+              cost = item.bhopal_nabh_rate;
+              rateSource = 'bhopal_nabh_fallback';
             } else if (item.private && item.private > 0) {
               cost = item.private;
               rateSource = 'private_fallback';
