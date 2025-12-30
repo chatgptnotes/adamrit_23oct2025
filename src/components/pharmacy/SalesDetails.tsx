@@ -182,7 +182,7 @@ export const SalesDetails: React.FC = () => {
           grouped[key].bills.push(sale);
           grouped[key].total_amount += sale.total_amount || 0;
           grouped[key].total_discount += sale.discount || 0;
-          grouped[key].total_paid += sale.total_amount || 0;
+          grouped[key].total_paid += sale.payment_method === 'CREDIT' ? 0 : (sale.total_amount || 0);
           grouped[key].bill_count += 1;
           // Update latest_date if this sale is more recent
           if (sale.sale_date && sale.sale_date > grouped[key].latest_date) {
@@ -270,7 +270,7 @@ export const SalesDetails: React.FC = () => {
         grouped[key].bills.push(sale);
         grouped[key].total_amount += sale.total_amount || 0;
         grouped[key].total_discount += sale.discount || 0;
-        grouped[key].total_paid += sale.total_amount || 0;
+        grouped[key].total_paid += sale.payment_method === 'CREDIT' ? 0 : (sale.total_amount || 0);
         grouped[key].bill_count += 1;
         if (sale.sale_date && sale.sale_date > grouped[key].latest_date) {
           grouped[key].latest_date = sale.sale_date;
@@ -288,6 +288,41 @@ export const SalesDetails: React.FC = () => {
   };
 
   const totalBalance = dummyData.reduce((sum, row) => sum + row.bal, 0);
+
+  // Fetch patient returns when patient is selected
+  const fetchPatientReturns = async (patientId: string) => {
+    if (!patientId || !hospitalConfig?.name) {
+      setPatientReturns([]);
+      return;
+    }
+
+    // First, get the patient's internal UUID from patients table
+    const { data: patientData, error: patientError } = await supabase
+      .from('patients')
+      .select('id')
+      .eq('patients_id', patientId)
+      .eq('hospital_name', hospitalConfig.name)
+      .single();
+
+    if (patientError || !patientData) {
+      setPatientReturns([]);
+      return;
+    }
+
+    // Now query medicine_returns with the UUID
+    const { data, error } = await supabase
+      .from('medicine_returns')
+      .select('*')
+      .eq('patient_id', patientData.id)
+      .eq('hospital_name', hospitalConfig.name)
+      .order('return_date', { ascending: false });
+
+    if (!error && data) {
+      setPatientReturns(data);
+    } else {
+      setPatientReturns([]);
+    }
+  };
 
   // Fetch all bills for a patient
   const handleViewPatientBills = async (row: any) => {
@@ -843,7 +878,7 @@ export const SalesDetails: React.FC = () => {
       bills: group.bills.filter(b => b.sale_id !== bill.sale_id),
       bill_count: group.bills.filter(b => b.sale_id !== bill.sale_id).length,
       total_amount: group.bills.filter(b => b.sale_id !== bill.sale_id).reduce((sum, b) => sum + (b.total_amount || 0), 0),
-      total_paid: group.bills.filter(b => b.sale_id !== bill.sale_id).reduce((sum, b) => sum + (b.total_amount || 0), 0),
+      total_paid: group.bills.filter(b => b.sale_id !== bill.sale_id).reduce((sum, b) => sum + (b.payment_method === 'CREDIT' ? 0 : (b.total_amount || 0)), 0),
       total_discount: group.bills.filter(b => b.sale_id !== bill.sale_id).reduce((sum, b) => sum + (b.discount || 0), 0)
     })).filter(group => group.bills.length > 0));
 
@@ -1558,6 +1593,7 @@ export const SalesDetails: React.FC = () => {
                         setSelectedPatient(group);
                         setPanelType('sales');
                         setShowSidePanel(true);
+                        fetchPatientReturns(group.patient_id);
                       }}
                     >
                       <td className="px-4 py-3">
@@ -1578,6 +1614,7 @@ export const SalesDetails: React.FC = () => {
                               setSelectedPatient(group);
                               setPanelType('sales');
                               setShowSidePanel(true);
+                              fetchPatientReturns(group.patient_id);
                             }}
                             className="h-8 w-8 p-0 hover:bg-cyan-100 hover:text-cyan-600"
                             title="View All Bills"
@@ -1879,6 +1916,102 @@ export const SalesDetails: React.FC = () => {
                 </tbody>
               </table>
             </div>
+
+            {/* Sales Return Section */}
+            <div className="bg-cyan-700 py-2 px-4 mt-4">
+              <span className="text-sm font-semibold text-white">Sales Return</span>
+            </div>
+            <div className="overflow-x-auto bg-white border border-gray-200">
+              <table className="min-w-full text-sm">
+                <thead>
+                  <tr className="bg-cyan-600 text-white">
+                    <th className="px-2 py-2 text-left text-xs font-semibold">Bill No.</th>
+                    <th className="px-2 py-2 text-left text-xs font-semibold">Date</th>
+                    <th className="px-2 py-2 text-right text-xs font-semibold">Total Amt</th>
+                    <th className="px-2 py-2 text-right text-xs font-semibold">Return Amt</th>
+                    <th className="px-2 py-2 text-right text-xs font-semibold">Discount(Rs)</th>
+                    <th className="px-2 py-2 text-center text-xs font-semibold">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {patientReturns && patientReturns.length > 0 ? (
+                    patientReturns.map((ret: any, idx: number) => (
+                      <tr key={ret.id || idx} className="bg-white border-b hover:bg-gray-50">
+                        <td className="px-2 py-2 text-gray-800">{ret.return_number || `SR-${ret.id?.slice(0, 4)}`}</td>
+                        <td className="px-2 py-2 text-gray-600">{ret.return_date ? new Date(ret.return_date).toLocaleDateString('en-IN') : '-'}</td>
+                        <td className="px-2 py-2 text-right text-gray-800">{(ret.refund_amount || 0).toFixed(2)}</td>
+                        <td className="px-2 py-2 text-right text-gray-800">{(ret.net_refund || 0).toFixed(2)}</td>
+                        <td className="px-2 py-2 text-right text-gray-600">{(ret.processing_fee || 0).toFixed(2)}</td>
+                        <td className="px-2 py-2">
+                          <div className="flex items-center justify-center gap-1">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 w-6 p-0 hover:bg-cyan-100 hover:text-cyan-600"
+                              title="View"
+                            >
+                              <Eye className="h-3 w-3" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 w-6 p-0 hover:bg-cyan-100 hover:text-cyan-600"
+                              title="Print"
+                            >
+                              <Printer className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={6} className="px-4 py-4 text-center text-gray-500">No returns found</td>
+                    </tr>
+                  )}
+                  {/* Total Row */}
+                  {patientReturns && patientReturns.length > 0 && (
+                    <tr className="bg-gray-100 font-semibold border-t">
+                      <td colSpan={2} className="px-2 py-2 text-right text-gray-700">Total :</td>
+                      <td className="px-2 py-2 text-right text-gray-800">
+                        {patientReturns.reduce((sum: number, r: any) => sum + (r.refund_amount || 0), 0).toFixed(2)}
+                      </td>
+                      <td className="px-2 py-2 text-right text-gray-800">
+                        {patientReturns.reduce((sum: number, r: any) => sum + (r.net_refund || 0), 0).toFixed(2)}
+                      </td>
+                      <td className="px-2 py-2 text-right text-gray-600">
+                        {patientReturns.reduce((sum: number, r: any) => sum + (r.processing_fee || 0), 0).toFixed(2)}
+                      </td>
+                      <td></td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Pending Amount Calculation */}
+            {selectedPatient.bills && selectedPatient.bills.length > 0 && (
+              <div className="bg-gray-800 text-white px-4 py-3 mt-2 rounded">
+                <div className="flex justify-between items-center">
+                  <span className="font-semibold">Pending Amount:</span>
+                  <span className="font-bold text-lg">
+                    ₹{(
+                      // Total Sales Amount
+                      selectedPatient.bills.reduce((sum: number, b: any) => sum + (b.total_amount || 0), 0) -
+                      // Total Paid (non-credit payments)
+                      selectedPatient.bills.reduce((sum: number, b: any) => sum + (b.payment_method === 'CREDIT' ? 0 : (b.total_amount || 0)), 0) -
+                      // Total Returns
+                      (patientReturns?.reduce((sum: number, r: any) => sum + (r.net_refund || 0), 0) || 0)
+                    ).toFixed(2)}
+                  </span>
+                </div>
+                <div className="text-xs text-gray-300 mt-1">
+                  Total: ₹{selectedPatient.bills.reduce((sum: number, b: any) => sum + (b.total_amount || 0), 0).toFixed(2)} -
+                  Paid: ₹{selectedPatient.bills.reduce((sum: number, b: any) => sum + (b.payment_method === 'CREDIT' ? 0 : (b.total_amount || 0)), 0).toFixed(2)} -
+                  Returns: ₹{(patientReturns?.reduce((sum: number, r: any) => sum + (r.net_refund || 0), 0) || 0).toFixed(2)}
+                </div>
+              </div>
+            )}
             </>
             )}
 

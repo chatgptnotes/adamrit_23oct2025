@@ -107,7 +107,7 @@ const PharmacyBilling: React.FC = () => {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [saleType, setSaleType] = useState<'antibiotic' | 'other'>('other');
-  const [patientInfo, setPatientInfo] = useState({ id: '', name: '', phone: '' });
+  const [patientInfo, setPatientInfo] = useState({ id: '', name: '', phone: '', corporate: '' });
   const [prescriptionId, setPrescriptionId] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'CARD' | 'UPI' | 'INSURANCE' | 'CREDIT'>('CASH');
   const [paymentReference, setPaymentReference] = useState('');
@@ -253,7 +253,7 @@ const PharmacyBilling: React.FC = () => {
       setIsSearchingPatient(true);
       const { data, error } = await supabase
         .from('patients')
-        .select('name, patients_id')
+        .select('name, patients_id, corporate')
         .eq('hospital_name', hospitalConfig.name)
         .ilike('name', `%${debouncedPatientName}%`)
         .limit(5);
@@ -281,13 +281,13 @@ const PharmacyBilling: React.FC = () => {
       setIsSearchingPatient(true);
       const { data, error } = await supabase
         .from('patients')
-        .select('name, patients_id')
+        .select('name, patients_id, corporate')
         .eq('hospital_name', hospitalConfig.name)
         .eq('patients_id', debouncedPatientId)
         .single();
 
       if (data) {
-        setPatientInfo({ id: data.patients_id, name: data.name, phone: '' });
+        setPatientInfo({ id: data.patients_id, name: data.name, phone: '', corporate: data.corporate || '' });
         setShowPatientDropdown(false);
       }
       setIsSearchingPatient(false);
@@ -379,8 +379,8 @@ const PharmacyBilling: React.FC = () => {
     fetchVisitDetails();
   }, [visitId, visitOptions]);
 
-  const handleSelectPatient = (patient: { name: string, patients_id: string }) => {
-    setPatientInfo({ name: patient.name, id: patient.patients_id, phone: '' });
+  const handleSelectPatient = (patient: { name: string, patients_id: string, corporate?: string | null }) => {
+    setPatientInfo({ name: patient.name, id: patient.patients_id, phone: '', corporate: patient.corporate || '' });
     setShowPatientDropdown(false);
   };
 
@@ -1151,6 +1151,15 @@ const PharmacyBilling: React.FC = () => {
                       ))}
                     </div>
                   )}
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Corporate</label>
+                  <Input
+                    placeholder="Corporate"
+                    value={patientInfo.corporate}
+                    readOnly
+                    className="bg-gray-50"
+                  />
                 </div>
               </div>
               <div className="grid grid-cols-3 gap-4">
