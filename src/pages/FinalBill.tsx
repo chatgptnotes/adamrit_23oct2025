@@ -559,6 +559,8 @@ const FinalBill = () => {
   const [finalPaymentSelectedBank, setFinalPaymentSelectedBank] = useState('');
   const [finalPaymentDischargeDate, setFinalPaymentDischargeDate] = useState(new Date().toISOString().split('T')[0]);
   const [bankAccounts, setBankAccounts] = useState<Array<{ id: string; account_name: string }>>([]);
+  const [pendingPharmacyAmount, setPendingPharmacyAmount] = useState(0);
+  const [pharmacyAmountAcknowledged, setPharmacyAmountAcknowledged] = useState(false);
 
   // Patient Data and Invoice Items State (moved to top to prevent initialization errors)
   const [patientData, setPatientData] = useState<PatientData>(initialPatientData);
@@ -611,6 +613,9 @@ const FinalBill = () => {
       if (!isFinalPaymentModalOpen || !visitId) return;
 
       console.log('📥 Loading existing final payment data for visit:', visitId);
+
+      // Reset pharmacy acknowledgment checkbox
+      setPharmacyAmountAcknowledged(false);
 
       try {
         // First, check if patient is actually discharged
@@ -1287,6 +1292,91 @@ const FinalBill = () => {
     enabled: !!visitId,
     retry: false, // Don't retry on error to avoid multiple failed requests
   })
+
+  // Fetch pending pharmacy amount when modal opens
+  useEffect(() => {
+    const fetchPendingPharmacyAmount = async () => {
+      if (!isFinalPaymentModalOpen) return;
+
+      const patientId = visitData?.patients?.patients_id || patientData.registrationNo;
+      const hospitalName = hospitalConfig?.name;
+
+      if (!patientId || !hospitalName) {
+        console.log('⚠️ Missing patient ID or hospital name for pharmacy calculation');
+        setPendingPharmacyAmount(0);
+        return;
+      }
+
+      console.log('📊 Fetching pending pharmacy amount for patient:', patientId);
+
+      try {
+        // 1. Get total CREDIT sales for this patient
+        const { data: salesData, error: salesError } = await supabase
+          .from('pharmacy_sales')
+          .select('total_amount')
+          .eq('patient_id', patientId)
+          .eq('hospital_name', hospitalName)
+          .eq('payment_method', 'CREDIT');
+
+        if (salesError) {
+          console.error('Error fetching pharmacy sales:', salesError);
+        }
+
+        const totalCreditSales = (salesData || []).reduce((sum, sale) => sum + (sale.total_amount || 0), 0);
+        console.log('💰 Total CREDIT sales:', totalCreditSales);
+
+        // 2. Get patient UUID for medicine_returns lookup
+        const { data: patientRecord } = await supabase
+          .from('patients')
+          .select('id')
+          .eq('patients_id', patientId)
+          .eq('hospital_name', hospitalName)
+          .single();
+
+        let totalReturns = 0;
+        if (patientRecord?.id) {
+          // 3. Get returns for this patient (uses UUID)
+          const { data: returnsData, error: returnsError } = await supabase
+            .from('medicine_returns')
+            .select('net_refund')
+            .eq('patient_id', patientRecord.id)
+            .eq('hospital_name', hospitalName);
+
+          if (returnsError) {
+            console.error('Error fetching medicine returns:', returnsError);
+          }
+
+          totalReturns = (returnsData || []).reduce((sum, ret) => sum + (ret.net_refund || 0), 0);
+          console.log('🔄 Total returns:', totalReturns);
+        }
+
+        // 4. Get credit payments received
+        const { data: paymentsData, error: paymentsError } = await supabase
+          .from('pharmacy_credit_payments')
+          .select('amount')
+          .eq('patient_id', patientId)
+          .eq('hospital_name', hospitalName);
+
+        if (paymentsError) {
+          console.error('Error fetching credit payments:', paymentsError);
+        }
+
+        const totalPaymentsReceived = (paymentsData || []).reduce((sum, payment) => sum + (payment.amount || 0), 0);
+        console.log('✅ Total payments received:', totalPaymentsReceived);
+
+        // 5. Calculate pending amount
+        const pendingAmount = totalCreditSales - totalReturns - totalPaymentsReceived;
+        console.log('📊 Pending pharmacy amount:', pendingAmount);
+
+        setPendingPharmacyAmount(Math.max(0, pendingAmount));
+      } catch (error) {
+        console.error('Error calculating pending pharmacy amount:', error);
+        setPendingPharmacyAmount(0);
+      }
+    };
+
+    fetchPendingPharmacyAmount();
+  }, [isFinalPaymentModalOpen, visitData?.patients?.patients_id, patientData.registrationNo, hospitalConfig?.name]);
 
   // Memoized patient data for Advance Payment Modal to prevent re-rendering
   const advancePaymentPatientData = useMemo(() => {
@@ -22321,6 +22411,36 @@ Dr. Murali B K
                     ₹ {Number(financialSummaryData?.balance?.total || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </div>
                 </div>
+                {/* Pending Pharmacy Amount - Full width */}
+                <div className={`col-span-2 bg-gradient-to-br from-purple-50 to-violet-50 rounded-lg p-4 border ${pendingPharmacyAmount > 0 && !pharmacyAmountAcknowledged ? 'border-red-400 border-2' : 'border-purple-200'}`}>
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <label className="text-sm font-medium text-purple-600 mb-2 block">Pending Pharmacy Amount (Credit)</label>
+                      <div className="text-2xl font-bold text-purple-700">
+                        ₹ {pendingPharmacyAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </div>
+                      <p className="text-xs text-purple-500 mt-1">Credit Sales - Returns - Payments Received</p>
+                    </div>
+                    {pendingPharmacyAmount > 0 && (
+                      <div className="flex items-center gap-2 bg-white px-3 py-2 rounded-lg border border-purple-300">
+                        <input
+                          type="checkbox"
+                          id="pharmacyAcknowledge"
+                          checked={pharmacyAmountAcknowledged}
+                          onChange={(e) => setPharmacyAmountAcknowledged(e.target.checked)}
+                          disabled={isPatientDischarged}
+                          className="w-5 h-5 text-purple-600 rounded border-gray-300 focus:ring-purple-500"
+                        />
+                        <label htmlFor="pharmacyAcknowledge" className="text-sm font-medium text-gray-700 cursor-pointer">
+                          I acknowledge this pending amount
+                        </label>
+                      </div>
+                    )}
+                  </div>
+                  {pendingPharmacyAmount > 0 && !pharmacyAmountAcknowledged && (
+                    <p className="text-xs text-red-600 mt-2 font-medium">* Please acknowledge the pending pharmacy amount to proceed with discharge</p>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -22490,12 +22610,14 @@ Dr. Murali B K
                 <div className="flex gap-3">
                   <button
                     onClick={handleSaveAndDischarge}
-                    disabled={isSavingFinalPayment || isPatientDischarged}
+                    disabled={isSavingFinalPayment || isPatientDischarged || (pendingPharmacyAmount > 0 && !pharmacyAmountAcknowledged)}
                     className="px-8 py-3 bg-gradient-to-r from-indigo-600 to-blue-600 text-white rounded-lg hover:from-indigo-700 hover:to-blue-700 font-semibold transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {isPatientDischarged
                       ? 'Patient Already Discharged'
-                      : isSavingFinalPayment ? 'Saving...' : 'Save & Discharge'}
+                      : (pendingPharmacyAmount > 0 && !pharmacyAmountAcknowledged)
+                        ? 'Acknowledge Pharmacy Amount'
+                        : isSavingFinalPayment ? 'Saving...' : 'Save & Discharge'}
                   </button>
 
                   {isPatientDischarged && (
