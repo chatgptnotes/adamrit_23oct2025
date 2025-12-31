@@ -155,7 +155,7 @@ const LabReportPrintFormat: React.FC<LabReportPrintFormatProps> = ({
                   <div className="pt-2 pb-2">
                     <div className="flex">
                       <div className="w-24 font-bold text-sm pl-4">Method</div>
-                      <p className="text-sm leading-relaxed text-justify flex-1">
+                      <p className="text-sm leading-relaxed flex-1 whitespace-pre-line">
                         {test.description}
                       </p>
                     </div>
