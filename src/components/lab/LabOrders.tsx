@@ -2049,13 +2049,18 @@ const LabOrders = () => {
           const savedResultIds: string[] = [];
           if (allLabResults && allLabResults.length > 0) {
             for (const testRow of labTestRows) {
-              // Match by visit_lab_id first, fallback to visit_id + lab_id for old entries
-              const hasActualResults = allLabResults.some(result =>
-                (result.visit_lab_id === testRow.id ||  // New entries with visit_lab_id
-                 (result.visit_id === testRow.order_id &&
-                  result.lab_id === testRow.test_id)) &&  // Old entries fallback
-                hasValidResultValue(result.result_value)  // Use helper to properly check JSON values
-              );
+              // Match by visit_lab_id ONLY - don't use fallback to avoid matching old unrelated results
+              const hasActualResults = allLabResults.some(result => {
+                // If result has visit_lab_id, match ONLY by visit_lab_id
+                if (result.visit_lab_id) {
+                  return result.visit_lab_id === testRow.id &&
+                         hasValidResultValue(result.result_value);
+                }
+                // Fallback for old entries without visit_lab_id (only when result has no visit_lab_id)
+                return result.visit_id === testRow.order_id &&
+                       result.lab_id === testRow.test_id &&
+                       hasValidResultValue(result.result_value);
+              });
               if (hasActualResults) {
                 savedResultIds.push(testRow.id);
               }
@@ -3002,6 +3007,7 @@ const LabOrders = () => {
   const formatTestMethod = (text: string): string => {
     if (!text) return '';
     return text
+      .replace(/\n/g, '<br/>')  // Preserve all line breaks from textarea
       .replace(/Standard\s*Therapy\s*:/gi, '<br/><strong>Standard Therapy:</strong>')
       .replace(/High\s*Dose\s*Therapy\s*:/gi, '<br/><strong>High Dose Therapy:</strong>')
       .replace(/INTERPRETATION\s*:/gi, '<br/><br/><strong>INTERPRETATION:</strong><br/>')
