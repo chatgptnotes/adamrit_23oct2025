@@ -128,8 +128,10 @@ const EnhancedLabResultsForm: React.FC<EnhancedLabResultsFormProps> = ({
             normalRange: findNormalRangeForGender(nested.normal_ranges, patient.gender, nested.unit),
             status: '',
             comments: '',
-            abnormal: false
-          });
+            abnormal: false,
+            // Store reference to nested subTest for unit display
+            _subTestData: { unit: nested.unit || nested.normal_ranges?.[0]?.unit || '' }
+          } as TestResult & { _subTestData?: { unit: string } });
         });
       }
     });
@@ -591,8 +593,14 @@ const EnhancedLabResultsForm: React.FC<EnhancedLabResultsFormProps> = ({
                               placeholder="Enter value"
                               value={result.observedValue}
                               onChange={(e) => handleValueChange(index, e.target.value)}
-                              className="w-full"
+                              className="flex-1"
                             />
+                            {/* Display unit from subTest data */}
+                            {(result as any)._subTestData?.unit && (result as any)._subTestData.unit.toLowerCase() !== 'unit' && (
+                              <span className="text-xs text-gray-600 min-w-[50px]">
+                                {(result as any)._subTestData.unit}
+                              </span>
+                            )}
                             {result.status && (
                               <Badge className={getStatusBadgeColor(result.status)} variant="outline">
                                 {result.status.toUpperCase()}
