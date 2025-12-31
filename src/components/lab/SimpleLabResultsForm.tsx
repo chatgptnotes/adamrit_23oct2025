@@ -25,6 +25,7 @@ interface SubTest {
   comments: string;
   abnormal: boolean;
   file?: File;
+  unit?: string; // Unit extracted from normalRange
 }
 
 interface SimpleLabResultsFormProps {
@@ -87,6 +88,13 @@ const SimpleLabResultsForm: React.FC<SimpleLabResultsFormProps> = ({
 
   const availableTests = Object.keys(TEST_CONFIG);
 
+  // Helper to extract unit from normalRange string (e.g., "8.0-26.0 mg/dL" -> "mg/dL")
+  const extractUnitFromRange = (normalRange: string): string => {
+    // Match common units at the end of the string
+    const match = normalRange.match(/\s*([a-zA-Z/%]+(?:\/[a-zA-Z]+)?)\s*$/);
+    return match ? match[1] : '';
+  };
+
   const handleTestSelection = (testName: string) => {
     setSelectedTest(testName);
     const testConfig = TEST_CONFIG[testName as keyof typeof TEST_CONFIG];
@@ -96,7 +104,8 @@ const SimpleLabResultsForm: React.FC<SimpleLabResultsFormProps> = ({
         normalRange: subTest.normalRange,
         observedValue: '',
         comments: '',
-        abnormal: false
+        abnormal: false,
+        unit: extractUnitFromRange(subTest.normalRange) // Extract unit from normalRange
       }));
       setSubTests(initialSubTests);
     }
@@ -277,8 +286,14 @@ const SimpleLabResultsForm: React.FC<SimpleLabResultsFormProps> = ({
                           placeholder="Enter value"
                           value={subTest.observedValue}
                           onChange={(e) => handleValueChange(index, e.target.value)}
-                          className="w-full"
+                          className="flex-1"
                         />
+                        {/* Display unit extracted from normalRange */}
+                        {subTest.unit && (
+                          <span className="text-xs text-gray-600 min-w-[50px]">
+                            {subTest.unit}
+                          </span>
+                        )}
                       </div>
                     </div>
                     <div>

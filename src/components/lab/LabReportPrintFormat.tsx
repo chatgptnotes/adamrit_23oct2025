@@ -141,7 +141,10 @@ const LabReportPrintFormat: React.FC<LabReportPrintFormatProps> = ({
                     <div className="font-bold text-base mb-2">{test.name}</div>
                     <div className="grid grid-cols-3 items-center py-2">
                       <div className="italic text-sm pl-4">{test.name}</div>
-                      <div className="text-center font-bold">{test.observedValue}</div>
+                      <div className="text-center font-bold">
+                        {test.observedValue}
+                        {test.unit && test.unit.toLowerCase() !== 'unit' && ` ${test.unit}`}
+                      </div>
                       <div className="text-center">{test.normalRange}</div>
                     </div>
                   </div>

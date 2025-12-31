@@ -908,7 +908,12 @@ const LabOrders = () => {
         console.log(`   patientGender:`, patientGender);
         console.log(`   parentRangeData result:`, parentRangeData);
 
-        const parentUnit = parentRangeData?.unit || bestMatch.normal_unit || bestMatch.unit || '';
+        // Get unit from normal_ranges JSONB as additional fallback
+        const normalRangesUnit = bestMatch.normal_ranges?.[0]?.unit || '';
+        const parentUnit = parentRangeData?.unit ||
+                           (normalRangesUnit && normalRangesUnit.toLowerCase() !== 'unit' ? normalRangesUnit : '') ||
+                           bestMatch.normal_unit ||
+                           bestMatch.unit || '';
         const parentMinValue = parentRangeData?.min ?? bestMatch.min_value;
         const parentMaxValue = parentRangeData?.max ?? bestMatch.max_value;
         const parentDisplayRange = parentRangeData?.displayRange;
@@ -946,30 +951,38 @@ const LabOrders = () => {
           });
 
           sortedNestedSubTests.forEach((nested: any, idx: number) => {
-            // Get unit from nested sub-test or from normal_ranges (calculate FIRST)
-            const nestedUnit = nested.unit || nested.normal_ranges?.[0]?.unit || '%';
-
-            // Get normal range from nested sub-test using gender-specific lookup
+            // Get normal range from nested sub-test using gender-specific lookup FIRST
+            // Then extract unit from the range data (more accurate for gender-specific units)
             let nestedRange = 'Consult reference values';
             let nestedMinValue = 0;
             let nestedMaxValue = 0;
+            let nestedDisplayUnit = '';
+
+            // Default unit from nested sub-test or normal_ranges
+            const defaultNestedUnit = nested.unit || nested.normal_ranges?.[0]?.unit || '';
+
             if (nested.normal_ranges && nested.normal_ranges.length > 0) {
-              const nestedRangeData = findNormalRangeForGender(nested.normal_ranges, patientGender || 'Both', nestedUnit);
+              const nestedRangeData = findNormalRangeForGender(nested.normal_ranges, patientGender || 'Both', defaultNestedUnit);
               if (nestedRangeData) {
-                // Skip displaying "unit" placeholder text
-                const displayUnit = nestedRangeData.unit && nestedRangeData.unit.toLowerCase() !== 'unit' ? nestedRangeData.unit : '';
-                nestedRange = formatNormalRange(nestedRangeData.min, nestedRangeData.max, displayUnit, nestedRangeData.displayRange);
+                // Get unit from gender-specific range data, filter out "unit" placeholder
+                nestedDisplayUnit = nestedRangeData.unit && nestedRangeData.unit.toLowerCase() !== 'unit' ? nestedRangeData.unit : '';
+                nestedRange = formatNormalRange(nestedRangeData.min, nestedRangeData.max, nestedDisplayUnit, nestedRangeData.displayRange);
                 nestedMinValue = nestedRangeData.min;
                 nestedMaxValue = nestedRangeData.max;
               }
             }
 
-            console.log(`    ↳ Nested: ${nested.name}, unit: ${nestedUnit}, range: ${nestedRange}, patientGender: ${patientGender}`);
+            // Fallback: if no unit from range data, use default (filtered)
+            if (!nestedDisplayUnit && defaultNestedUnit && defaultNestedUnit.toLowerCase() !== 'unit') {
+              nestedDisplayUnit = defaultNestedUnit;
+            }
+
+            console.log(`    ↳ Nested: ${nested.name}, unit: ${nestedDisplayUnit}, range: ${nestedRange}, patientGender: ${patientGender}`);
 
             processedSubTests.push({
               id: `${bestMatch.id}_nested_${idx}`,
               name: `  ${nested.name}`, // Indent nested sub-tests
-              unit: nestedUnit,
+              unit: nestedDisplayUnit,
               range: nestedRange,
               minValue: nestedMinValue,
               maxValue: nestedMaxValue,
@@ -5064,21 +5077,31 @@ const LabOrders = () => {
 
                                 console.log(`🚨 FINAL RENDER: ${testRow.test_name} will display value: "${displayValue}"`);
 
+                                // Get unit from form data, filter out "unit" placeholder
+                                const mainTestUnit = mainTestFormData.result_unit && mainTestFormData.result_unit.toLowerCase() !== 'unit'
+                                  ? mainTestFormData.result_unit
+                                  : '';
+
                                 return (
-                                  <input
-                                    type="text"
-                                    className={`w-full max-w-[120px] px-2 py-1 border rounded text-center text-sm border-gray-300`}
-                                    placeholder="Enter value"
-                                    value={displayValue}
-                                    onChange={(e) => handleLabResultChange(mainTestKey, 'result_value', e.target.value)}
-                                    data-observed-value="true"
-                                    onKeyDown={(e) => {
-                                      const currentInputIndex = Array.from(
-                                        document.querySelectorAll('input[data-observed-value="true"]')
-                                      ).indexOf(e.currentTarget);
-                                      handleKeyNavigation(e, currentInputIndex);
-                                    }}
-                                  />
+                                  <div className="flex items-center justify-center gap-1">
+                                    <input
+                                      type="text"
+                                      className={`w-full max-w-[100px] px-2 py-1 border rounded text-center text-sm border-gray-300`}
+                                      placeholder="Enter value"
+                                      value={displayValue}
+                                      onChange={(e) => handleLabResultChange(mainTestKey, 'result_value', e.target.value)}
+                                      data-observed-value="true"
+                                      onKeyDown={(e) => {
+                                        const currentInputIndex = Array.from(
+                                          document.querySelectorAll('input[data-observed-value="true"]')
+                                        ).indexOf(e.currentTarget);
+                                        handleKeyNavigation(e, currentInputIndex);
+                                      }}
+                                    />
+                                    {mainTestUnit && (
+                                      <span className="text-xs text-gray-600 min-w-[40px]">{mainTestUnit}</span>
+                                    )}
+                                  </div>
                                 );
                               })()}
                             </div>
