@@ -1527,9 +1527,9 @@ const LabOrders = () => {
             patient_gender: originalTestRow.patient_gender || 'Unknown',
 
             // Foreign keys for proper data linking (use UUID fields)
+            visit_lab_id: originalTestRow.id,  // Unique ID from visit_labs - links result to specific test entry
             visit_id: originalTestRow.visit_uuid || originalTestRow.order_id || null,
             lab_id: originalTestRow.lab_uuid || originalTestRow.test_id || null
-            // Note: visit_lab_id column doesn't exist in lab_results table - removed to fix save error
           };
 
           // Remove any undefined values to prevent schema errors
@@ -1574,9 +1574,9 @@ const LabOrders = () => {
               patient_age: originalTestRow.patient_age || null,
               patient_gender: originalTestRow.patient_gender || 'Unknown',
               // Foreign keys for proper data linking (use UUID fields)
+              visit_lab_id: originalTestRow.id,  // Unique ID from visit_labs
               visit_id: originalTestRow.visit_uuid || originalTestRow.order_id || null,
               lab_id: originalTestRow.lab_uuid || originalTestRow.test_id || null
-              // Note: visit_lab_id removed - column doesn't exist in lab_results table
             };
 
             const { data: minimalResult, error: minimalError } = await supabase
@@ -2041,8 +2041,7 @@ const LabOrders = () => {
                 (result.visit_lab_id === testRow.id ||  // New entries with visit_lab_id
                  (result.visit_id === testRow.order_id &&
                   result.lab_id === testRow.test_id)) &&  // Old entries fallback
-                result.result_value &&
-                result.result_value.toString().trim() !== ''
+                hasValidResultValue(result.result_value)  // Use helper to properly check JSON values
               );
               if (hasActualResults) {
                 savedResultIds.push(testRow.id);
