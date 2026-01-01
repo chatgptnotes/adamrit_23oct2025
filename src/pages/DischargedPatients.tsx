@@ -18,11 +18,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuCheckboxItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
-import { Loader2, Search, Users, Calendar, Clock, UserCheck, Shield, AlertTriangle, Filter, RotateCcw, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, FileText } from "lucide-react";
+import { Loader2, Search, Users, Calendar, Clock, UserCheck, Shield, AlertTriangle, Filter, RotateCcw, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, FileText, Printer } from "lucide-react";
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from "@/hooks/use-toast";
 import { format } from 'date-fns';
 import { CascadingBillingStatusDropdown } from '@/components/shared/CascadingBillingStatusDropdown';
+import { EnhancedDatePicker } from '@/components/ui/enhanced-date-picker';
 
 interface Visit {
   id: string;
@@ -82,6 +83,8 @@ const DischargedPatients = () => {
   const sortOrder = (searchParams.get('sortOrder') || 'desc') as 'asc' | 'desc';
   const currentPage = parseInt(searchParams.get('page') || '1');
   const itemsPerPage = 10;
+  const fromDate = searchParams.get('from') || '';
+  const toDate = searchParams.get('to') || '';
 
   // Helper to update URL params
   const updateParams = (updates: Record<string, string | null>) => {
@@ -105,6 +108,8 @@ const DischargedPatients = () => {
   const setSortBy = (value: string) => updateParams({ sortBy: value });
   const setSortOrder = (value: 'asc' | 'desc') => updateParams({ sortOrder: value });
   const setCurrentPage = (value: number) => updateParams({ page: value.toString() });
+  const setFromDate = (value: string) => updateParams({ from: value || null, page: '1' });
+  const setToDate = (value: string) => updateParams({ to: value || null, page: '1' });
 
   // State for undischarge functionality
   const [isUndischargeDialogOpen, setIsUndischargeDialogOpen] = useState(false);
@@ -389,7 +394,7 @@ const DischargedPatients = () => {
 
   // Fetch discharged patients
   const { data: visits, isLoading, error, refetch } = useQuery({
-    queryKey: ['discharged-patients', searchTerm, statusFilter, patientTypeFilter, billingStatusFilter, corporateFilter, sortBy, sortOrder, hospitalConfig?.name, availableCorporates?.length],
+    queryKey: ['discharged-patients', searchTerm, statusFilter, patientTypeFilter, billingStatusFilter, corporateFilter, sortBy, sortOrder, hospitalConfig?.name, availableCorporates?.length, fromDate, toDate],
     queryFn: async () => {
       console.log('🏥 Fetching discharged patients for hospital:', hospitalConfig?.name, '(IPD, IPD (Inpatient) & Emergency only)');
 
@@ -441,6 +446,16 @@ const DischargedPatients = () => {
       if (corporateFilter && corporateFilter !== 'all') {
         query = query.eq('patients.corporate', corporateFilter);
         console.log('🏥 DischargedPatients: Applied corporate filter for:', corporateFilter);
+      }
+
+      // Date range filter (Discharge Date)
+      if (fromDate) {
+        query = query.gte('discharge_date', fromDate);
+        console.log('🏥 DischargedPatients: Applied from date filter:', fromDate);
+      }
+      if (toDate) {
+        query = query.lte('discharge_date', toDate + 'T23:59:59');
+        console.log('🏥 DischargedPatients: Applied to date filter:', toDate);
       }
 
       // Skip database search for now - we'll filter client-side
@@ -645,6 +660,86 @@ const DischargedPatients = () => {
     }
   };
 
+  // Helper to extract short form from corporate name (e.g., "Ayushman Bharat (PM-JAY)" -> "PM-JAY")
+  const getCorporateShortForm = (corporate: string | null) => {
+    if (!corporate) return '-';
+    // Look for text in parentheses
+    const match = corporate.match(/\(([^)]+)\)/);
+    if (match) return match[1];
+    // If no parentheses, return the original (might already be short like "ECHS")
+    return corporate;
+  };
+
+  // Print Dashboard function
+  const handlePrintDashboard = () => {
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.write(`
+        <html>
+          <head>
+            <title>Discharged Patients Report</title>
+            <style>
+              body { font-family: Arial, sans-serif; padding: 20px; font-size: 12px; }
+              h1 { text-align: center; margin-bottom: 5px; }
+              .subtitle { text-align: center; color: #666; margin-bottom: 20px; }
+              .header-info { display: flex; justify-content: space-between; margin-bottom: 15px; padding: 10px; background: #f5f5f5; }
+              table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+              th, td { border: 1px solid #000; padding: 8px; text-align: left; }
+              th { background-color: #f0f0f0; color: #000; font-weight: bold; font-size: 13px; }
+              tr:nth-child(even) { background-color: #f9f9f9; }
+              .text-center { text-align: center; }
+              @media print {
+                body { margin: 0; }
+                .no-print { display: none; }
+              }
+            </style>
+          </head>
+          <body>
+            <h1>Discharged Patients Report</h1>
+            <p class="subtitle">IPD & Emergency Patients</p>
+            <div class="header-info">
+              <span><strong>Print Date:</strong> ${format(new Date(), 'dd MMM yyyy, hh:mm a')}</span>
+              <span><strong>Total Patients:</strong> ${filteredVisits?.length || 0}</span>
+              ${fromDate || toDate ? `<span><strong>Date Filter:</strong> ${fromDate || 'Start'} to ${toDate || 'End'}</span>` : ''}
+            </div>
+            <table>
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Patient Name</th>
+                  <th>Patient ID</th>
+                  <th>Visit ID</th>
+                  <th>Admission Date</th>
+                  <th>Discharge Date</th>
+                  <th>Days</th>
+                  <th>Billing Status</th>
+                  <th>Corporate</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${filteredVisits?.map((visit, index) => `
+                  <tr>
+                    <td class="text-center">${index + 1}</td>
+                    <td>${visit.patients?.name || '-'}</td>
+                    <td>${visit.patients?.patients_id || '-'}</td>
+                    <td>${visit.visit_id || '-'}</td>
+                    <td>${visit.admission_date ? format(new Date(visit.admission_date), 'dd MMM yyyy') : '-'}</td>
+                    <td>${visit.discharge_date ? format(new Date(visit.discharge_date), 'dd MMM yyyy') : '-'}</td>
+                    <td class="text-center">${calculateDaysAdmitted(visit.admission_date, visit.discharge_date)}</td>
+                    <td>${visit.billing_status || '-'}</td>
+                    <td>${getCorporateShortForm(visit.patients?.corporate)}</td>
+                  </tr>
+                `).join('') || '<tr><td colspan="9" class="text-center">No data</td></tr>'}
+              </tbody>
+            </table>
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
+      printWindow.print();
+    }
+  };
+
 
   if (error) {
     return (
@@ -684,6 +779,15 @@ const DischargedPatients = () => {
         </div>
 
         <div className="flex items-center gap-2">
+          <Button
+            onClick={handlePrintDashboard}
+            variant="outline"
+            size="sm"
+            className="flex items-center gap-2"
+          >
+            <Printer className="h-4 w-4" />
+            Print
+          </Button>
           <Badge variant="outline" className="flex items-center gap-1">
             <Users className="h-3 w-3" />
             {filteredVisits?.length || 0} patients
@@ -776,29 +880,62 @@ const DischargedPatients = () => {
             </Select>
           </div>
 
-          {/* Sort Options */}
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">Sort by:</span>
-            <Select value={sortBy} onValueChange={setSortBy}>
-              <SelectTrigger className="w-40">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="discharge_date">Discharge Date</SelectItem>
-                <SelectItem value="visit_date">Visit Date</SelectItem>
-                <SelectItem value="patients.name">Patient Name</SelectItem>
-                <SelectItem value="billing_status">Billing Status</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={sortOrder} onValueChange={(value) => setSortOrder(value as 'asc' | 'desc')}>
-              <SelectTrigger className="w-32">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="desc">Newest First</SelectItem>
-                <SelectItem value="asc">Oldest First</SelectItem>
-              </SelectContent>
-            </Select>
+          {/* Date Range & Sort Options - Single Row */}
+          <div className="flex items-center justify-between flex-wrap gap-4">
+            {/* Date Range Filter */}
+            <div className="flex items-center gap-4 flex-wrap">
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">From:</span>
+                <EnhancedDatePicker
+                  value={fromDate ? new Date(fromDate) : undefined}
+                  onChange={(date) => setFromDate(date ? date.toISOString().split('T')[0] : '')}
+                  placeholder="From Date"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">To:</span>
+                <EnhancedDatePicker
+                  value={toDate ? new Date(toDate) : undefined}
+                  onChange={(date) => setToDate(date ? date.toISOString().split('T')[0] : '')}
+                  placeholder="To Date"
+                />
+              </div>
+              {(fromDate || toDate) && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => { setFromDate(''); setToDate(''); }}
+                  className="text-gray-500 hover:text-gray-700"
+                >
+                  Clear Dates
+                </Button>
+              )}
+            </div>
+
+            {/* Sort Options */}
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">Sort by:</span>
+              <Select value={sortBy} onValueChange={setSortBy}>
+                <SelectTrigger className="w-40">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="discharge_date">Discharge Date</SelectItem>
+                  <SelectItem value="visit_date">Visit Date</SelectItem>
+                  <SelectItem value="patients.name">Patient Name</SelectItem>
+                  <SelectItem value="billing_status">Billing Status</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={sortOrder} onValueChange={(value) => setSortOrder(value as 'asc' | 'desc')}>
+                <SelectTrigger className="w-32">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="desc">Newest First</SelectItem>
+                  <SelectItem value="asc">Oldest First</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </CardContent>
       </Card>
