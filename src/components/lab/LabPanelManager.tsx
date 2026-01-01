@@ -755,6 +755,7 @@ const LabPanelManager: React.FC = () => {
             type: isTextType ? 'Text' : 'Numeric', // Load test type from lab_test_formulas
             textValue: isTextType ? (formulaData?.text_value || '') : '', // Load text value from lab_test_formulas
             formula: formulaData?.formula || '', // Load formula from lab_test_formulas
+            isMandatory: config.is_mandatory !== false, // Load mandatory status (default true)
             ageRanges: [],
             normalRanges: []
           };
@@ -902,11 +903,12 @@ const LabPanelManager: React.FC = () => {
 
         // Prepare nested_sub_tests JSONB
         const nestedSubTestsData = subTest.subTests?.map((nst, nestedIndex) => {
-          console.log(`  🔹 Nested sub-test [${nestedIndex}]: ${nst.name}`);
+          console.log(`  🔹 Nested sub-test [${nestedIndex}]: ${nst.name}, mandatory: ${nst.isMandatory}`);
 
           return {
             name: nst.name,
             unit: nst.unit || null,
+            is_mandatory: nst.isMandatory !== false, // Individual mandatory status
             display_order: nestedIndex,
             age_ranges: nst.ageRanges?.map(ar => {
               const ageRangeParts = ar.ageRange?.split(' ') || [];
@@ -954,6 +956,7 @@ const LabPanelManager: React.FC = () => {
           test_level: 1,
           display_order: subTestIndex,
           is_active: true,
+          is_mandatory: subTest.isMandatory !== false, // Save mandatory status (default true)
           lab_id: labId,
           test_type: isTextType ? 'Text' : 'Numeric', // Save the test type
           age_ranges: isTextType ? [] : ageRangesData, // Empty array for Text type
@@ -2357,6 +2360,7 @@ const EditPanelForm: React.FC<EditPanelFormProps> = ({ panel, onSubmit }) => {
             name: config.sub_test_name,
             unit: config.unit || config.normal_unit || '',
             formula: formulaData?.formula || '',
+            isMandatory: config.is_mandatory !== false, // Load mandatory status (default true)
             ageRanges: [],
             normalRanges: [],
             subTests: []
@@ -2412,6 +2416,7 @@ const EditPanelForm: React.FC<EditPanelFormProps> = ({ panel, onSubmit }) => {
             id: `nested_${subTestKey}_${index}_${Date.now()}`,
             name: nst.name || '',
             unit: nst.unit || '',
+            isMandatory: nst.is_mandatory !== false, // Load individual mandatory status
             ageRanges: (nst.age_ranges || []).map((ar: any, arIndex: number) => ({
               id: `agerange_${index}_${arIndex}_${Date.now()}`,
               minAge: ar.min_age?.toString() || '',
