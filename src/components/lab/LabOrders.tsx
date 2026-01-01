@@ -933,6 +933,7 @@ const LabOrders = () => {
           maxAge: bestMatch.max_age,
           allRanges: ranges,
           isParent: bestMatch.nested_sub_tests && Array.isArray(bestMatch.nested_sub_tests) && bestMatch.nested_sub_tests.length > 0,
+          isMandatory: bestMatch.is_mandatory !== false, // Include mandatory status (default true)
           test_type: formulaData?.test_type || 'Numeric', // Load from lab_test_formulas
           text_value: formulaData?.text_value || null,     // Load from lab_test_formulas
           formula: formulaData?.formula || null            // Load from lab_test_formulas
@@ -991,6 +992,7 @@ const LabOrders = () => {
               maxAge: nested.age_ranges?.[0]?.max_age || 100,
               isNested: true,
               parentId: bestMatch.id,
+              isMandatory: nested.is_mandatory !== false, // Use individual nested sub-test's mandatory status
               test_type: nested.test_type || 'Numeric', // NEW: Include test type
               text_value: nested.text_value || null      // NEW: Include text value
             });
@@ -2049,16 +2051,9 @@ const LabOrders = () => {
           const savedResultIds: string[] = [];
           if (allLabResults && allLabResults.length > 0) {
             for (const testRow of labTestRows) {
-              // Match by visit_lab_id ONLY - don't use fallback to avoid matching old unrelated results
+              // Match by visit_lab_id ONLY - strict matching to avoid false positives from old unrelated entries
               const hasActualResults = allLabResults.some(result => {
-                // If result has visit_lab_id, match ONLY by visit_lab_id
-                if (result.visit_lab_id) {
-                  return result.visit_lab_id === testRow.id &&
-                         hasValidResultValue(result.result_value);
-                }
-                // Fallback for old entries without visit_lab_id (only when result has no visit_lab_id)
-                return result.visit_id === testRow.order_id &&
-                       result.lab_id === testRow.test_id &&
+                return result.visit_lab_id === testRow.id &&
                        hasValidResultValue(result.result_value);
               });
               if (hasActualResults) {
@@ -3453,8 +3448,8 @@ const LabOrders = () => {
                   const allTextType = subTests.every(st => st.test_type === 'Text');
 
                   if (allTextType) {
-                    // TEXT TYPE FORMAT - Simple list without table
-                    const textTestRows = subTests.map(subTest => {
+                    // TEXT TYPE FORMAT - Simple list without table (only mandatory sub-tests)
+                    const textTestRows = subTests.filter(subTest => subTest.isMandatory !== false).map(subTest => {
                       const subTestKey = `${testRow.id}_subtest_${subTest.id}`;
                       let subTestFormData = currentFormData[subTestKey] || savedLabResults[subTestKey];
 
@@ -3550,8 +3545,8 @@ const LabOrders = () => {
                     </div>
                   `;
                   } else {
-                    // NUMERIC TYPE FORMAT - Table format (existing logic)
-                    const subTestRows = subTests.map(subTest => {
+                    // NUMERIC TYPE FORMAT - Table format (existing logic, only mandatory sub-tests)
+                    const subTestRows = subTests.filter(subTest => subTest.isMandatory !== false).map(subTest => {
                       const subTestKey = `${testRow.id}_subtest_${subTest.id}`;
                       console.log('🔑 Looking for sub-test data with key:', subTestKey);
 
@@ -5120,8 +5115,8 @@ const LabOrders = () => {
                         </div>
                       )}
 
-                      {/* Sub-test Rows */}
-                      {subTests.map((subTest, subIndex) => {
+                      {/* Sub-test Rows - Only show mandatory sub-tests */}
+                      {subTests.filter(subTest => subTest.isMandatory !== false).map((subTest, subIndex) => {
                         const subTestKey = `${testRow.id}_subtest_${subTest.id}`;
 
                         // Check if this is a nested sub-test (indented)

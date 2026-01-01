@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
@@ -16,6 +17,7 @@ export interface SubTest {
   type?: 'Numeric' | 'Text'; // Type field for numeric or text values
   textValue?: string; // Text value when type is Text
   formula?: string; // Formula for auto-calculation
+  isMandatory?: boolean; // When true, sub-test shows in entry mode and print
   ageRanges: AgeRange[];
   normalRanges: NormalRange[];
   subTests?: SubTest[]; // Nested sub-tests
@@ -74,6 +76,7 @@ const TestConfigurationSection: React.FC<TestConfigurationSectionProps> = ({
       unit: '',
       type: 'Numeric', // Default to Numeric
       textValue: '',
+      isMandatory: true, // Default to mandatory
       ageRanges: [],
       normalRanges: [],
       subTests: []
@@ -100,6 +103,7 @@ const TestConfigurationSection: React.FC<TestConfigurationSectionProps> = ({
       unit: '',
       type: 'Numeric', // Default to Numeric
       textValue: '',
+      isMandatory: true, // Default to mandatory
       ageRanges: [],
       normalRanges: [],
       subTests: []
@@ -657,7 +661,7 @@ const TestConfigurationSection: React.FC<TestConfigurationSectionProps> = ({
 
           {/* Sub-Test Header */}
           <div className="flex items-center gap-3 ml-8">
-            <div className="flex-1 grid grid-cols-3 gap-4">
+            <div className="flex-1 grid grid-cols-4 gap-4">
               <div>
                 <Label className="text-sm font-medium text-gray-700 mb-1 block">Sub Test Name</Label>
                 <Input
@@ -690,6 +694,19 @@ const TestConfigurationSection: React.FC<TestConfigurationSectionProps> = ({
                     <SelectItem value="Text">Text</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+              <div className="flex items-center gap-2 pt-6">
+                <Checkbox
+                  id={`mandatory-${subTest.id}`}
+                  checked={subTest.isMandatory !== false}
+                  onCheckedChange={(checked) => updateSubTest(subTest.id, { isMandatory: checked === true })}
+                />
+                <Label
+                  htmlFor={`mandatory-${subTest.id}`}
+                  className="text-sm font-medium text-gray-700 cursor-pointer"
+                >
+                  Mandatory
+                </Label>
               </div>
             </div>
           </div>
@@ -939,7 +956,7 @@ const TestConfigurationSection: React.FC<TestConfigurationSectionProps> = ({
                   </Button>
 
                   {/* Nested Sub-Test Header */}
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-3 gap-3">
                     <div>
                       <Label className="text-xs font-medium text-gray-700 mb-1 block">Nested Sub Test Name</Label>
                       <Input
@@ -957,6 +974,21 @@ const TestConfigurationSection: React.FC<TestConfigurationSectionProps> = ({
                         onChange={(e) => updateNestedSubTest(subTest.id, nestedSubTest.id, { unit: e.target.value })}
                         className="h-8 text-sm"
                       />
+                    </div>
+                    <div className="flex items-center gap-2 pt-5">
+                      <Checkbox
+                        id={`nested-mandatory-${nestedSubTest.id}`}
+                        checked={nestedSubTest.isMandatory !== false}
+                        onCheckedChange={(checked) =>
+                          updateNestedSubTest(subTest.id, nestedSubTest.id, { isMandatory: checked === true })
+                        }
+                      />
+                      <Label
+                        htmlFor={`nested-mandatory-${nestedSubTest.id}`}
+                        className="text-xs font-medium text-gray-700 cursor-pointer"
+                      >
+                        Mandatory
+                      </Label>
                     </div>
                   </div>
 

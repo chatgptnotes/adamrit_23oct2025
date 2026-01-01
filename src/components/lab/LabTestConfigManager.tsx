@@ -46,7 +46,7 @@ export default function LabTestConfigManager() {
         unit: nr.unit || subTest.unit || null
       })) || [];
 
-      // Prepare nested_sub_tests JSONB data
+      // Prepare nested_sub_tests JSONB data (inherits parent's is_mandatory)
       const nestedSubTestsData = subTest.subTests?.map(nst => {
         console.log('=== NESTED SUB-TEST ===');
         console.log('Nested name:', nst.name);
@@ -57,6 +57,7 @@ export default function LabTestConfigManager() {
         return {
           name: nst.name,
           unit: nst.unit || null,
+          is_mandatory: nst.isMandatory !== false, // Use nested's own status
           age_ranges: nst.ageRanges?.map(ar => ({
             min_age: parseInt(ar.minAge) || 0,
             max_age: parseInt(ar.maxAge) || 100,
@@ -87,6 +88,7 @@ export default function LabTestConfigManager() {
           test_name: testName,
           sub_test_name: subTest.name,
           unit: subTest.unit || null,
+          is_mandatory: subTest.isMandatory !== false, // Default to true for mandatory
           min_age: firstAgeRange ? parseInt(firstAgeRange.minAge) || 0 : 0,
           max_age: firstAgeRange ? parseInt(firstAgeRange.maxAge) || 100 : 100,
           age_unit: firstAgeRange?.unit || 'Years',
