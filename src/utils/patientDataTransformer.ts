@@ -120,7 +120,7 @@ export const transformPatientsData = (patients: Patient[]) => {
       // Get CGHS surgery information from this specific visit's surgeries
       let surgeryName = 'No Surgery Assigned';
       let surgeryCode = '';
-      let surgeryCategory = 'No Category Assigned';
+      let surgeryCategory = 'No Surgery Assigned';
       let sanctionStatus = 'Not Sanctioned';
 
       if (visit.visit_surgeries && visit.visit_surgeries.length > 0) {
@@ -139,10 +139,18 @@ export const transformPatientsData = (patients: Patient[]) => {
         }
       }
       
-      // If no surgery assigned but we have sst_treatment, skip this record
-      if (surgeryName === 'No Surgery Assigned' && visit.sst_treatment) {
-        return; // Skip SST treatment records
-      }
+      // Debug: Log visits to track filtering issues (e.g., IH25G01006 not showing)
+      console.log('🔍 Visit:', visit.visit_id,
+        'Patient:', patient.name,
+        'Surgery:', surgeryName,
+        'SST:', visit.sst_treatment,
+        'Category:', surgeryCategory);
+
+      // REMOVED: Previously skipped SST treatment records without surgery
+      // This was hiding visits like IH25G01006 that need to be visible for document upload
+      // if (surgeryName === 'No Surgery Assigned' && visit.sst_treatment) {
+      //   return; // Skip SST treatment records
+      // }
 
       // Create a surgery label based on category instead of surgery name
       const surgeryLabel = surgeryCategory;

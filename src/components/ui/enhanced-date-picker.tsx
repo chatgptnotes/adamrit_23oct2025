@@ -178,7 +178,12 @@ export const EnhancedDatePicker: React.FC<EnhancedDatePickerProps> = ({
     const firstDayOfMonth = new Date(selectedYear, selectedMonth, 1).getDay();
     const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
     const emptyDays = Array.from({ length: firstDayOfMonth }, (_, i) => null);
-    
+
+    // Add trailing empty cells to complete the last row (fixes 31st day click issue)
+    const totalCells = emptyDays.length + days.length;
+    const remainingCells = totalCells % 7 === 0 ? 0 : 7 - (totalCells % 7);
+    const trailingEmptyDays = Array.from({ length: remainingCells }, (_, i) => null);
+
     return (
       <div className="p-4 space-y-4">
         <div className="flex flex-col space-y-2">
@@ -197,34 +202,46 @@ export const EnhancedDatePicker: React.FC<EnhancedDatePickerProps> = ({
           {isDOB && <p className="text-xs text-muted-foreground">Step 3 of 3: Choose day</p>}
         </div>
         
-        <div className="grid grid-cols-7 gap-1 text-center">
-          {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map((day) => (
-            <div key={day} className="h-8 flex items-center justify-center text-xs font-medium text-muted-foreground">
-              {day}
-            </div>
-          ))}
-          
-          {[...emptyDays, ...days].map((day, index) => (
-            <div key={index} className="h-8 flex items-center justify-center">
-              {day && (
-                <Button
-                  variant={
-                    value && 
-                    value.getDate() === day && 
-                    value.getMonth() === selectedMonth && 
-                    value.getFullYear() === selectedYear 
-                      ? "default" 
-                      : "ghost"
-                  }
-                  size="sm"
-                  onClick={() => handleDaySelect(day)}
-                  className="h-8 w-8 p-0 text-xs"
-                >
-                  {day}
-                </Button>
-              )}
-            </div>
-          ))}
+        <div className="space-y-1">
+          {/* Header row - separate grid */}
+          <div className="grid grid-cols-7 gap-1 text-center">
+            {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map((dayName) => (
+              <div key={dayName} className="h-8 flex items-center justify-center text-xs font-medium text-muted-foreground">
+                {dayName}
+              </div>
+            ))}
+          </div>
+
+          {/* Days grid - separate from header */}
+          <div className="grid grid-cols-7 gap-1 text-center">
+            {[...emptyDays, ...days, ...trailingEmptyDays].map((day, index) => (
+              <div key={index} className="h-8 flex items-center justify-center">
+                {day !== null && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleDaySelect(day);
+                    }}
+                    className={cn(
+                      "h-7 w-7 rounded-md text-xs font-medium transition-colors cursor-pointer",
+                      "hover:bg-accent hover:text-accent-foreground",
+                      "focus:outline-none focus:ring-2 focus:ring-ring",
+                      value &&
+                      value.getDate() === day &&
+                      value.getMonth() === selectedMonth &&
+                      value.getFullYear() === selectedYear
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-transparent"
+                    )}
+                  >
+                    {day}
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     );
@@ -261,7 +278,13 @@ export const EnhancedDatePicker: React.FC<EnhancedDatePickerProps> = ({
             {value ? format(value, "dd/MM/yyyy") : <span>{placeholder}</span>}
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="w-auto p-0 z-[9999] bg-white border-2 border-gray-400" align="start">
+        <PopoverContent
+          className="w-auto p-0 z-[9999] bg-white border-2 border-gray-400"
+          align="start"
+          avoidCollisions={false}
+          side="bottom"
+          sideOffset={5}
+        >
           {getCurrentView()}
         </PopoverContent>
       </Popover>

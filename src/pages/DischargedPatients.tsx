@@ -899,7 +899,7 @@ const DischargedPatients = () => {
                 <span className="text-sm text-muted-foreground">From:</span>
                 <EnhancedDatePicker
                   value={fromDate ? new Date(fromDate) : undefined}
-                  onChange={(date) => setFromDate(date ? date.toISOString().split('T')[0] : '')}
+                  onChange={(date) => setFromDate(date ? format(date, 'yyyy-MM-dd') : '')}
                   placeholder="From Date"
                 />
               </div>
@@ -907,7 +907,7 @@ const DischargedPatients = () => {
                 <span className="text-sm text-muted-foreground">To:</span>
                 <EnhancedDatePicker
                   value={toDate ? new Date(toDate) : undefined}
-                  onChange={(date) => setToDate(date ? date.toISOString().split('T')[0] : '')}
+                  onChange={(date) => setToDate(date ? format(date, 'yyyy-MM-dd') : '')}
                   placeholder="To Date"
                 />
               </div>

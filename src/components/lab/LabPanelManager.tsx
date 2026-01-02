@@ -2412,28 +2412,34 @@ const EditPanelForm: React.FC<EditPanelFormProps> = ({ panel, onSubmit }) => {
 
         // Load nested sub-tests from JSONB column
         if (config.nested_sub_tests && Array.isArray(config.nested_sub_tests) && config.nested_sub_tests.length > 0 && !subTest.subTests?.length) {
-          subTest.subTests = config.nested_sub_tests.map((nst: any, index: number) => ({
-            id: `nested_${subTestKey}_${index}_${Date.now()}`,
-            name: nst.name || '',
-            unit: nst.unit || '',
-            isMandatory: nst.is_mandatory !== false, // Load individual mandatory status
-            ageRanges: (nst.age_ranges || []).map((ar: any, arIndex: number) => ({
-              id: `agerange_${index}_${arIndex}_${Date.now()}`,
-              minAge: ar.min_age?.toString() || '',
-              maxAge: ar.max_age?.toString() || '',
-              unit: ar.age_unit || 'Years',
-              description: ar.description || ''
-            })),
-            normalRanges: (nst.normal_ranges || []).map((nr: any, nrIndex: number) => ({
-              id: `normalrange_${index}_${nrIndex}_${Date.now()}`,
-              ageRange: nr.age_range || '- Years',
-              gender: nr.gender || 'Both',
-              minValue: nr.min_value?.toString() || '0',
-              maxValue: nr.max_value?.toString() || '0',
-              unit: nr.unit || ''
-            })),
-            subTests: []
-          }));
+          subTest.subTests = config.nested_sub_tests.map((nst: any, index: number) => {
+            // Look up formula for this nested sub-test from formulasMap
+            const nestedFormulaData = formulasMap.get(nst.name);
+
+            return {
+              id: `nested_${subTestKey}_${index}_${Date.now()}`,
+              name: nst.name || '',
+              unit: nst.unit || '',
+              formula: nestedFormulaData?.formula || '', // Load formula for nested sub-test
+              isMandatory: nst.is_mandatory !== false, // Load individual mandatory status
+              ageRanges: (nst.age_ranges || []).map((ar: any, arIndex: number) => ({
+                id: `agerange_${index}_${arIndex}_${Date.now()}`,
+                minAge: ar.min_age?.toString() || '',
+                maxAge: ar.max_age?.toString() || '',
+                unit: ar.age_unit || 'Years',
+                description: ar.description || ''
+              })),
+              normalRanges: (nst.normal_ranges || []).map((nr: any, nrIndex: number) => ({
+                id: `normalrange_${index}_${nrIndex}_${Date.now()}`,
+                ageRange: nr.age_range || '- Years',
+                gender: nr.gender || 'Both',
+                minValue: nr.min_value?.toString() || '0',
+                maxValue: nr.max_value?.toString() || '0',
+                unit: nr.unit || ''
+              })),
+              subTests: []
+            };
+          });
         }
       }
 
