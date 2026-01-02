@@ -395,19 +395,25 @@ export const SalesDetails: React.FC = () => {
     }
   };
 
-  // Fetch credit payments received for a patient
-  const fetchPatientCreditPayments = async (patientId: string) => {
+  // Fetch credit payments received for a patient (filtered by visit_id if provided)
+  const fetchPatientCreditPayments = async (patientId: string, visitId?: string | null) => {
     if (!patientId || !hospitalConfig?.name) {
       setPatientCreditPayments([]);
       return;
     }
 
-    const { data, error } = await supabase
+    let query = supabase
       .from('pharmacy_credit_payments')
       .select('*')
       .eq('patient_id', patientId)
-      .eq('hospital_name', hospitalConfig.name)
-      .order('payment_date', { ascending: false });
+      .eq('hospital_name', hospitalConfig.name);
+
+    // Filter by visit_id if provided
+    if (visitId) {
+      query = query.eq('visit_id', visitId);
+    }
+
+    const { data, error } = await query.order('payment_date', { ascending: false });
 
     if (!error && data) {
       setPatientCreditPayments(data);
@@ -1688,7 +1694,7 @@ export const SalesDetails: React.FC = () => {
                         setShowSidePanel(true);
                         const saleIds = group.bills.map((b: any) => b.sale_id);
                         fetchPatientReturns(group.patient_id, saleIds);
-                        fetchPatientCreditPayments(group.patient_id);
+                        fetchPatientCreditPayments(group.patient_id, group.visit_id);
                       }}
                     >
                       <td className="px-4 py-3">
@@ -1725,7 +1731,7 @@ export const SalesDetails: React.FC = () => {
                               setShowSidePanel(true);
                               const saleIds = group.bills.map((b: any) => b.sale_id);
                               fetchPatientReturns(group.patient_id, saleIds);
-                              fetchPatientCreditPayments(group.patient_id);
+                              fetchPatientCreditPayments(group.patient_id, group.visit_id);
                             }}
                             className="h-8 w-8 p-0 hover:bg-cyan-100 hover:text-cyan-600"
                             title="View All Bills"
