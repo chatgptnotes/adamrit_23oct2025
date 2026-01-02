@@ -11,6 +11,7 @@ import { toast } from 'sonner';
 interface CreditPatient {
   patient_id: string;
   patient_name: string;
+  visit_id: string | null;
   total_credit: number;
   total_paid: number;
   total_returns: number;
@@ -48,9 +49,13 @@ export const CreditPayments: React.FC = () => {
   // History modal state
   const [showHistory, setShowHistory] = useState(false);
   const [allPayments, setAllPayments] = useState<any[]>([]);
-  const [currentPage, setCurrentPage] = useState(1);
+  const [historyPage, setHistoryPage] = useState(1);
   const [totalPayments, setTotalPayments] = useState(0);
-  const itemsPerPage = 10;
+  const historyItemsPerPage = 10;
+
+  // Main list pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 25;
 
   // Fetch all credit patients
   const fetchCreditPatients = async () => {
@@ -103,15 +108,17 @@ export const CreditPayments: React.FC = () => {
       console.error('Error fetching returns:', returnsError);
     }
 
-    // Group by patient
-    const patientMap: { [key: string]: CreditPatient } = {};
+    // Group by visit_id (or patient_id for walk-ins)
+    const visitMap: { [key: string]: CreditPatient } = {};
 
     (creditSales || []).forEach((sale: any) => {
-      const key = sale.patient_id || 'walk-in';
-      if (!patientMap[key]) {
-        patientMap[key] = {
+      // Use visit_id as key if available, otherwise use patient_id with sale_id for uniqueness
+      const key = sale.visit_id || `walkin-${sale.patient_id || 'unknown'}-${sale.sale_id}`;
+      if (!visitMap[key]) {
+        visitMap[key] = {
           patient_id: sale.patient_id || 'walk-in',
           patient_name: sale.patient_name || 'Walk-in',
+          visit_id: sale.visit_id || null,
           total_credit: 0,
           total_paid: 0,
           total_returns: 0,
@@ -119,54 +126,65 @@ export const CreditPayments: React.FC = () => {
           bills: []
         };
       }
-      patientMap[key].total_credit += sale.total_amount || 0;
-      patientMap[key].bills.push(sale);
+      visitMap[key].total_credit += sale.total_amount || 0;
+      visitMap[key].bills.push(sale);
     });
 
-    // Add payments to totals
+    // Add payments to totals - filter by visit_id if available
     (payments || []).forEach((payment: any) => {
-      const key = payment.patient_id || 'walk-in';
-      if (patientMap[key]) {
-        patientMap[key].total_paid += payment.amount || 0;
+      // Try to match payment to visit by visit_id first, then by patient_id for legacy payments
+      if (payment.visit_id && visitMap[payment.visit_id]) {
+        visitMap[payment.visit_id].total_paid += payment.amount || 0;
+      } else {
+        // For legacy payments without visit_id, distribute to first matching patient visit
+        const matchingKey = Object.keys(visitMap).find(
+          key => visitMap[key].patient_id === payment.patient_id
+        );
+        if (matchingKey) {
+          visitMap[matchingKey].total_paid += payment.amount || 0;
+        }
       }
     });
 
-    // Add returns to totals (medicine_returns uses UUID in patient_id)
-    (returns || []).forEach((ret: any) => {
-      const patientUuid = ret.patient_id;
-      // Find patient_id (string) from UUID
-      const stringPatientId = Object.keys(patientIdToUuid).find(
-        key => patientIdToUuid[key] === patientUuid
+    // Add returns to totals - filter by visit's sale IDs
+    Object.values(visitMap).forEach(visit => {
+      const saleIds = visit.bills.map((b: any) => b.sale_id);
+      const visitReturns = (returns || []).filter((ret: any) =>
+        saleIds.includes(ret.original_sale_id)
       );
-      if (stringPatientId && patientMap[stringPatientId]) {
-        patientMap[stringPatientId].total_returns += ret.net_refund || 0;
-      }
+      visit.total_returns = visitReturns.reduce((sum: number, r: any) => sum + (r.net_refund || 0), 0);
     });
 
     // Calculate balance (Credit - Paid - Returns)
-    Object.values(patientMap).forEach(patient => {
-      patient.balance = patient.total_credit - patient.total_paid - patient.total_returns;
+    Object.values(visitMap).forEach(visit => {
+      visit.balance = visit.total_credit - visit.total_paid - visit.total_returns;
     });
 
     // Convert to array and sort by balance (highest first)
-    const patientsArray = Object.values(patientMap)
-      .filter(p => p.balance > 0) // Only show patients with pending balance
+    const patientsArray = Object.values(visitMap)
+      .filter(p => p.balance > 0) // Only show visits with pending balance
       .sort((a, b) => b.balance - a.balance);
 
     setCreditPatients(patientsArray);
     setIsLoading(false);
   };
 
-  // Fetch payments for selected patient
-  const fetchPatientPayments = async (patientId: string) => {
+  // Fetch payments for selected patient (filtered by visit_id if available)
+  const fetchPatientPayments = async (patientId: string, visitId?: string | null) => {
     if (!hospitalConfig?.name) return;
 
-    const { data, error } = await supabase
+    let query = supabase
       .from('pharmacy_credit_payments')
       .select('*')
       .eq('patient_id', patientId)
-      .eq('hospital_name', hospitalConfig.name)
-      .order('payment_date', { ascending: false });
+      .eq('hospital_name', hospitalConfig.name);
+
+    // Filter by visit_id if provided
+    if (visitId) {
+      query = query.eq('visit_id', visitId);
+    }
+
+    const { data, error } = await query.order('payment_date', { ascending: false });
 
     if (!error && data) {
       setPatientPayments(data);
@@ -179,8 +197,8 @@ export const CreditPayments: React.FC = () => {
   const fetchPaymentHistory = async (page: number) => {
     if (!hospitalConfig?.name) return;
 
-    const from = (page - 1) * itemsPerPage;
-    const to = from + itemsPerPage - 1;
+    const from = (page - 1) * historyItemsPerPage;
+    const to = from + historyItemsPerPage - 1;
 
     const { data, count, error } = await supabase
       .from('pharmacy_credit_payments')
@@ -192,7 +210,7 @@ export const CreditPayments: React.FC = () => {
     if (!error) {
       setAllPayments(data || []);
       setTotalPayments(count || 0);
-      setCurrentPage(page);
+      setHistoryPage(page);
     }
   };
 
@@ -306,7 +324,7 @@ export const CreditPayments: React.FC = () => {
   const handleSelectPatient = (patient: CreditPatient) => {
     setSelectedPatient(patient);
     setShowSidePanel(true);
-    fetchPatientPayments(patient.patient_id);
+    fetchPatientPayments(patient.patient_id, patient.visit_id);
   };
 
   // Handle receive payment
@@ -342,6 +360,7 @@ export const CreditPayments: React.FC = () => {
         patient_id: selectedPatient.patient_id,
         patient_uuid: patientData?.id || null,
         patient_name: selectedPatient.patient_name,
+        visit_id: selectedPatient.visit_id,  // Store visit_id for visit-level tracking
         amount: amount,
         payment_method: paymentMethod,
         payment_reference: paymentReference,
@@ -368,7 +387,7 @@ export const CreditPayments: React.FC = () => {
 
     // Refresh data
     fetchCreditPatients();
-    fetchPatientPayments(selectedPatient.patient_id);
+    fetchPatientPayments(selectedPatient.patient_id, selectedPatient.visit_id);
 
     // Update selected patient balance
     setSelectedPatient(prev => prev ? {
@@ -386,6 +405,13 @@ export const CreditPayments: React.FC = () => {
   const filteredPatients = creditPatients.filter(p =>
     p.patient_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     p.patient_id.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  // Pagination for main list
+  const totalPages = Math.ceil(filteredPatients.length / pageSize);
+  const paginatedPatients = filteredPatients.slice(
+    (currentPage - 1) * pageSize,
+    currentPage * pageSize
   );
 
   // Summary stats
@@ -435,7 +461,7 @@ export const CreditPayments: React.FC = () => {
             <Input
               placeholder="Search patient name or ID..."
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
               className="pl-10"
             />
           </div>
@@ -460,6 +486,7 @@ export const CreditPayments: React.FC = () => {
                 <thead>
                   <tr className="bg-cyan-600 text-white">
                     <th className="px-4 py-3 text-left text-sm font-semibold">Patient</th>
+                    <th className="px-4 py-3 text-left text-sm font-semibold">Visit</th>
                     <th className="px-4 py-3 text-right text-sm font-semibold">Credit Amount</th>
                     <th className="px-4 py-3 text-right text-sm font-semibold">Paid</th>
                     <th className="px-4 py-3 text-right text-sm font-semibold">Balance</th>
@@ -469,22 +496,36 @@ export const CreditPayments: React.FC = () => {
                 <tbody>
                   {isLoading ? (
                     <tr>
-                      <td colSpan={5} className="px-4 py-8 text-center text-gray-500">Loading...</td>
+                      <td colSpan={6} className="px-4 py-8 text-center text-gray-500">Loading...</td>
                     </tr>
                   ) : filteredPatients.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="px-4 py-8 text-center text-gray-500">No credit patients found</td>
+                      <td colSpan={6} className="px-4 py-8 text-center text-gray-500">No credit patients found</td>
                     </tr>
                   ) : (
-                    filteredPatients.map((patient, idx) => (
+                    paginatedPatients.map((patient, idx) => (
                       <tr
-                        key={patient.patient_id || idx}
-                        className={`border-b hover:bg-gray-50 cursor-pointer ${selectedPatient?.patient_id === patient.patient_id ? 'bg-cyan-50' : ''}`}
+                        key={patient.visit_id || `${patient.patient_id}-${idx}`}
+                        className={`border-b hover:bg-gray-50 cursor-pointer ${selectedPatient?.visit_id === patient.visit_id && selectedPatient?.patient_id === patient.patient_id ? 'bg-cyan-50' : ''}`}
                         onClick={() => handleSelectPatient(patient)}
                       >
                         <td className="px-4 py-3">
                           <div className="font-medium text-gray-800">{patient.patient_name}</div>
                           <div className="text-xs text-gray-500">{patient.patient_id}</div>
+                        </td>
+                        <td className="px-4 py-3">
+                          {patient.visit_id ? (
+                            <div>
+                              <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                                patient.visit_id.startsWith('IH') ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'
+                              }`}>
+                                {patient.visit_id.startsWith('IH') ? 'IPD' : 'OPD'}
+                              </span>
+                              <div className="text-xs text-gray-500 mt-1 font-mono">{patient.visit_id}</div>
+                            </div>
+                          ) : (
+                            <span className="text-xs text-gray-400">Walk-in</span>
+                          )}
                         </td>
                         <td className="px-4 py-3 text-right text-gray-800">₹{patient.total_credit.toFixed(2)}</td>
                         <td className="px-4 py-3 text-right text-green-600">₹{patient.total_paid.toFixed(2)}</td>
@@ -527,17 +568,62 @@ export const CreditPayments: React.FC = () => {
             </div>
           </CardContent>
         </Card>
+
+        {/* Pagination Controls */}
+        {filteredPatients.length > 0 && (
+          <div className="flex items-center justify-between mt-4 px-2">
+            <div className="text-sm text-gray-600">
+              Showing {((currentPage - 1) * pageSize) + 1} to {Math.min(currentPage * pageSize, filteredPatients.length)} of {filteredPatients.length} entries
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                disabled={currentPage === 1}
+              >
+                <ChevronLeft className="h-4 w-4" />
+                Previous
+              </Button>
+              <span className="px-3 py-1 bg-gray-100 rounded text-sm">
+                Page {currentPage} of {totalPages || 1}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                disabled={currentPage >= totalPages}
+              >
+                Next
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Side Panel */}
       {showSidePanel && selectedPatient && (
-        <div className="w-1/2 bg-gray-100 shadow-lg overflow-y-auto border-l border-gray-200">
+        <div
+          key={`${selectedPatient.visit_id || 'walkin'}-${selectedPatient.patient_id}-${selectedPatient.bills?.[0]?.sale_id || ''}`}
+          className="w-1/2 bg-gray-100 shadow-lg overflow-y-auto border-l border-gray-200"
+        >
           <div className="p-4">
             {/* Patient Header */}
             <div className="flex justify-between items-center mb-4 bg-cyan-700 text-white px-4 py-3 rounded">
               <div>
                 <div className="font-semibold">{selectedPatient.patient_name}</div>
                 <div className="text-sm opacity-80">{selectedPatient.patient_id}</div>
+                {selectedPatient.visit_id && (
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className={`px-2 py-0.5 rounded text-xs ${
+                      selectedPatient.visit_id.startsWith('IH') ? 'bg-blue-500' : 'bg-green-500'
+                    }`}>
+                      {selectedPatient.visit_id.startsWith('IH') ? 'IPD' : 'OPD'}
+                    </span>
+                    <span className="text-xs opacity-80 font-mono">{selectedPatient.visit_id}</span>
+                  </div>
+                )}
               </div>
               <Button
                 size="sm"
@@ -857,26 +943,26 @@ export const CreditPayments: React.FC = () => {
           {totalPayments > 0 && (
             <div className="flex items-center justify-between border-t pt-4 mt-4">
               <div className="text-sm text-gray-600">
-                Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, totalPayments)} of {totalPayments} payments
+                Showing {((historyPage - 1) * historyItemsPerPage) + 1} to {Math.min(historyPage * historyItemsPerPage, totalPayments)} of {totalPayments} payments
               </div>
               <div className="flex items-center gap-2">
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => fetchPaymentHistory(currentPage - 1)}
-                  disabled={currentPage === 1}
+                  onClick={() => fetchPaymentHistory(historyPage - 1)}
+                  disabled={historyPage === 1}
                 >
                   <ChevronLeft className="h-4 w-4" />
                   Previous
                 </Button>
                 <span className="px-3 py-1 bg-gray-100 rounded text-sm">
-                  Page {currentPage} of {Math.ceil(totalPayments / itemsPerPage)}
+                  Page {historyPage} of {Math.ceil(totalPayments / historyItemsPerPage)}
                 </span>
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => fetchPaymentHistory(currentPage + 1)}
-                  disabled={currentPage >= Math.ceil(totalPayments / itemsPerPage)}
+                  onClick={() => fetchPaymentHistory(historyPage + 1)}
+                  disabled={historyPage >= Math.ceil(totalPayments / historyItemsPerPage)}
                 >
                   Next
                   <ChevronRight className="h-4 w-4" />

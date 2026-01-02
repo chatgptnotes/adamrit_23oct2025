@@ -1295,13 +1295,13 @@ const PharmacyBilling: React.FC = () => {
                         <TableHead>Item Name</TableHead>
                         <TableHead>Strips</TableHead>
                         <TableHead>Tablets</TableHead>
+                        <TableHead>MRP</TableHead>
+                        <TableHead>Price/Pc</TableHead>
+                        <TableHead>Amount</TableHead>
                         <TableHead>Administration Time</TableHead>
                         <TableHead>Batch No.</TableHead>
                         <TableHead>Stock Available</TableHead>
                         <TableHead>Expiry Date</TableHead>
-                        <TableHead>MRP</TableHead>
-                        <TableHead>Price/Pc</TableHead>
-                        <TableHead>Amount</TableHead>
                         <TableHead>#</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -1471,61 +1471,7 @@ const PharmacyBilling: React.FC = () => {
                               </Button>
                             </div>
                           </TableCell>
-                          <TableCell>
-                            <select
-                              className="w-32 p-1 border rounded text-xs"
-                              value={item.administration_time || ''}
-                              onChange={(e) => {
-                                setCart(prev => prev.map(i =>
-                                  i.id === item.id ? { ...i, administration_time: e.target.value } : i
-                                ));
-                              }}
-                            >
-                              <option value="">Please Select</option>
-                              <option value="BREAKFAST TIME">BREAKFAST TIME</option>
-                              <option value="LUNCH TIME">LUNCH TIME</option>
-                              <option value="HS">HS</option>
-                              <option value="SOS">SOS</option>
-                            </select>
-                          </TableCell>
-                          <TableCell>
-                            <select
-                              className="w-32 p-1 border rounded text-xs"
-                              value={item.batch_number || ''}
-                              onChange={(e) => {
-                                setCart(prev => prev.map(i =>
-                                  i.id === item.id ? { ...i, batch_number: e.target.value } : i
-                                ));
-                              }}
-                            >
-                              <option value="">Select</option>
-                              <option value={item.batch_number}>{item.batch_number}</option>
-                            </select>
-                          </TableCell>
-                          <TableCell>
-                            <Input
-                              type="number"
-                              className="w-20 text-xs"
-                              value={item.available_stock}
-                              onChange={(e) => {
-                                setCart(prev => prev.map(i =>
-                                  i.id === item.id ? { ...i, available_stock: parseFloat(e.target.value) || 0 } : i
-                                ));
-                              }}
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <Input
-                              type="date"
-                              className="w-32 text-xs"
-                              value={item.expiry_date || ''}
-                              onChange={(e) => {
-                                setCart(prev => prev.map(i =>
-                                  i.id === item.id ? { ...i, expiry_date: e.target.value } : i
-                                ));
-                              }}
-                            />
-                          </TableCell>
+                          {/* MRP */}
                           <TableCell>
                             <Input
                               type="number"
@@ -1539,6 +1485,7 @@ const PharmacyBilling: React.FC = () => {
                               }}
                             />
                           </TableCell>
+                          {/* Price/Pc */}
                           <TableCell>
                             <Input
                               type="number"
@@ -1566,6 +1513,7 @@ const PharmacyBilling: React.FC = () => {
                               }}
                             />
                           </TableCell>
+                          {/* Amount */}
                           <TableCell>
                             <Input
                               type="number"
@@ -1578,6 +1526,66 @@ const PharmacyBilling: React.FC = () => {
                               }}
                             />
                           </TableCell>
+                          {/* Administration Time */}
+                          <TableCell>
+                            <select
+                              className="w-32 p-1 border rounded text-xs"
+                              value={item.administration_time || ''}
+                              onChange={(e) => {
+                                setCart(prev => prev.map(i =>
+                                  i.id === item.id ? { ...i, administration_time: e.target.value } : i
+                                ));
+                              }}
+                            >
+                              <option value="">Please Select</option>
+                              <option value="BREAKFAST TIME">BREAKFAST TIME</option>
+                              <option value="LUNCH TIME">LUNCH TIME</option>
+                              <option value="HS">HS</option>
+                              <option value="SOS">SOS</option>
+                            </select>
+                          </TableCell>
+                          {/* Batch No. */}
+                          <TableCell>
+                            <select
+                              className="w-32 p-1 border rounded text-xs"
+                              value={item.batch_number || ''}
+                              onChange={(e) => {
+                                setCart(prev => prev.map(i =>
+                                  i.id === item.id ? { ...i, batch_number: e.target.value } : i
+                                ));
+                              }}
+                            >
+                              <option value="">Select</option>
+                              <option value={item.batch_number}>{item.batch_number}</option>
+                            </select>
+                          </TableCell>
+                          {/* Stock Available */}
+                          <TableCell>
+                            <Input
+                              type="number"
+                              className="w-20 text-xs"
+                              value={item.available_stock}
+                              onChange={(e) => {
+                                setCart(prev => prev.map(i =>
+                                  i.id === item.id ? { ...i, available_stock: parseFloat(e.target.value) || 0 } : i
+                                ));
+                              }}
+                            />
+                          </TableCell>
+                          {/* Expiry Date */}
+                          <TableCell>
+                            <Input
+                              type="date"
+                              className="w-32 text-xs"
+                              value={item.expiry_date || ''}
+                              onChange={(e) => {
+                                setCart(prev => prev.map(i =>
+                                  i.id === item.id ? { ...i, expiry_date: e.target.value } : i
+                                ));
+                              }}
+                            />
+                          </TableCell>
+                          {/* Delete */}
                           <TableCell>
                             <Button
                               size="sm"

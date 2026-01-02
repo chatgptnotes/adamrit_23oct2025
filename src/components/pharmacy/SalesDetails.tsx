@@ -12,10 +12,11 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 
-// Interface for grouping sales by patient
+// Interface for grouping sales by visit (or patient for walk-in)
 interface PatientGroup {
   patient_id: string;
   patient_name: string;
+  visit_id: string | null;  // null for walk-in/direct sales
   total_amount: number;
   total_discount: number;
   total_paid: number;
@@ -116,6 +117,17 @@ export const SalesDetails: React.FC = () => {
   // Selected bills for printing prescriptions
   const [selectedBills, setSelectedBills] = useState<number[]>([]);
 
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+  const pageSize = 25;
+  const totalPages = Math.ceil(totalCount / pageSize);
+
+  // Reset to page 1 when search filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [billNo, patientName, date]);
+
   // Fetch patients as user types
   useEffect(() => {
     const fetchPatients = async () => {
@@ -150,9 +162,13 @@ export const SalesDetails: React.FC = () => {
   // Fetch all sales on component mount and group by patient
   useEffect(() => {
     const fetchAllSales = async () => {
+      // Calculate pagination range
+      const from = (currentPage - 1) * pageSize;
+      const to = from + pageSize - 1;
+
       let query = supabase
         .from('pharmacy_sales')
-        .select('*')
+        .select('*', { count: 'exact' })  // Get total count for pagination
         .order('sale_date', { ascending: false });
 
       // Filter by hospital if configured
@@ -160,7 +176,36 @@ export const SalesDetails: React.FC = () => {
         query = query.eq('hospital_name', hospitalConfig.name);
       }
 
-      const { data, error } = await query;
+      // Apply search filters to database query (searches ALL records)
+      if (billNo.trim()) {
+        query = query.ilike('bill_number', `%${billNo.trim()}%`);
+      }
+
+      if (patientName.trim()) {
+        // Extract patient ID from format "Name (ID)" if present
+        const match = patientName.match(/\(([^)]+)\)/);
+        if (match) {
+          query = query.eq('patient_id', match[1]);
+        } else {
+          query = query.or(`patient_name.ilike.%${patientName.trim()}%,patient_id.ilike.%${patientName.trim()}%`);
+        }
+      }
+
+      if (date) {
+        const startDate = new Date(date);
+        startDate.setHours(0, 0, 0, 0);
+        const endDate = new Date(date);
+        endDate.setHours(23, 59, 59, 999);
+        query = query.gte('sale_date', startDate.toISOString()).lte('sale_date', endDate.toISOString());
+      }
+
+      // Apply pagination
+      query = query.range(from, to);
+
+      const { data, error, count } = await query;
+
+      // Update total count for pagination
+      setTotalCount(count || 0);
 
       // Fetch credit payments
       const { data: creditPayments } = await supabase
@@ -171,14 +216,16 @@ export const SalesDetails: React.FC = () => {
       if (!error && data) {
         setTableData(data);
 
-        // Group sales by patient
+        // Group sales by visit_id (or by patient_id for walk-in/direct sales)
         const grouped: { [key: string]: PatientGroup } = {};
         data.forEach((sale: any) => {
-          const key = sale.patient_id || 'walk-in';
+          // Use visit_id as key if available, otherwise use patient_id with 'walkin-' prefix
+          const key = sale.visit_id || `walkin-${sale.patient_id || 'unknown'}-${sale.sale_id}`;
           if (!grouped[key]) {
             grouped[key] = {
               patient_id: sale.patient_id || 'walk-in',
               patient_name: sale.patient_name || 'Walk-in',
+              visit_id: sale.visit_id || null,
               total_amount: 0,
               total_discount: 0,
               total_paid: 0,
@@ -217,7 +264,7 @@ export const SalesDetails: React.FC = () => {
       }
     };
     fetchAllSales();
-  }, [hospitalConfig?.name]);
+  }, [hospitalConfig?.name, currentPage, billNo, patientName, date]);
 
   // Auto-open sidebar when returning from Edit Sale Bill with saleId in URL
   useEffect(() => {
@@ -267,14 +314,16 @@ export const SalesDetails: React.FC = () => {
     if (!error && data) {
       setTableData(data);
 
-      // Group sales by patient (same logic as initial fetch)
+      // Group sales by visit_id (same logic as initial fetch)
       const grouped: { [key: string]: PatientGroup } = {};
       data.forEach((sale: any) => {
-        const key = sale.patient_id || 'walk-in';
+        // Use visit_id as key if available, otherwise use patient_id with 'walkin-' prefix
+        const key = sale.visit_id || `walkin-${sale.patient_id || 'unknown'}-${sale.sale_id}`;
         if (!grouped[key]) {
           grouped[key] = {
             patient_id: sale.patient_id || 'walk-in',
             patient_name: sale.patient_name || 'Walk-in',
+            visit_id: sale.visit_id || null,
             total_amount: 0,
             total_discount: 0,
             total_paid: 0,
@@ -306,7 +355,7 @@ export const SalesDetails: React.FC = () => {
   const totalBalance = dummyData.reduce((sum, row) => sum + row.bal, 0);
 
   // Fetch patient returns when patient is selected
-  const fetchPatientReturns = async (patientId: string) => {
+  const fetchPatientReturns = async (patientId: string, saleIds?: string[]) => {
     if (!patientId || !hospitalConfig?.name) {
       setPatientReturns([]);
       return;
@@ -325,13 +374,19 @@ export const SalesDetails: React.FC = () => {
       return;
     }
 
-    // Now query medicine_returns with the UUID
-    const { data, error } = await supabase
+    // Build query for medicine_returns
+    let query = supabase
       .from('medicine_returns')
       .select('*')
       .eq('patient_id', patientData.id)
-      .eq('hospital_name', hospitalConfig.name)
-      .order('return_date', { ascending: false });
+      .eq('hospital_name', hospitalConfig.name);
+
+    // Filter by specific sale IDs if provided (to show returns only for selected visit)
+    if (saleIds && saleIds.length > 0) {
+      query = query.in('original_sale_id', saleIds);
+    }
+
+    const { data, error } = await query.order('return_date', { ascending: false });
 
     if (!error && data) {
       setPatientReturns(data);
@@ -1604,6 +1659,7 @@ export const SalesDetails: React.FC = () => {
               <thead>
                 <tr className="bg-cyan-600 text-white">
                   <th className="px-4 py-3 text-left text-sm font-semibold">Patient</th>
+                  <th className="px-4 py-3 text-left text-sm font-semibold">Visit</th>
                   <th className="px-4 py-3 text-right text-sm font-semibold">Total</th>
                   <th className="px-4 py-3 text-right text-sm font-semibold">Paid</th>
                   <th className="px-4 py-3 text-right text-sm font-semibold">Discount</th>
@@ -1614,7 +1670,7 @@ export const SalesDetails: React.FC = () => {
               <tbody className="divide-y divide-gray-100">
                 {patientGroups.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-4 py-8 text-center text-gray-500">
+                    <td colSpan={7} className="px-4 py-8 text-center text-gray-500">
                       <Receipt className="h-12 w-12 mx-auto mb-2 text-gray-300" />
                       <p>No sales records found</p>
                     </td>
@@ -1622,21 +1678,36 @@ export const SalesDetails: React.FC = () => {
                 ) : (
                   patientGroups.map((group, idx) => (
                     <tr
-                      key={group.patient_id || idx}
+                      key={group.visit_id || `${group.patient_id}-${idx}`}
                       className={`bg-white hover:bg-gray-50 transition-colors cursor-pointer ${
-                        selectedPatient?.patient_id === group.patient_id ? 'bg-cyan-50' : ''
+                        selectedPatient?.visit_id === group.visit_id && selectedPatient?.patient_id === group.patient_id ? 'bg-cyan-50' : ''
                       }`}
                       onClick={() => {
                         setSelectedPatient(group);
                         setPanelType('sales');
                         setShowSidePanel(true);
-                        fetchPatientReturns(group.patient_id);
+                        const saleIds = group.bills.map((b: any) => b.sale_id);
+                        fetchPatientReturns(group.patient_id, saleIds);
                         fetchPatientCreditPayments(group.patient_id);
                       }}
                     >
                       <td className="px-4 py-3">
                         <div className="font-medium text-gray-800">{group.patient_name}</div>
                         <div className="text-xs text-gray-500">{group.patient_id}</div>
+                      </td>
+                      <td className="px-4 py-3">
+                        {group.visit_id ? (
+                          <div>
+                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                              IPD
+                            </span>
+                            <div className="text-xs text-gray-500 mt-1 font-mono">{group.visit_id}</div>
+                          </div>
+                        ) : (
+                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                            Walk-in
+                          </span>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-right font-medium text-gray-800">₹{group.total_amount?.toFixed(2) ?? '0.00'}</td>
                       <td className="px-4 py-3 text-right font-medium text-gray-800">₹{group.total_paid?.toFixed(2) ?? '0.00'}</td>
@@ -1652,7 +1723,8 @@ export const SalesDetails: React.FC = () => {
                               setSelectedPatient(group);
                               setPanelType('sales');
                               setShowSidePanel(true);
-                              fetchPatientReturns(group.patient_id);
+                              const saleIds = group.bills.map((b: any) => b.sale_id);
+                              fetchPatientReturns(group.patient_id, saleIds);
                               fetchPatientCreditPayments(group.patient_id);
                             }}
                             className="h-8 w-8 p-0 hover:bg-cyan-100 hover:text-cyan-600"
@@ -1751,18 +1823,28 @@ export const SalesDetails: React.FC = () => {
           </div>
 
           {/* Pagination */}
-          {patientGroups.length > 0 && (
+          {totalCount > 0 && (
             <div className="flex items-center justify-between px-4 py-3 border-t bg-gray-50">
               <p className="text-sm text-gray-600">
-                Showing <span className="font-medium">{patientGroups.length}</span> patients
+                Showing <span className="font-medium">{patientGroups.length}</span> of <span className="font-medium">{totalCount}</span> records
               </p>
               <div className="flex items-center gap-2">
-                <Button variant="outline" size="sm" disabled>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={currentPage === 1}
+                  onClick={() => setCurrentPage(p => p - 1)}
+                >
                   <ChevronLeft className="h-4 w-4" />
                   Previous
                 </Button>
-                <span className="text-sm text-gray-600 px-2">Page 1 of 1</span>
-                <Button variant="outline" size="sm" disabled>
+                <span className="text-sm text-gray-600 px-2">Page {currentPage} of {totalPages || 1}</span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={currentPage >= totalPages}
+                  onClick={() => setCurrentPage(p => p + 1)}
+                >
                   Next
                   <ChevronRight className="h-4 w-4" />
                 </Button>
@@ -1774,7 +1856,10 @@ export const SalesDetails: React.FC = () => {
 
       {/* Right Side Panel - Shows all bills for selected patient */}
       {showSidePanel && selectedPatient && (
-        <div className="w-1/2 bg-gray-100 shadow-lg overflow-y-auto border-l border-gray-200">
+        <div
+          key={`${selectedPatient.visit_id || 'walkin'}-${selectedPatient.patient_id}-${selectedPatient.bills?.[0]?.sale_id || ''}`}
+          className="w-1/2 bg-gray-100 shadow-lg overflow-y-auto border-l border-gray-200"
+        >
           <div className="p-2">
             {/* Patient Header with Print Icon */}
             <div className="flex justify-between items-center px-4 py-3 bg-gray-200 border-b mb-2">

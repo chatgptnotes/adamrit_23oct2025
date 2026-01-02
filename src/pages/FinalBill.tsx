@@ -1318,14 +1318,15 @@ const FinalBill = () => {
         return;
       }
 
-      console.log('📊 Fetching pending pharmacy amount for patient:', patientId);
+      console.log('📊 Fetching pending pharmacy amount for patient:', patientId, 'visit:', visitId);
 
       try {
-        // 1. Get total CREDIT sales for this patient
+        // 1. Get CREDIT sales for this patient for THIS VISIT only (with sale_id for filtering related records)
         const { data: salesData, error: salesError } = await supabase
           .from('pharmacy_sales')
-          .select('total_amount')
+          .select('sale_id, total_amount')
           .eq('patient_id', patientId)
+          .eq('visit_id', visitId)  // Filter by current visit
           .eq('hospital_name', hospitalName)
           .eq('payment_method', 'CREDIT');
 
@@ -1334,23 +1335,16 @@ const FinalBill = () => {
         }
 
         const totalCreditSales = (salesData || []).reduce((sum, sale) => sum + (sale.total_amount || 0), 0);
-        console.log('💰 Total CREDIT sales:', totalCreditSales);
+        const visitSaleIds = (salesData || []).map(sale => sale.sale_id);
+        console.log('💰 Total CREDIT sales:', totalCreditSales, 'Sale IDs:', visitSaleIds);
 
-        // 2. Get patient UUID for medicine_returns lookup
-        const { data: patientRecord } = await supabase
-          .from('patients')
-          .select('id')
-          .eq('patients_id', patientId)
-          .eq('hospital_name', hospitalName)
-          .single();
-
+        // 2. Get returns only for sales from THIS VISIT (via original_sale_id)
         let totalReturns = 0;
-        if (patientRecord?.id) {
-          // 3. Get returns for this patient (uses UUID)
+        if (visitSaleIds.length > 0) {
           const { data: returnsData, error: returnsError } = await supabase
             .from('medicine_returns')
             .select('net_refund')
-            .eq('patient_id', patientRecord.id)
+            .in('original_sale_id', visitSaleIds)
             .eq('hospital_name', hospitalName);
 
           if (returnsError) {
@@ -1358,22 +1352,25 @@ const FinalBill = () => {
           }
 
           totalReturns = (returnsData || []).reduce((sum, ret) => sum + (ret.net_refund || 0), 0);
-          console.log('🔄 Total returns:', totalReturns);
+          console.log('🔄 Total returns for this visit:', totalReturns);
         }
 
-        // 4. Get credit payments received
-        const { data: paymentsData, error: paymentsError } = await supabase
-          .from('pharmacy_credit_payments')
-          .select('amount')
-          .eq('patient_id', patientId)
-          .eq('hospital_name', hospitalName);
+        // 3. Get credit payments only for sales from THIS VISIT (via sale_id)
+        let totalPaymentsReceived = 0;
+        if (visitSaleIds.length > 0) {
+          const { data: paymentsData, error: paymentsError } = await supabase
+            .from('pharmacy_credit_payments')
+            .select('amount')
+            .in('sale_id', visitSaleIds)
+            .eq('hospital_name', hospitalName);
 
-        if (paymentsError) {
-          console.error('Error fetching credit payments:', paymentsError);
+          if (paymentsError) {
+            console.error('Error fetching credit payments:', paymentsError);
+          }
+
+          totalPaymentsReceived = (paymentsData || []).reduce((sum, payment) => sum + (payment.amount || 0), 0);
+          console.log('✅ Total payments received for this visit:', totalPaymentsReceived);
         }
-
-        const totalPaymentsReceived = (paymentsData || []).reduce((sum, payment) => sum + (payment.amount || 0), 0);
-        console.log('✅ Total payments received:', totalPaymentsReceived);
 
         // 5. Calculate pending amount
         const pendingAmount = totalCreditSales - totalReturns - totalPaymentsReceived;
@@ -1387,7 +1384,7 @@ const FinalBill = () => {
     };
 
     fetchPendingPharmacyAmount();
-  }, [isFinalPaymentModalOpen, visitData?.patients?.patients_id, patientData.registrationNo, hospitalConfig?.name]);
+  }, [isFinalPaymentModalOpen, visitId, visitData?.patients?.patients_id, patientData.registrationNo, hospitalConfig?.name]);
 
   // Memoized patient data for Advance Payment Modal to prevent re-rendering
   const advancePaymentPatientData = useMemo(() => {

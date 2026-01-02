@@ -50,6 +50,7 @@ interface PatientSale {
   sale_date: string;
   total_amount: number;
   payment_method: string;
+  visit_id?: string;
   items: SaleItem[];
   expanded: boolean;
 }
@@ -147,7 +148,8 @@ const ReturnSales: React.FC = () => {
           bill_number,
           sale_date,
           total_amount,
-          payment_method
+          payment_method,
+          visit_id
         `)
         .eq('patient_id', patientId)
         .order('sale_date', { ascending: false });
@@ -625,7 +627,20 @@ const ReturnSales: React.FC = () => {
                     >
                       <div className="flex items-center gap-4">
                         <div>
-                          <p className="font-semibold text-blue-600">{sale.bill_number}</p>
+                          <div className="flex items-center gap-2">
+                            <p className="font-semibold text-blue-600">{sale.bill_number}</p>
+                            {sale.visit_id && (
+                              <>
+                                <Badge
+                                  variant="default"
+                                  className={sale.visit_id.startsWith('IH') ? 'bg-blue-500 hover:bg-blue-600' : 'bg-green-500 hover:bg-green-600'}
+                                >
+                                  {sale.visit_id.startsWith('IH') ? 'IPD' : 'OPD'}
+                                </Badge>
+                                <span className="text-xs text-gray-500">{sale.visit_id}</span>
+                              </>
+                            )}
+                          </div>
                           <p className="text-xs text-gray-500">
                             {new Date(sale.sale_date).toLocaleDateString()}
                           </p>
