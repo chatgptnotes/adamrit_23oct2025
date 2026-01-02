@@ -969,7 +969,7 @@ const DischargedPatients = () => {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-16">Sr. No</TableHead>
+                    <TableHead className="w-24">Discharged Sr. No</TableHead>
                     <TableHead>Patient Details</TableHead>
                     <TableHead>Visit Info</TableHead>
                     <TableHead>Admission Date</TableHead>
