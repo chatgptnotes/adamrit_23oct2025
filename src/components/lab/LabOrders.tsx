@@ -3133,6 +3133,51 @@ const LabOrders = () => {
       console.log('✅ Got visit_id from saved results:', actualVisitId);
     }
 
+    // Fetch sample collection time from lab_orders table
+    let sampleReceivedDate = reportDate;
+    let sampleReceivedTime = reportTime;
+
+    if (patientInfo?.order_number) {
+      try {
+        const { data: orderData, error: orderError } = await supabase
+          .from('lab_orders')
+          .select('sample_collection_datetime, sample_received_datetime, collection_date, collection_time, order_date, order_time, created_at')
+          .eq('order_number', patientInfo.order_number)
+          .single();
+
+        if (!orderError && orderData) {
+          // Prefer sample_received_datetime, then sample_collection_datetime,
+          // then order_date+order_time, then created_at
+          let sampleDateTime = orderData.sample_received_datetime ||
+                               orderData.sample_collection_datetime;
+
+          // If no specific sample datetime, try order_date + order_time
+          if (!sampleDateTime && orderData.order_date) {
+            const orderTimeStr = orderData.order_time || '00:00:00';
+            sampleDateTime = `${orderData.order_date}T${orderTimeStr}`;
+          }
+
+          // Final fallback to created_at
+          if (!sampleDateTime) {
+            sampleDateTime = orderData.created_at;
+          }
+
+          if (sampleDateTime) {
+            const sampleDate = new Date(sampleDateTime);
+            sampleReceivedDate = sampleDate.toLocaleDateString('en-GB', {
+              day: '2-digit', month: '2-digit', year: 'numeric'
+            });
+            sampleReceivedTime = sampleDate.toLocaleTimeString('en-GB', {
+              hour: '2-digit', minute: '2-digit', second: '2-digit'
+            });
+            console.log('✅ Got sample time from lab_orders:', sampleReceivedDate, sampleReceivedTime);
+          }
+        }
+      } catch (err) {
+        console.error('❌ Error fetching sample time:', err);
+      }
+    }
+
     console.log('📋 FINAL VALUES FOR PRINT:', { actualPatientId, actualVisitId });
 
     return `
@@ -3231,7 +3276,7 @@ const LabOrders = () => {
 
           .header-row {
             display: grid;
-            grid-template-columns: 40% 25% 35%;
+            grid-template-columns: 45% 27.5% 27.5%;
             align-items: center;
             border-bottom: 1px solid #ccc;
             padding: 8px 0;
@@ -3246,7 +3291,7 @@ const LabOrders = () => {
           }
 
           .header-col-2, .header-col-3 {
-            text-align: center;
+            text-align: left;
           }
 
           .main-test-section {
@@ -3263,7 +3308,7 @@ const LabOrders = () => {
 
           .test-row {
             display: grid;
-            grid-template-columns: 40% 25% 35%;
+            grid-template-columns: 45% 27.5% 27.5%;
             align-items: center;
             padding: 2px 0;
             font-size: 14px;
@@ -3367,7 +3412,7 @@ const LabOrders = () => {
               const savedResult = savedLabResults[firstTestId];
               return savedResult?.patient_info?.actual_ref_by || savedResult?.patient_info?.ref_by || patientInfo?.ordering_doctor || 'Not specified';
             })()}</div>
-                      <div><strong>Sample Received :</strong> ${reportDate} ${reportTime}</div>
+                      <div><strong>Sample Received :</strong> ${sampleReceivedDate} ${sampleReceivedTime}</div>
                       <div><strong>Request No. :</strong> ${patientInfo?.order_number?.split('-').pop() || 'N/A'}</div>
                     </div>
                     <div>

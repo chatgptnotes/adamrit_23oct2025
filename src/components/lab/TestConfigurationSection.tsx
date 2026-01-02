@@ -61,7 +61,7 @@ const TestConfigurationSection: React.FC<TestConfigurationSectionProps> = ({
 }) => {
   const [nextSubTestId, setNextSubTestId] = useState(1);
   const [isFormulaDialogOpen, setIsFormulaDialogOpen] = useState(false);
-  const [currentSubTestId, setCurrentSubTestId] = useState<string>('');
+  const [currentSubTestForFormula, setCurrentSubTestForFormula] = useState<SubTest | null>(null);
   const [selectedTest, setSelectedTest] = useState('');
   const [formula, setFormula] = useState('');
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
@@ -89,6 +89,24 @@ const TestConfigurationSection: React.FC<TestConfigurationSectionProps> = ({
     onSubTestsChange(subTests.map(st =>
       st.id === id ? { ...st, ...updatedSubTest } : st
     ));
+  };
+
+  // Helper to recursively update formula in nested subTests
+  const updateSubTestFormula = (tests: SubTest[], targetId: string, newFormula: string): SubTest[] => {
+    return tests.map(subTest => {
+      // Check if this is the target
+      if (subTest.id === targetId) {
+        return { ...subTest, formula: newFormula };
+      }
+      // Recursively check nested subTests
+      if (subTest.subTests && subTest.subTests.length > 0) {
+        return {
+          ...subTest,
+          subTests: updateSubTestFormula(subTest.subTests, targetId, newFormula)
+        };
+      }
+      return subTest;
+    });
   };
 
   const removeSubTest = (id: string) => {
@@ -466,40 +484,47 @@ const TestConfigurationSection: React.FC<TestConfigurationSectionProps> = ({
     setFormula(prev => prev.slice(0, -1));
   };
 
-  const openFormulaDialog = (subTestId: string) => {
-    setCurrentSubTestId(subTestId);
+  const openFormulaDialog = (subTest: SubTest) => {
+    console.log('🔍 openFormulaDialog called with subTest:', subTest);
+
+    // Store the entire subTest object to avoid ID mismatch issues
+    setCurrentSubTestForFormula(subTest);
     setSelectedTest('none');
-
-    // Load existing formula if available
-    const subTest = subTests.find(st => st.id === subTestId);
     setFormula(subTest?.formula || '');
-
     setIsFormulaDialogOpen(true);
   };
 
   const saveFormula = async () => {
-    // Find the current sub-test
-    const currentSubTest = subTests.find(st => st.id === currentSubTestId);
+    // Use stored subTest object directly (no ID lookup needed)
+    console.log('🔍 saveFormula called');
+    console.log('🔍 currentSubTestForFormula:', currentSubTestForFormula);
 
-    if (!currentSubTest || !currentSubTest.name) {
+    if (!currentSubTestForFormula) {
       toast({
         title: "Error",
-        description: "Sub-test name is required to save formula",
+        description: "Sub-test not found. Please try again.",
         variant: "destructive"
       });
       return;
     }
 
-    // Update local state first
-    const updatedSubTests = subTests.map(subTest => {
-      if (subTest.id === currentSubTestId) {
-        return { ...subTest, formula: formula };
-      }
-      return subTest;
-    });
+    if (!currentSubTestForFormula.name || !currentSubTestForFormula.name.trim()) {
+      toast({
+        title: "Error",
+        description: "Sub-test name is required to save formula. Please enter a name first.",
+        variant: "destructive"
+      });
+      return;
+    }
 
-    console.log('Formula saved:', formula, 'for subtest:', currentSubTestId);
+    // Update local state - use recursive helper to also update nested subTests
+    const updatedSubTests = updateSubTestFormula(subTests, currentSubTestForFormula.id, formula);
+
+    console.log('Formula saved:', formula, 'for subtest:', currentSubTestForFormula.name);
     onSubTestsChange(updatedSubTests);
+
+    // Also update the stored object
+    setCurrentSubTestForFormula({ ...currentSubTestForFormula, formula: formula });
 
     // If labId is available, save directly to database
     if (labId && testName) {
@@ -509,10 +534,10 @@ const TestConfigurationSection: React.FC<TestConfigurationSectionProps> = ({
         const formulaData = {
           lab_id: labId,
           test_name: testName,
-          sub_test_name: currentSubTest.name,
+          sub_test_name: currentSubTestForFormula.name,
           formula: formula || null,
-          test_type: currentSubTest.type || 'Numeric',
-          text_value: currentSubTest.type === 'Text' ? (currentSubTest.textValue || null) : null,
+          test_type: currentSubTestForFormula.type || 'Numeric',
+          text_value: currentSubTestForFormula.type === 'Text' ? (currentSubTestForFormula.textValue || null) : null,
           is_active: true
         };
 
@@ -530,10 +555,10 @@ const TestConfigurationSection: React.FC<TestConfigurationSectionProps> = ({
             variant: "destructive"
           });
         } else {
-          console.log(`✅ Formula saved to database for: ${currentSubTest.name}`);
+          console.log(`✅ Formula saved to database for: ${currentSubTestForFormula.name}`);
           toast({
             title: "Success",
-            description: `Formula saved successfully for ${currentSubTest.name}`,
+            description: `Formula saved successfully for ${currentSubTestForFormula.name}`,
           });
           setIsFormulaDialogOpen(false);
         }
@@ -596,7 +621,8 @@ const TestConfigurationSection: React.FC<TestConfigurationSectionProps> = ({
       return null;
     };
 
-    const currentSubTest = findSubTest(subTests, currentSubTestId);
+    if (!currentSubTestForFormula) return [];
+    const currentSubTest = findSubTest(subTests, currentSubTestForFormula.id);
     return currentSubTest?.subTests || [];
   };
 
@@ -839,7 +865,7 @@ const TestConfigurationSection: React.FC<TestConfigurationSectionProps> = ({
                 </Button>
                 <Button
                   type="button"
-                  onClick={() => openFormulaDialog(subTest.id)}
+                  onClick={() => openFormulaDialog(subTest)}
                   className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 h-7"
                   size="sm"
                 >
@@ -1091,7 +1117,7 @@ const TestConfigurationSection: React.FC<TestConfigurationSectionProps> = ({
                         </Button>
                         <Button
                           type="button"
-                          onClick={() => openFormulaDialog(nestedSubTest.id)}
+                          onClick={() => openFormulaDialog(nestedSubTest)}
                           className="bg-blue-600 hover:bg-blue-700 text-white px-2 py-1 h-6 text-xs"
                           size="sm"
                         >
