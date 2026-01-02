@@ -1835,7 +1835,7 @@ const LabOrders = () => {
 
   // Fetch lab test rows from visit_labs table (JOIN with visits and lab tables)
   const { data: labTestRows = [], isLoading: testRowsLoading, isFetching: testRowsFetching } = useQuery({
-    queryKey: ['visit-lab-orders', getHospitalFilter(), patientStatusFilter, dateRange.from, dateRange.to],
+    queryKey: ['visit-lab-orders', getHospitalFilter(), patientStatusFilter, dateRange.from, dateRange.to, searchTerm],
     queryFn: async () => {
       console.log('🔍 Fetching lab test data from visit_labs...');
 
@@ -1916,9 +1916,15 @@ const LabOrders = () => {
         toDate.setHours(23, 59, 59, 999);
       }
 
+      // Only apply date filter if NOT searching by patient name
+      // When searching, show all results regardless of date
+      if (!searchTerm) {
+        query = query
+          .gte('ordered_date', fromDate.toISOString())
+          .lte('ordered_date', toDate.toISOString());
+      }
+
       const { data, error } = await query
-        .gte('ordered_date', fromDate.toISOString())
-        .lte('ordered_date', toDate.toISOString())
         .order('ordered_date', { ascending: false });
 
       // 🏥 Only filter by patient hospital, lab tests are shared
@@ -2379,12 +2385,12 @@ const LabOrders = () => {
     return groups;
   }, {} as Record<string, { patient: any, tests: LabTestRow[] }>);
 
-  // Sort tests within each patient group by category priority (HEMATOLOGY first, BIOCHEMISTRY second, COAGULATION last)
+  // Sort tests within each patient group by date (descending - newest first)
   Object.values(filteredGroupedTests).forEach(group => {
     group.tests.sort((a, b) => {
-      const priorityA = getCategoryPriority(a.test_category);
-      const priorityB = getCategoryPriority(b.test_category);
-      return priorityA - priorityB;
+      const dateA = new Date(a.ordered_date || 0).getTime();
+      const dateB = new Date(b.ordered_date || 0).getTime();
+      return dateB - dateA;  // Descending order (newest first)
     });
   });
 
@@ -3975,7 +3981,10 @@ const LabOrders = () => {
                 id="discharged"
                 className="h-4 w-4"
                 checked={isDischargedFilter}
-                onCheckedChange={(checked) => setIsDischargedFilter(checked as boolean)}
+                onCheckedChange={(checked) => {
+                  setIsDischargedFilter(checked as boolean);
+                  setPatientStatusFilter(checked ? 'All' : 'Currently Admitted');
+                }}
               />
               <Label htmlFor="discharged" className="text-xs font-medium cursor-pointer">Discharged?:</Label>
             </div>
