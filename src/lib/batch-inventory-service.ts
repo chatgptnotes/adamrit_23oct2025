@@ -115,8 +115,6 @@ export async function getAllBatchInventory(
   hospital_name: string,
   filters?: BatchFilters
 ) {
-  console.log('🔍 getAllBatchInventory called with hospital_name:', hospital_name);
-
   try {
     // First try the view
     let query = supabase
@@ -140,8 +138,6 @@ export async function getAllBatchInventory(
 
     const { data, error } = await query;
 
-    console.log('🔍 v_batch_stock_details result:', { data, error });
-
     // If view returns data with missing medicine_name, enrich it
     if (!error && data && data.length > 0) {
       // FIRST: Fetch pieces_per_pack from base table (view doesn't have it)
@@ -157,20 +153,15 @@ export async function getAllBatchInventory(
         if (batchDetails) {
           piecesPerPackMap = new Map(batchDetails.map(b => [b.id, b.pieces_per_pack || 1]));
         }
-        console.log('🔍 Fetched pieces_per_pack from base table:', Object.fromEntries(piecesPerPackMap));
       }
 
       // Check if medicine names are missing
       const needsEnrichment = data.some(d => !d.medicine_name || d.medicine_name === 'Unknown');
 
       if (needsEnrichment) {
-        console.log('🔍 View data needs medicine name enrichment');
-        console.log('🔍 Raw batch data medicine_ids:', data.map(b => ({ id: b.id, medicine_id: b.medicine_id, medicine_name: b.medicine_name })));
         const medicineIds = [...new Set(data.map(b => b.medicine_id).filter(Boolean))];
 
         if (medicineIds.length > 0) {
-          console.log('🔍 Looking up medicine IDs:', medicineIds);
-
           // Try direct query for each medicine (to avoid .in() issues)
           const medicineMap = new Map();
 
@@ -181,20 +172,15 @@ export async function getAllBatchInventory(
               .eq('id', medId)
               .single();
 
-            console.log('🔍 Medicine lookup for', medId, ':', { medicine, error: medError });
-
             if (medicine) {
               medicineMap.set(medId, medicine);
             }
           }
 
-          console.log('🔍 Final medicine map size:', medicineMap.size);
-
           if (medicineMap.size > 0) {
             return data.map(batch => {
               const medicine = medicineMap.get(batch.medicine_id);
               const piecesPerPack = piecesPerPackMap.get(batch.id) || 1;
-              console.log('🔍 Batch pieces_per_pack:', batch.id, piecesPerPack);
               return {
                 ...batch,
                 medicine_name: medicine?.medicine_name || batch.medicine_name || 'Unknown',
@@ -208,7 +194,6 @@ export async function getAllBatchInventory(
       }
 
       // Ensure pieces_per_pack is always included (from base table fetch)
-      console.log('🔍 No enrichment needed, mapping pieces_per_pack from base table');
       return data.map(batch => ({
         ...batch,
         pieces_per_pack: piecesPerPackMap.get(batch.id) || 1
@@ -217,8 +202,6 @@ export async function getAllBatchInventory(
 
     // If view doesn't exist or fails, fallback to direct table query
     if (error) {
-      console.log('🔍 View query failed, trying direct table query...');
-
       // Fallback: Query medicine_batch_inventory directly with medicine_master join
       const { data: batchData, error: batchError } = await supabase
         .from('medicine_batch_inventory')
@@ -226,8 +209,6 @@ export async function getAllBatchInventory(
         .eq('hospital_name', hospital_name)
         .eq('is_active', true)
         .order('expiry_date', { ascending: true });
-
-      console.log('🔍 Direct table query result:', { batchData, batchError });
 
       if (batchError) throw batchError;
 
@@ -257,7 +238,6 @@ export async function getAllBatchInventory(
         const expiryDate = new Date(batch.expiry_date);
         const daysToExpiry = Math.ceil((expiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 
-        console.log('🔍 Fallback batch pieces_per_pack:', batch.id, batch.pieces_per_pack);
         return {
           ...batch,
           medicine_name: medicine.medicine_name || 'Unknown',

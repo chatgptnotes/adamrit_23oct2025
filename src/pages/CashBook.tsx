@@ -77,6 +77,37 @@ const CashBook: React.FC = () => {
     to_date: toDate
   });
 
+  // State for pharmacy credit payments (only for Hope hospital)
+  const [pharmacyCreditPayments, setPharmacyCreditPayments] = useState<any[]>([]);
+
+  // Fetch pharmacy credit payments for Hope hospital only (CASH payments)
+  useEffect(() => {
+    const fetchPharmacyCreditPayments = async () => {
+      // Only fetch for Hope hospital (check if name contains 'hope', exclude Ayushman)
+      if (!hospitalConfig?.name || !hospitalConfig.name.toLowerCase().includes('hope')) {
+        setPharmacyCreditPayments([]);
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from('pharmacy_credit_payments')
+        .select('*')
+        .eq('payment_method', 'CASH')
+        .ilike('hospital_name', '%hope%')
+        .gte('payment_date', `${fromDate}T00:00:00`)
+        .lte('payment_date', `${toDate}T23:59:59`)
+        .order('payment_date', { ascending: true });
+
+      if (!error && data) {
+        setPharmacyCreditPayments(data);
+      } else {
+        setPharmacyCreditPayments([]);
+      }
+    };
+
+    fetchPharmacyCreditPayments();
+  }, [fromDate, toDate, hospitalConfig?.name]);
+
   // Fetch users and voucher types for dropdowns
   const { data: users = [] } = useCashBookUsers();
   const { data: voucherTypes = [] } = useCashBookVoucherTypes();
@@ -321,8 +352,33 @@ const CashBook: React.FC = () => {
       });
     }
 
+    // Add pharmacy credit payments (for Hope hospital only, CASH payments)
+    if (pharmacyCreditPayments && pharmacyCreditPayments.length > 0) {
+      pharmacyCreditPayments.forEach((payment: any) => {
+        const date = new Date(payment.payment_date);
+        const formattedDate = `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}/${date.getFullYear()}`;
+
+        const remarksText = payment.remarks ? ` | ${payment.remarks}` : '';
+        const summary = `Pharmacy Credit Payment | CASH: Rs ${payment.amount.toLocaleString('en-IN')} | Pharmacy Sale${remarksText}`;
+
+        entries.push({
+          type: 'patient-summary' as const,
+          date: formattedDate,
+          particulars: `${payment.patient_name || 'Unknown Patient'} - Pharmacy Credit Payment`,
+          summary: summary,
+          debit: payment.amount,
+          credit: 0,
+          patientId: payment.patient_id,
+          visitId: payment.visit_id,
+          patientName: payment.patient_name || 'Unknown Patient',
+          transactionCount: 1,
+          transactionDate: payment.payment_date
+        });
+      });
+    }
+
     return entries;
-  }, [dailyTransactions, cashBookData, fromDate]);
+  }, [dailyTransactions, cashBookData, fromDate, pharmacyCreditPayments]);
 
   // Calculate totals for footer
   const totals = useMemo(() => {
