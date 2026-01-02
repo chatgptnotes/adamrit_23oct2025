@@ -2458,6 +2458,7 @@ const TodaysIpdDashboard = () => {
                 {!hideColumns && <TableHead className="font-semibold">Bunch No.</TableHead>}
                 <TableHead className="font-semibold">Visit ID</TableHead>
                 <TableHead className="font-semibold">Patient Name</TableHead>
+                <TableHead className="font-semibold">Gender/Age</TableHead>
                 <TableHead className="font-semibold">Claim ID</TableHead>
                 <TableHead className="text-center font-semibold">Payment Received</TableHead>
                 <TableHead className="font-semibold">ESIC UHID</TableHead>
@@ -2576,6 +2577,13 @@ const TodaysIpdDashboard = () => {
                   <TableCell className="font-medium">
                     {visit.patients?.name}
                     {visit.discharge_date && <span className="text-red-500 text-xs ml-1">(discharged)</span>}
+                  </TableCell>
+                  <TableCell>
+                    {(() => {
+                      const gender = visit.patients?.gender || 'Unknown';
+                      const age = visit.patients?.age;
+                      return age ? `${gender}/${age} Years` : `${gender}/N/A`;
+                    })()}
                   </TableCell>
                   <TableCell>
                     <ClaimIdInput visit={visit} />
