@@ -969,6 +969,7 @@ const DischargedPatients = () => {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="w-16">Sr. No</TableHead>
                     <TableHead>Patient Details</TableHead>
                     <TableHead>Visit Info</TableHead>
                     <TableHead>Admission Date</TableHead>
@@ -980,8 +981,13 @@ const DischargedPatients = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {paginatedVisits.map((visit) => (
+                  {paginatedVisits.map((visit, index) => (
                     <TableRow key={visit.id} className="hover:bg-muted/50">
+                      <TableCell className="font-medium text-center">
+                        {sortOrder === 'desc'
+                          ? totalCount - startIndex - index
+                          : startIndex + index + 1}
+                      </TableCell>
                       <TableCell>
                         <div>
                           <div className="font-medium">
