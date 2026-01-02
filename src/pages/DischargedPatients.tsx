@@ -394,7 +394,7 @@ const DischargedPatients = () => {
 
   // Fetch discharged patients
   const { data: visits, isLoading, error, refetch } = useQuery({
-    queryKey: ['discharged-patients', searchTerm, statusFilter, patientTypeFilter, billingStatusFilter, corporateFilter, sortBy, sortOrder, hospitalConfig?.name, availableCorporates?.length, fromDate, toDate],
+    queryKey: ['discharged-patients', statusFilter, patientTypeFilter, billingStatusFilter, corporateFilter, sortBy, sortOrder, hospitalConfig?.name, availableCorporates?.length],
     queryFn: async () => {
       console.log('🏥 Fetching discharged patients for hospital:', hospitalConfig?.name, '(IPD, IPD (Inpatient) & Emergency only)');
 
@@ -448,16 +448,7 @@ const DischargedPatients = () => {
         console.log('🏥 DischargedPatients: Applied corporate filter for:', corporateFilter);
       }
 
-      // Date range filter (Discharge Date)
-      if (fromDate) {
-        query = query.gte('discharge_date', fromDate);
-        console.log('🏥 DischargedPatients: Applied from date filter:', fromDate);
-      }
-      if (toDate) {
-        query = query.lte('discharge_date', toDate + 'T23:59:59');
-        console.log('🏥 DischargedPatients: Applied to date filter:', toDate);
-      }
-
+      // Date range filter moved to client-side to preserve original Sr. No
       // Skip database search for now - we'll filter client-side
       // This avoids all PostgREST parsing issues
       // TODO: Fix database search later
@@ -492,12 +483,32 @@ const DischargedPatients = () => {
   });
 
   // Apply client-side filtering to avoid PostgREST parsing issues
-  const filteredVisits = visits?.filter(visit => {
-    // Filter 1: Only show fully discharged patients
-    // Patient automatically gets discharge_date and status='discharged' when Final Payment is completed
-    if (visit.status?.toLowerCase() !== 'discharged') return false;
+  // Step 1: First filter only by discharged status to get FULL list
+  const dischargedVisits = visits?.filter(visit =>
+    visit.status?.toLowerCase() === 'discharged'
+  ) || [];
 
-    // Filter 2: Apply search if provided
+  // Step 2: Assign original Sr. No based on position in FULL sorted list
+  const visitsWithOriginalSrNo = dischargedVisits.map((visit, index) => ({
+    ...visit,
+    originalSrNo: sortOrder === 'desc'
+      ? dischargedVisits.length - index
+      : index + 1
+  }));
+
+  // Step 3: Apply date filter (AFTER assigning originalSrNo to preserve original position)
+  const dateFilteredVisits = visitsWithOriginalSrNo.filter(visit => {
+    if (!fromDate && !toDate) return true;
+    const dischargeDate = visit.discharge_date ? new Date(visit.discharge_date) : null;
+    if (!dischargeDate) return false;
+
+    if (fromDate && dischargeDate < new Date(fromDate)) return false;
+    if (toDate && dischargeDate > new Date(toDate + 'T23:59:59')) return false;
+    return true;
+  });
+
+  // Step 4: Apply search filter (preserving originalSrNo)
+  const filteredVisits = dateFilteredVisits.filter(visit => {
     if (!searchTerm.trim()) return true;
 
     const searchLower = searchTerm.toLowerCase();
@@ -508,7 +519,7 @@ const DischargedPatients = () => {
       visit.patients?.phone?.toLowerCase().includes(searchLower) ||
       visit.patients?.insurance_person_no?.toLowerCase().includes(searchLower)
     );
-  }) || [];
+  });
 
   // Pagination calculations
   const totalCount = filteredVisits.length;
@@ -705,7 +716,7 @@ const DischargedPatients = () => {
             <table>
               <thead>
                 <tr>
-                  <th>#</th>
+                  <th>Discharged Sr. No</th>
                   <th>Patient Name</th>
                   <th>Patient ID</th>
                   <th>Visit ID</th>
@@ -719,7 +730,7 @@ const DischargedPatients = () => {
               <tbody>
                 ${filteredVisits?.map((visit, index) => `
                   <tr>
-                    <td class="text-center">${index + 1}</td>
+                    <td class="text-center">${visit.originalSrNo}</td>
                     <td>${visit.patients?.name || '-'}</td>
                     <td>${visit.patients?.patients_id || '-'}</td>
                     <td>${visit.visit_id || '-'}</td>
@@ -904,7 +915,7 @@ const DischargedPatients = () => {
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => { setFromDate(''); setToDate(''); }}
+                  onClick={() => updateParams({ from: null, to: null, page: '1' })}
                   className="text-gray-500 hover:text-gray-700"
                 >
                   Clear Dates
@@ -984,9 +995,7 @@ const DischargedPatients = () => {
                   {paginatedVisits.map((visit, index) => (
                     <TableRow key={visit.id} className="hover:bg-muted/50">
                       <TableCell className="font-medium text-center">
-                        {sortOrder === 'desc'
-                          ? totalCount - startIndex - index
-                          : startIndex + index + 1}
+                        {visit.originalSrNo}
                       </TableCell>
                       <TableCell>
                         <div>
