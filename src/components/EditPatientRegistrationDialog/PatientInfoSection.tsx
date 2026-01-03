@@ -5,6 +5,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { EnhancedDatePicker } from '@/components/ui/enhanced-date-picker';
 import { Upload } from 'lucide-react';
+import { useCorporateData } from '@/hooks/useCorporateData';
 
 interface PatientInfoSectionProps {
   formData: any;
@@ -19,6 +20,8 @@ export const PatientInfoSection: React.FC<PatientInfoSectionProps> = ({
   onInputChange,
   onDateChange
 }) => {
+  const { corporateOptions, loading: corporateLoading } = useCorporateData();
+
   return (
     <div className="bg-blue-50 p-4 rounded-lg">
       <h3 className="text-lg font-semibold text-blue-700 mb-4">UID Patient Information</h3>
@@ -46,14 +49,14 @@ export const PatientInfoSection: React.FC<PatientInfoSectionProps> = ({
           </Label>
           <Select value={formData.corporate} onValueChange={(value) => onInputChange('corporate', value)}>
             <SelectTrigger className="w-full">
-              <SelectValue placeholder="Select Corporate" />
+              <SelectValue placeholder={corporateLoading ? "Loading..." : "Select Corporate"} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="private">Private</SelectItem>
-              <SelectItem value="esic">ESIC</SelectItem>
-              <SelectItem value="cghs">CGHS</SelectItem>
-              <SelectItem value="echs">ECHS</SelectItem>
-              <SelectItem value="insurance">Insurance</SelectItem>
+              {corporateOptions.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
@@ -311,7 +314,7 @@ export const PatientInfoSection: React.FC<PatientInfoSectionProps> = ({
       </div>
 
       {/* ESIC Insurance Person No - Only show if Corporate is ESIC */}
-      {formData.corporate === 'esic' && (
+      {formData.corporate?.toLowerCase() === 'esic' && (
         <div className="mt-4">
           <div className="space-y-2">
             <Label htmlFor="insurancePersonNo" className="text-sm font-medium">

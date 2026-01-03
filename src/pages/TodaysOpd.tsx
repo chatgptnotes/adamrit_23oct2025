@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import * as XLSX from 'xlsx';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -6,25 +7,28 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Printer, Search, ClipboardList } from 'lucide-react';
+import { Printer, Search, ClipboardList, Download } from 'lucide-react';
 import { OpdStatisticsCards } from '@/components/opd/OpdStatisticsCards';
 import { OpdPatientTable } from '@/components/opd/OpdPatientTable';
+import { DateRangePicker } from '@/components/ui/date-range-picker';
+import { DateRange } from 'react-day-picker';
+import { format } from 'date-fns';
 
 const TodaysOpd = () => {
   const { hospitalConfig } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
-  const today = new Date().toISOString().split('T')[0];
 
   // URL-persisted state
   const searchTerm = searchParams.get('search') || '';
   const corporateFilter = searchParams.get('corporate') || '';
-  const selectedDate = searchParams.get('date') || today;
+  const startDate = searchParams.get('startDate') || '';
+  const endDate = searchParams.get('endDate') || '';
 
   // Helper to update URL params
   const updateParams = (updates: Record<string, string | null>) => {
     const newParams = new URLSearchParams(searchParams);
     Object.entries(updates).forEach(([key, value]) => {
-      if (value === null || value === '' || (key === 'date' && value === today)) {
+      if (value === null || value === '') {
         newParams.delete(key);
       } else {
         newParams.set(key, value);
@@ -36,7 +40,22 @@ const TodaysOpd = () => {
   // Setter functions
   const setSearchTerm = (value: string) => updateParams({ search: value });
   const setCorporateFilter = (value: string) => updateParams({ corporate: value });
-  const setSelectedDate = (value: string) => updateParams({ date: value });
+
+  // Date range state
+  const dateRange: DateRange | undefined = useMemo(() => {
+    if (!startDate && !endDate) return undefined;
+    return {
+      from: startDate ? new Date(startDate) : undefined,
+      to: endDate ? new Date(endDate) : undefined,
+    };
+  }, [startDate, endDate]);
+
+  const handleDateRangeChange = (range: DateRange | undefined) => {
+    updateParams({
+      startDate: range?.from ? format(range.from, 'yyyy-MM-dd') : null,
+      endDate: range?.to ? format(range.to, 'yyyy-MM-dd') : null,
+    });
+  };
 
   // Fetch corporates from corporate table
   const { data: corporates = [] } = useQuery({
@@ -76,7 +95,8 @@ const TodaysOpd = () => {
             date_of_birth,
             patients_id,
             insurance_person_no,
-            corporate
+            corporate,
+            phone
           )
         `)
         .eq('patient_type', 'OPD')
@@ -143,20 +163,30 @@ const TodaysOpd = () => {
     const matchesCorporate = !corporateFilter ||
       patient.patients?.corporate?.trim().toLowerCase() === corporateFilter.trim().toLowerCase();
 
-    // Single date filter - show only entries for selected date
+    // Date range filter - default to today if no date range selected
     let matchesDate = true;
-    const visitDate = new Date(patient.created_at || patient.visit_date);
-    visitDate.setHours(0, 0, 0, 0);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayEnd = new Date();
+    todayEnd.setHours(23, 59, 59, 999);
 
-    if (selectedDate) {
-      const selected = new Date(selectedDate);
-      selected.setHours(0, 0, 0, 0);
+    const visitDateTime = new Date(patient.created_at || patient.visit_date);
 
-      const selectedEnd = new Date(selectedDate);
-      selectedEnd.setHours(23, 59, 59, 999);
-
-      const visitDateTime = new Date(patient.created_at || patient.visit_date);
-      matchesDate = visitDateTime >= selected && visitDateTime <= selectedEnd;
+    if (startDate || endDate) {
+      // Use selected date range
+      if (startDate) {
+        const start = new Date(startDate);
+        start.setHours(0, 0, 0, 0);
+        if (visitDateTime < start) matchesDate = false;
+      }
+      if (endDate) {
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        if (visitDateTime > end) matchesDate = false;
+      }
+    } else {
+      // Default to today's date
+      matchesDate = visitDateTime >= today && visitDateTime <= todayEnd;
     }
 
     // If search term is entered, ignore date filter to show all visits for that patient
@@ -176,6 +206,18 @@ const TodaysOpd = () => {
 
   const handlePrintList = () => {
     window.print();
+  };
+
+  const handleExportToExcel = () => {
+    const excelData = filteredPatients.map(patient => ({
+      'Name': patient.patients?.name || '',
+      'Phone number': patient.patients?.phone || ''
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(excelData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'OPD Patients');
+    XLSX.writeFile(wb, `OPD_Patients_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
   // Debug: Check if there are any visits in the database
@@ -213,7 +255,8 @@ const TodaysOpd = () => {
                 <p className="text-sm text-muted-foreground">Total OPD Patients: {statistics.total}</p>
                 {/* Date display for print */}
                 <p className="hidden print:block text-sm text-gray-700 mt-1">
-                  Date: {selectedDate ? new Date(selectedDate).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : 'Today'}
+                  Date: {startDate ? new Date(startDate).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : 'All'}
+                  {endDate ? ` - ${new Date(endDate).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}` : ''}
                 </p>
               </div>
             </div>
@@ -227,15 +270,19 @@ const TodaysOpd = () => {
                 <Printer className="h-4 w-4" />
                 Print List
               </Button>
-              <div className="flex items-center gap-2">
-                <label className="text-sm text-gray-600">Date:</label>
-                <input
-                  type="date"
-                  value={selectedDate}
-                  onChange={(e) => setSelectedDate(e.target.value)}
-                  className="h-10 text-sm border border-gray-300 rounded-md px-3 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleExportToExcel}
+                className="flex items-center gap-2"
+              >
+                <Download className="h-4 w-4" />
+                Export XLS
+              </Button>
+              <DateRangePicker
+                date={dateRange}
+                onDateChange={handleDateRangeChange}
+              />
               <select
                 value={corporateFilter}
                 onChange={(e) => setCorporateFilter(e.target.value)}
