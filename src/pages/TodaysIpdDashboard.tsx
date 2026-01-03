@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import * as XLSX from 'xlsx';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -7,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useDebounce } from 'use-debounce';
 import { Badge } from '@/components/ui/badge';
-import { Eye, FileText, Search, Calendar, DollarSign, Trash2, FolderOpen, FolderX, CheckCircle, XCircle, Clock, MinusCircle, RotateCcw, Printer, Filter, MessageSquare, ClipboardList, ArrowUpDown, Circle, ChevronLeft, ChevronRight, Upload, Bell } from 'lucide-react';
+import { Eye, FileText, Search, Calendar, DollarSign, Trash2, FolderOpen, FolderX, CheckCircle, XCircle, Clock, MinusCircle, RotateCcw, Printer, Filter, MessageSquare, ClipboardList, ArrowUpDown, Circle, ChevronLeft, ChevronRight, Upload, Bell, Download } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -2079,6 +2080,18 @@ const TodaysIpdDashboard = () => {
     openPrintPicker();
   };
 
+  const handleExportToExcel = () => {
+    const excelData = filteredVisits.map(visit => ({
+      'Name': visit.patients?.name || '',
+      'Phone number': visit.patients?.phone || ''
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(excelData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'IPD Patients');
+    XLSX.writeFile(wb, `IPD_Patients_${new Date().toISOString().split('T')[0]}.xlsx`);
+  };
+
   const handlePrintConfirm = () => {
     setIsPrintPickerOpen(false);
     setShowPrintPreview(true);
@@ -2261,6 +2274,14 @@ const TodaysIpdDashboard = () => {
             >
               <Printer className="h-4 w-4" />
               Print List
+            </Button>
+            <Button
+              onClick={handleExportToExcel}
+              variant="outline"
+              className="flex items-center gap-2"
+            >
+              <Download className="h-4 w-4" />
+              Export XLS
             </Button>
             <Button
               onClick={() => setHideColumns(!hideColumns)}
