@@ -96,7 +96,9 @@ const TodaysOpd = () => {
             patients_id,
             insurance_person_no,
             corporate,
-            phone
+            phone,
+            address,
+            city_town
           )
         `)
         .eq('patient_type', 'OPD')
@@ -244,8 +246,8 @@ const TodaysOpd = () => {
 
   return (
     <div className="container mx-auto p-6 space-y-6">
-      {/* Header */}
-      <Card className="border-0 shadow-none">
+      {/* Header - hidden in print */}
+      <Card className="border-0 shadow-none print:hidden">
         <CardHeader className="pb-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
