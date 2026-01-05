@@ -214,6 +214,7 @@ const LabOrders = () => {
   const [isDischargedFilter, setIsDischargedFilter] = useState(false);
   const [categorySearch, setCategorySearch] = useState('');
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
+  const [showPatientDropdown, setShowPatientDropdown] = useState(false);
   const [serviceSearch, setServiceSearch] = useState('');
   const [reqNoSearch, setReqNoSearch] = useState('');
   const [consultantFilter, setConsultantFilter] = useState('All');
@@ -1831,6 +1832,57 @@ const LabOrders = () => {
       console.log('✅ Fetched consultants:', data);
       return data || [];
     }
+  });
+
+  // Patient search suggestions with visits (filtered by admission status)
+  const { data: patientVisitSuggestions = [] } = useQuery({
+    queryKey: ['patient-visit-suggestions', searchTerm, getHospitalFilter(), isDischargedFilter],
+    queryFn: async () => {
+      if (!searchTerm || searchTerm.length < 2) return [];
+
+      const hospitalFilter = getHospitalFilter();
+
+      // Search visits with patient info
+      let query = supabase
+        .from('visits')
+        .select(`
+          id,
+          visit_id,
+          visit_date,
+          visit_type,
+          patient_id,
+          discharge_date,
+          patients!inner(
+            id,
+            name,
+            patients_id,
+            hospital_name
+          )
+        `)
+        .eq('patients.hospital_name', hospitalFilter)
+        .ilike('patients.name', `%${searchTerm}%`);
+
+      // Apply admission status filter
+      if (isDischargedFilter) {
+        // Show discharged patients
+        query = query.not('discharge_date', 'is', null);
+      } else {
+        // Show currently admitted patients
+        query = query.is('discharge_date', null);
+      }
+
+      const { data, error } = await query
+        .order('visit_date', { ascending: false })
+        .limit(20);
+
+      if (error) {
+        console.error('Error fetching patient suggestions:', error);
+        return [];
+      }
+
+      return data || [];
+    },
+    enabled: searchTerm.length >= 2 && showPatientDropdown
   });
 
   // Fetch lab test rows from visit_labs table (JOIN with visits and lab tables)
@@ -4016,9 +4068,32 @@ const LabOrders = () => {
               </Popover>
             </div>
 
-            <div className="col-span-2">
+            <div className="col-span-2 relative">
               <Label className="text-xs font-medium">Patient:</Label>
-              <Input placeholder="Type To Search" className="h-8 text-xs" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+              <Input
+                placeholder="Type To Search"
+                className="h-8 text-xs"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                onFocus={() => setShowPatientDropdown(true)}
+                onBlur={() => setTimeout(() => setShowPatientDropdown(false), 200)}
+              />
+              {showPatientDropdown && searchTerm.length >= 2 && patientVisitSuggestions.length > 0 && (
+                <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-48 overflow-y-auto">
+                  {patientVisitSuggestions.map((item: any) => (
+                    <div
+                      key={`${item.patient_id}-${item.id}`}
+                      className="px-3 py-2 text-xs hover:bg-blue-50 cursor-pointer"
+                      onMouseDown={() => {
+                        setSearchTerm(item.patients?.name || '');
+                        setShowPatientDropdown(false);
+                      }}
+                    >
+                      {item.patients?.name} ({item.visit_id})
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div className="col-span-1 flex items-center gap-1">
