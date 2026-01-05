@@ -2353,12 +2353,15 @@ const EditPanelForm: React.FC<EditPanelFormProps> = ({ panel, onSubmit }) => {
         if (!subTestsMap.has(subTestKey)) {
           // Get formula data for this sub-test
           const formulaData = formulasMap.get(subTestKey);
+          const isTextType = formulaData?.test_type === 'Text';
 
           // Create new sub-test
           const newSubTest: SubTest = {
             id: `subtest_${subTestKey}_${Date.now()}`,
             name: config.sub_test_name,
             unit: config.unit || config.normal_unit || '',
+            type: isTextType ? 'Text' : 'Numeric',
+            textValue: isTextType ? (formulaData?.text_value || '') : '',
             formula: formulaData?.formula || '',
             isMandatory: config.is_mandatory !== false, // Load mandatory status (default true)
             ageRanges: [],
@@ -2440,6 +2443,38 @@ const EditPanelForm: React.FC<EditPanelFormProps> = ({ panel, onSubmit }) => {
               subTests: []
             };
           });
+        }
+      }
+
+      // Also create sub-tests for entries in lab_test_formulas that don't have lab_test_config entries
+      // This is important for Text type tests that don't have normal ranges
+      if (formulasData) {
+        for (const formula of formulasData) {
+          const subTestKey = formula.sub_test_name;
+
+          // Skip if already created from lab_test_config
+          if (subTestsMap.has(subTestKey)) continue;
+
+          const isTextType = formula.test_type === 'Text';
+
+          const newSubTest: SubTest = {
+            id: `subtest_${subTestKey}_${Date.now()}`,
+            name: formula.sub_test_name,
+            unit: '',
+            type: isTextType ? 'Text' : 'Numeric',
+            textValue: isTextType ? (formula.text_value || '') : '',
+            formula: formula.formula || '',
+            isMandatory: true,
+            ageRanges: [],
+            normalRanges: [],
+            subTests: []
+          };
+          subTestsMap.set(subTestKey, newSubTest);
+
+          // Set high display_order so these appear at end (or use formula's order if available)
+          if (!subTestOrder.has(subTestKey)) {
+            subTestOrder.set(subTestKey, 999);
+          }
         }
       }
 
