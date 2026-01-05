@@ -1150,48 +1150,63 @@ Verified by: [To be verified by doctor]`;
       <Table>
         <TableHeader>
           <TableRow className="bg-gray-50">
-            <TableHead className="font-medium">Visit ID</TableHead>
+            {/* Print-only columns */}
+            <TableHead className="hidden print:table-cell font-medium">Sr No.</TableHead>
+            <TableHead className="hidden print:table-cell font-medium">Date</TableHead>
+            {/* Screen-only columns */}
+            <TableHead className="font-medium print:hidden">Visit ID</TableHead>
             <TableHead className="font-medium">Patient Name</TableHead>
-            <TableHead className="font-medium">Gender/Age</TableHead>
-            <TableHead className="font-medium">Visit Type</TableHead>
+            <TableHead className="font-medium print:hidden">Gender/Age</TableHead>
+            <TableHead className="hidden print:table-cell font-medium">Age</TableHead>
+            <TableHead className="hidden print:table-cell font-medium">Address</TableHead>
+            <TableHead className="font-medium print:hidden">Visit Type</TableHead>
             <TableHead className="font-medium">Doctor</TableHead>
-            <TableHead className="font-medium">Diagnosis</TableHead>
-            <TableHead className="text-center font-medium">Payment Received</TableHead>
-            <TableHead className="font-medium">Corporate</TableHead>
-            <TableHead className="text-center font-medium">Bill</TableHead>
-            <TableHead className="text-center font-medium">Admit To Hospital</TableHead>
-            <TableHead className="text-center font-medium">Admission Notes</TableHead>
-            <TableHead className="text-center font-medium">Physiotherapy Bill</TableHead>
-            <TableHead className="text-center font-medium">Stickers</TableHead>
-            <TableHead className="text-center font-medium">OPD Summary</TableHead>
-            <TableHead className="text-center font-medium">Actions</TableHead>
+            <TableHead className="font-medium print:hidden">Diagnosis</TableHead>
+            <TableHead className="text-center font-medium print:hidden">Payment Received</TableHead>
+            <TableHead className="hidden print:table-cell font-medium">Paid Amount</TableHead>
+            <TableHead className="font-medium print:hidden">Corporate</TableHead>
+            <TableHead className="text-center font-medium print:hidden">Bill</TableHead>
+            <TableHead className="text-center font-medium print:hidden">Admit To Hospital</TableHead>
+            <TableHead className="text-center font-medium print:hidden">Admission Notes</TableHead>
+            <TableHead className="text-center font-medium print:hidden">Physiotherapy Bill</TableHead>
+            <TableHead className="text-center font-medium print:hidden">Stickers</TableHead>
+            <TableHead className="text-center font-medium print:hidden">OPD Summary</TableHead>
+            <TableHead className="text-center font-medium print:hidden">Actions</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {patients
             .filter(patient => !hiddenPatients.has(patient.visit_id || ''))
-            .map((patient) => (
+            .map((patient, index) => (
             <TableRow key={patient.id}>
-              <TableCell className="font-mono text-sm">
+              {/* Print-only: Sr No. */}
+              <TableCell className="hidden print:table-cell text-center">
+                {index + 1}
+              </TableCell>
+              {/* Print-only: Date */}
+              <TableCell className="hidden print:table-cell">
+                {patient.created_at ? new Date(patient.created_at).toLocaleDateString('en-IN') : '-'}
+              </TableCell>
+              {/* Screen-only: Visit ID */}
+              <TableCell className="font-mono text-sm print:hidden">
                 <button
                   onClick={() => handleVisitIdClick(patient.patient_id || patient.patients?.id, patient.visit_id)}
-                  className="text-blue-600 hover:text-blue-800 hover:underline font-medium transition-colors print:hidden"
+                  className="text-blue-600 hover:text-blue-800 hover:underline font-medium transition-colors"
                 >
                   {patient.visit_id || 'N/A'}
                 </button>
-                <span className="hidden print:inline">
-                  {patient.visit_id || 'N/A'}
-                </span>
               </TableCell>
+              {/* Both: Patient Name */}
               <TableCell>
                 <div>
                   <div className="font-medium">{patient.patients?.name || 'Unknown'}</div>
-                  <div className="text-xs text-muted-foreground">
+                  <div className="text-xs text-muted-foreground print:hidden">
                     {patient.patients?.patients_id || 'No ID'}
                   </div>
                 </div>
               </TableCell>
-              <TableCell>
+              {/* Screen-only: Gender/Age */}
+              <TableCell className="print:hidden">
                 {(() => {
                   const gender = patient.patients?.gender || 'Unknown';
 
@@ -1209,27 +1224,54 @@ Verified by: [To be verified by doctor]`;
                   return `${gender}/Age N/A`;
                 })()}
               </TableCell>
-              <TableCell>
+              {/* Print-only: Age */}
+              <TableCell className="hidden print:table-cell">
+                {patient.patients?.age !== undefined && patient.patients?.age !== null
+                  ? `${patient.patients.age} Yrs`
+                  : calculateAge(patient.patients?.date_of_birth) !== null
+                    ? `${calculateAge(patient.patients?.date_of_birth)} Yrs`
+                    : '-'}
+              </TableCell>
+              {/* Print-only: Location */}
+              <TableCell className="hidden print:table-cell">
+                {patient.patients?.address || patient.patients?.city_town || '-'}
+              </TableCell>
+              {/* Screen-only: Visit Type */}
+              <TableCell className="print:hidden">
                 <Badge variant="outline" className="capitalize">
                   {patient.visit_type || 'General'}
                 </Badge>
               </TableCell>
+              {/* Both: Doctor */}
               <TableCell>
                 {patient.appointment_with || 'Not Assigned'}
               </TableCell>
-              <TableCell>
+              {/* Screen-only: Diagnosis */}
+              <TableCell className="print:hidden">
                 {patient.diagnosis || 'General'}
               </TableCell>
-              <TableCell className="text-center">
+              {/* Screen-only: Payment Received status */}
+              <TableCell className="text-center print:hidden">
                 {renderAdvancePaymentStatus(patient)}
               </TableCell>
-              <TableCell>
+              {/* Print-only: Paid Amount */}
+              <TableCell className="hidden print:table-cell text-right">
+                {(() => {
+                  const visitId = patient.visit_id;
+                  const amount = advancePayments[visitId];
+                  return amount ? `₹${amount}` : '-';
+                })()}
+              </TableCell>
+              {/* Screen-only: Corporate */}
+              <TableCell className="print:hidden">
                 {patient.patients?.corporate || '-'}
               </TableCell>
-              <TableCell className="text-center">
+              {/* Screen-only: Bill */}
+              <TableCell className="text-center print:hidden">
                 {renderPaymentStatus(patient)}
               </TableCell>
-              <TableCell className="text-center">
+              {/* Screen-only: Admit To Hospital */}
+              <TableCell className="text-center print:hidden">
                 <Button
                   variant="ghost"
                   size="sm"
@@ -1240,7 +1282,8 @@ Verified by: [To be verified by doctor]`;
                   <UserCheck className="h-4 w-4 text-blue-600" />
                 </Button>
               </TableCell>
-              <TableCell className="text-center">
+              {/* Screen-only: Admission Notes */}
+              <TableCell className="text-center print:hidden">
                 <Button
                   variant="ghost"
                   size="sm"
@@ -1251,7 +1294,8 @@ Verified by: [To be verified by doctor]`;
                   <ClipboardEdit className="h-4 w-4 text-amber-600" />
                 </Button>
               </TableCell>
-              <TableCell className="text-center">
+              {/* Screen-only: Physiotherapy Bill */}
+              <TableCell className="text-center print:hidden">
                 <Button
                   variant="ghost"
                   size="sm"
@@ -1262,7 +1306,8 @@ Verified by: [To be verified by doctor]`;
                   <Activity className="h-4 w-4 text-teal-600" />
                 </Button>
               </TableCell>
-              <TableCell className="text-center">
+              {/* Screen-only: Stickers */}
+              <TableCell className="text-center print:hidden">
                 <Button
                   variant="outline"
                   size="sm"
@@ -1280,7 +1325,8 @@ Verified by: [To be verified by doctor]`;
                   Print Sticker
                 </Button>
               </TableCell>
-              <TableCell className="text-center">
+              {/* Screen-only: OPD Summary */}
+              <TableCell className="text-center print:hidden">
                 <Button
                   variant="ghost"
                   size="sm"
@@ -1291,7 +1337,8 @@ Verified by: [To be verified by doctor]`;
                   <FileTextIcon className="h-4 w-4 text-purple-600" />
                 </Button>
               </TableCell>
-              <TableCell>
+              {/* Screen-only: Actions */}
+              <TableCell className="print:hidden">
                 <div className="flex items-center gap-1">
                   <Button
                     variant="ghost"

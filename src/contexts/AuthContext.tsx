@@ -78,6 +78,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   // Database authentication
   const login = async (credentials: { email: string; password: string }): Promise<boolean> => {
     try {
+      console.log('🔐 Login attempt for:', credentials.email);
+
       const { data, error } = await supabase
         .from('User')
         .select('*')
@@ -89,21 +91,33 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         return false;
       }
 
+      console.log('✅ User found, checking password...');
+      console.log('📋 Password type:', data.password.startsWith('$2') ? 'hashed' : 'plain');
+
       // Check if password is hashed (new users) or plain text (existing users)
       let isPasswordValid = false;
-      
+
       if (data.password.startsWith('$2')) {
-        // Hashed password - use bcrypt compare
-        isPasswordValid = await comparePassword(credentials.password, data.password);
+        // Hashed password - use bcrypt compare with setTimeout to prevent UI blocking
+        isPasswordValid = await new Promise<boolean>((resolve) => {
+          setTimeout(async () => {
+            const result = await comparePassword(credentials.password, data.password);
+            resolve(result);
+          }, 10);
+        });
       } else {
         // Plain text password - direct comparison (for backward compatibility)
         isPasswordValid = data.password === credentials.password;
       }
 
+      console.log('🔑 Password validation result:', isPasswordValid);
+
       if (!isPasswordValid) {
-        console.error('Invalid password');
+        console.error('❌ Invalid password');
         return false;
       }
+
+      console.log('✅ Password valid, creating user session...');
 
       const user: User = {
         id: data.id,
