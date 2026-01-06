@@ -5,12 +5,19 @@ import { X, Printer, FileSpreadsheet } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useQuery } from '@tanstack/react-query';
 import * as XLSX from 'xlsx';
+import { useAuth } from '@/contexts/AuthContext';
 
 const DetailedInvoice = () => {
   const { visitId } = useParams();
   const navigate = useNavigate();
+  const { hospitalConfig } = useAuth();
   const [patientData, setPatientData] = useState(null);
   const printRef = useRef(null);
+
+  // State for selected items in each section (for print selected feature)
+  const [selectedLabItems, setSelectedLabItems] = useState<number[]>([]);
+  const [selectedRadiologyItems, setSelectedRadiologyItems] = useState<number[]>([]);
+  const [selectedSurgeryItems, setSelectedSurgeryItems] = useState<number[]>([]);
 
   // Close function that goes back or to a specific page
   const handleClose = () => {
@@ -342,6 +349,302 @@ const DetailedInvoice = () => {
 
     // Save file
     XLSX.writeFile(workbook, fileName);
+  };
+
+  // Print section functions for Laboratory, Radiology, Surgery
+  const handlePrintSectionAll = (section: 'laboratory' | 'radiology' | 'surgery') => {
+    const sectionTitles = {
+      laboratory: 'LABORATORY',
+      radiology: 'RADIOLOGY',
+      surgery: 'SURGERY'
+    };
+
+    const items = serviceData[section] || [];
+    if (items.length === 0) {
+      alert(`No ${section} items to print.`);
+      return;
+    }
+
+    const total = items.reduce((sum, item) => sum + (item.rate || 0), 0);
+
+    const printContent = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>${sectionTitles[section]} Report</title>
+          <style>
+            @page { size: A4; margin: 0; }
+            body { font-family: Arial, sans-serif; margin: 0; padding: 120px 20px 20px 20px; }
+            .header { text-align: center; margin-bottom: 20px; border-bottom: 2px solid #000; padding-bottom: 10px; }
+            .header h1 { margin: 0; font-size: 18px; }
+            .header h2 { margin: 5px 0; font-size: 14px; color: #666; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+            th, td { border: 1px solid #000; padding: 8px; text-align: left; font-size: 12px; }
+            th { background-color: #f0f0f0; font-weight: bold; }
+            .text-center { text-align: center; }
+            .text-right { text-align: right; }
+            .total-row { font-weight: bold; background-color: #f0f0f0; }
+            .patient-table { width: 100%; border-collapse: collapse; margin-bottom: 15px; font-size: 12px; }
+            .patient-table td { border: 1px solid #ccc; padding: 5px 8px; width: 50%; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <h1>${hospitalConfig?.fullName || 'HOSPITAL'}</h1>
+            <h2>${sectionTitles[section]} REPORT</h2>
+          </div>
+          <table class="patient-table">
+            <tr>
+              <td><strong>Patient Name:</strong> ${patientData?.patientName || 'N/A'}</td>
+              <td><strong>Age/Sex:</strong> ${patientData?.age || 'N/A'} / ${patientData?.sex || 'N/A'}</td>
+            </tr>
+            <tr>
+              <td><strong>Reg No:</strong> ${patientData?.registrationNo || 'N/A'}</td>
+              <td><strong>Contact:</strong> ${patientData?.contactNo || 'N/A'}</td>
+            </tr>
+            <tr>
+              <td><strong>Address:</strong> ${patientData?.address || 'N/A'}</td>
+              <td><strong>Date of Admission:</strong> ${patientData?.dateOfAdmission || 'N/A'}</td>
+            </tr>
+          </table>
+          <table>
+            <thead>
+              <tr>
+                <th class="text-center" style="width: 50px;">SR.NO.</th>
+                <th>ITEM</th>
+                <th class="text-center" style="width: 120px;">DATE & TIME</th>
+                <th class="text-center" style="width: 80px;">QTY</th>
+                <th class="text-right" style="width: 100px;">RATE</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${items.map((item, index) => `
+                <tr>
+                  <td class="text-center">${index + 1}</td>
+                  <td>${item.item}</td>
+                  <td class="text-center">${item.dateTime}</td>
+                  <td class="text-center">${item.qty}</td>
+                  <td class="text-right">${item.rate}</td>
+                </tr>
+              `).join('')}
+              <tr class="total-row">
+                <td colspan="4" class="text-right">TOTAL:</td>
+                <td class="text-right">${total}</td>
+              </tr>
+            </tbody>
+          </table>
+        </body>
+      </html>
+    `;
+
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.write(printContent);
+      printWindow.document.close();
+      setTimeout(() => {
+        printWindow.focus();
+        printWindow.print();
+        printWindow.close();
+      }, 500);
+    }
+  };
+
+  const handlePrintSectionSelected = (section: 'laboratory' | 'radiology' | 'surgery') => {
+    const sectionTitles = {
+      laboratory: 'LABORATORY',
+      radiology: 'RADIOLOGY',
+      surgery: 'SURGERY'
+    };
+
+    const selectedIndices = section === 'laboratory' ? selectedLabItems :
+                           section === 'radiology' ? selectedRadiologyItems :
+                           selectedSurgeryItems;
+
+    const allItems = serviceData[section] || [];
+    const items = allItems.filter((_, index) => selectedIndices.includes(index));
+
+    if (items.length === 0) {
+      alert(`Please select at least one ${section} item to print.`);
+      return;
+    }
+
+    const total = items.reduce((sum, item) => sum + (item.rate || 0), 0);
+
+    const printContent = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>${sectionTitles[section]} Report (Selected)</title>
+          <style>
+            @page { size: A4; margin: 0; }
+            body { font-family: Arial, sans-serif; margin: 0; padding: 120px 20px 20px 20px; }
+            .header { text-align: center; margin-bottom: 20px; border-bottom: 2px solid #000; padding-bottom: 10px; }
+            .header h1 { margin: 0; font-size: 18px; }
+            .header h2 { margin: 5px 0; font-size: 14px; color: #666; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+            th, td { border: 1px solid #000; padding: 8px; text-align: left; font-size: 12px; }
+            th { background-color: #f0f0f0; font-weight: bold; }
+            .text-center { text-align: center; }
+            .text-right { text-align: right; }
+            .total-row { font-weight: bold; background-color: #f0f0f0; }
+            .patient-table { width: 100%; border-collapse: collapse; margin-bottom: 15px; font-size: 12px; }
+            .patient-table td { border: 1px solid #ccc; padding: 5px 8px; width: 50%; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <h1>${hospitalConfig?.fullName || 'HOSPITAL'}</h1>
+            <h2>${sectionTitles[section]} REPORT</h2>
+          </div>
+          <table class="patient-table">
+            <tr>
+              <td><strong>Patient Name:</strong> ${patientData?.patientName || 'N/A'}</td>
+              <td><strong>Age/Sex:</strong> ${patientData?.age || 'N/A'} / ${patientData?.sex || 'N/A'}</td>
+            </tr>
+            <tr>
+              <td><strong>Reg No:</strong> ${patientData?.registrationNo || 'N/A'}</td>
+              <td><strong>Contact:</strong> ${patientData?.contactNo || 'N/A'}</td>
+            </tr>
+            <tr>
+              <td><strong>Address:</strong> ${patientData?.address || 'N/A'}</td>
+              <td><strong>Date of Admission:</strong> ${patientData?.dateOfAdmission || 'N/A'}</td>
+            </tr>
+          </table>
+          <table>
+            <thead>
+              <tr>
+                <th class="text-center" style="width: 50px;">SR.NO.</th>
+                <th>ITEM</th>
+                <th class="text-center" style="width: 120px;">DATE & TIME</th>
+                <th class="text-center" style="width: 80px;">QTY</th>
+                <th class="text-right" style="width: 100px;">RATE</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${items.map((item, index) => `
+                <tr>
+                  <td class="text-center">${index + 1}</td>
+                  <td>${item.item}</td>
+                  <td class="text-center">${item.dateTime}</td>
+                  <td class="text-center">${item.qty}</td>
+                  <td class="text-right">${item.rate}</td>
+                </tr>
+              `).join('')}
+              <tr class="total-row">
+                <td colspan="4" class="text-right">TOTAL:</td>
+                <td class="text-right">${total}</td>
+              </tr>
+            </tbody>
+          </table>
+        </body>
+      </html>
+    `;
+
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.write(printContent);
+      printWindow.document.close();
+      setTimeout(() => {
+        printWindow.focus();
+        printWindow.print();
+        printWindow.close();
+      }, 500);
+    }
+  };
+
+  const handlePrintSectionSummary = (section: 'laboratory' | 'radiology' | 'surgery') => {
+    const sectionTitles = {
+      laboratory: 'LABORATORY',
+      radiology: 'RADIOLOGY',
+      surgery: 'SURGERY'
+    };
+
+    const items = serviceData[section] || [];
+    const total = items.reduce((sum, item) => sum + (item.rate || 0), 0);
+    const itemCount = items.length;
+
+    const printContent = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>${sectionTitles[section]} Summary</title>
+          <style>
+            @page { size: A4; margin: 0; }
+            body { font-family: Arial, sans-serif; margin: 0; padding: 120px 20px 20px 20px; }
+            .header { text-align: center; margin-bottom: 20px; border-bottom: 2px solid #000; padding-bottom: 10px; }
+            .header h1 { margin: 0; font-size: 18px; }
+            .header h2 { margin: 5px 0; font-size: 14px; color: #666; }
+            .summary-box { border: 1px solid #000; padding: 20px; margin: 20px 0; }
+            .summary-row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #ccc; }
+            .summary-row:last-child { border-bottom: none; font-weight: bold; font-size: 16px; }
+            .patient-table { width: 100%; border-collapse: collapse; margin-bottom: 15px; font-size: 12px; }
+            .patient-table td { border: 1px solid #ccc; padding: 5px 8px; width: 50%; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <h1>${hospitalConfig?.fullName || 'HOSPITAL'}</h1>
+            <h2>${sectionTitles[section]} SUMMARY</h2>
+          </div>
+          <table class="patient-table">
+            <tr>
+              <td><strong>Patient Name:</strong> ${patientData?.patientName || 'N/A'}</td>
+              <td><strong>Age/Sex:</strong> ${patientData?.age || 'N/A'} / ${patientData?.sex || 'N/A'}</td>
+            </tr>
+            <tr>
+              <td><strong>Reg No:</strong> ${patientData?.registrationNo || 'N/A'}</td>
+              <td><strong>Contact:</strong> ${patientData?.contactNo || 'N/A'}</td>
+            </tr>
+            <tr>
+              <td><strong>Address:</strong> ${patientData?.address || 'N/A'}</td>
+              <td><strong>Date of Admission:</strong> ${patientData?.dateOfAdmission || 'N/A'}</td>
+            </tr>
+          </table>
+          <div class="summary-box">
+            <div class="summary-row">
+              <span>Section:</span>
+              <span>${sectionTitles[section]}</span>
+            </div>
+            <div class="summary-row">
+              <span>Total Items:</span>
+              <span>${itemCount}</span>
+            </div>
+            <div class="summary-row">
+              <span>Total Amount:</span>
+              <span>Rs. ${total.toLocaleString()}</span>
+            </div>
+          </div>
+        </body>
+      </html>
+    `;
+
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.write(printContent);
+      printWindow.document.close();
+      setTimeout(() => {
+        printWindow.focus();
+        printWindow.print();
+        printWindow.close();
+      }, 500);
+    }
+  };
+
+  // Toggle item selection
+  const toggleItemSelection = (section: 'laboratory' | 'radiology' | 'surgery', index: number) => {
+    if (section === 'laboratory') {
+      setSelectedLabItems(prev =>
+        prev.includes(index) ? prev.filter(i => i !== index) : [...prev, index]
+      );
+    } else if (section === 'radiology') {
+      setSelectedRadiologyItems(prev =>
+        prev.includes(index) ? prev.filter(i => i !== index) : [...prev, index]
+      );
+    } else {
+      setSelectedSurgeryItems(prev =>
+        prev.includes(index) ? prev.filter(i => i !== index) : [...prev, index]
+      );
+    }
   };
 
   // Fetch patient data from database
@@ -1123,15 +1426,23 @@ const DetailedInvoice = () => {
             <div className="bg-gray-200 border border-gray-400 border-t-0 p-1 flex justify-between items-center">
               <strong className="text-xs">LABORATORY</strong>
               <div className="flex gap-1">
-                <span className="text-xs bg-green-100 px-1">📊</span>
-                <span className="text-xs bg-blue-100 px-1">🖨️</span>
-                <span className="text-xs bg-red-100 px-1">📋</span>
+                <button onClick={() => handlePrintSectionAll('laboratory')} className="text-xs bg-green-100 px-1 hover:bg-green-200 cursor-pointer" title="Print All">📊</button>
+                <button onClick={() => handlePrintSectionSelected('laboratory')} className="text-xs bg-blue-100 px-1 hover:bg-blue-200 cursor-pointer" title="Print Selected">🖨️</button>
+                <button onClick={() => handlePrintSectionSummary('laboratory')} className="text-xs bg-red-100 px-1 hover:bg-red-200 cursor-pointer" title="Print Summary">📋</button>
               </div>
             </div>
             <table className="w-full border-collapse border border-gray-400 border-t-0 text-xs">
               <tbody>
                 {serviceData.laboratory.map((item, index) => (
                   <tr key={index}>
+                    <td className="border border-gray-400 p-1 text-center w-8">
+                      <input
+                        type="checkbox"
+                        checked={selectedLabItems.includes(index)}
+                        onChange={() => toggleItemSelection('laboratory', index)}
+                        className="cursor-pointer"
+                      />
+                    </td>
                     <td className="border border-gray-400 p-1 text-center w-12">{index + 1}</td>
                     <td className="border border-gray-400 p-1">{item.item}</td>
                     <td className="border border-gray-400 p-1 text-center w-32">{item.dateTime}</td>
@@ -1141,7 +1452,7 @@ const DetailedInvoice = () => {
                 ))}
                 {serviceData.laboratory.length === 0 && (
                   <tr>
-                    <td className="border border-gray-400 p-1 text-center" colSpan={5}>No laboratory tests ordered</td>
+                    <td className="border border-gray-400 p-1 text-center" colSpan={6}>No laboratory tests ordered</td>
                   </tr>
                 )}
               </tbody>
@@ -1153,15 +1464,23 @@ const DetailedInvoice = () => {
             <div className="bg-gray-200 border border-gray-400 border-t-0 p-1 flex justify-between items-center">
               <strong className="text-xs">RADIOLOGY</strong>
               <div className="flex gap-1">
-                <span className="text-xs bg-green-100 px-1">📊</span>
-                <span className="text-xs bg-blue-100 px-1">🖨️</span>
-                <span className="text-xs bg-red-100 px-1">📋</span>
+                <button onClick={() => handlePrintSectionAll('radiology')} className="text-xs bg-green-100 px-1 hover:bg-green-200 cursor-pointer" title="Print All">📊</button>
+                <button onClick={() => handlePrintSectionSelected('radiology')} className="text-xs bg-blue-100 px-1 hover:bg-blue-200 cursor-pointer" title="Print Selected">🖨️</button>
+                <button onClick={() => handlePrintSectionSummary('radiology')} className="text-xs bg-red-100 px-1 hover:bg-red-200 cursor-pointer" title="Print Summary">📋</button>
               </div>
             </div>
             <table className="w-full border-collapse border border-gray-400 border-t-0 text-xs">
               <tbody>
                 {serviceData.radiology.map((item, index) => (
                   <tr key={index}>
+                    <td className="border border-gray-400 p-1 text-center w-8">
+                      <input
+                        type="checkbox"
+                        checked={selectedRadiologyItems.includes(index)}
+                        onChange={() => toggleItemSelection('radiology', index)}
+                        className="cursor-pointer"
+                      />
+                    </td>
                     <td className="border border-gray-400 p-1 text-center w-12">{index + 1}</td>
                     <td className="border border-gray-400 p-1">{item.item}</td>
                     <td className="border border-gray-400 p-1 text-center w-32">{item.dateTime}</td>
@@ -1171,7 +1490,7 @@ const DetailedInvoice = () => {
                 ))}
                 {serviceData.radiology.length === 0 && (
                   <tr>
-                    <td className="border border-gray-400 p-1 text-center" colSpan={5}>No radiology tests ordered</td>
+                    <td className="border border-gray-400 p-1 text-center" colSpan={6}>No radiology tests ordered</td>
                   </tr>
                 )}
               </tbody>
@@ -1183,15 +1502,23 @@ const DetailedInvoice = () => {
             <div className="bg-gray-200 border border-gray-400 border-t-0 p-1 flex justify-between items-center">
               <strong className="text-xs">SURGERY</strong>
               <div className="flex gap-1">
-                <span className="text-xs bg-green-100 px-1">📊</span>
-                <span className="text-xs bg-blue-100 px-1">🖨️</span>
-                <span className="text-xs bg-red-100 px-1">📋</span>
+                <button onClick={() => handlePrintSectionAll('surgery')} className="text-xs bg-green-100 px-1 hover:bg-green-200 cursor-pointer" title="Print All">📊</button>
+                <button onClick={() => handlePrintSectionSelected('surgery')} className="text-xs bg-blue-100 px-1 hover:bg-blue-200 cursor-pointer" title="Print Selected">🖨️</button>
+                <button onClick={() => handlePrintSectionSummary('surgery')} className="text-xs bg-red-100 px-1 hover:bg-red-200 cursor-pointer" title="Print Summary">📋</button>
               </div>
             </div>
             <table className="w-full border-collapse border border-gray-400 border-t-0 text-xs">
               <tbody>
                 {serviceData.surgery.map((item, index) => (
                   <tr key={index}>
+                    <td className="border border-gray-400 p-1 text-center w-8">
+                      <input
+                        type="checkbox"
+                        checked={selectedSurgeryItems.includes(index)}
+                        onChange={() => toggleItemSelection('surgery', index)}
+                        className="cursor-pointer"
+                      />
+                    </td>
                     <td className="border border-gray-400 p-1 text-center w-12">{index + 1}</td>
                     <td className="border border-gray-400 p-1">{item.item}</td>
                     <td className="border border-gray-400 p-1 text-center w-32">{item.dateTime}</td>
@@ -1201,7 +1528,7 @@ const DetailedInvoice = () => {
                 ))}
                 {serviceData.surgery.length === 0 && (
                   <tr>
-                    <td className="border border-gray-400 p-1 text-center" colSpan={5}>No surgeries performed</td>
+                    <td className="border border-gray-400 p-1 text-center" colSpan={6}>No surgeries performed</td>
                   </tr>
                 )}
               </tbody>
