@@ -405,6 +405,8 @@ export function useTestPanels() {
         throw supabaseError;
       }
 
+      console.log('📋 [useTestPanels] Fetched panels:', data?.length, 'Total panels from lab table');
+      console.log('📋 [useTestPanels] Panel names:', data?.slice(0, 20).map(p => p.name).join(', '));
       setPanels(data || []);
     } catch (err) {
       console.error('Error fetching lab panels:', err);

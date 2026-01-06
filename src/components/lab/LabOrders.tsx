@@ -74,6 +74,7 @@ interface LabTestRow {
   sample_status: 'not_taken' | 'taken' | 'saved';
   visit_id?: string;  // Add visit_id field
   patient_id?: string; // Add patient_id field
+  test_type?: string; // Test type from lab_test_config (Numeric or Text)
 }
 
 interface PatientWithVisit {
@@ -159,8 +160,8 @@ const formatNormalRange = (minValue: number | null | undefined, maxValue: number
     return displayRange;
   }
 
-  const hasMin = minValue !== null && minValue !== undefined && minValue !== 0;
-  const hasMax = maxValue !== null && maxValue !== undefined && maxValue !== 0;
+  const hasMin = minValue !== null && minValue !== undefined;
+  const hasMax = maxValue !== null && maxValue !== undefined;
   const displayUnit = unit && unit.toLowerCase() !== 'unit' ? ` ${unit}` : '';
 
   if (!hasMin && hasMax) {
@@ -170,11 +171,15 @@ const formatNormalRange = (minValue: number | null | undefined, maxValue: number
     // Only minimum, no maximum - "X and above" format
     return `${minValue} and above${displayUnit}`;
   } else if (hasMin && hasMax) {
+    // If both are 0, show only unit with dash (no actual range configured)
+    if (minValue === 0 && maxValue === 0) {
+      return displayUnit.trim() ? `-${displayUnit}` : '';
+    }
     // Both min and max - standard "X - Y" format
     return `${minValue} - ${maxValue}${displayUnit}`;
   } else {
-    // Neither min nor max
-    return 'Consult reference values';
+    // Neither min nor max - show dash with unit if available
+    return displayUnit.trim() ? `-${displayUnit}` : '';
   }
 };
 
@@ -803,8 +808,8 @@ const LabOrders = () => {
       }
     }
 
-    // Default fallback
-    return 'Consult reference values';
+    // Default fallback - return empty string
+    return '';
   }, []);
 
   // NEW: State to store calculated reference ranges
@@ -1783,7 +1788,7 @@ const LabOrders = () => {
         test_code: test.interface_code || '',
         category: test.category || 'General',
         sample_type: 'Blood', // Default since this field doesn't exist in lab table
-        price: (test.private && test.private > 0) ? test.private : 100,
+        price: test.private || 0,
         turnaround_time: 24, // Default
         preparation_instructions: test.description || ''
       })) || [];
@@ -4672,7 +4677,7 @@ const LabOrders = () => {
                 disabled={includedTests.length === 0}
                 variant={includedTests.length === 0 ? "outline" : "default"}
                 className={includedTests.length === 0 ? "opacity-50 cursor-not-allowed" : ""}
-                onClick={() => {
+                onClick={async () => {
                   if (includedTests.length > 0) {
                     const selectedTests = labTestRows.filter(testRow => includedTests.includes(testRow.id));
 
@@ -4689,7 +4694,21 @@ const LabOrders = () => {
 
                     // Clear cached sub-tests data to fetch fresh normal ranges from database
                     setTestSubTests({});
-                    setSelectedTestsForEntry(selectedTests);
+
+                    // Fetch test_type for selected tests from lab_test_config
+                    const testNames = selectedTests.map(t => t.test_name);
+                    const { data: configData } = await supabase
+                      .from('lab_test_config')
+                      .select('test_name, test_type')
+                      .in('test_name', testNames);
+
+                    // Merge test_type into selectedTests
+                    const testsWithType = selectedTests.map(test => ({
+                      ...test,
+                      test_type: configData?.find(c => c.test_name === test.test_name)?.test_type || 'Numeric'
+                    }));
+
+                    setSelectedTestsForEntry(testsWithType);
                     setIsEntryModeOpen(true);
                   }
                 }}
@@ -4968,15 +4987,28 @@ const LabOrders = () => {
 
           {selectedTestsForEntry.length > 0 && (() => {
             // Check if this is a Histo/Cytology type test
-            const isHistoCytology = selectedTestsForEntry.some(test =>
-              test.test_category?.toLowerCase().includes('histo') ||
-              test.test_category?.toLowerCase().includes('cytology') ||
-              test.test_category?.toLowerCase().includes('pathology') ||
-              test.test_name?.toLowerCase().includes('fnac') ||
-              test.test_name?.toLowerCase().includes('biopsy') ||
-              test.test_name?.toLowerCase().includes('histopath') ||
-              test.test_name?.toLowerCase().includes('cytopathology')
-            );
+            // BUT if test_type is explicitly Numeric, use numeric form
+            const isHistoCytology = selectedTestsForEntry.some(test => {
+              // First check if it's a histopathology/cytology test by name/category
+              const isHistoByNameOrCategory = (
+                test.test_category?.toLowerCase().includes('histo') ||
+                test.test_category?.toLowerCase().includes('cytology') ||
+                test.test_name?.toLowerCase().includes('fnac') ||
+                test.test_name?.toLowerCase().includes('biopsy') ||
+                test.test_name?.toLowerCase().includes('histopath') ||
+                test.test_name?.toLowerCase().includes('cytopathology')
+              );
+
+              // If it matches histo/cytology criteria, ALWAYS use HistoCytologyEntryForm
+              if (isHistoByNameOrCategory) return true;
+
+              // For other tests with 'pathology' in category, check test_type
+              if (test.test_category?.toLowerCase().includes('pathology')) {
+                return test.test_type !== 'Numeric';
+              }
+
+              return false;
+            });
 
             // If Histo/Cytology, show special form
             if (isHistoCytology) {

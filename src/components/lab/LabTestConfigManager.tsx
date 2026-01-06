@@ -41,8 +41,8 @@ export default function LabTestConfigManager() {
       const normalRangesData = subTest.normalRanges?.map(nr => ({
         age_range: nr.ageRange,
         gender: nr.gender || 'Both',
-        min_value: parseFloat(nr.minValue) || 0,
-        max_value: parseFloat(nr.maxValue) || 0,
+        min_value: nr.minValue !== '' && nr.minValue !== undefined ? parseFloat(nr.minValue) : null,
+        max_value: nr.maxValue !== '' && nr.maxValue !== undefined ? parseFloat(nr.maxValue) : null,
         unit: nr.unit || subTest.unit || null
       })) || [];
 
@@ -68,8 +68,8 @@ export default function LabTestConfigManager() {
           normal_ranges: nst.normalRanges?.map(nr => ({
             age_range: nr.ageRange,
             gender: nr.gender || 'Both',
-            min_value: parseFloat(nr.minValue) || 0,
-            max_value: parseFloat(nr.maxValue) || 0,
+            min_value: nr.minValue !== '' && nr.minValue !== undefined ? parseFloat(nr.minValue) : null,
+            max_value: nr.maxValue !== '' && nr.maxValue !== undefined ? parseFloat(nr.maxValue) : null,
             unit: nr.unit || nst.unit || null
           })) || []
         };
@@ -94,8 +94,8 @@ export default function LabTestConfigManager() {
           age_unit: firstAgeRange?.unit || 'Years',
           age_description: firstAgeRange?.description || null,
           gender: firstNormalRange?.gender || 'Both',
-          min_value: firstNormalRange ? parseFloat(firstNormalRange.minValue) || 0 : 0,
-          max_value: firstNormalRange ? parseFloat(firstNormalRange.maxValue) || 0 : 0,
+          min_value: firstNormalRange && firstNormalRange.minValue !== '' ? parseFloat(firstNormalRange.minValue) : null,
+          max_value: firstNormalRange && firstNormalRange.maxValue !== '' ? parseFloat(firstNormalRange.maxValue) : null,
           normal_unit: subTest.unit || null,
           test_level: 1,
           display_order: index,
@@ -287,16 +287,16 @@ export default function LabTestConfigManager() {
               id: `nr_${idx}_${nrIdx}`,
               ageRange: nr.age_range || '- Years',
               gender: nr.gender || 'Both',
-              minValue: nr.min_value?.toString() || '0',
-              maxValue: nr.max_value?.toString() || '0',
+              minValue: nr.min_value !== null && nr.min_value !== undefined ? nr.min_value.toString() : '',
+              maxValue: nr.max_value !== null && nr.max_value !== undefined ? nr.max_value.toString() : '',
               unit: nr.unit || ''
             }))
           : [{
               id: `nr_${idx}_0`,
               ageRange: `${config.min_age}-${config.max_age} ${config.age_unit}`,
               gender: config.gender || 'Both',
-              minValue: config.min_value?.toString() || '0',
-              maxValue: config.max_value?.toString() || '0',
+              minValue: config.min_value !== null && config.min_value !== undefined ? config.min_value.toString() : '',
+              maxValue: config.max_value !== null && config.max_value !== undefined ? config.max_value.toString() : '',
               unit: config.normal_unit || ''
             }];
 
@@ -317,8 +317,8 @@ export default function LabTestConfigManager() {
                 id: `nst_${idx}_${nstIdx}_nr_${nrIdx}`,
                 ageRange: nr.age_range || '- Years',
                 gender: nr.gender || 'Both',
-                minValue: nr.min_value?.toString() || '0',
-                maxValue: nr.max_value?.toString() || '0',
+                minValue: nr.min_value !== null && nr.min_value !== undefined ? nr.min_value.toString() : '',
+                maxValue: nr.max_value !== null && nr.max_value !== undefined ? nr.max_value.toString() : '',
                 unit: nr.unit || ''
               })),
               subTests: []

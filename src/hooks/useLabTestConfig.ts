@@ -130,8 +130,8 @@ export const useLabTestConfig = () => {
   };
 
   const getNormalRange = (subTest: SubTest, patientAge: number, patientGender: string): string => {
-    // For now, return a placeholder. You can add min/max values to your table later
-    return `Consult reference values ${subTest.unit}`;
+    // Return empty string when no min/max values configured
+    return '';
   };
 
   const isAbnormalValue = (value: string, subTest: SubTest, patientAge: number, patientGender: string): 'normal' | 'high' | 'low' | '' => {
