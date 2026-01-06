@@ -861,7 +861,7 @@ const Invoice = () => {
           const quantity = visitLab.quantity || 1;
 
           // Use saved rate from visit_labs instead of recalculating
-          const correctUnitRate = visitLab.cost || visitLab.unit_rate || 100;
+          const correctUnitRate = visitLab.cost || visitLab.unit_rate || 0;
 
           const finalCost = correctUnitRate * quantity;
 

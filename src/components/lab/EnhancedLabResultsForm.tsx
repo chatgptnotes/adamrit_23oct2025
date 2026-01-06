@@ -57,7 +57,7 @@ const EnhancedLabResultsForm: React.FC<EnhancedLabResultsFormProps> = ({
     unit: string
   ): string => {
     if (!normalRanges || normalRanges.length === 0) {
-      return `Consult reference values ${unit}`;
+      return '';  // No data - return empty string
     }
 
     // First try to find exact gender match (Male/Female)

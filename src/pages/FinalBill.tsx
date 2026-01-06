@@ -2646,7 +2646,7 @@ const FinalBill = () => {
                 return {
                   ...item,
                   lab_name: labDetails?.name || 'Unknown Lab',
-                  cost: item.cost || ((labDetails?.private && labDetails.private > 0) ? labDetails.private : 100), // Preserve saved cost
+                  cost: item.cost || ((labDetails?.private && labDetails.private > 0) ? labDetails.private : 0), // Preserve saved cost
                   quantity: item.quantity || 1, // Preserve quantity from database
                   description: labDetails?.description || ''
                 };
@@ -2899,7 +2899,7 @@ const FinalBill = () => {
               return {
                 ...item,
                 lab_name: labDetails?.name || 'Unknown Lab',
-                cost: item.cost || ((labDetails?.private && labDetails.private > 0) ? labDetails.private : 100), // Preserve saved cost
+                cost: item.cost || ((labDetails?.private && labDetails.private > 0) ? labDetails.private : 0), // Preserve saved cost
                 quantity: item.quantity || 1, // Preserve quantity from database
                 description: labDetails?.description || ''
               };
@@ -3290,7 +3290,7 @@ const FinalBill = () => {
             itemCount++;
             investigationText += `${itemCount}. ${labInfo.name}\n`;
             investigationText += `   CODE: ${labInfo.CGHS_code || 'N/A'}\n`;
-            investigationText += `   APPROXIMATE COST: ₹${(labInfo.private && labInfo.private > 0) ? labInfo.private : 100}\n\n`;
+            investigationText += `   APPROXIMATE COST: ₹${(labInfo.private && labInfo.private > 0) ? labInfo.private : 0}\n\n`;
           }
         });
       }
@@ -14094,7 +14094,7 @@ Dr. Murali B K
                   srNo: srNo++,
                   code: labItem.lab?.CGHS_code || '-',
                   particular: labItem.lab?.name || 'Lab Investigation',
-                  cost: (labItem.lab?.private && labItem.lab.private > 0) ? labItem.lab.private : 100
+                  cost: (labItem.lab?.private && labItem.lab.private > 0) ? labItem.lab.private : 0
                 });
               });
             }

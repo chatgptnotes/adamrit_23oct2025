@@ -648,6 +648,13 @@ const LabPanelManager: React.FC = () => {
     isActive: true  // 'lab' table doesn't have is_active, so defaulting to true
   }));
 
+  // Debug logging for panels
+  console.log('🔍 [LabPanelManager] Total panels loaded:', panels.length);
+  console.log('🔍 [LabPanelManager] DB panels:', dbPanels?.length, 'Error:', error);
+  if (searchTerm) {
+    console.log('🔍 [LabPanelManager] Searching for:', searchTerm);
+  }
+
   const filteredPanels = panels.filter(panel =>
     panel.testName.toLowerCase().includes(searchTerm.toLowerCase()) ||
     panel.testCode.toLowerCase().includes(searchTerm.toLowerCase())
@@ -800,8 +807,8 @@ const LabPanelManager: React.FC = () => {
             id: `normalrange_${config.id || Date.now()}_${subTest.normalRanges.length}`,
             ageRange: ageRangeStr,
             gender: (config.gender as 'Male' | 'Female' | 'Both') || 'Both',
-            minValue: config.min_value?.toString() || '0',
-            maxValue: config.max_value?.toString() || '0',
+            minValue: config.min_value !== null && config.min_value !== undefined ? config.min_value.toString() : '',
+            maxValue: config.max_value !== null && config.max_value !== undefined ? config.max_value.toString() : '',
             unit: config.normal_unit || config.unit || ''
           };
           subTest.normalRanges.push(normalRange);
@@ -896,8 +903,8 @@ const LabPanelManager: React.FC = () => {
         const normalRangesData = subTest.normalRanges?.map(nr => ({
           age_range: nr.ageRange || '- Years',
           gender: nr.gender || 'Both',
-          min_value: parseFloat(nr.minValue || '') || 0,
-          max_value: parseFloat(nr.maxValue || '') || 0,
+          min_value: nr.minValue && nr.minValue.trim() !== '' ? parseFloat(nr.minValue) : 0,
+          max_value: nr.maxValue && nr.maxValue.trim() !== '' ? parseFloat(nr.maxValue) : 0,
           unit: nr.unit || subTest.unit || 'unit'
         })) || [];
 
@@ -931,8 +938,8 @@ const LabPanelManager: React.FC = () => {
             normal_ranges: nst.normalRanges?.map(nr => ({
               age_range: nr.ageRange || '- Years',
               gender: nr.gender || 'Both',
-              min_value: parseFloat(nr.minValue || '') || 0,
-              max_value: parseFloat(nr.maxValue || '') || 0,
+              min_value: nr.minValue && nr.minValue.trim() !== '' ? parseFloat(nr.minValue) : 0,
+              max_value: nr.maxValue && nr.maxValue.trim() !== '' ? parseFloat(nr.maxValue) : 0,
               unit: nr.unit || nst.unit || null
             })) || []
           };
@@ -950,8 +957,8 @@ const LabPanelManager: React.FC = () => {
           age_unit: isTextType ? 'Years' : ageUnit, // Default for Text type
           age_description: isTextType ? null : (firstAgeRange?.description || null),
           gender: isTextType ? 'Both' : (firstNormalRange?.gender || 'Both'),
-          min_value: isTextType ? 0 : (parseFloat(firstNormalRange?.minValue || '') || 0),
-          max_value: isTextType ? 0 : (parseFloat(firstNormalRange?.maxValue || '') || 0),
+          min_value: isTextType ? 0 : (firstNormalRange?.minValue && firstNormalRange.minValue.trim() !== '' ? parseFloat(firstNormalRange.minValue) : 0),
+          max_value: isTextType ? 0 : (firstNormalRange?.maxValue && firstNormalRange.maxValue.trim() !== '' ? parseFloat(firstNormalRange.maxValue) : 0),
           normal_unit: firstNormalRange?.unit || subTest.unit || 'unit',
           test_level: 1,
           display_order: subTestIndex,
@@ -1090,8 +1097,28 @@ const LabPanelManager: React.FC = () => {
         });
 
         // Then save sub-tests to lab_test_config table using the created panel's ID
+        console.log('📋 Sub-tests to save:', newPanel.subTests);
+
         if (newPanel.subTests && newPanel.subTests.length > 0) {
-          await saveSubTestsToDatabase(newPanel.testName, newPanel.subTests, createdPanel.id);
+          // Warn about empty sub-test names that will be skipped
+          const subTestsWithEmptyNames = newPanel.subTests.filter(st => !st.name || st.name.trim() === '');
+          if (subTestsWithEmptyNames.length > 0) {
+            console.warn(`⚠️ ${subTestsWithEmptyNames.length} sub-test(s) have empty names and will be skipped`);
+            toast({
+              title: 'Warning',
+              description: `${subTestsWithEmptyNames.length} sub-test(s) have empty names and will be skipped`,
+              variant: 'destructive'
+            });
+          }
+
+          const validSubTests = newPanel.subTests.filter(st => st.name && st.name.trim() !== '');
+          console.log(`✅ Valid sub-tests to save: ${validSubTests.length}`);
+
+          if (validSubTests.length > 0) {
+            await saveSubTestsToDatabase(newPanel.testName, validSubTests, createdPanel.id);
+          }
+        } else {
+          console.log('⚠️ No sub-tests to save');
         }
 
         toast({
@@ -1169,8 +1196,28 @@ const LabPanelManager: React.FC = () => {
       });
   
       // Update sub-tests to lab_test_config table
+      console.log('📋 Sub-tests to update:', updatedPanel.subTests);
+
       if (updatedPanel.subTests && updatedPanel.subTests.length > 0) {
-        await saveSubTestsToDatabase(updatedPanel.testName, updatedPanel.subTests, updatedPanel.id);
+        // Warn about empty sub-test names that will be skipped
+        const subTestsWithEmptyNames = updatedPanel.subTests.filter(st => !st.name || st.name.trim() === '');
+        if (subTestsWithEmptyNames.length > 0) {
+          console.warn(`⚠️ ${subTestsWithEmptyNames.length} sub-test(s) have empty names and will be skipped`);
+          toast({
+            title: 'Warning',
+            description: `${subTestsWithEmptyNames.length} sub-test(s) have empty names and will be skipped`,
+            variant: 'destructive'
+          });
+        }
+
+        const validSubTests = updatedPanel.subTests.filter(st => st.name && st.name.trim() !== '');
+        console.log(`✅ Valid sub-tests to update: ${validSubTests.length}`);
+
+        if (validSubTests.length > 0) {
+          await saveSubTestsToDatabase(updatedPanel.testName, validSubTests, updatedPanel.id);
+        }
+      } else {
+        console.log('⚠️ No sub-tests to update');
       }
 
       toast({
@@ -1662,6 +1709,13 @@ const AddPanelForm: React.FC<AddPanelFormProps> = ({ onSubmit }) => {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    console.log('🚀 [AddPanelForm] Form submitted with sub-tests:', formData.subTests);
+    console.log('📋 [AddPanelForm] Sub-tests count:', formData.subTests?.length || 0);
+    if (formData.subTests && formData.subTests.length > 0) {
+      formData.subTests.forEach((st, idx) => {
+        console.log(`  Sub-test ${idx + 1}: name="${st.name}", unit="${st.unit}"`);
+      });
+    }
     onSubmit(formData);
   };
 
@@ -2307,14 +2361,21 @@ const EditPanelForm: React.FC<EditPanelFormProps> = ({ panel, onSubmit }) => {
   const [showAttributeForm, setShowAttributeForm] = useState(false);
 
   // Function to load sub-tests from lab_test_config table (for EditPanelForm)
-  const loadSubTestsFromDatabaseInForm = async (testName: string): Promise<SubTest[]> => {
+  const loadSubTestsFromDatabaseInForm = async (testName: string, labId?: string): Promise<SubTest[]> => {
     try {
-      console.log('Loading sub-tests for test:', testName);
+      console.log('Loading sub-tests for test:', testName, 'lab_id:', labId);
 
-      const { data, error } = await supabase
+      let query = supabase
         .from('lab_test_config')
         .select('*')
-        .eq('test_name', testName)
+        .eq('test_name', testName);
+
+      // Add lab_id filter if provided for more precise matching
+      if (labId) {
+        query = query.eq('lab_id', labId);
+      }
+
+      const { data, error } = await query
         .order('display_order', { ascending: true })
         .order('sub_test_name', { ascending: true })
         .order('min_age', { ascending: true })
@@ -2386,8 +2447,8 @@ const EditPanelForm: React.FC<EditPanelFormProps> = ({ panel, onSubmit }) => {
               id: `normalrange_${config.id || Date.now()}_${subTest.normalRanges.length}`,
               ageRange: nr.age_range || '- Years',
               gender: (nr.gender as 'Male' | 'Female' | 'Both') || 'Both',
-              minValue: nr.min_value?.toString() || '0',
-              maxValue: nr.max_value?.toString() || '0',
+              minValue: nr.min_value !== null && nr.min_value !== undefined ? nr.min_value.toString() : '',
+              maxValue: nr.max_value !== null && nr.max_value !== undefined ? nr.max_value.toString() : '',
               unit: nr.unit || config.unit || ''
             };
             subTest.normalRanges.push(normalRange);
@@ -2406,8 +2467,8 @@ const EditPanelForm: React.FC<EditPanelFormProps> = ({ panel, onSubmit }) => {
             id: `normalrange_${config.id || Date.now()}_${subTest.normalRanges.length}`,
             ageRange: ageRangeStr,
             gender: (config.gender as 'Male' | 'Female' | 'Both') || 'Both',
-            minValue: config.min_value?.toString() || '0',
-            maxValue: config.max_value?.toString() || '0',
+            minValue: config.min_value !== null && config.min_value !== undefined ? config.min_value.toString() : '',
+            maxValue: config.max_value !== null && config.max_value !== undefined ? config.max_value.toString() : '',
             unit: config.normal_unit || config.unit || ''
           };
           subTest.normalRanges.push(normalRange);
@@ -2436,8 +2497,8 @@ const EditPanelForm: React.FC<EditPanelFormProps> = ({ panel, onSubmit }) => {
                 id: `normalrange_${index}_${nrIndex}_${Date.now()}`,
                 ageRange: nr.age_range || '- Years',
                 gender: nr.gender || 'Both',
-                minValue: nr.min_value?.toString() || '0',
-                maxValue: nr.max_value?.toString() || '0',
+                minValue: nr.min_value !== null && nr.min_value !== undefined ? nr.min_value.toString() : '',
+                maxValue: nr.max_value !== null && nr.max_value !== undefined ? nr.max_value.toString() : '',
                 unit: nr.unit || ''
               })),
               subTests: []
@@ -2503,7 +2564,9 @@ const EditPanelForm: React.FC<EditPanelFormProps> = ({ panel, onSubmit }) => {
       if (panel.testName) {
         setIsLoadingSubTests(true);
         try {
-          const existingSubTests = await loadSubTestsFromDatabaseInForm(panel.testName);
+          console.log('📥 Loading sub-tests for panel:', panel.testName, 'id:', panel.id);
+          const existingSubTests = await loadSubTestsFromDatabaseInForm(panel.testName, panel.id);
+          console.log('📦 Loaded sub-tests:', existingSubTests.length);
           setFormData(prev => ({
             ...prev,
             subTests: existingSubTests
@@ -2517,7 +2580,7 @@ const EditPanelForm: React.FC<EditPanelFormProps> = ({ panel, onSubmit }) => {
     };
 
     loadExistingSubTests();
-  }, [panel.testName]);
+  }, [panel.testName, panel.id]);
 
   // State for managing multiple attribute forms in EditPanelForm
   const [attributeForms, setAttributeForms] = useState<Array<{id: string, attribute: TestAttribute, isEditing: boolean}>>([]);

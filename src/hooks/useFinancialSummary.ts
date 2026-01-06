@@ -447,7 +447,7 @@ export const useFinancialSummary = (billId?: string, visitId?: string, savedMedi
         } else {
           // Fallback: calculate from quantity × private rate
           const quantity = visitLab.quantity || 1;
-          const unitRate = (labDetail?.private && labDetail.private > 0) ? labDetail.private : 100;
+          const unitRate = (labDetail?.private && labDetail.private > 0) ? labDetail.private : 0;
           itemTotal = quantity * unitRate;
         }
 
@@ -457,7 +457,7 @@ export const useFinancialSummary = (billId?: string, visitId?: string, savedMedi
           labName: labDetail?.name || 'Unknown',
           labId: visitLab.lab_id,
           quantity: visitLab.quantity || 1,
-          unitRate: labDetail?.private || 100,
+          unitRate: labDetail?.private || 0,
           costColumn: visitLab.cost,
           itemTotal: itemTotal,
           usingCostColumn: !!(visitLab.cost && visitLab.cost > 0)
