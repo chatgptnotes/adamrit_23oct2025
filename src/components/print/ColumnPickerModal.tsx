@@ -120,7 +120,7 @@ export const ColumnPickerModal: React.FC<PrintModalProps> = ({
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent 
-        className="max-w-4xl max-h-[90vh] overflow-hidden"
+        className="max-w-4xl max-h-[90vh] flex flex-col"
         onKeyDown={handleKeyDown}
         aria-labelledby="column-picker-title"
         aria-describedby="column-picker-description"
@@ -164,7 +164,7 @@ export const ColumnPickerModal: React.FC<PrintModalProps> = ({
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto min-h-[400px]">
+        <div className="flex-1 overflow-y-auto min-h-[200px] max-h-[50vh]">
           {activeTab === 'columns' && (
             <div className="space-y-4">
               {/* Presets */}

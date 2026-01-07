@@ -1238,6 +1238,19 @@ const LabOrders = () => {
 
           console.log('🔍 Primary query result:', { count: existingResults?.length || 0, error: error?.message });
 
+          // Deduplicate primary query results - keep only the most recent per test_name
+          if (existingResults && existingResults.length > 0) {
+            const uniqueResults: Record<string, any> = {};
+            existingResults.forEach(r => {
+              // Since results are ordered by created_at DESC, first occurrence is the most recent
+              if (!uniqueResults[r.test_name]) {
+                uniqueResults[r.test_name] = r;
+              }
+            });
+            existingResults = Object.values(uniqueResults);
+            console.log('✅ Deduplicated primary query results:', existingResults.length, 'unique tests');
+          }
+
           // Fallback: patient_name + date ONLY (ignores main_test_name which may be corrupted)
           if ((!existingResults || existingResults.length === 0) && !error) {
             console.log('🔄 Trying fallback: patient_name + date only (ignoring corrupted main_test_name)');
@@ -1323,17 +1336,18 @@ const LabOrders = () => {
               console.log(`📊 Processing ${testRow.test_name} (ID: ${testRow.id}) with ${subTests.length} sub-tests`);
               console.log(`📊 Sub-tests available:`, subTests.map(st => ({ id: st.id, name: st.name })));
 
-              // For each result, try to match it to a sub-test of THIS test
+              // Track which results have been matched (to avoid double-matching in fuzzy pass)
+              const matchedResultNames = new Set<string>();
+
+              // FIRST PASS: Exact matches only (prevents "Mean Cell Haemoglobin" from matching "Haemoglobin")
               existingResults.forEach(result => {
                 const resultNameNorm = normalizeTestName(result.test_name);
 
-                // Find matching sub-test by name (exact → case-insensitive → normalized → partial)
+                // Find EXACT matching sub-test by name
                 let matchingSubTest = subTests.find(st =>
                   st.name === result.test_name ||
                   st.name.toLowerCase() === result.test_name.toLowerCase() ||
-                  normalizeTestName(st.name) === resultNameNorm ||
-                  result.test_name.toLowerCase().includes(st.name.toLowerCase()) ||
-                  st.name.toLowerCase().includes(result.test_name.toLowerCase())
+                  normalizeTestName(st.name) === resultNameNorm
                 );
 
                 if (matchingSubTest) {
@@ -1348,10 +1362,43 @@ const LabOrders = () => {
                   };
 
                   const key = `${testRow.id}_subtest_${matchingSubTest.id}`;
-                  if (!loadedFormData[key]) {  // Don't overwrite if already loaded
+                  if (!loadedFormData[key]) {
                     loadedFormData[key] = formData;
-                    console.log(`✅ Loaded: ${result.test_name} → ${matchingSubTest.name} (key: ${key})`);
+                    matchedResultNames.add(result.test_name);
+                    console.log(`✅ EXACT Loaded: ${result.test_name} → ${matchingSubTest.name} (key: ${key})`);
                   }
+                }
+              });
+
+              // SECOND PASS: Fuzzy matches for unmatched results only
+              existingResults.forEach(result => {
+                // Skip if already matched in first pass
+                if (matchedResultNames.has(result.test_name)) return;
+
+                // Find fuzzy matching sub-test (partial name match)
+                let matchingSubTest = subTests.find(st => {
+                  const key = `${testRow.id}_subtest_${st.id}`;
+                  // Skip if this sub-test already has data
+                  if (loadedFormData[key]) return false;
+
+                  return result.test_name.toLowerCase().includes(st.name.toLowerCase()) ||
+                         st.name.toLowerCase().includes(result.test_name.toLowerCase());
+                });
+
+                if (matchingSubTest) {
+                  const parsedResult = parseResultValue(result.result_value);
+                  const formData = {
+                    result_value: parsedResult.value,
+                    result_unit: result.result_unit || '',
+                    reference_range: result.reference_range || '',
+                    comments: result.comments || '',
+                    is_abnormal: result.is_abnormal || false,
+                    result_status: result.result_status || 'Preliminary'
+                  };
+
+                  const key = `${testRow.id}_subtest_${matchingSubTest.id}`;
+                  loadedFormData[key] = formData;
+                  console.log(`✅ FUZZY Loaded: ${result.test_name} → ${matchingSubTest.name} (key: ${key})`);
                 }
               });
 
@@ -2620,6 +2667,13 @@ const LabOrders = () => {
       currentTestRow.sub_tests.forEach((subTest: any) => {
         // Check if this sub-test has a formula
         if (subTest.formula && subTest.formula.trim()) {
+          // GUARD: Skip if formula references itself (prevents incorrect self-calculation like Haemoglobin + Haemoglobin = doubled value)
+          if (subTest.formula.includes(subTest.name)) {
+            if (iterations === 1) {
+              console.warn(`⚠️ Skipping self-referential formula for ${subTest.name}: ${subTest.formula}`);
+            }
+            return; // Skip this sub-test's formula
+          }
           console.log(`📐 Processing formula for "${subTest.name}": ${subTest.formula}`);
           let formula = subTest.formula;
           let canCalculate = true;
