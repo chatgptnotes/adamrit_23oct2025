@@ -50,9 +50,27 @@ const EnhancedLabResultsForm: React.FC<EnhancedLabResultsFormProps> = ({
   const [authenticatedResult, setAuthenticatedResult] = useState(false);
   const [showEntryMode, setShowEntryMode] = useState(false);
 
+  // Helper function to check if a value already ends with the unit (case-insensitive)
+  const valueContainsUnit = (value: string | number | null | undefined, unitToCheck: string): boolean => {
+    if (!value || !unitToCheck) return false;
+    const valueStr = String(value).toLowerCase().trim();
+    const unitStr = unitToCheck.toLowerCase().trim();
+    return valueStr.endsWith(unitStr);
+  };
+
+  // Helper function to format range with unit, avoiding duplicates like "sec sec"
+  const formatRangeWithUnit = (minVal: string | number, maxVal: string | number, displayUnit: string): string => {
+    const minHasUnit = valueContainsUnit(minVal, displayUnit);
+    const maxHasUnit = valueContainsUnit(maxVal, displayUnit);
+    const shouldAppendUnit = displayUnit && displayUnit.toLowerCase() !== 'unit' && !minHasUnit && !maxHasUnit;
+    const unitSuffix = shouldAppendUnit ? ` ${displayUnit}` : '';
+    return `${minVal} - ${maxVal}${unitSuffix}`;
+  };
+
   // Helper function to find correct normal range based on patient gender
+  // Supports both numeric and text values (words, symbols like <5, >10, Positive, etc.)
   const findNormalRangeForGender = (
-    normalRanges: Array<{gender?: string; min_value: number; max_value: number; unit?: string}> | undefined,
+    normalRanges: Array<{gender?: string; min_value: string | number; max_value: string | number; unit?: string}> | undefined,
     patientGender: string,
     unit: string
   ): string => {
@@ -66,7 +84,7 @@ const EnhancedLabResultsForm: React.FC<EnhancedLabResultsFormProps> = ({
     );
 
     if (genderMatch) {
-      return `${genderMatch.min_value} - ${genderMatch.max_value} ${genderMatch.unit || unit}`;
+      return formatRangeWithUnit(genderMatch.min_value, genderMatch.max_value, genderMatch.unit || unit);
     }
 
     // Fallback to 'Both' if no gender-specific range found
@@ -75,11 +93,11 @@ const EnhancedLabResultsForm: React.FC<EnhancedLabResultsFormProps> = ({
     );
 
     if (bothMatch) {
-      return `${bothMatch.min_value} - ${bothMatch.max_value} ${bothMatch.unit || unit}`;
+      return formatRangeWithUnit(bothMatch.min_value, bothMatch.max_value, bothMatch.unit || unit);
     }
 
     // Final fallback: use first available range
-    return `${normalRanges[0].min_value} - ${normalRanges[0].max_value} ${normalRanges[0].unit || unit}`;
+    return formatRangeWithUnit(normalRanges[0].min_value, normalRanges[0].max_value, normalRanges[0].unit || unit);
   };
 
   useEffect(() => {

@@ -153,16 +153,30 @@ const findNormalRangeForGender = (
   };
 };
 
+// Helper function to check if a value already ends with the unit (case-insensitive)
+const valueContainsUnit = (value: string | number | null | undefined, unit: string): boolean => {
+  if (!value || !unit) return false;
+  const valueStr = String(value).toLowerCase().trim();
+  const unitStr = unit.toLowerCase().trim();
+  return valueStr.endsWith(unitStr);
+};
+
 // Helper function to format normal range display string
-const formatNormalRange = (minValue: number | null | undefined, maxValue: number | null | undefined, unit: string, displayRange?: string): string => {
+// Supports both numeric and text values (words, symbols like <5, >10, Positive, etc.)
+const formatNormalRange = (minValue: string | number | null | undefined, maxValue: string | number | null | undefined, unit: string, displayRange?: string): string => {
   // If displayRange is provided, use it directly
   if (displayRange && displayRange.trim() !== '') {
     return displayRange;
   }
 
-  const hasMin = minValue !== null && minValue !== undefined;
-  const hasMax = maxValue !== null && maxValue !== undefined;
-  const displayUnit = unit && unit.toLowerCase() !== 'unit' ? ` ${unit}` : '';
+  const hasMin = minValue !== null && minValue !== undefined && minValue !== '';
+  const hasMax = maxValue !== null && maxValue !== undefined && maxValue !== '';
+
+  // Check if values already contain the unit to avoid duplication like "sec sec"
+  const minHasUnit = valueContainsUnit(minValue, unit);
+  const maxHasUnit = valueContainsUnit(maxValue, unit);
+  const shouldAppendUnit = unit && unit.toLowerCase() !== 'unit' && !minHasUnit && !maxHasUnit;
+  const displayUnit = shouldAppendUnit ? ` ${unit}` : '';
 
   if (!hasMin && hasMax) {
     // No minimum, only maximum - "- Up to X" format
@@ -171,8 +185,8 @@ const formatNormalRange = (minValue: number | null | undefined, maxValue: number
     // Only minimum, no maximum - "X and above" format
     return `${minValue} and above${displayUnit}`;
   } else if (hasMin && hasMax) {
-    // If both are 0, show only unit with dash (no actual range configured)
-    if (minValue === 0 && maxValue === 0) {
+    // If both are 0 or "0", show only unit with dash (no actual range configured)
+    if ((minValue === 0 || minValue === '0') && (maxValue === 0 || maxValue === '0')) {
       return displayUnit.trim() ? `-${displayUnit}` : '';
     }
     // Both min and max - standard "X - Y" format
@@ -3333,7 +3347,7 @@ const LabOrders = () => {
 
           .header-row {
             display: grid;
-            grid-template-columns: 45% 27.5% 27.5%;
+            grid-template-columns: 38% 31% 31%;
             align-items: center;
             border-bottom: 1px solid #ccc;
             padding: 8px 0;
@@ -3365,7 +3379,7 @@ const LabOrders = () => {
 
           .test-row {
             display: grid;
-            grid-template-columns: 45% 27.5% 27.5%;
+            grid-template-columns: 38% 31% 31%;
             align-items: center;
             padding: 2px 0;
             font-size: 14px;
