@@ -109,8 +109,8 @@ const LabReportPrintFormat: React.FC<LabReportPrintFormatProps> = ({
             <div className="border-t-2 border-b-2 border-black">
               <div className="grid grid-cols-3 py-3 font-bold text-center">
                 <div className="border-r border-black">INVESTIGATION</div>
-                <div className="border-r border-black">OBSERVED VALUE</div>
-                <div>NORMAL RANGE</div>
+                <div className="border-r border-black text-left pl-4">OBSERVED VALUE</div>
+                <div className="text-left pl-4">NORMAL RANGE</div>
               </div>
             </div>
 

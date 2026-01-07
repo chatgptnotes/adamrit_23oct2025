@@ -837,12 +837,14 @@ const LabPanelManager: React.FC = () => {
   // Function to save sub-tests to lab_test_config table
   const saveSubTestsToDatabase = async (testName: string, subTests: SubTest[], labId: string) => {
     try {
-      console.log('🚀 SAVING TO DATABASE - NEW CODE');
+      console.log('🚀 SAVING TO DATABASE - UPSERT APPROACH');
       console.log('Test Name:', testName);
       console.log('Lab ID:', labId);
       console.log('Sub-Tests:', JSON.stringify(subTests, null, 2));
 
-      // First, delete existing entries for this test
+      // Delete ALL existing subtests for this test/lab_id, then insert fresh
+      // This is simpler and avoids unique constraint conflicts
+      console.log('🗑️ Deleting all existing subtests for test:', testName, 'lab_id:', labId);
       await supabase
         .from('lab_test_config')
         .delete()
@@ -903,8 +905,8 @@ const LabPanelManager: React.FC = () => {
         const normalRangesData = subTest.normalRanges?.map(nr => ({
           age_range: nr.ageRange || '- Years',
           gender: nr.gender || 'Both',
-          min_value: nr.minValue && nr.minValue.trim() !== '' ? parseFloat(nr.minValue) : 0,
-          max_value: nr.maxValue && nr.maxValue.trim() !== '' ? parseFloat(nr.maxValue) : 0,
+          min_value: nr.minValue && nr.minValue.trim() !== '' ? nr.minValue.trim() : null,
+          max_value: nr.maxValue && nr.maxValue.trim() !== '' ? nr.maxValue.trim() : null,
           unit: nr.unit || subTest.unit || 'unit'
         })) || [];
 
@@ -938,8 +940,8 @@ const LabPanelManager: React.FC = () => {
             normal_ranges: nst.normalRanges?.map(nr => ({
               age_range: nr.ageRange || '- Years',
               gender: nr.gender || 'Both',
-              min_value: nr.minValue && nr.minValue.trim() !== '' ? parseFloat(nr.minValue) : 0,
-              max_value: nr.maxValue && nr.maxValue.trim() !== '' ? parseFloat(nr.maxValue) : 0,
+              min_value: nr.minValue && nr.minValue.trim() !== '' ? nr.minValue.trim() : null,
+              max_value: nr.maxValue && nr.maxValue.trim() !== '' ? nr.maxValue.trim() : null,
               unit: nr.unit || nst.unit || null
             })) || []
           };
@@ -957,8 +959,8 @@ const LabPanelManager: React.FC = () => {
           age_unit: isTextType ? 'Years' : ageUnit, // Default for Text type
           age_description: isTextType ? null : (firstAgeRange?.description || null),
           gender: isTextType ? 'Both' : (firstNormalRange?.gender || 'Both'),
-          min_value: isTextType ? 0 : (firstNormalRange?.minValue && firstNormalRange.minValue.trim() !== '' ? parseFloat(firstNormalRange.minValue) : 0),
-          max_value: isTextType ? 0 : (firstNormalRange?.maxValue && firstNormalRange.maxValue.trim() !== '' ? parseFloat(firstNormalRange.maxValue) : 0),
+          min_value: isTextType ? null : (firstNormalRange?.minValue && firstNormalRange.minValue.trim() !== '' ? firstNormalRange.minValue.trim() : null),
+          max_value: isTextType ? null : (firstNormalRange?.maxValue && firstNormalRange.maxValue.trim() !== '' ? firstNormalRange.maxValue.trim() : null),
           normal_unit: firstNormalRange?.unit || subTest.unit || 'unit',
           test_level: 1,
           display_order: subTestIndex,
@@ -979,8 +981,9 @@ const LabPanelManager: React.FC = () => {
 
         if (error) {
           console.error('❌ Error saving sub-test config:', error);
+          console.error('❌ Error details:', JSON.stringify(error, null, 2));
           console.error('Config data that failed:', configData);
-          throw error;
+          throw new Error(error.message || 'Failed to save sub-test config');
         }
 
         // Save formula, test_type, and text_value to lab_test_formulas table
@@ -2363,32 +2366,48 @@ const EditPanelForm: React.FC<EditPanelFormProps> = ({ panel, onSubmit }) => {
   // Function to load sub-tests from lab_test_config table (for EditPanelForm)
   const loadSubTestsFromDatabaseInForm = async (testName: string, labId?: string): Promise<SubTest[]> => {
     try {
-      console.log('Loading sub-tests for test:', testName, 'lab_id:', labId);
+      console.log('🔍 Loading sub-tests for test:', testName, 'lab_id:', labId);
 
-      let query = supabase
+      // First try: Query by test_name
+      let { data, error } = await supabase
         .from('lab_test_config')
         .select('*')
-        .eq('test_name', testName);
-
-      // Add lab_id filter if provided for more precise matching
-      if (labId) {
-        query = query.eq('lab_id', labId);
-      }
-
-      const { data, error } = await query
+        .eq('test_name', testName)
         .order('display_order', { ascending: true })
         .order('sub_test_name', { ascending: true })
         .order('min_age', { ascending: true })
         .order('gender', { ascending: true });
 
+      console.log('📊 Query by test_name result:', data?.length || 0, 'records');
+
+      // Fallback: If no results by test_name, try by lab_id
+      if ((!data || data.length === 0) && labId) {
+        console.log('🔄 No results by test_name, trying lab_id:', labId);
+        const fallbackResult = await supabase
+          .from('lab_test_config')
+          .select('*')
+          .eq('lab_id', labId)
+          .order('display_order', { ascending: true })
+          .order('sub_test_name', { ascending: true })
+          .order('min_age', { ascending: true })
+          .order('gender', { ascending: true });
+
+        data = fallbackResult.data;
+        error = fallbackResult.error;
+        console.log('📊 Query by lab_id result:', data?.length || 0, 'records');
+      }
+
       if (error) {
-        console.error('Error loading sub-test configs:', error);
+        console.error('❌ Error loading sub-test configs:', error);
         return [];
       }
 
       if (!data || data.length === 0) {
+        console.log('⚠️ No sub-tests found for test:', testName, 'lab_id:', labId);
         return [];
       }
+
+      console.log('✅ Found', data.length, 'sub-test records');
 
       // Load formulas from lab_test_formulas table
       const { data: formulasData } = await supabase
