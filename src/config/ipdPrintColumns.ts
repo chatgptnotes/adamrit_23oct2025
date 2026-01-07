@@ -38,6 +38,14 @@ export const IPD_PRINT_COLUMNS: ReportColumn[] = [
     align: 'left'
   },
   {
+    id: 'mobile_no',
+    label: 'Mob No',
+    accessorKey: 'patients.phone',
+    printable: true,
+    widthPx: 120,
+    align: 'left'
+  },
+  {
     id: 'claim_id',
     label: 'Claim ID',
     accessorKey: 'claim_id',
