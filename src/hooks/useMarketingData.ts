@@ -13,16 +13,31 @@ const TARGETS = {
   camps: 4
 };
 
-// Get current month date range
-const getCurrentMonthRange = () => {
-  const now = new Date();
-  const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
-  const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+// Get month date range from "YYYY-MM" string or current month
+const getMonthRange = (monthStr?: string) => {
+  let year: number, month: number;
+
+  if (monthStr) {
+    const [y, m] = monthStr.split('-').map(Number);
+    year = y;
+    month = m - 1; // JS months are 0-indexed
+  } else {
+    const now = new Date();
+    year = now.getFullYear();
+    month = now.getMonth();
+  }
+
+  const firstDay = new Date(year, month, 1);
+  const lastDay = new Date(year, month + 1, 0);
   return {
     start: firstDay.toISOString().split('T')[0],
-    end: lastDay.toISOString().split('T')[0]
+    end: lastDay.toISOString().split('T')[0],
+    monthLabel: firstDay.toLocaleString('default', { month: 'long', year: 'numeric' })
   };
 };
+
+// Get current month date range (legacy helper)
+const getCurrentMonthRange = () => getMonthRange();
 
 // Hook for Marketing Users
 export const useMarketingUsers = () => {
@@ -58,8 +73,8 @@ export const useAllMarketingUsers = () => {
 };
 
 // Hook for Doctor Visits (using marketing_visits table)
-export const useDoctorVisits = (marketingUserId?: string) => {
-  const { start, end } = getCurrentMonthRange();
+export const useDoctorVisits = (marketingUserId?: string, monthStr?: string) => {
+  const { start, end } = getMonthRange(monthStr);
 
   return useQuery({
     queryKey: ['doctor-visits', marketingUserId, start, end],
@@ -111,8 +126,8 @@ export const useAllDoctorVisits = () => {
 };
 
 // Hook for Marketing Camps
-export const useMarketingCamps = (marketingUserId?: string) => {
-  const { start, end } = getCurrentMonthRange();
+export const useMarketingCamps = (marketingUserId?: string, monthStr?: string) => {
+  const { start, end } = getMonthRange(monthStr);
 
   return useQuery({
     queryKey: ['marketing-camps', marketingUserId, start, end],
@@ -164,8 +179,8 @@ export const useAllMarketingCamps = () => {
 };
 
 // Hook for Dashboard Summary Data
-export const useMarketingDashboard = () => {
-  const { start, end } = getCurrentMonthRange();
+export const useMarketingDashboard = (monthStr?: string) => {
+  const { start, end, monthLabel } = getMonthRange(monthStr);
 
   return useQuery({
     queryKey: ['marketing-dashboard', start, end],
@@ -219,7 +234,7 @@ export const useMarketingDashboard = () => {
         },
         totalVisits: visits?.length || 0,
         totalCamps: camps?.filter(c => c.status === 'Completed').length || 0,
-        currentMonth: new Date().toLocaleString('default', { month: 'long', year: 'numeric' })
+        currentMonth: monthLabel
       };
     }
   });
