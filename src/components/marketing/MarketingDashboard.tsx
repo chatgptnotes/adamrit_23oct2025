@@ -43,17 +43,17 @@ const MarketingDashboard: React.FC = () => {
     `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`
   );
 
-  // Generate last 12 months for dropdown
+  // Generate all 12 months for 2026
   const monthOptions = useMemo(() => {
     const options = [];
-    const now = new Date();
+    // Show all 12 months of 2026
     for (let i = 0; i < 12; i++) {
-      const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const date = new Date(2026, i, 1);
       const value = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
       const label = date.toLocaleString('default', { month: 'long', year: 'numeric' });
       options.push({ value, label });
     }
-    return options;
+    return options; // January to December
   }, []);
 
   const { data: dashboardData, isLoading, refetch } = useMarketingDashboard(selectedMonth);
