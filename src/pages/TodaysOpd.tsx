@@ -77,12 +77,13 @@ const TodaysOpd = () => {
 
   // Fetch OPD patients
   const { data: opdPatients = [], isLoading, refetch } = useQuery({
-    queryKey: ['opd-patients', hospitalConfig?.name],
+    queryKey: ['opd-patients', hospitalConfig?.name, startDate, endDate],
     queryFn: async () => {
       console.log('Fetching OPD patients...');
       console.log('Hospital config:', hospitalConfig);
+      console.log('Date range:', startDate, endDate);
 
-      // First, let's get all OPD patients without date filter to see if there are any
+      // Build query with date filtering at database level
       let query = supabase
         .from('visits')
         .select(`
@@ -102,8 +103,21 @@ const TodaysOpd = () => {
           )
         `)
         .eq('patient_type', 'OPD')
-        .order('created_at', { ascending: false })
-        .limit(50); // Get latest 50 OPD visits
+        .order('created_at', { ascending: false });
+
+      // Apply date filter at database level
+      if (startDate) {
+        query = query.gte('visit_date', startDate);
+      }
+      if (endDate) {
+        query = query.lte('visit_date', endDate);
+      }
+
+      // If no date range, default to today
+      if (!startDate && !endDate) {
+        const today = new Date().toISOString().split('T')[0];
+        query = query.eq('visit_date', today);
+      }
 
       // Only apply hospital filter if hospitalConfig exists
       if (hospitalConfig?.name) {
@@ -152,10 +166,10 @@ const TodaysOpd = () => {
     refetchInterval: 30000 // Refresh every 30 seconds
   });
 
-  // Filter patients based on search term, corporate, and date range
+  // Filter patients based on search term and corporate (date filtering is done at DB level)
   const filteredPatients = opdPatients.filter(patient => {
     const searchLower = searchTerm.toLowerCase();
-    const matchesSearch = (
+    const matchesSearch = !searchTerm || (
       patient.patients?.name?.toLowerCase().includes(searchLower) ||
       patient.patients?.patients_id?.toLowerCase().includes(searchLower) ||
       patient.visit_id?.toLowerCase().includes(searchLower) ||
@@ -165,37 +179,7 @@ const TodaysOpd = () => {
     const matchesCorporate = !corporateFilter ||
       patient.patients?.corporate?.trim().toLowerCase() === corporateFilter.trim().toLowerCase();
 
-    // Date range filter - default to today if no date range selected
-    let matchesDate = true;
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const todayEnd = new Date();
-    todayEnd.setHours(23, 59, 59, 999);
-
-    const visitDateTime = new Date(patient.created_at || patient.visit_date);
-
-    if (startDate || endDate) {
-      // Use selected date range
-      if (startDate) {
-        const start = new Date(startDate);
-        start.setHours(0, 0, 0, 0);
-        if (visitDateTime < start) matchesDate = false;
-      }
-      if (endDate) {
-        const end = new Date(endDate);
-        end.setHours(23, 59, 59, 999);
-        if (visitDateTime > end) matchesDate = false;
-      }
-    } else {
-      // Default to today's date
-      matchesDate = visitDateTime >= today && visitDateTime <= todayEnd;
-    }
-
-    // If search term is entered, ignore date filter to show all visits for that patient
-    if (searchTerm.trim()) {
-      return matchesSearch && matchesCorporate;
-    }
-    return matchesSearch && matchesCorporate && matchesDate;
+    return matchesSearch && matchesCorporate;
   });
 
   // Calculate statistics from filtered patients (to match displayed data)
