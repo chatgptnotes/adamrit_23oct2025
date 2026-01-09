@@ -24,16 +24,18 @@ import { useToast } from '@/hooks/use-toast';
 
 interface MarketingCampsListProps {
   onAddNew: () => void;
+  selectedMonth?: string;
 }
 
-const MarketingCampsList: React.FC<MarketingCampsListProps> = ({ onAddNew }) => {
+const MarketingCampsList: React.FC<MarketingCampsListProps> = ({ onAddNew, selectedMonth }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedUser, setSelectedUser] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const { toast } = useToast();
 
   const { data: camps = [], isLoading } = useMarketingCamps(
-    selectedUser !== 'all' ? selectedUser : undefined
+    selectedUser !== 'all' ? selectedUser : undefined,
+    selectedMonth
   );
   const { data: marketingUsers = [] } = useMarketingUsers();
   const deleteCamp = useDeleteMarketingCamp();

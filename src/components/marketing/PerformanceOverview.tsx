@@ -1,16 +1,55 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { Stethoscope, Tent, User, TrendingUp } from 'lucide-react';
-import { MarketingDashboardData } from '@/types/marketing';
+import { MarketingDashboardData, MarketingUser } from '@/types/marketing';
+import { useDoctorVisits, useMarketingCamps } from '@/hooks/useMarketingData';
 
 interface PerformanceOverviewProps {
   data: MarketingDashboardData | undefined;
   isLoading: boolean;
+  selectedMonth?: string;
 }
 
-const PerformanceOverview: React.FC<PerformanceOverviewProps> = ({ data, isLoading }) => {
+const PerformanceOverview: React.FC<PerformanceOverviewProps> = ({ data, isLoading, selectedMonth }) => {
+  const [selectedUser, setSelectedUser] = useState<MarketingUser | null>(null);
+  const [dialogType, setDialogType] = useState<'visits' | 'camps' | null>(null);
+
+  // Fetch visits/camps for selected user
+  const { data: userVisits = [] } = useDoctorVisits(selectedUser?.id, selectedMonth);
+  const { data: userCamps = [] } = useMarketingCamps(selectedUser?.id, selectedMonth);
+
+  const handleViewVisits = (user: MarketingUser) => {
+    setSelectedUser(user);
+    setDialogType('visits');
+  };
+
+  const handleViewCamps = (user: MarketingUser) => {
+    setSelectedUser(user);
+    setDialogType('camps');
+  };
+
+  const closeDialog = () => {
+    setSelectedUser(null);
+    setDialogType(null);
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -70,9 +109,12 @@ const PerformanceOverview: React.FC<PerformanceOverviewProps> = ({ data, isLoadi
                     <Stethoscope className="h-4 w-4 text-green-600" />
                     <span>Doctor Visits</span>
                   </div>
-                  <span className="font-semibold">
+                  <button
+                    onClick={() => handleViewVisits(person.marketingUser)}
+                    className="font-semibold text-blue-600 hover:text-blue-800 hover:underline cursor-pointer"
+                  >
                     {person.currentMonthVisits} / 100
-                  </span>
+                  </button>
                 </div>
                 <Progress
                   value={person.visitsPercentage}
@@ -93,9 +135,12 @@ const PerformanceOverview: React.FC<PerformanceOverviewProps> = ({ data, isLoadi
                     <Tent className="h-4 w-4 text-purple-600" />
                     <span>Marketing Camps</span>
                   </div>
-                  <span className="font-semibold">
+                  <button
+                    onClick={() => handleViewCamps(person.marketingUser)}
+                    className="font-semibold text-blue-600 hover:text-blue-800 hover:underline cursor-pointer"
+                  >
                     {person.currentMonthCamps} / 4
-                  </span>
+                  </button>
                 </div>
                 <Progress
                   value={person.campsPercentage}
@@ -109,15 +154,6 @@ const PerformanceOverview: React.FC<PerformanceOverviewProps> = ({ data, isLoadi
                 </div>
               </div>
 
-              {/* Overall Status */}
-              <div className="pt-2 border-t">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium">Overall Progress</span>
-                  <span className="text-sm font-bold">
-                    {((person.visitsPercentage + person.campsPercentage) / 2).toFixed(0)}%
-                  </span>
-                </div>
-              </div>
             </CardContent>
           </Card>
         ))}
@@ -135,6 +171,103 @@ const PerformanceOverview: React.FC<PerformanceOverviewProps> = ({ data, isLoadi
           </CardContent>
         </Card>
       )}
+
+      {/* Details Dialog */}
+      <Dialog open={!!dialogType} onOpenChange={closeDialog}>
+        <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {dialogType === 'visits' ? (
+                <><Stethoscope className="h-5 w-5 text-green-600" /> Doctor Visits - {selectedUser?.name}</>
+              ) : (
+                <><Tent className="h-5 w-5 text-purple-600" /> Marketing Camps - {selectedUser?.name}</>
+              )}
+            </DialogTitle>
+          </DialogHeader>
+
+          {dialogType === 'visits' && (
+            <div className="mt-4">
+              {userVisits.length === 0 ? (
+                <p className="text-center text-muted-foreground py-8">No doctor visits found for this month</p>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Date</TableHead>
+                      <TableHead>Doctor Name</TableHead>
+                      <TableHead>Specialty</TableHead>
+                      <TableHead>Hospital/Clinic</TableHead>
+                      <TableHead>Contact</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {userVisits.map((visit) => (
+                      <TableRow key={visit.id}>
+                        <TableCell>
+                          {new Date(visit.visit_date).toLocaleDateString('en-GB', {
+                            day: '2-digit',
+                            month: 'short',
+                            year: 'numeric'
+                          })}
+                        </TableCell>
+                        <TableCell className="font-medium">{visit.doctor_name}</TableCell>
+                        <TableCell>{visit.specialty || '-'}</TableCell>
+                        <TableCell>{visit.hospital_clinic_name || '-'}</TableCell>
+                        <TableCell>{visit.contact_number || '-'}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </div>
+          )}
+
+          {dialogType === 'camps' && (
+            <div className="mt-4">
+              {userCamps.length === 0 ? (
+                <p className="text-center text-muted-foreground py-8">No camps found for this month</p>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Date</TableHead>
+                      <TableHead>Camp Name</TableHead>
+                      <TableHead>Location</TableHead>
+                      <TableHead>Type</TableHead>
+                      <TableHead>Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {userCamps.map((camp) => (
+                      <TableRow key={camp.id}>
+                        <TableCell>
+                          {new Date(camp.camp_date).toLocaleDateString('en-GB', {
+                            day: '2-digit',
+                            month: 'short',
+                            year: 'numeric'
+                          })}
+                        </TableCell>
+                        <TableCell className="font-medium">{camp.camp_name}</TableCell>
+                        <TableCell>{camp.location || '-'}</TableCell>
+                        <TableCell>{camp.camp_type || '-'}</TableCell>
+                        <TableCell>
+                          <Badge className={
+                            camp.status === 'Completed' ? 'bg-green-100 text-green-800' :
+                            camp.status === 'Scheduled' ? 'bg-blue-100 text-blue-800' :
+                            'bg-gray-100 text-gray-800'
+                          }>
+                            {camp.status}
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

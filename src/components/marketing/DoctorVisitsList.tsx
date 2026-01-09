@@ -24,15 +24,17 @@ import { useToast } from '@/hooks/use-toast';
 
 interface DoctorVisitsListProps {
   onAddNew: () => void;
+  selectedMonth?: string;
 }
 
-const DoctorVisitsList: React.FC<DoctorVisitsListProps> = ({ onAddNew }) => {
+const DoctorVisitsList: React.FC<DoctorVisitsListProps> = ({ onAddNew, selectedMonth }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedUser, setSelectedUser] = useState<string>('all');
   const { toast } = useToast();
 
   const { data: visits = [], isLoading } = useDoctorVisits(
-    selectedUser !== 'all' ? selectedUser : undefined
+    selectedUser !== 'all' ? selectedUser : undefined,
+    selectedMonth
   );
   const { data: marketingUsers = [] } = useMarketingUsers();
   const deleteVisit = useDeleteDoctorVisit();

@@ -1,8 +1,15 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   Users,
   UserPlus,
@@ -30,7 +37,26 @@ const MarketingDashboard: React.FC = () => {
   const [isAddCampOpen, setIsAddCampOpen] = useState(false);
   const [isAddUserOpen, setIsAddUserOpen] = useState(false);
 
-  const { data: dashboardData, isLoading, refetch } = useMarketingDashboard();
+  // Month filter state
+  const currentDate = new Date();
+  const [selectedMonth, setSelectedMonth] = useState(
+    `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`
+  );
+
+  // Generate last 12 months for dropdown
+  const monthOptions = useMemo(() => {
+    const options = [];
+    const now = new Date();
+    for (let i = 0; i < 12; i++) {
+      const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const value = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      const label = date.toLocaleString('default', { month: 'long', year: 'numeric' });
+      options.push({ value, label });
+    }
+    return options;
+  }, []);
+
+  const { data: dashboardData, isLoading, refetch } = useMarketingDashboard(selectedMonth);
 
   const setSelectedTab = (tab: string) => {
     setSearchParams({ tab });
@@ -50,6 +76,18 @@ const MarketingDashboard: React.FC = () => {
           </div>
         </div>
         <div className="flex items-center gap-3">
+          <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+            <SelectTrigger className="w-[180px]">
+              <SelectValue placeholder="Select Month" />
+            </SelectTrigger>
+            <SelectContent>
+              {monthOptions.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <Button
             variant="outline"
             size="sm"
@@ -173,15 +211,15 @@ const MarketingDashboard: React.FC = () => {
         </TabsList>
 
         <TabsContent value="overview">
-          <PerformanceOverview data={dashboardData} isLoading={isLoading} />
+          <PerformanceOverview data={dashboardData} isLoading={isLoading} selectedMonth={selectedMonth} />
         </TabsContent>
 
         <TabsContent value="visits">
-          <DoctorVisitsList onAddNew={() => setIsAddVisitOpen(true)} />
+          <DoctorVisitsList onAddNew={() => setIsAddVisitOpen(true)} selectedMonth={selectedMonth} />
         </TabsContent>
 
         <TabsContent value="camps">
-          <MarketingCampsList onAddNew={() => setIsAddCampOpen(true)} />
+          <MarketingCampsList onAddNew={() => setIsAddCampOpen(true)} selectedMonth={selectedMonth} />
         </TabsContent>
 
         <TabsContent value="users">
