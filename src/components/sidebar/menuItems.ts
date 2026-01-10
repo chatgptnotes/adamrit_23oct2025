@@ -53,11 +53,6 @@ export const menuItems = [
   },
 
   {
-    title: "Security Gate",
-    url: "/security-verification",
-    icon: Shield,
-  },
-  {
     title: "Mandatory Service",
     url: "/mandatory-service",
     icon: ShieldCheck,
@@ -83,11 +78,6 @@ export const menuItems = [
     icon: Activity,
   },
   {
-    title: "Operation Theatre",
-    url: "/operation-theatre",
-    icon: Syringe,
-  },
-  {
     title: "Patients",
     url: "/patients",
     icon: UserPlus,
@@ -111,16 +101,6 @@ export const menuItems = [
     title: "Radiology",
     url: "/radiology", 
     icon: Camera,
-  },
-  {
-    title: "Medications",
-    url: "/medications",
-    icon: Pill,
-  },
-  {
-    title: "Prescriptions",
-    url: "/prescriptions",
-    icon: ScrollText,
   },
   {
     title: "Referees",
