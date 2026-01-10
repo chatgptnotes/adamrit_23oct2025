@@ -45,8 +45,6 @@ export const useMenuItems = (props: AppSidebarProps): MenuItem[] => {
             return isFeatureEnabled(hospitalType, 'hasLab');
           case "Radiology":
             return isFeatureEnabled(hospitalType, 'hasRadiology');
-          case "Operation Theatre":
-            return isFeatureEnabled(hospitalType, 'hasOperationTheatre');
           case "Accounting":
             return isFeatureEnabled(hospitalType, 'hasAccounting');
           case "Hope Surgeons":

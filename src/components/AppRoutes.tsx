@@ -35,7 +35,6 @@ const LedgerStatement = lazy(() => import("../pages/LedgerStatement"));
 const Pharmacy = lazy(() => import("../pages/Pharmacy"));
 const Lab = lazy(() => import("../pages/Lab"));
 const Radiology = lazy(() => import("../pages/Radiology"));
-const OperationTheatre = lazy(() => import("../pages/OperationTheatre"));
 const FinalBill = lazy(() => import("../pages/FinalBill"));
 const EditFinalBill = lazy(() => import("../pages/EditFinalBill"));
 
@@ -46,7 +45,6 @@ const Users = lazy(() => import("../pages/Users"));
 const Complications = lazy(() => import("../pages/Complications"));
 const CghsSurgery = lazy(() => import("../pages/CghsSurgery"));
 const CghsSurgeryMaster = lazy(() => import("../pages/CghsSurgeryMaster"));
-const Medications = lazy(() => import("../pages/Medications"));
 const EsicSurgeons = lazy(() => import("../pages/EsicSurgeons"));
 const Referees = lazy(() => import("../pages/Referees"));
 const HopeSurgeons = lazy(() => import("../pages/HopeSurgeons"));
@@ -55,7 +53,6 @@ const HopeAnaesthetists = lazy(() => import("../pages/HopeAnaesthetists"));
 const AyushmanSurgeons = lazy(() => import("../pages/AyushmanSurgeons"));
 const AyushmanConsultants = lazy(() => import("../pages/AyushmanConsultants"));
 const AyushmanAnaesthetists = lazy(() => import("../pages/AyushmanAnaesthetists"));
-const SecurityVerificationPage = lazy(() => import("../pages/SecurityVerificationPage"));
 const MandatoryService = lazy(() => import("../pages/MandatoryService"));
 const MandatoryServiceCreate = lazy(() => import("../pages/MandatoryServiceCreate"));
 const ClinicalServices = lazy(() => import("../pages/ClinicalServices"));
@@ -73,7 +70,6 @@ const OpdAdmissionNotes = lazy(() => import("../pages/OpdAdmissionNotes"));
 
 const PVIFormPrint = lazy(() => import("../pages/PVIFormPrint"));
 const PatientProfile = lazy(() => import("../pages/PatientProfile"));
-const Prescriptions = lazy(() => import("../pages/prescriptions/Prescriptions"));
 const TreatmentSheet = lazy(() => import("../pages/TreatmentSheet"));
 const Reports = lazy(() => import("../pages/Reports"));
 const FinalBillTest = lazy(() => import("../pages/FinalBillTest"));
@@ -122,7 +118,6 @@ export const AppRoutes = () => {
         <Route path="/accommodation" element={<Suspense fallback={<PageLoader />}><Accommodation /></Suspense>} />
         <Route path="/room-management" element={<Suspense fallback={<PageLoader />}><RoomManagement /></Suspense>} />
         <Route path="/discharged-patients" element={<Suspense fallback={<PageLoader />}><DischargedPatients /></Suspense>} />
-        <Route path="/security-verification" element={<Suspense fallback={<PageLoader />}><SecurityVerificationPage /></Suspense>} />
         <Route path="/mandatory-service" element={<Suspense fallback={<PageLoader />}><MandatoryService /></Suspense>} />
         <Route path="/mandatory-service-create" element={<Suspense fallback={<PageLoader />}><MandatoryServiceCreate /></Suspense>} />
         <Route path="/clinical-services" element={<Suspense fallback={<PageLoader />}><ClinicalServices /></Suspense>} />
@@ -138,7 +133,6 @@ export const AppRoutes = () => {
 
         <Route path="/pvi-form/:visitId" element={<Suspense fallback={<PageLoader />}><PVIFormPrint /></Suspense>} />
         <Route path="/diagnoses" element={<Suspense fallback={<PageLoader />}><Diagnoses /></Suspense>} />
-        <Route path="/operation-theatre" element={<Suspense fallback={<PageLoader />}><OperationTheatre /></Suspense>} />
         <Route path="/patients" element={<Suspense fallback={<PageLoader />}><Patients /></Suspense>} />
         <Route path="/users" element={<Suspense fallback={<PageLoader />}><Users /></Suspense>} />
         <Route path="/complications" element={<Suspense fallback={<PageLoader />}><Complications /></Suspense>} />
@@ -146,8 +140,6 @@ export const AppRoutes = () => {
         <Route path="/cghs-surgery-master" element={<Suspense fallback={<PageLoader />}><CghsSurgeryMaster /></Suspense>} />
         <Route path="/lab" element={<Suspense fallback={<PageLoader />}><Lab /></Suspense>} />
         <Route path="/radiology" element={<Suspense fallback={<PageLoader />}><Radiology /></Suspense>} />
-        <Route path="/medications" element={<Suspense fallback={<PageLoader />}><Medications /></Suspense>} />
-        <Route path="/prescriptions" element={<Suspense fallback={<PageLoader />}><Prescriptions /></Suspense>} />
         <Route path="/treatment-sheet" element={<Suspense fallback={<PageLoader />}><TreatmentSheet /></Suspense>} />
         <Route path="/esic-surgeons" element={<Suspense fallback={<PageLoader />}><EsicSurgeons /></Suspense>} />
         <Route path="/referees" element={<Suspense fallback={<PageLoader />}><Referees /></Suspense>} />

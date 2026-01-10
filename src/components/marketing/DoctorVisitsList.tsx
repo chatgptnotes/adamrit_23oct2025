@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -31,6 +32,7 @@ const DoctorVisitsList: React.FC<DoctorVisitsListProps> = ({ onAddNew, selectedM
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedUser, setSelectedUser] = useState<string>('all');
   const { toast } = useToast();
+  const { isAdmin } = useAuth();
 
   const { data: visits = [], isLoading } = useDoctorVisits(
     selectedUser !== 'all' ? selectedUser : undefined,
@@ -147,7 +149,7 @@ const DoctorVisitsList: React.FC<DoctorVisitsListProps> = ({ onAddNew, selectedM
                   <TableHead>Doctor Name</TableHead>
                   <TableHead>Specialty</TableHead>
                   <TableHead>Hospital/Clinic</TableHead>
-                  <TableHead>Contact</TableHead>
+                  {isAdmin && <TableHead>Contact</TableHead>}
                   <TableHead>Marketing Staff</TableHead>
                   <TableHead>Outcome</TableHead>
                   <TableHead>Actions</TableHead>
@@ -166,7 +168,7 @@ const DoctorVisitsList: React.FC<DoctorVisitsListProps> = ({ onAddNew, selectedM
                     <TableCell className="font-medium">{visit.doctor_name}</TableCell>
                     <TableCell>{visit.specialty || '-'}</TableCell>
                     <TableCell>{visit.hospital_clinic_name || '-'}</TableCell>
-                    <TableCell>{visit.contact_number || '-'}</TableCell>
+                    {isAdmin && <TableCell>{visit.contact_number || '-'}</TableCell>}
                     <TableCell>{visit.marketing_users?.name || '-'}</TableCell>
                     <TableCell>{getOutcomeBadge(visit.disposition)}</TableCell>
                     <TableCell>
