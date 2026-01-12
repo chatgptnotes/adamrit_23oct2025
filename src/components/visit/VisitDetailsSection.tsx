@@ -17,6 +17,7 @@ interface VisitDetailsSectionProps {
     patientType?: string;
     wardAllotted?: string;
     roomAllotted?: string;
+    referringDoctor?: string;
   };
   handleInputChange: (field: string, value: string) => void;
   existingVisit?: any; // Optional existing visit data for edit mode
@@ -32,6 +33,10 @@ export const VisitDetailsSection: React.FC<VisitDetailsSectionProps> = ({
   const [doctors, setDoctors] = useState<Array<{ id: string; name: string; specialty: string }>>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Referees state
+  const [referees, setReferees] = useState<Array<{ id: string; name: string; specialty: string | null; institution: string | null }>>([]);
+  const [isLoadingReferees, setIsLoadingReferees] = useState(true);
 
   // Ward and Room Management
   const [wards, setWards] = useState<Array<{ ward_id: string; ward_type: string; maximum_rooms: number }>>([]);
@@ -69,6 +74,36 @@ export const VisitDetailsSection: React.FC<VisitDetailsSectionProps> = ({
     };
 
     fetchDoctors();
+  }, []);
+
+  // Fetch referees from referees table
+  useEffect(() => {
+    const fetchReferees = async () => {
+      try {
+        setIsLoadingReferees(true);
+        console.log('Fetching referees from referees table...');
+
+        const { data, error } = await supabase
+          .from('referees')
+          .select('id, name, specialty, institution')
+          .order('name');
+
+        if (error) {
+          console.error('Error fetching referees:', error);
+          setReferees([]);
+        } else {
+          console.log('Referees fetched successfully:', data);
+          setReferees(data || []);
+        }
+      } catch (error) {
+        console.error('Exception while fetching referees:', error);
+        setReferees([]);
+      } finally {
+        setIsLoadingReferees(false);
+      }
+    };
+
+    fetchReferees();
   }, []);
 
   // Fetch wards from room_management table
@@ -348,6 +383,38 @@ export const VisitDetailsSection: React.FC<VisitDetailsSectionProps> = ({
               <SelectItem value="in-progress">In Progress</SelectItem>
               <SelectItem value="completed">Completed</SelectItem>
               <SelectItem value="cancelled">Cancelled</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Referring Doctor */}
+        <div className="space-y-2">
+          <Label htmlFor="referringDoctor" className="text-sm font-medium">
+            Referring Doctor
+          </Label>
+          <Select
+            value={formData.referringDoctor || ''}
+            onValueChange={(value) => handleInputChange('referringDoctor', value)}
+            disabled={isLoadingReferees}
+          >
+            <SelectTrigger>
+              <SelectValue
+                placeholder={
+                  isLoadingReferees
+                    ? "Loading referees..."
+                    : referees.length === 0
+                    ? "No referees available"
+                    : "Select Referring Doctor"
+                }
+              />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">None</SelectItem>
+              {!isLoadingReferees && referees.length > 0 && referees.map((referee) => (
+                <SelectItem key={referee.id} value={referee.name}>
+                  {referee.name}{referee.specialty ? ` (${referee.specialty})` : ''}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
