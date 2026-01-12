@@ -20,6 +20,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Plus, Search, Stethoscope, Trash2, Edit } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useDoctorVisits, useMarketingUsers, useDeleteDoctorVisit } from '@/hooks/useMarketingData';
 import { useToast } from '@/hooks/use-toast';
 
@@ -31,6 +32,8 @@ interface DoctorVisitsListProps {
 const DoctorVisitsList: React.FC<DoctorVisitsListProps> = ({ onAddNew, selectedMonth }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedUser, setSelectedUser] = useState<string>('all');
+  const [isExecutiveSheetOpen, setIsExecutiveSheetOpen] = useState(false);
+  const [isCorporateSheetOpen, setIsCorporateSheetOpen] = useState(false);
   const { toast } = useToast();
   const { isAdmin } = useAuth();
 
@@ -88,12 +91,20 @@ const DoctorVisitsList: React.FC<DoctorVisitsListProps> = ({ onAddNew, selectedM
         <div className="flex items-center justify-between">
           <CardTitle className="flex items-center gap-2">
             <Stethoscope className="h-5 w-5" />
-            Doctor Visits - Current Month
+            Referal - Current Month
           </CardTitle>
-          <Button onClick={onAddNew}>
-            <Plus className="h-4 w-4 mr-2" />
-            Add Visit
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => setIsExecutiveSheetOpen(true)}>
+              Executive Sheet
+            </Button>
+            <Button variant="outline" onClick={() => setIsCorporateSheetOpen(true)}>
+              Corporate Sheet
+            </Button>
+            <Button onClick={onAddNew}>
+              <Plus className="h-4 w-4 mr-2" />
+              Add Visit
+            </Button>
+          </div>
         </div>
       </CardHeader>
       <CardContent>
@@ -200,6 +211,30 @@ const DoctorVisitsList: React.FC<DoctorVisitsListProps> = ({ onAddNew, selectedM
           </div>
         )}
       </CardContent>
+
+      {/* Executive Sheet Modal */}
+      <Dialog open={isExecutiveSheetOpen} onOpenChange={setIsExecutiveSheetOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Executive Sheet</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="text-muted-foreground">Content coming soon...</p>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Corporate Sheet Modal */}
+      <Dialog open={isCorporateSheetOpen} onOpenChange={setIsCorporateSheetOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Corporate Sheet</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="text-muted-foreground">Content coming soon...</p>
+          </div>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 };

@@ -479,7 +479,7 @@ export const VisitDetailsSection: React.FC<VisitDetailsSectionProps> = ({
               <SelectItem value="none">None</SelectItem>
               {!isLoadingRelationshipManagers && relationshipManagers.length > 0 && relationshipManagers.map((manager) => (
                 <SelectItem key={manager.id} value={manager.name}>
-                  {manager.name}{manager.contact_no ? ` (${manager.contact_no})` : ''}
+                  {manager.name}
                 </SelectItem>
               ))}
             </SelectContent>

@@ -205,7 +205,7 @@ const MarketingDashboard: React.FC = () => {
       <Tabs value={selectedTab} onValueChange={setSelectedTab} className="space-y-3">
         <TabsList className="grid w-full grid-cols-4 bg-blue-50 rounded-md">
           <TabsTrigger value="overview">Performance Overview</TabsTrigger>
-          <TabsTrigger value="visits">Doctor Visits</TabsTrigger>
+          <TabsTrigger value="visits">Referal</TabsTrigger>
           <TabsTrigger value="camps">Marketing Camps</TabsTrigger>
           <TabsTrigger value="users">Marketing Staff</TabsTrigger>
         </TabsList>
