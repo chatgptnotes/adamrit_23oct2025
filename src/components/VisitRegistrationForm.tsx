@@ -40,6 +40,7 @@ export const VisitRegistrationForm: React.FC<VisitRegistrationFormProps> = ({
     relationWithEmployee: '',
     status: '',
     referringDoctor: '',
+    relationshipManager: '',
     claimId: '',
     patientType: '',
     wardAllotted: '',
@@ -48,7 +49,8 @@ export const VisitRegistrationForm: React.FC<VisitRegistrationFormProps> = ({
 
   // Keep track of selected IDs for foreign keys
   const [selectedIds, setSelectedIds] = useState({
-    referringDoctorId: '' as string
+    referringDoctorId: '' as string,
+    relationshipManagerId: '' as string
   });
 
   // Populate form with existing data when in edit mode
@@ -65,6 +67,7 @@ export const VisitRegistrationForm: React.FC<VisitRegistrationFormProps> = ({
         relationWithEmployee: existingVisit.relation_with_employee || 'Self',
         status: existingVisit.status || 'scheduled',
         referringDoctor: existingVisit.referring_doctor || '',
+        relationshipManager: existingVisit.relationship_manager || '',
         claimId: existingVisit.claim_id || '',
         patientType: existingVisit.patient_type || 'OPD',
         wardAllotted: existingVisit.ward_allotted || '',
@@ -83,18 +86,18 @@ export const VisitRegistrationForm: React.FC<VisitRegistrationFormProps> = ({
 
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
-    
+
     // Handle referring doctor ID mapping
     if (field === 'referringDoctor') {
       // Find the referee by name to get the ID
       const findRefereeId = async () => {
-        if (value) {
+        if (value && value !== 'none') {
           const { data: referees } = await supabase
             .from('referees')
             .select('id, name')
             .eq('name', value)
             .single();
-          
+
           if (referees) {
             setSelectedIds(prev => ({ ...prev, referringDoctorId: referees.id }));
           }
@@ -103,6 +106,26 @@ export const VisitRegistrationForm: React.FC<VisitRegistrationFormProps> = ({
         }
       };
       findRefereeId();
+    }
+
+    // Handle relationship manager ID mapping
+    if (field === 'relationshipManager') {
+      const findRelationshipManagerId = async () => {
+        if (value && value !== 'none') {
+          const { data: manager } = await supabase
+            .from('relationship_managers')
+            .select('id, name')
+            .eq('name', value)
+            .single();
+
+          if (manager) {
+            setSelectedIds(prev => ({ ...prev, relationshipManagerId: manager.id }));
+          }
+        } else {
+          setSelectedIds(prev => ({ ...prev, relationshipManagerId: '' }));
+        }
+      };
+      findRelationshipManagerId();
     }
   };
 
@@ -218,6 +241,7 @@ export const VisitRegistrationForm: React.FC<VisitRegistrationFormProps> = ({
           status: formData.status || 'scheduled',
           patient_type: formData.patientType,
           referring_doctor_id: selectedIds.referringDoctorId || null,
+          relationship_manager_id: selectedIds.relationshipManagerId || null,
           claim_id: formData.claimId,
           admission_date: admissionDate
         });
@@ -233,6 +257,7 @@ export const VisitRegistrationForm: React.FC<VisitRegistrationFormProps> = ({
             status: formData.status || 'scheduled',
             patient_type: formData.patientType,
             referring_doctor_id: selectedIds.referringDoctorId || null,
+            relationship_manager_id: selectedIds.relationshipManagerId || null,
             claim_id: formData.claimId || null,
             ward_allotted: formData.wardAllotted || null,
             room_allotted: formData.roomAllotted || null,
@@ -304,6 +329,7 @@ export const VisitRegistrationForm: React.FC<VisitRegistrationFormProps> = ({
             status: formData.status || 'scheduled',
             patient_type: formData.patientType,
             referring_doctor_id: selectedIds.referringDoctorId || null,
+            relationship_manager_id: selectedIds.relationshipManagerId || null,
             claim_id: formData.claimId,
             ward_allotted: formData.wardAllotted || null,
             room_allotted: formData.roomAllotted || null,
@@ -504,13 +530,15 @@ export const VisitRegistrationForm: React.FC<VisitRegistrationFormProps> = ({
       relationWithEmployee: '',
       status: '',
       referringDoctor: '',
+      relationshipManager: '',
       claimId: '',
       patientType: '',
       wardAllotted: '',
       roomAllotted: '',
     });
     setSelectedIds({
-      referringDoctorId: ''
+      referringDoctorId: '',
+      relationshipManagerId: ''
     });
     setVisitDate(new Date());
     onClose();
