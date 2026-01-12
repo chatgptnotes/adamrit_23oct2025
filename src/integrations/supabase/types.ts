@@ -6733,6 +6733,7 @@ export type Database = {
           remark1: string | null
           remark2: string | null
           sr_no: string | null
+          discharged_sr_no: string | null
           sst_treatment: string | null
           status: string | null
           surgery_date: string | null
@@ -6783,6 +6784,7 @@ export type Database = {
           remark1?: string | null
           remark2?: string | null
           sr_no?: string | null
+          discharged_sr_no?: string | null
           sst_treatment?: string | null
           status?: string | null
           surgery_date?: string | null
@@ -6833,6 +6835,7 @@ export type Database = {
           remark1?: string | null
           remark2?: string | null
           sr_no?: string | null
+          discharged_sr_no?: string | null
           sst_treatment?: string | null
           status?: string | null
           surgery_date?: string | null

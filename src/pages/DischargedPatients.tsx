@@ -18,8 +18,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuCheckboxItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
-import { Loader2, Search, Users, Calendar, Clock, UserCheck, Shield, AlertTriangle, Filter, RotateCcw, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, FileText, Printer } from "lucide-react";
+import { Loader2, Search, Users, Calendar, Clock, UserCheck, Shield, AlertTriangle, Filter, RotateCcw, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, FileText, Printer, Upload } from "lucide-react";
+import * as XLSX from 'xlsx';
+import * as pdfjsLib from 'pdfjs-dist';
+// @ts-ignore
+import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+
+// Set PDF.js worker from local package
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
 import { toast } from "@/hooks/use-toast";
 import { format } from 'date-fns';
 import { CascadingBillingStatusDropdown } from '@/components/shared/CascadingBillingStatusDropdown';
@@ -33,6 +40,7 @@ interface Visit {
   discharge_date: string | null;
   surgery_date: string | null;
   sr_no: string | null;
+  discharged_sr_no: string | null;
   bunch_no: string | null;
   status: string;
   sst_treatment: string | null;
@@ -79,8 +87,10 @@ const DischargedPatients = () => {
   const patientTypeFilter = searchParams.get('patientType') || 'all';
   const billingStatusFilter = searchParams.get('billingStatus') || 'all';
   const corporateFilter = searchParams.get('corporate') || 'all';
-  const sortBy = searchParams.get('sortBy') || 'discharge_date';
-  const sortOrder = (searchParams.get('sortOrder') || 'desc') as 'asc' | 'desc';
+  const sortBy = searchParams.get('sortBy') || 'discharged_sr_no';
+  // For discharged_sr_no, always use desc unless explicitly set to asc in URL
+  const urlSortOrder = searchParams.get('sortOrder');
+  const sortOrder = (urlSortOrder || 'desc') as 'asc' | 'desc';
   const currentPage = parseInt(searchParams.get('page') || '1');
   const itemsPerPage = 10;
   const fromDate = searchParams.get('from') || '';
@@ -118,6 +128,11 @@ const DischargedPatients = () => {
   // State for gate pass modal
   const [isGatePassModalOpen, setIsGatePassModalOpen] = useState(false);
   const [selectedVisitForGatePass, setSelectedVisitForGatePass] = useState<Visit | null>(null);
+
+  // State for Excel upload modal
+  const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+  const [uploadPreviewData, setUploadPreviewData] = useState<Array<{visit_id: string, discharged_sr_no: string}>>([]);
+  const [isUploading, setIsUploading] = useState(false);
 
   // Fetch notifications for selected visit
   const { data: gatePassNotifications, isLoading: notificationsLoading } = useQuery({
@@ -730,7 +745,7 @@ const DischargedPatients = () => {
               <tbody>
                 ${filteredVisits?.map((visit, index) => `
                   <tr>
-                    <td class="text-center">${visit.originalSrNo}</td>
+                    <td class="text-center">${visit.discharged_sr_no || '-'}</td>
                     <td>${visit.patients?.name || '-'}</td>
                     <td>${visit.patients?.patients_id || '-'}</td>
                     <td>${visit.visit_id || '-'}</td>
@@ -748,6 +763,206 @@ const DischargedPatients = () => {
       `);
       printWindow.document.close();
       printWindow.print();
+    }
+  };
+
+  // Parse PDF file and extract Sr. No. and Visit ID
+  const parsePdfFile = async (file: File): Promise<Array<{visit_id: string, discharged_sr_no: string}>> => {
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+
+    let allText = '';
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const textContent = await page.getTextContent();
+
+      // Extract text with position info to maintain table structure
+      const items = textContent.items as any[];
+
+      // Sort by Y position (top to bottom) then X position (left to right)
+      items.sort((a, b) => {
+        const yDiff = b.transform[5] - a.transform[5]; // Y is inverted in PDF
+        if (Math.abs(yDiff) > 5) return yDiff;
+        return a.transform[4] - b.transform[4]; // X position
+      });
+
+      // Join text items with spaces
+      const pageText = items.map((item: any) => item.str).join(' ');
+      allText += pageText + '\n';
+    }
+
+    // Debug: Log extracted text to console
+    console.log('📄 PDF Text Extracted:', allText.substring(0, 3000));
+
+    const results: Array<{visit_id: string, discharged_sr_no: string}> = [];
+
+    // Visit ID pattern: IH + 2 digits (year) + 1 letter + 5 digits
+    // Examples: IH25L26030, IH25K16003, IH25J01004, IH24L19001, IH25I30003
+    const visitIdPattern = /IH\d{2}[A-Z]\d{5}/g;
+
+    // Find all Visit IDs in the text
+    const visitIdMatches = allText.match(visitIdPattern) || [];
+    console.log('🔍 Found Visit IDs:', visitIdMatches.length, visitIdMatches.slice(0, 10));
+
+    // Split text into tokens for analysis
+    const tokens = allText.split(/\s+/);
+    console.log('📝 Total tokens:', tokens.length);
+
+    for (let i = 0; i < tokens.length; i++) {
+      // Check if this token is a Visit ID
+      if (/^IH\d{2}[A-Z]\d{5}$/.test(tokens[i])) {
+        const visitId = tokens[i];
+
+        // Look backwards for Sr. No. (should be within 20 tokens before)
+        for (let j = i - 1; j >= Math.max(0, i - 20); j--) {
+          const token = tokens[j];
+
+          // Sr. No. is 1-4 digit number (like 380, 379, 267, etc.)
+          if (/^\d{1,4}$/.test(token)) {
+            const srNo = parseInt(token);
+
+            // Valid Sr. No. range and not a date component
+            if (srNo >= 1 && srNo <= 9999) {
+              // Skip if it looks like a day of month (followed by month name)
+              const nextToken = tokens[j + 1] || '';
+              const isDateDay = srNo <= 31 && /^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)/i.test(nextToken);
+
+              // Skip if it looks like a year (2024, 2025, etc.)
+              const isYear = srNo >= 2020 && srNo <= 2030;
+
+              if (!isDateDay && !isYear) {
+                results.push({
+                  discharged_sr_no: token,
+                  visit_id: visitId
+                });
+                console.log(`✅ Matched: Sr.No=${token}, Visit ID=${visitId}`);
+                break;
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // Remove duplicates (keep first occurrence of each visit_id)
+    const uniqueResults = results.filter((item, index, self) =>
+      index === self.findIndex(t => t.visit_id === item.visit_id)
+    );
+
+    console.log('📊 Total unique records found:', uniqueResults.length);
+    return uniqueResults;
+  };
+
+  // Handle file upload (Excel or PDF)
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const fileExtension = file.name.split('.').pop()?.toLowerCase();
+
+    try {
+      if (fileExtension === 'pdf') {
+        // Handle PDF
+        toast({ title: "Processing PDF...", description: "Please wait" });
+        const data = await parsePdfFile(file);
+
+        if (data.length === 0) {
+          toast({
+            title: "No Data Found",
+            description: "Could not extract Sr. No. and Visit ID from PDF. Please check the format.",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        setUploadPreviewData(data);
+        toast({
+          title: "PDF Loaded",
+          description: `Found ${data.length} records to update`,
+        });
+      } else {
+        // Handle Excel/CSV
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          try {
+            const data = e.target?.result;
+            const workbook = XLSX.read(data, { type: 'binary' });
+            const sheetName = workbook.SheetNames[0];
+            const worksheet = workbook.Sheets[sheetName];
+            const jsonData = XLSX.utils.sheet_to_json<{visit_id: string, discharged_sr_no: string | number}>(worksheet);
+
+            // Convert to proper format
+            const formattedData = jsonData.map(row => ({
+              visit_id: String(row.visit_id || '').trim(),
+              discharged_sr_no: String(row.discharged_sr_no || '').trim()
+            })).filter(row => row.visit_id && row.discharged_sr_no);
+
+            setUploadPreviewData(formattedData);
+            toast({
+              title: "File Loaded",
+              description: `Found ${formattedData.length} records to update`,
+            });
+          } catch (err) {
+            toast({
+              title: "Error",
+              description: "Failed to read Excel file. Please check the format.",
+              variant: "destructive",
+            });
+          }
+        };
+        reader.readAsBinaryString(file);
+      }
+    } catch (err) {
+      console.error('File upload error:', err);
+      toast({
+        title: "Error",
+        description: "Failed to read file. Please check the format.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Apply uploaded Sr. No. to database
+  const applyUploadedSrNo = async () => {
+    if (uploadPreviewData.length === 0) return;
+
+    setIsUploading(true);
+    let successCount = 0;
+    let errorCount = 0;
+
+    try {
+      for (const row of uploadPreviewData) {
+        const { error } = await supabase
+          .from('visits')
+          .update({ discharged_sr_no: row.discharged_sr_no })
+          .eq('visit_id', row.visit_id);
+
+        if (error) {
+          errorCount++;
+          console.error(`Failed to update ${row.visit_id}:`, error);
+        } else {
+          successCount++;
+        }
+      }
+
+      toast({
+        title: "Update Complete",
+        description: `Successfully updated ${successCount} records. ${errorCount > 0 ? `Failed: ${errorCount}` : ''}`,
+        variant: errorCount > 0 ? "destructive" : "default",
+      });
+
+      // Reset and refresh
+      setUploadPreviewData([]);
+      setIsUploadModalOpen(false);
+      queryClient.invalidateQueries({ queryKey: ['discharged-visits'] });
+    } catch (err) {
+      toast({
+        title: "Error",
+        description: "Failed to update records",
+        variant: "destructive",
+      });
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -931,6 +1146,7 @@ const DischargedPatients = () => {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="discharged_sr_no">Discharged Sr. No</SelectItem>
                   <SelectItem value="discharge_date">Discharge Date</SelectItem>
                   <SelectItem value="visit_date">Visit Date</SelectItem>
                   <SelectItem value="patients.name">Patient Name</SelectItem>
@@ -995,7 +1211,7 @@ const DischargedPatients = () => {
                   {paginatedVisits.map((visit, index) => (
                     <TableRow key={visit.id} className="hover:bg-muted/50">
                       <TableCell className="font-medium text-center">
-                        {visit.originalSrNo}
+                        {visit.discharged_sr_no || '-'}
                       </TableCell>
                       <TableCell>
                         <div>

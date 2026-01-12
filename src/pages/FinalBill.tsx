@@ -3127,17 +3127,43 @@ const FinalBill = () => {
       console.log('💾 Starting discharge update for visitId:', visitId);
       console.log('📅 Setting discharge date to:', finalPaymentDischargeDate);
 
+      // Get next Discharged Sr. No for 'hope' instance
+      let nextDischargedSrNo: number | null = null;
+
+      if (hospitalConfig?.name === 'hope') {
+        // Don't filter by status - number should be unique even if patient is undischarged later
+        const { data: maxSrNoData } = await supabase
+          .from('visits')
+          .select('discharged_sr_no, patients!inner(hospital_name)')
+          .eq('patients.hospital_name', 'hope')
+          .not('discharged_sr_no', 'is', null)
+          .order('discharged_sr_no', { ascending: false })
+          .limit(1)
+          .single();
+
+        const maxSrNo = maxSrNoData?.discharged_sr_no ? Number(maxSrNoData.discharged_sr_no) : 0;
+        nextDischargedSrNo = maxSrNo + 1;
+        console.log('📝 Assigning Discharged Sr. No:', nextDischargedSrNo);
+      }
+
       // Update visit discharge status and discharge date
+      const updateData: any = {
+        discharge_date: finalPaymentDischargeDate, // Use selected discharge date (DATE format: YYYY-MM-DD)
+        discharge_mode: finalPaymentReason?.toLowerCase().includes('death') ? 'death' :
+                       finalPaymentReason?.toLowerCase().includes('dama') ? 'dama' : 'recovery',
+        bill_paid: true,
+        is_discharged: true, // Enable discharge summary button
+        status: 'discharged' // Set status to discharged so patient appears in Discharged Patients dashboard
+      };
+
+      // Add discharged_sr_no only for hope instance
+      if (nextDischargedSrNo !== null) {
+        updateData.discharged_sr_no = nextDischargedSrNo;
+      }
+
       const { error: visitError } = await supabase
         .from('visits')
-        .update({
-          discharge_date: finalPaymentDischargeDate, // Use selected discharge date (DATE format: YYYY-MM-DD)
-          discharge_mode: finalPaymentReason?.toLowerCase().includes('death') ? 'death' :
-                         finalPaymentReason?.toLowerCase().includes('dama') ? 'dama' : 'recovery',
-          bill_paid: true,
-          is_discharged: true, // Enable discharge summary button
-          status: 'discharged' // Set status to discharged so patient appears in Discharged Patients dashboard
-        })
+        .update(updateData)
         .eq('visit_id', visitId);
 
       if (visitError) {

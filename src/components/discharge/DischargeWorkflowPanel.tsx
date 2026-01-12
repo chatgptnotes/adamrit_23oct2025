@@ -36,6 +36,7 @@ interface Visit {
     id: string;
     name: string;
     patients_id: string;
+    hospital_name?: string | null;
   };
 }
 
@@ -259,21 +260,50 @@ export const DischargeWorkflowPanel: React.FC<DischargeWorkflowPanelProps> = ({ 
   const dischargePatientMutation = useMutation({
     mutationFn: async () => {
       if (!dischargeDate) throw new Error('Discharge date required');
-      
+
       console.log('🏥 Discharging patient:', visit.visit_id);
-      
-      // Update visit with discharge date
+
+      // Check if patient belongs to 'hope' instance
+      const isHopeInstance = visit.patients.hospital_name === 'hope';
+
+      let nextDischargedSrNo: number | null = null;
+
+      if (isHopeInstance) {
+        // Get next Discharged Sr. No (auto-increment) for 'hope' instance only
+        // Don't filter by status - number should be unique even if patient is undischarged later
+        const { data: maxSrNoData } = await supabase
+          .from('visits')
+          .select('discharged_sr_no, patients!inner(hospital_name)')
+          .eq('patients.hospital_name', 'hope')
+          .not('discharged_sr_no', 'is', null)
+          .order('discharged_sr_no', { ascending: false })
+          .limit(1)
+          .single();
+
+        const maxSrNo = maxSrNoData?.discharged_sr_no ? parseInt(maxSrNoData.discharged_sr_no) : 0;
+        nextDischargedSrNo = maxSrNo + 1;
+
+        console.log('📝 Assigning Discharged Sr. No:', nextDischargedSrNo);
+      }
+
+      // Update visit with discharge date and Discharged Sr. No (if hope instance)
+      const updateData: any = {
+        discharge_date: dischargeDate.toISOString(),
+        status: 'discharged',
+      };
+
+      if (nextDischargedSrNo !== null) {
+        updateData.discharged_sr_no = nextDischargedSrNo.toString();
+      }
+
       const { error } = await supabase
         .from('visits')
-        .update({ 
-          discharge_date: dischargeDate.toISOString(),
-          status: 'discharged'
-        })
+        .update(updateData)
         .eq('id', visit.id);
 
       if (error) throw error;
-      
-      console.log('✅ Patient discharged successfully');
+
+      console.log('✅ Patient discharged successfully', nextDischargedSrNo ? `with Discharged Sr. No: ${nextDischargedSrNo}` : '');
     },
     onSuccess: () => {
       toast({
