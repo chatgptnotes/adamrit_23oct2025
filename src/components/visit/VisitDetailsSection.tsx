@@ -18,6 +18,7 @@ interface VisitDetailsSectionProps {
     wardAllotted?: string;
     roomAllotted?: string;
     referringDoctor?: string;
+    relationshipManager?: string;
   };
   handleInputChange: (field: string, value: string) => void;
   existingVisit?: any; // Optional existing visit data for edit mode
@@ -37,6 +38,10 @@ export const VisitDetailsSection: React.FC<VisitDetailsSectionProps> = ({
   // Referees state
   const [referees, setReferees] = useState<Array<{ id: string; name: string; specialty: string | null; institution: string | null }>>([]);
   const [isLoadingReferees, setIsLoadingReferees] = useState(true);
+
+  // Relationship Managers state
+  const [relationshipManagers, setRelationshipManagers] = useState<Array<{ id: string; name: string; contact_no: string | null }>>([]);
+  const [isLoadingRelationshipManagers, setIsLoadingRelationshipManagers] = useState(true);
 
   // Ward and Room Management
   const [wards, setWards] = useState<Array<{ ward_id: string; ward_type: string; maximum_rooms: number }>>([]);
@@ -104,6 +109,36 @@ export const VisitDetailsSection: React.FC<VisitDetailsSectionProps> = ({
     };
 
     fetchReferees();
+  }, []);
+
+  // Fetch relationship managers from relationship_managers table
+  useEffect(() => {
+    const fetchRelationshipManagers = async () => {
+      try {
+        setIsLoadingRelationshipManagers(true);
+        console.log('Fetching relationship managers...');
+
+        const { data, error } = await supabase
+          .from('relationship_managers')
+          .select('id, name, contact_no')
+          .order('name');
+
+        if (error) {
+          console.error('Error fetching relationship managers:', error);
+          setRelationshipManagers([]);
+        } else {
+          console.log('Relationship managers fetched successfully:', data);
+          setRelationshipManagers(data || []);
+        }
+      } catch (error) {
+        console.error('Exception while fetching relationship managers:', error);
+        setRelationshipManagers([]);
+      } finally {
+        setIsLoadingRelationshipManagers(false);
+      }
+    };
+
+    fetchRelationshipManagers();
   }, []);
 
   // Fetch wards from room_management table
@@ -413,6 +448,38 @@ export const VisitDetailsSection: React.FC<VisitDetailsSectionProps> = ({
               {!isLoadingReferees && referees.length > 0 && referees.map((referee) => (
                 <SelectItem key={referee.id} value={referee.name}>
                   {referee.name}{referee.specialty ? ` (${referee.specialty})` : ''}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Relationship Manager */}
+        <div className="space-y-2">
+          <Label htmlFor="relationshipManager" className="text-sm font-medium">
+            Relationship Manager
+          </Label>
+          <Select
+            value={formData.relationshipManager || ''}
+            onValueChange={(value) => handleInputChange('relationshipManager', value)}
+            disabled={isLoadingRelationshipManagers}
+          >
+            <SelectTrigger>
+              <SelectValue
+                placeholder={
+                  isLoadingRelationshipManagers
+                    ? "Loading..."
+                    : relationshipManagers.length === 0
+                    ? "No managers available"
+                    : "Select Relationship Manager"
+                }
+              />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">None</SelectItem>
+              {!isLoadingRelationshipManagers && relationshipManagers.length > 0 && relationshipManagers.map((manager) => (
+                <SelectItem key={manager.id} value={manager.name}>
+                  {manager.name}{manager.contact_no ? ` (${manager.contact_no})` : ''}
                 </SelectItem>
               ))}
             </SelectContent>

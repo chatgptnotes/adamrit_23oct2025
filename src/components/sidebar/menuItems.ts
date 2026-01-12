@@ -108,6 +108,11 @@ export const menuItems = [
     icon: MapPin,
   },
   {
+    title: "Relationship Manager",
+    url: "/relationship-manager",
+    icon: HeartHandshake,
+  },
+  {
     title: "Hope Surgeons",
     url: "/hope-surgeons",
     icon: Stethoscope,

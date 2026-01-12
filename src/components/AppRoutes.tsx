@@ -90,6 +90,7 @@ const BillSubmission = lazy(() => import("../pages/BillSubmission"));
 const BillAgingStatement = lazy(() => import("../pages/BillAgingStatement"));
 const ExpectedPaymentDateReport = lazy(() => import("../pages/ExpectedPaymentDateReport"));
 const Marketing = lazy(() => import("../pages/Marketing"));
+const RelationshipManager = lazy(() => import("../pages/RelationshipManager"));
 
 // Loading component
 const PageLoader = () => (
@@ -143,6 +144,7 @@ export const AppRoutes = () => {
         <Route path="/treatment-sheet" element={<Suspense fallback={<PageLoader />}><TreatmentSheet /></Suspense>} />
         <Route path="/esic-surgeons" element={<Suspense fallback={<PageLoader />}><EsicSurgeons /></Suspense>} />
         <Route path="/referees" element={<Suspense fallback={<PageLoader />}><Referees /></Suspense>} />
+        <Route path="/relationship-manager" element={<Suspense fallback={<PageLoader />}><RelationshipManager /></Suspense>} />
         <Route path="/hope-surgeons" element={<Suspense fallback={<PageLoader />}><HopeSurgeons /></Suspense>} />
         <Route path="/hope-consultants" element={<Suspense fallback={<PageLoader />}><HopeConsultants /></Suspense>} />
         <Route path="/hope-anaesthetists" element={<Suspense fallback={<PageLoader />}><HopeAnaesthetists /></Suspense>} />
