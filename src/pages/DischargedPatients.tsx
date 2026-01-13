@@ -58,6 +58,7 @@ interface Visit {
   patient_type: string | null;
   discharge_summary_status: string | null;
   referral_payment_status: string | null;
+  referee_discharge_amt_paid: number | null;
   referees: {
     name: string;
   } | null;
@@ -124,17 +125,89 @@ const ReferralPaymentDropdown = ({
       <select
         value={value}
         onChange={(e) => handleChange(e.target.value)}
-        className="w-28 h-8 text-xs border border-gray-300 rounded-md px-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+        className="w-20 h-6 text-[10px] border border-gray-300 rounded px-1 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
         disabled={isUpdating}
       >
         <option value="">Select</option>
-        <option value="Paid">Paid</option>
+        <option value="Spot Paid">Spot Paid</option>
         <option value="Unpaid">Unpaid</option>
         <option value="Direct">Direct</option>
+        <option value="Back Paid">Back Paid</option>
       </select>
       {isUpdating && (
         <Loader2 className="absolute right-1 top-1/2 transform -translate-y-1/2 h-3 w-3 animate-spin" />
       )}
+    </div>
+  );
+};
+
+// Referee Amount Input Component - Admin only can edit
+const RefereeAmountCell = ({
+  visit,
+  onUpdate,
+  isAdmin
+}: {
+  visit: Visit;
+  onUpdate?: () => void;
+  isAdmin: boolean;
+}) => {
+  const [value, setValue] = useState(visit.referee_discharge_amt_paid?.toString() || '');
+  const [isUpdating, setIsUpdating] = useState(false);
+
+  const handleSave = async () => {
+    const numValue = value ? parseFloat(value) : null;
+
+    setIsUpdating(true);
+    try {
+      const { error } = await supabase
+        .from('visits')
+        .update({ referee_discharge_amt_paid: numValue })
+        .eq('id', visit.id);
+
+      if (error) {
+        console.error('Error updating referee amount:', error);
+        toast({
+          title: "Error",
+          description: "Failed to save amount",
+          variant: "destructive"
+        });
+      } else {
+        toast({
+          title: "Saved",
+          description: "Amount saved successfully",
+        });
+        onUpdate?.();
+      }
+    } catch (err) {
+      console.error('Error updating referee amount:', err);
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  // Non-admin users can only view the value
+  if (!isAdmin) {
+    return <span className="text-xs">{visit.referee_discharge_amt_paid ? `₹${visit.referee_discharge_amt_paid}` : '—'}</span>;
+  }
+
+  // Admin users get the input field with save button below
+  return (
+    <div className="flex flex-col items-center gap-1">
+      <input
+        type="number"
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        placeholder="Amount"
+        className="w-20 h-6 text-xs border border-gray-300 rounded px-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+        disabled={isUpdating}
+      />
+      <button
+        onClick={handleSave}
+        disabled={isUpdating}
+        className="h-4 px-2 text-[9px] bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+      >
+        {isUpdating ? <Loader2 className="h-2 w-2 animate-spin" /> : 'Save'}
+      </button>
     </div>
   );
 };
@@ -763,6 +836,23 @@ const DischargedPatients = () => {
     return corporate;
   };
 
+  // Export Referral Report to Excel
+  const handleExportReferralReport = () => {
+    const reportData = filteredVisits.map(visit => ({
+      'Date of Admission': visit.admission_date || '-',
+      'Visit ID': visit.visit_id || '-',
+      'Patient Name': visit.patients?.name || '-',
+      'Referral Doctor Name': visit.referees?.name || '-',
+      'Patient Bill Amount': visit.referee_discharge_amt_paid ? `₹${visit.referee_discharge_amt_paid}` : '-',
+      'Payment Status': visit.referral_payment_status || '-'
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(reportData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Referral Report');
+    XLSX.writeFile(wb, `Discharged_Referral_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
+  };
+
   // Print Dashboard function
   const handlePrintDashboard = () => {
     const printWindow = window.open('', '_blank');
@@ -1081,6 +1171,15 @@ const DischargedPatients = () => {
             <Printer className="h-4 w-4" />
             Print
           </Button>
+          <Button
+            onClick={handleExportReferralReport}
+            variant="outline"
+            size="sm"
+            className="flex items-center gap-2"
+          >
+            <FileText className="h-4 w-4" />
+            Referral Report
+          </Button>
           <Badge variant="outline" className="flex items-center gap-1">
             <Users className="h-3 w-3" />
             {filteredVisits?.length || 0} patients
@@ -1272,6 +1371,7 @@ const DischargedPatients = () => {
                     <TableHead>Billing Status</TableHead>
                     <TableHead>Corporate</TableHead>
                     <TableHead>Referral Doctor</TableHead>
+                    <TableHead>Discharge Amt Paid</TableHead>
                     <TableHead>Referral Payment</TableHead>
                     <TableHead>Actions</TableHead>
                   </TableRow>
@@ -1356,6 +1456,9 @@ const DischargedPatients = () => {
                       </TableCell>
                       <TableCell>
                         {visit.referees?.name || '—'}
+                      </TableCell>
+                      <TableCell>
+                        <RefereeAmountCell visit={visit} onUpdate={() => refetch()} isAdmin={user?.role === 'admin' || user?.role === 'marketing_manager'} />
                       </TableCell>
                       <TableCell>
                         <ReferralPaymentDropdown visit={visit} onUpdate={() => refetch()} isAdmin={user?.role === 'admin' || user?.role === 'marketing_manager'} />

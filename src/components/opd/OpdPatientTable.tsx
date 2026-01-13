@@ -4,7 +4,8 @@ import { useNavigate } from 'react-router-dom';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { X, Check, Eye, FileText, UserCheck, Trash2, DollarSign, MessageSquare, FileTextIcon, Activity, ClipboardEdit, Circle } from 'lucide-react';
+import { X, Check, Eye, FileText, UserCheck, Trash2, DollarSign, MessageSquare, FileTextIcon, Activity, ClipboardEdit, Circle, Loader2 } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
 import { VisitRegistrationForm } from '@/components/VisitRegistrationForm';
 import { supabase } from '@/integrations/supabase/client';
 import { useDebounce } from 'use-debounce';
@@ -24,6 +25,12 @@ interface Patient {
     patients_id?: string;
     corporate?: string;
   };
+  referees?: {
+    id: string;
+    name: string;
+  };
+  referee_doa_amt_paid?: number | null;
+  referral_payment_status?: string | null;
   visit_type?: string;
   appointment_with?: string;
   diagnosis?: string;
@@ -41,6 +48,122 @@ interface OpdPatientTableProps {
   patients: Patient[];
   refetch?: () => void;
 }
+
+// Referral Payment Dropdown Component
+const ReferralPaymentDropdown = ({
+  patient,
+  onUpdate
+}: {
+  patient: Patient;
+  onUpdate?: () => void;
+}) => {
+  const [value, setValue] = useState(patient.referral_payment_status || '');
+  const [isUpdating, setIsUpdating] = useState(false);
+
+  const handleChange = async (newValue: string) => {
+    setValue(newValue);
+    setIsUpdating(true);
+    try {
+      const { error } = await supabase
+        .from('visits')
+        .update({ referral_payment_status: newValue || null })
+        .eq('id', patient.id);
+
+      if (error) {
+        console.error('Error updating referral payment status:', error);
+      } else {
+        onUpdate?.();
+      }
+    } catch (err) {
+      console.error('Error updating referral payment status:', err);
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  return (
+    <div className="relative">
+      <select
+        value={value}
+        onChange={(e) => handleChange(e.target.value)}
+        className="w-20 h-6 text-[10px] border border-gray-300 rounded px-1 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+        disabled={isUpdating}
+      >
+        <option value="">Select</option>
+        <option value="Spot Paid">Spot Paid</option>
+        <option value="Unpaid">Unpaid</option>
+        <option value="Direct">Direct</option>
+        <option value="Back Paid">Back Paid</option>
+      </select>
+      {isUpdating && (
+        <Loader2 className="absolute right-1 top-1/2 transform -translate-y-1/2 h-3 w-3 animate-spin" />
+      )}
+    </div>
+  );
+};
+
+// Referee Amount Input Component with Save Button
+const RefereeAmountCell = ({
+  patient,
+  onUpdate
+}: {
+  patient: Patient;
+  onUpdate?: () => void;
+}) => {
+  const { toast } = useToast();
+  const [value, setValue] = useState(patient.referee_doa_amt_paid?.toString() || '');
+  const [isUpdating, setIsUpdating] = useState(false);
+
+  const handleSave = async () => {
+    const numValue = value ? parseFloat(value) : null;
+    setIsUpdating(true);
+    try {
+      const { error } = await supabase
+        .from('visits')
+        .update({ referee_doa_amt_paid: numValue })
+        .eq('id', patient.id);
+
+      if (error) {
+        console.error('Error updating referee amount:', error);
+        toast({
+          title: "Error",
+          description: "Failed to save amount",
+          variant: "destructive"
+        });
+      } else {
+        toast({
+          title: "Saved",
+          description: "Amount saved successfully",
+        });
+        onUpdate?.();
+      }
+    } catch (err) {
+      console.error('Error updating referee amount:', err);
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col items-center gap-1">
+      <input
+        type="number"
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        placeholder="Amount"
+        className="w-20 h-6 text-xs border border-gray-300 rounded px-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+        disabled={isUpdating}
+      />
+      <button
+        onClick={handleSave}
+        disabled={isUpdating}
+        className="h-4 px-2 text-[9px] bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+      >
+        {isUpdating ? <Loader2 className="h-2 w-2 animate-spin" /> : 'Save'}
+      </button>
+    </div>
+  );
+};
 
 export const OpdPatientTable = ({ patients, refetch }: OpdPatientTableProps) => {
   const navigate = useNavigate();
@@ -1161,6 +1284,9 @@ Verified by: [To be verified by doctor]`;
             <TableHead className="hidden print:table-cell font-medium">Address</TableHead>
             <TableHead className="font-medium print:hidden">Visit Type</TableHead>
             <TableHead className="font-medium">Doctor</TableHead>
+            <TableHead className="font-medium print:hidden">Referral Doctor</TableHead>
+            <TableHead className="font-medium print:hidden">Referee DOA_Amt Paid</TableHead>
+            <TableHead className="font-medium print:hidden">Referral Payment</TableHead>
             <TableHead className="font-medium print:hidden">Diagnosis</TableHead>
             <TableHead className="text-center font-medium print:hidden">Payment Received</TableHead>
             <TableHead className="hidden print:table-cell font-medium">Paid Amount</TableHead>
@@ -1245,6 +1371,18 @@ Verified by: [To be verified by doctor]`;
               {/* Both: Doctor */}
               <TableCell>
                 {patient.appointment_with || 'Not Assigned'}
+              </TableCell>
+              {/* Screen-only: Referral Doctor */}
+              <TableCell className="print:hidden text-xs">
+                {patient.referees?.name || '-'}
+              </TableCell>
+              {/* Screen-only: Referee Amount */}
+              <TableCell className="print:hidden">
+                <RefereeAmountCell patient={patient} onUpdate={refetch} />
+              </TableCell>
+              {/* Screen-only: Referral Payment Status */}
+              <TableCell className="print:hidden">
+                <ReferralPaymentDropdown patient={patient} onUpdate={refetch} />
               </TableCell>
               {/* Screen-only: Diagnosis */}
               <TableCell className="print:hidden">

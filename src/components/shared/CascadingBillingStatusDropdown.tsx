@@ -157,7 +157,7 @@ export const CascadingBillingStatusDropdown: React.FC<CascadingBillingStatusDrop
         <select
           value={primaryStatus}
           onChange={(e) => handlePrimaryChange(e.target.value)}
-          className="w-44 h-8 text-xs border border-gray-300 rounded-md px-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-28 h-6 text-[10px] border border-gray-300 rounded px-1 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
           disabled={isUpdating}
         >
           <option value="">Select Status</option>
@@ -172,7 +172,7 @@ export const CascadingBillingStatusDropdown: React.FC<CascadingBillingStatusDrop
           <select
             value={subStatus}
             onChange={(e) => setSubStatus(e.target.value)}
-            className="w-44 h-8 text-xs border border-gray-300 rounded-md px-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 z-10"
+            className="w-28 h-6 text-[10px] border border-gray-300 rounded px-1 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 z-10"
             disabled={isUpdating}
           >
             <option value="">Select Detail</option>
