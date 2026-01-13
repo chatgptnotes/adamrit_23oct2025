@@ -1358,7 +1358,7 @@ const DischargedPatients = () => {
                         {visit.referees?.name || '—'}
                       </TableCell>
                       <TableCell>
-                        <ReferralPaymentDropdown visit={visit} onUpdate={() => refetch()} isAdmin={user?.role === 'admin'} />
+                        <ReferralPaymentDropdown visit={visit} onUpdate={() => refetch()} isAdmin={user?.role === 'admin' || user?.role === 'marketing_manager'} />
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">

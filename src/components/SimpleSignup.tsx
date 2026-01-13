@@ -7,7 +7,7 @@ const SimpleSignup: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [hospital, setHospital] = useState<HospitalType>('hope');
-  const [role, setRole] = useState<'admin' | 'doctor' | 'nurse' | 'user'>('user');
+  const [role, setRole] = useState<'admin' | 'doctor' | 'nurse' | 'user' | 'marketing_manager'>('user');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -117,7 +117,7 @@ const SimpleSignup: React.FC = () => {
             </label>
             <select
               value={role}
-              onChange={(e) => setRole(e.target.value as 'admin' | 'doctor' | 'nurse' | 'user')}
+              onChange={(e) => setRole(e.target.value as 'admin' | 'doctor' | 'nurse' | 'user' | 'marketing_manager')}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               disabled={isLoading}
             >
@@ -125,6 +125,7 @@ const SimpleSignup: React.FC = () => {
               <option value="nurse">Nurse</option>
               <option value="doctor">Doctor</option>
               <option value="admin">Admin</option>
+              <option value="marketing_manager">Marketing Manager</option>
             </select>
           </div>
 
