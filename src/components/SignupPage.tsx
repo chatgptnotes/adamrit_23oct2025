@@ -15,7 +15,7 @@ interface SignupFormData {
   email: string;
   password: string;
   confirmPassword: string;
-  role: 'admin' | 'doctor' | 'nurse' | 'user';
+  role: 'admin' | 'doctor' | 'nurse' | 'user' | 'marketing_manager';
   hospitalType: HospitalType;
 }
 
@@ -222,6 +222,7 @@ const SignupPage: React.FC = () => {
                   <SelectItem value="nurse">Nurse</SelectItem>
                   <SelectItem value="doctor">Doctor</SelectItem>
                   <SelectItem value="admin">Admin</SelectItem>
+                  <SelectItem value="marketing_manager">Marketing Manager</SelectItem>
                 </SelectContent>
               </Select>
             </div>
