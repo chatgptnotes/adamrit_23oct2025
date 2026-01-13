@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useDebounce } from 'use-debounce';
 import { Badge } from '@/components/ui/badge';
-import { Eye, FileText, Search, Calendar, DollarSign, Trash2, FolderOpen, FolderX, CheckCircle, XCircle, Clock, MinusCircle, RotateCcw, Printer, Filter, MessageSquare, ClipboardList, ArrowUpDown, Circle, ChevronLeft, ChevronRight, Upload, Bell, Download } from 'lucide-react';
+import { Eye, FileText, Search, Calendar, DollarSign, Trash2, FolderOpen, FolderX, CheckCircle, XCircle, Clock, MinusCircle, RotateCcw, Printer, Filter, MessageSquare, ClipboardList, ArrowUpDown, Circle, ChevronLeft, ChevronRight, Upload, Bell, Download, Loader2 } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -46,6 +46,121 @@ import { printSticker } from '@/utils/stickerPrinter';
 import { DateRangePicker } from '@/components/ui/date-range-picker';
 import { DateRange } from 'react-day-picker';
 import '@/styles/print.css';
+
+// Referral Payment Dropdown Component for IPD
+const IpdReferralPaymentDropdown = ({
+  visit,
+  onUpdate
+}: {
+  visit: any;
+  onUpdate?: () => void;
+}) => {
+  const [value, setValue] = useState(visit.referral_payment_status || '');
+  const [isUpdating, setIsUpdating] = useState(false);
+
+  const handleChange = async (newValue: string) => {
+    setValue(newValue);
+    setIsUpdating(true);
+    try {
+      const { error } = await supabase
+        .from('visits')
+        .update({ referral_payment_status: newValue || null })
+        .eq('id', visit.id);
+
+      if (error) {
+        console.error('Error updating referral payment status:', error);
+      } else {
+        onUpdate?.();
+      }
+    } catch (err) {
+      console.error('Error updating referral payment status:', err);
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  return (
+    <div className="relative">
+      <select
+        value={value}
+        onChange={(e) => handleChange(e.target.value)}
+        className="w-20 h-6 text-[10px] border border-gray-300 rounded px-1 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+        disabled={isUpdating}
+      >
+        <option value="">Select</option>
+        <option value="Spot Paid">Spot Paid</option>
+        <option value="Unpaid">Unpaid</option>
+        <option value="Direct">Direct</option>
+        <option value="Back Paid">Back Paid</option>
+      </select>
+      {isUpdating && (
+        <Loader2 className="absolute right-1 top-1/2 transform -translate-y-1/2 h-3 w-3 animate-spin" />
+      )}
+    </div>
+  );
+};
+
+// Referee Amount Input Component with Save Button for IPD
+const IpdRefereeAmountCell = ({
+  visit,
+  onUpdate
+}: {
+  visit: any;
+  onUpdate?: () => void;
+}) => {
+  const [value, setValue] = useState(visit.referee_doa_amt_paid?.toString() || '');
+  const [isUpdating, setIsUpdating] = useState(false);
+
+  const handleSave = async () => {
+    const numValue = value ? parseFloat(value) : null;
+    setIsUpdating(true);
+    try {
+      const { error } = await supabase
+        .from('visits')
+        .update({ referee_doa_amt_paid: numValue })
+        .eq('id', visit.id);
+
+      if (error) {
+        console.error('Error updating referee amount:', error);
+        toast({
+          title: "Error",
+          description: "Failed to save amount",
+          variant: "destructive"
+        });
+      } else {
+        toast({
+          title: "Saved",
+          description: "Amount saved successfully",
+        });
+        onUpdate?.();
+      }
+    } catch (err) {
+      console.error('Error updating referee amount:', err);
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col items-center gap-1">
+      <input
+        type="number"
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        placeholder="Amount"
+        className="w-20 h-6 text-xs border border-gray-300 rounded px-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+        disabled={isUpdating}
+      />
+      <button
+        onClick={handleSave}
+        disabled={isUpdating}
+        className="h-4 px-2 text-[9px] bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+      >
+        {isUpdating ? <Loader2 className="h-2 w-2 animate-spin" /> : 'Save'}
+      </button>
+    </div>
+  );
+};
 
 const TodaysIpdDashboard = () => {
   const { isAdmin, hospitalConfig, user } = useAuth();
@@ -1297,6 +1412,10 @@ const TodaysIpdDashboard = () => {
             phone,
             emergency_contact_name,
             emergency_contact_mobile
+          ),
+          referees (
+            id,
+            name
           )
         `)
         .eq('patient_type', 'IPD')
@@ -2092,6 +2211,22 @@ const TodaysIpdDashboard = () => {
     XLSX.writeFile(wb, `IPD_Patients_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
+  const handleExportReferralReport = () => {
+    const reportData = filteredVisits.map(visit => ({
+      'Date of Admission': visit.visit_date || '-',
+      'Visit ID': visit.visit_id || '-',
+      'Patient Name': visit.patients?.name || '-',
+      'Referral Doctor Name': visit.referees?.name || '-',
+      'Patient Bill Amount': visit.referee_doa_amt_paid ? `₹${visit.referee_doa_amt_paid}` : '-',
+      'Payment Status': visit.referral_payment_status || '-'
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(reportData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Referral Report');
+    XLSX.writeFile(wb, `IPD_Referral_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
+  };
+
   const handlePrintConfirm = () => {
     setIsPrintPickerOpen(false);
     setShowPrintPreview(true);
@@ -2282,6 +2417,14 @@ const TodaysIpdDashboard = () => {
             >
               <Download className="h-4 w-4" />
               Export XLS
+            </Button>
+            <Button
+              onClick={handleExportReferralReport}
+              variant="outline"
+              className="flex items-center gap-2"
+            >
+              <Download className="h-4 w-4" />
+              Referral Report
             </Button>
             <Button
               onClick={() => setHideColumns(!hideColumns)}
@@ -2500,6 +2643,9 @@ const TodaysIpdDashboard = () => {
                 {!hideColumns && <TableHead className="font-semibold">Visit Type</TableHead>}
                 <TableHead className="font-semibold">Stickers</TableHead>
                 <TableHead className="font-semibold">Doctor</TableHead>
+                <TableHead className="font-semibold">Referral Doctor</TableHead>
+                <TableHead className="font-semibold">Referee DOA_Amt Paid</TableHead>
+                <TableHead className="font-semibold">Referral Payment</TableHead>
                 <TableHead className="font-semibold">Diagnosis</TableHead>
                 <TableHead className="font-semibold">Admission Date</TableHead>
                 <TableHead className="font-semibold">Days Admitted</TableHead>
@@ -2551,6 +2697,9 @@ const TodaysIpdDashboard = () => {
                   </TableHead>
                 )}
                 {!hideColumns && <TableHead></TableHead>}
+                <TableHead></TableHead>
+                <TableHead></TableHead>
+                <TableHead></TableHead>
                 <TableHead></TableHead>
                 <TableHead></TableHead>
                 <TableHead></TableHead>
@@ -2819,6 +2968,15 @@ const TodaysIpdDashboard = () => {
                   </TableCell>
                   <TableCell>
                     {visit.appointment_with}
+                  </TableCell>
+                  <TableCell className="text-xs">
+                    {visit.referees?.name || '-'}
+                  </TableCell>
+                  <TableCell>
+                    <IpdRefereeAmountCell visit={visit} onUpdate={refetch} />
+                  </TableCell>
+                  <TableCell>
+                    <IpdReferralPaymentDropdown visit={visit} onUpdate={refetch} />
                   </TableCell>
                   <TableCell>
                     General

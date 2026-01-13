@@ -100,6 +100,10 @@ const TodaysOpd = () => {
             phone,
             address,
             city_town
+          ),
+          referees (
+            id,
+            name
           )
         `)
         .eq('patient_type', 'OPD')
@@ -206,6 +210,27 @@ const TodaysOpd = () => {
     XLSX.writeFile(wb, `OPD_Patients_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
+  const handleExportReferralReport = () => {
+    console.log('📊 Exporting Referral Report...');
+    console.log('📅 Date range:', startDate, 'to', endDate);
+    console.log('👥 Filtered patients count:', filteredPatients.length);
+    console.log('📋 OPD patients count:', opdPatients.length);
+
+    const reportData = filteredPatients.map(patient => ({
+      'Date of Admission': patient.visit_date || '-',
+      'Visit ID': patient.visit_id || '-',
+      'Patient Name': patient.patients?.name || '-',
+      'Referral Doctor Name': patient.referees?.name || '-',
+      'Patient Bill Amount': patient.referee_doa_amt_paid ? `₹${patient.referee_doa_amt_paid}` : '-',
+      'Payment Status': patient.referral_payment_status || '-'
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(reportData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Referral Report');
+    XLSX.writeFile(wb, `Referral_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
+  };
+
   // Debug: Check if there are any visits in the database
   useEffect(() => {
     const checkVisits = async () => {
@@ -264,6 +289,15 @@ const TodaysOpd = () => {
               >
                 <Download className="h-4 w-4" />
                 Export XLS
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleExportReferralReport}
+                className="flex items-center gap-2"
+              >
+                <Download className="h-4 w-4" />
+                Referral Report
               </Button>
               <DateRangePicker
                 date={dateRange}
