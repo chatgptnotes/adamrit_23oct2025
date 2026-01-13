@@ -269,21 +269,34 @@ export const DischargeWorkflowPanel: React.FC<DischargeWorkflowPanelProps> = ({ 
       let nextDischargedSrNo: number | null = null;
 
       if (isHopeInstance) {
-        // Get next Discharged Sr. No (auto-increment) for 'hope' instance only
-        // Don't filter by status - number should be unique even if patient is undischarged later
-        const { data: maxSrNoData } = await supabase
+        // First check if this visit already has a discharged_sr_no (from previous discharge)
+        const { data: existingVisit } = await supabase
           .from('visits')
-          .select('discharged_sr_no, patients!inner(hospital_name)')
-          .eq('patients.hospital_name', 'hope')
-          .not('discharged_sr_no', 'is', null)
-          .order('discharged_sr_no', { ascending: false })
-          .limit(1)
+          .select('discharged_sr_no')
+          .eq('id', visit.id)
           .single();
 
-        const maxSrNo = maxSrNoData?.discharged_sr_no ? parseInt(maxSrNoData.discharged_sr_no) : 0;
-        nextDischargedSrNo = maxSrNo + 1;
+        if (existingVisit?.discharged_sr_no) {
+          // Patient was previously discharged - keep their original Sr. No
+          nextDischargedSrNo = parseInt(existingVisit.discharged_sr_no);
+          console.log('📝 Keeping existing Discharged Sr. No:', nextDischargedSrNo);
+        } else {
+          // Get next Discharged Sr. No (auto-increment) for 'hope' instance only
+          // Don't filter by status - number should be unique even if patient is undischarged later
+          const { data: maxSrNoData } = await supabase
+            .from('visits')
+            .select('discharged_sr_no, patients!inner(hospital_name)')
+            .eq('patients.hospital_name', 'hope')
+            .not('discharged_sr_no', 'is', null)
+            .order('discharged_sr_no', { ascending: false })
+            .limit(1)
+            .single();
 
-        console.log('📝 Assigning Discharged Sr. No:', nextDischargedSrNo);
+          const maxSrNo = maxSrNoData?.discharged_sr_no ? parseInt(maxSrNoData.discharged_sr_no) : 0;
+          nextDischargedSrNo = maxSrNo + 1;
+
+          console.log('📝 Assigning new Discharged Sr. No:', nextDischargedSrNo);
+        }
       }
 
       // Update visit with discharge date and Discharged Sr. No (if hope instance)
