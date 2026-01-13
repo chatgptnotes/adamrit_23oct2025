@@ -263,11 +263,13 @@ export const DischargeWorkflowPanel: React.FC<DischargeWorkflowPanelProps> = ({ 
 
       console.log('🏥 Discharging patient:', visit.visit_id);
 
-      // Check if patient belongs to 'hope' instance
+      // Check which hospital instance
       const isHopeInstance = visit.patients.hospital_name === 'hope';
+      const isAyushmanInstance = visit.patients.hospital_name === 'ayushman';
 
       let nextDischargedSrNo: number | null = null;
 
+      // Sr. No logic for Hope hospital
       if (isHopeInstance) {
         // First check if this visit already has a discharged_sr_no (from previous discharge)
         const { data: existingVisit } = await supabase
@@ -279,10 +281,9 @@ export const DischargeWorkflowPanel: React.FC<DischargeWorkflowPanelProps> = ({ 
         if (existingVisit?.discharged_sr_no) {
           // Patient was previously discharged - keep their original Sr. No
           nextDischargedSrNo = parseInt(existingVisit.discharged_sr_no);
-          console.log('📝 Keeping existing Discharged Sr. No:', nextDischargedSrNo);
+          console.log('📝 Hope: Keeping existing Discharged Sr. No:', nextDischargedSrNo);
         } else {
           // Get next Discharged Sr. No (auto-increment) for 'hope' instance only
-          // Don't filter by status - number should be unique even if patient is undischarged later
           const { data: maxSrNoData } = await supabase
             .from('visits')
             .select('discharged_sr_no, patients!inner(hospital_name)')
@@ -295,11 +296,42 @@ export const DischargeWorkflowPanel: React.FC<DischargeWorkflowPanelProps> = ({ 
           const maxSrNo = maxSrNoData?.discharged_sr_no ? parseInt(maxSrNoData.discharged_sr_no) : 0;
           nextDischargedSrNo = maxSrNo + 1;
 
-          console.log('📝 Assigning new Discharged Sr. No:', nextDischargedSrNo);
+          console.log('📝 Hope: Assigning new Discharged Sr. No:', nextDischargedSrNo);
         }
       }
 
-      // Update visit with discharge date and Discharged Sr. No (if hope instance)
+      // Sr. No logic for Ayushman hospital
+      if (isAyushmanInstance) {
+        // First check if this visit already has a discharged_sr_no (from previous discharge)
+        const { data: existingVisit } = await supabase
+          .from('visits')
+          .select('discharged_sr_no')
+          .eq('id', visit.id)
+          .single();
+
+        if (existingVisit?.discharged_sr_no) {
+          // Patient was previously discharged - keep their original Sr. No
+          nextDischargedSrNo = parseInt(existingVisit.discharged_sr_no);
+          console.log('📝 Ayushman: Keeping existing Discharged Sr. No:', nextDischargedSrNo);
+        } else {
+          // Get next Discharged Sr. No (auto-increment) for 'ayushman' instance only
+          const { data: maxSrNoData } = await supabase
+            .from('visits')
+            .select('discharged_sr_no, patients!inner(hospital_name)')
+            .eq('patients.hospital_name', 'ayushman')
+            .not('discharged_sr_no', 'is', null)
+            .order('discharged_sr_no', { ascending: false })
+            .limit(1)
+            .single();
+
+          const maxSrNo = maxSrNoData?.discharged_sr_no ? parseInt(maxSrNoData.discharged_sr_no) : 0;
+          nextDischargedSrNo = maxSrNo + 1;
+
+          console.log('📝 Ayushman: Assigning new Discharged Sr. No:', nextDischargedSrNo);
+        }
+      }
+
+      // Update visit with discharge date and Discharged Sr. No (if Hope or Ayushman)
       const updateData: any = {
         discharge_date: dischargeDate.toISOString(),
         status: 'discharged',

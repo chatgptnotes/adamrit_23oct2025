@@ -3,7 +3,7 @@
  * Defines role-based permissions for the hospital management system
  */
 
-export type UserRole = 'admin' | 'doctor' | 'nurse' | 'user';
+export type UserRole = 'admin' | 'doctor' | 'nurse' | 'user' | 'marketing_manager';
 
 export enum Permission {
   // Master Data Permissions
@@ -58,6 +58,14 @@ const rolePermissions: Record<UserRole, Permission[]> = {
 
   user: [
     // Users have read-only access to masters, can manage records but NOT delete
+    Permission.VIEW_MASTERS,
+    Permission.CREATE_RECORDS,
+    Permission.EDIT_RECORDS,
+    Permission.VIEW_RECORDS,
+  ],
+
+  marketing_manager: [
+    // Marketing managers have same permissions as user + can edit Referral Payment
     Permission.VIEW_MASTERS,
     Permission.CREATE_RECORDS,
     Permission.EDIT_RECORDS,

@@ -3127,9 +3127,10 @@ const FinalBill = () => {
       console.log('💾 Starting discharge update for visitId:', visitId);
       console.log('📅 Setting discharge date to:', finalPaymentDischargeDate);
 
-      // Get next Discharged Sr. No for 'hope' instance
+      // Get next Discharged Sr. No for Hope or Ayushman instance
       let nextDischargedSrNo: number | null = null;
 
+      // Sr. No logic for Hope hospital
       if (hospitalConfig?.name === 'hope') {
         // First check if this visit already has a discharged_sr_no (from previous discharge)
         const { data: existingVisit } = await supabase
@@ -3141,10 +3142,9 @@ const FinalBill = () => {
         if (existingVisit?.discharged_sr_no) {
           // Patient was previously discharged - keep their original Sr. No
           nextDischargedSrNo = Number(existingVisit.discharged_sr_no);
-          console.log('📝 Keeping existing Discharged Sr. No:', nextDischargedSrNo);
+          console.log('📝 Hope: Keeping existing Discharged Sr. No:', nextDischargedSrNo);
         } else {
-          // Get next Discharged Sr. No (auto-increment)
-          // Don't filter by status - number should be unique even if patient is undischarged later
+          // Get next Discharged Sr. No (auto-increment) for Hope
           const { data: maxSrNoData } = await supabase
             .from('visits')
             .select('discharged_sr_no, patients!inner(hospital_name)')
@@ -3156,7 +3156,37 @@ const FinalBill = () => {
 
           const maxSrNo = maxSrNoData?.discharged_sr_no ? Number(maxSrNoData.discharged_sr_no) : 0;
           nextDischargedSrNo = maxSrNo + 1;
-          console.log('📝 Assigning new Discharged Sr. No:', nextDischargedSrNo);
+          console.log('📝 Hope: Assigning new Discharged Sr. No:', nextDischargedSrNo);
+        }
+      }
+
+      // Sr. No logic for Ayushman hospital
+      if (hospitalConfig?.name === 'ayushman') {
+        // First check if this visit already has a discharged_sr_no (from previous discharge)
+        const { data: existingVisit } = await supabase
+          .from('visits')
+          .select('discharged_sr_no')
+          .eq('visit_id', visitId)
+          .single();
+
+        if (existingVisit?.discharged_sr_no) {
+          // Patient was previously discharged - keep their original Sr. No
+          nextDischargedSrNo = Number(existingVisit.discharged_sr_no);
+          console.log('📝 Ayushman: Keeping existing Discharged Sr. No:', nextDischargedSrNo);
+        } else {
+          // Get next Discharged Sr. No (auto-increment) for Ayushman
+          const { data: maxSrNoData } = await supabase
+            .from('visits')
+            .select('discharged_sr_no, patients!inner(hospital_name)')
+            .eq('patients.hospital_name', 'ayushman')
+            .not('discharged_sr_no', 'is', null)
+            .order('discharged_sr_no', { ascending: false })
+            .limit(1)
+            .single();
+
+          const maxSrNo = maxSrNoData?.discharged_sr_no ? Number(maxSrNoData.discharged_sr_no) : 0;
+          nextDischargedSrNo = maxSrNo + 1;
+          console.log('📝 Ayushman: Assigning new Discharged Sr. No:', nextDischargedSrNo);
         }
       }
 
@@ -3170,7 +3200,7 @@ const FinalBill = () => {
         status: 'discharged' // Set status to discharged so patient appears in Discharged Patients dashboard
       };
 
-      // Add discharged_sr_no only for hope instance
+      // Add discharged_sr_no for Hope or Ayushman instance
       if (nextDischargedSrNo !== null) {
         updateData.discharged_sr_no = nextDischargedSrNo;
       }
