@@ -57,6 +57,10 @@ interface Visit {
   billing_status: string | null;
   patient_type: string | null;
   discharge_summary_status: string | null;
+  referral_payment_status: string | null;
+  referees: {
+    name: string;
+  } | null;
   patients: {
     id: string;
     patients_id: string;
@@ -74,6 +78,66 @@ interface CorporateOption {
   id: string;
   name: string;
 }
+
+// Referral Payment Dropdown Component - Admin only can edit
+const ReferralPaymentDropdown = ({
+  visit,
+  onUpdate,
+  isAdmin
+}: {
+  visit: Visit;
+  onUpdate?: () => void;
+  isAdmin: boolean;
+}) => {
+  const [value, setValue] = useState(visit.referral_payment_status || '');
+  const [isUpdating, setIsUpdating] = useState(false);
+
+  const handleChange = async (newValue: string) => {
+    setValue(newValue);
+    setIsUpdating(true);
+    try {
+      const { error } = await supabase
+        .from('visits')
+        .update({ referral_payment_status: newValue || null })
+        .eq('id', visit.id);
+
+      if (error) {
+        console.error('Error updating referral payment status:', error);
+      } else {
+        onUpdate?.();
+      }
+    } catch (err) {
+      console.error('Error updating referral payment status:', err);
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  // Non-admin users can only view the value
+  if (!isAdmin) {
+    return <span className="text-xs">{visit.referral_payment_status || '—'}</span>;
+  }
+
+  // Admin users get the dropdown
+  return (
+    <div className="relative">
+      <select
+        value={value}
+        onChange={(e) => handleChange(e.target.value)}
+        className="w-28 h-8 text-xs border border-gray-300 rounded-md px-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+        disabled={isUpdating}
+      >
+        <option value="">Select</option>
+        <option value="Paid">Paid</option>
+        <option value="Unpaid">Unpaid</option>
+        <option value="Direct">Direct</option>
+      </select>
+      {isUpdating && (
+        <Loader2 className="absolute right-1 top-1/2 transform -translate-y-1/2 h-3 w-3 animate-spin" />
+      )}
+    </div>
+  );
+};
 
 const DischargedPatients = () => {
   const navigate = useNavigate();
@@ -427,6 +491,9 @@ const DischargedPatients = () => {
             insurance_person_no,
             hospital_name,
             corporate
+          ),
+          referees(
+            name
           ),
           ipd_discharge_summary!visit_id(
             status
@@ -1204,6 +1271,8 @@ const DischargedPatients = () => {
                     <TableHead>Days Admitted</TableHead>
                     <TableHead>Billing Status</TableHead>
                     <TableHead>Corporate</TableHead>
+                    <TableHead>Referral Doctor</TableHead>
+                    <TableHead>Referral Payment</TableHead>
                     <TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -1284,6 +1353,12 @@ const DischargedPatients = () => {
                       </TableCell>
                       <TableCell>
                         {visit.patients?.corporate || '—'}
+                      </TableCell>
+                      <TableCell>
+                        {visit.referees?.name || '—'}
+                      </TableCell>
+                      <TableCell>
+                        <ReferralPaymentDropdown visit={visit} onUpdate={() => refetch()} isAdmin={user?.role === 'admin'} />
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
