@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Receipt, Pencil, Trash2, Search, User, Loader2, Download, Filter, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
+import { Receipt, Pencil, Trash2, Search, User, Loader2, Download, Filter, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, X } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -70,6 +70,12 @@ const BillSubmissionPage: React.FC = () => {
   const [selectedPatient, setSelectedPatient] = useState<PatientData | null>(null);
   const [showDropdown, setShowDropdown] = useState(false);
   const searchRef = useRef<HTMLDivElement>(null);
+
+  // Patient lookup search state
+  const [patientLookupTerm, setPatientLookupTerm] = useState('');
+  const [selectedPatientForLookup, setSelectedPatientForLookup] = useState<any>(null);
+  const [showPatientLookupDropdown, setShowPatientLookupDropdown] = useState(false);
+  const patientLookupRef = useRef<HTMLDivElement>(null);
 
   // Fetch bill submissions from Supabase, filtered by hospital
   const { data: submissions = [], isLoading } = useBillSubmissions(hospitalConfig?.name);
@@ -219,11 +225,60 @@ const BillSubmissionPage: React.FC = () => {
     enabled: searchTerm.length >= 2,
   });
 
+  // Patient lookup search query
+  const { data: patientLookupResults = [], isLoading: isPatientLookupSearching } = useQuery({
+    queryKey: ['patient-lookup-search', patientLookupTerm, hospitalConfig?.name],
+    queryFn: async () => {
+      let query = supabase
+        .from('visits')
+        .select(`
+          id,
+          visit_id,
+          admission_date,
+          discharge_date,
+          patients!inner(
+            id,
+            name,
+            corporate,
+            hospital_name
+          )
+        `)
+        .ilike('patients.name', `%${patientLookupTerm}%`);
+
+      if (hospitalConfig?.name) {
+        query = query.eq('patients.hospital_name', hospitalConfig.name);
+      }
+
+      const { data, error } = await query.limit(10);
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: patientLookupTerm.length >= 2,
+  });
+
+  // Fetch bill details for selected patient
+  const { data: patientBillDetails = [], isLoading: isBillLoading } = useQuery({
+    queryKey: ['patient-bill-details', selectedPatientForLookup?.visit_id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('bill_preparation' as any)
+        .select('*')
+        .eq('visit_id', selectedPatientForLookup?.visit_id);
+
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!selectedPatientForLookup?.visit_id,
+  });
+
   // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (searchRef.current && !searchRef.current.contains(event.target as Node)) {
         setShowDropdown(false);
+      }
+      if (patientLookupRef.current && !patientLookupRef.current.contains(event.target as Node)) {
+        setShowPatientLookupDropdown(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -240,6 +295,25 @@ const BillSubmissionPage: React.FC = () => {
     setIsFormOpen(true);
     setShowDropdown(false);
     setSearchTerm('');
+  };
+
+  // Handle patient lookup selection
+  const handlePatientLookupSelect = (visit: any) => {
+    setSelectedPatientForLookup({
+      visit_id: visit.visit_id,
+      patient_name: visit.patients?.name || '',
+      corporate: visit.patients?.corporate || '',
+      admission_date: visit.admission_date || '',
+      discharge_date: visit.discharge_date || '',
+    });
+    setShowPatientLookupDropdown(false);
+    setPatientLookupTerm('');
+  };
+
+  // Clear patient lookup
+  const handleClearPatientLookup = () => {
+    setSelectedPatientForLookup(null);
+    setPatientLookupTerm('');
   };
 
   const handleEdit = (submission: any) => {
@@ -416,6 +490,57 @@ const BillSubmissionPage: React.FC = () => {
               Clear Filters
             </Button>
 
+            {/* Patient Lookup Search */}
+            <div className="relative ml-4" ref={patientLookupRef}>
+              <div className="space-y-1">
+                <Label className="text-xs text-gray-500">Patient Lookup</Label>
+                <div className="flex items-center gap-2">
+                  <Search className="h-4 w-4 text-gray-400" />
+                  <Input
+                    placeholder="Search patient..."
+                    value={patientLookupTerm}
+                    onChange={(e) => {
+                      setPatientLookupTerm(e.target.value);
+                      setShowPatientLookupDropdown(e.target.value.length >= 2);
+                    }}
+                    onFocus={() => patientLookupTerm.length >= 2 && setShowPatientLookupDropdown(true)}
+                    className="w-[200px]"
+                  />
+                </div>
+              </div>
+
+              {/* Patient Lookup Dropdown */}
+              {showPatientLookupDropdown && (
+                <div className="absolute z-50 mt-1 w-full bg-white border rounded-md shadow-lg">
+                  {isPatientLookupSearching ? (
+                    <div className="p-3 text-center text-gray-500">Searching...</div>
+                  ) : patientLookupResults.length === 0 ? (
+                    <div className="p-3 text-center text-gray-500">No patients found</div>
+                  ) : (
+                    <ul className="max-h-60 overflow-auto">
+                      {patientLookupResults.map((visit: any) => (
+                        <li
+                          key={visit.id}
+                          className="px-4 py-3 hover:bg-gray-100 cursor-pointer border-b last:border-b-0"
+                          onClick={() => handlePatientLookupSelect(visit)}
+                        >
+                          <div className="flex items-center gap-3">
+                            <User className="h-5 w-5 text-gray-400" />
+                            <div>
+                              <div className="font-medium">{visit.patients?.name}</div>
+                              <div className="text-sm text-gray-500">
+                                Visit ID: {visit.visit_id || 'N/A'} | {visit.patients?.corporate || 'N/A'}
+                              </div>
+                            </div>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
+            </div>
+
             <div className="ml-auto flex gap-2">
               <Button onClick={handleExportReceivedAmount} className="bg-blue-600 hover:bg-blue-700">
                 <Download className="h-4 w-4 mr-2" />
@@ -427,6 +552,70 @@ const BillSubmissionPage: React.FC = () => {
               </Button>
             </div>
           </div>
+
+          {/* Patient Lookup Details Card */}
+          {selectedPatientForLookup && (
+            <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-4">
+                  <User className="h-6 w-6 text-blue-600" />
+                  <div>
+                    <h3 className="font-semibold text-lg">{selectedPatientForLookup.patient_name}</h3>
+                    <p className="text-sm text-gray-600">
+                      Visit ID: {selectedPatientForLookup.visit_id} | Corporate: {selectedPatientForLookup.corporate || 'N/A'}
+                    </p>
+                    <p className="text-sm text-gray-600">
+                      Admission: {formatDate(selectedPatientForLookup.admission_date)} | Discharge: {formatDate(selectedPatientForLookup.discharge_date)}
+                    </p>
+                  </div>
+                </div>
+                <Button variant="ghost" size="sm" onClick={handleClearPatientLookup}>
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+
+              {/* Bill Details */}
+              <div className="mt-3">
+                <h4 className="text-sm font-medium text-gray-700 mb-2">Billing Information:</h4>
+                {isBillLoading ? (
+                  <div className="text-center py-2">
+                    <Loader2 className="h-4 w-4 animate-spin mx-auto" />
+                  </div>
+                ) : patientBillDetails.length === 0 ? (
+                  <p className="text-sm text-gray-500">No billing records found for this patient.</p>
+                ) : (
+                  <div className="bg-white rounded border overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead className="bg-gray-100">
+                        <tr>
+                          <th className="px-3 py-2 text-left">Bill Amount</th>
+                          <th className="px-3 py-2 text-left">Submitted By</th>
+                          <th className="px-3 py-2 text-left">Submission Date</th>
+                          <th className="px-3 py-2 text-left">Expected Payment</th>
+                          <th className="px-3 py-2 text-left">Received Amount</th>
+                          <th className="px-3 py-2 text-left">Deduction</th>
+                          <th className="px-3 py-2 text-left">Received On</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {patientBillDetails.map((bill: any) => (
+                          <tr key={bill.id} className="border-t">
+                            <td className="px-3 py-2">{formatAmount(bill.bill_amount)}</td>
+                            <td className="px-3 py-2">{bill.executive_who_submitted || '-'}</td>
+                            <td className="px-3 py-2">{formatDate(bill.date_of_submission)}</td>
+                            <td className="px-3 py-2">{formatDate(bill.expected_payment_date)}</td>
+                            <td className="px-3 py-2">{formatAmount(bill.received_amount)}</td>
+                            <td className="px-3 py-2">{formatAmount(bill.deduction_amount)}</td>
+                            <td className="px-3 py-2">{formatDate(bill.received_date)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           <div className="rounded-md border">
             <Table>
