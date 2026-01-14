@@ -271,6 +271,12 @@ const DischargedPatients = () => {
   const [uploadPreviewData, setUploadPreviewData] = useState<Array<{visit_id: string, discharged_sr_no: string}>>([]);
   const [isUploading, setIsUploading] = useState(false);
 
+  // State for referral report preview modal
+  const [isReferralReportOpen, setIsReferralReportOpen] = useState(false);
+
+  // State for unpaid referral report modal
+  const [isUnpaidReportOpen, setIsUnpaidReportOpen] = useState(false);
+
   // Fetch notifications for selected visit
   const { data: gatePassNotifications, isLoading: notificationsLoading } = useQuery({
     queryKey: ['gatepass-notifications', selectedVisitForGatePass?.visit_id],
@@ -836,21 +842,131 @@ const DischargedPatients = () => {
     return corporate;
   };
 
-  // Export Referral Report to Excel
-  const handleExportReferralReport = () => {
-    const reportData = filteredVisits.map(visit => ({
-      'Date of Admission': visit.admission_date || '-',
-      'Visit ID': visit.visit_id || '-',
-      'Patient Name': visit.patients?.name || '-',
-      'Referral Doctor Name': visit.referees?.name || '-',
-      'Patient Bill Amount': visit.referee_discharge_amt_paid ? `₹${visit.referee_discharge_amt_paid}` : '-',
-      'Payment Status': visit.referral_payment_status || '-'
-    }));
+  // Open Referral Report Preview Modal
+  const handleOpenReferralReport = () => {
+    setIsReferralReportOpen(true);
+  };
 
-    const ws = XLSX.utils.json_to_sheet(reportData);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Referral Report');
-    XLSX.writeFile(wb, `Discharged_Referral_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
+  // Print Referral Report
+  const handlePrintReferralReport = () => {
+    const printContent = document.getElementById('referral-report-content');
+    if (printContent) {
+      const printWindow = window.open('', '_blank');
+      if (printWindow) {
+        printWindow.document.write(`
+          <html>
+            <head>
+              <title>Referral Report - ${format(new Date(), 'dd MMM yyyy')}</title>
+              <style>
+                body {
+                  font-family: Arial, sans-serif;
+                  padding: 20px;
+                  font-size: 12px;
+                  margin: 0;
+                }
+                h1 { text-align: center; margin-bottom: 5px; font-size: 18px; }
+                .subtitle { text-align: center; color: #666; margin-bottom: 15px; font-size: 11px; }
+                .header-info {
+                  display: flex;
+                  justify-content: space-between;
+                  margin-bottom: 15px;
+                  padding: 8px;
+                  background: #f5f5f5;
+                  font-size: 10px;
+                }
+                table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+                th, td { border: 1px solid #000; padding: 6px; text-align: left; font-size: 10px; }
+                th { background-color: #f0f0f0; font-weight: bold; }
+                tr:nth-child(even) { background-color: #f9f9f9; }
+                .text-right { text-align: right; }
+                @media print {
+                  body { margin: 0; }
+                  @page { margin: 0.5in; size: A4 landscape; }
+                }
+              </style>
+            </head>
+            <body>
+              <h1>Referral Report</h1>
+              <p class="subtitle">Discharged Patients - Referral Details</p>
+              <div class="header-info">
+                <span><strong>Print Date:</strong> ${format(new Date(), 'dd MMM yyyy, hh:mm a')}</span>
+                <span><strong>Total Records:</strong> ${filteredVisits.length}</span>
+              </div>
+              ${printContent.innerHTML}
+            </body>
+          </html>
+        `);
+        printWindow.document.close();
+        printWindow.print();
+        printWindow.close();
+      }
+    }
+  };
+
+  // Filter for unpaid referral visits
+  const unpaidReferralVisits = filteredVisits.filter(
+    visit => visit.referral_payment_status === 'Unpaid'
+  );
+
+  // Open Unpaid Referral Report Modal
+  const handleOpenUnpaidReport = () => {
+    setIsUnpaidReportOpen(true);
+  };
+
+  // Print Unpaid Referral Report
+  const handlePrintUnpaidReport = () => {
+    const printContent = document.getElementById('unpaid-report-content');
+    if (printContent) {
+      const printWindow = window.open('', '_blank');
+      if (printWindow) {
+        printWindow.document.write(`
+          <html>
+            <head>
+              <title>Unpaid Referral Report - ${format(new Date(), 'dd MMM yyyy')}</title>
+              <style>
+                body {
+                  font-family: Arial, sans-serif;
+                  padding: 20px;
+                  font-size: 12px;
+                  margin: 0;
+                }
+                h1 { text-align: center; margin-bottom: 5px; font-size: 18px; }
+                .subtitle { text-align: center; color: #666; margin-bottom: 15px; font-size: 11px; }
+                .header-info {
+                  display: flex;
+                  justify-content: space-between;
+                  margin-bottom: 15px;
+                  padding: 8px;
+                  background: #f5f5f5;
+                  font-size: 10px;
+                }
+                table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+                th, td { border: 1px solid #000; padding: 6px; text-align: left; font-size: 10px; }
+                th { background-color: #f0f0f0; font-weight: bold; }
+                tr:nth-child(even) { background-color: #f9f9f9; }
+                .text-right { text-align: right; }
+                @media print {
+                  body { margin: 0; }
+                  @page { margin: 0.5in; size: A4 landscape; }
+                }
+              </style>
+            </head>
+            <body>
+              <h1>Unpaid Referral Report</h1>
+              <p class="subtitle">Discharged Patients - Unpaid Referral Details</p>
+              <div class="header-info">
+                <span><strong>Print Date:</strong> ${format(new Date(), 'dd MMM yyyy, hh:mm a')}</span>
+                <span><strong>Total Unpaid:</strong> ${unpaidReferralVisits.length}</span>
+              </div>
+              ${printContent.innerHTML}
+            </body>
+          </html>
+        `);
+        printWindow.document.close();
+        printWindow.print();
+        printWindow.close();
+      }
+    }
   };
 
   // Print Dashboard function
@@ -1172,13 +1288,22 @@ const DischargedPatients = () => {
             Print
           </Button>
           <Button
-            onClick={handleExportReferralReport}
+            onClick={handleOpenReferralReport}
             variant="outline"
             size="sm"
             className="flex items-center gap-2"
           >
             <FileText className="h-4 w-4" />
             Referral Report
+          </Button>
+          <Button
+            onClick={handleOpenUnpaidReport}
+            variant="outline"
+            size="sm"
+            className="flex items-center gap-2 text-red-600 border-red-300 hover:bg-red-50"
+          >
+            <FileText className="h-4 w-4" />
+            Unpaid Referral
           </Button>
           <Badge variant="outline" className="flex items-center gap-1">
             <Users className="h-3 w-3" />
@@ -1698,6 +1823,114 @@ const DischargedPatients = () => {
                 Print Gate Pass
               </Button>
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Referral Report Preview Modal */}
+      <Dialog open={isReferralReportOpen} onOpenChange={setIsReferralReportOpen}>
+        <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center justify-between pr-8">
+              <span>Referral Report Preview</span>
+              <Button onClick={handlePrintReferralReport} className="ml-4">
+                <Printer className="mr-2 h-4 w-4" />
+                Print Report
+              </Button>
+            </DialogTitle>
+          </DialogHeader>
+
+          <div id="referral-report-content">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Date of Admission</TableHead>
+                  <TableHead>Visit ID</TableHead>
+                  <TableHead>Patient Name</TableHead>
+                  <TableHead>Referral Doctor Name</TableHead>
+                  <TableHead className="text-right">Patient Bill Amount</TableHead>
+                  <TableHead>Payment Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredVisits.map((visit) => (
+                  <TableRow key={visit.id}>
+                    <TableCell>{visit.admission_date || '-'}</TableCell>
+                    <TableCell>{visit.visit_id || '-'}</TableCell>
+                    <TableCell>{visit.patients?.name || '-'}</TableCell>
+                    <TableCell>{visit.referees?.name || '-'}</TableCell>
+                    <TableCell className="text-right">
+                      {visit.referee_discharge_amt_paid ? `₹${visit.referee_discharge_amt_paid}` : '-'}
+                    </TableCell>
+                    <TableCell>{visit.referral_payment_status || '-'}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+
+          <div className="flex justify-between items-center pt-4 border-t">
+            <span className="text-sm text-muted-foreground">
+              Total: {filteredVisits.length} records
+            </span>
+            <Button onClick={handlePrintReferralReport} className="bg-blue-600 hover:bg-blue-700">
+              <Printer className="mr-2 h-4 w-4" />
+              Print Report
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Unpaid Referral Report Modal */}
+      <Dialog open={isUnpaidReportOpen} onOpenChange={setIsUnpaidReportOpen}>
+        <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center justify-between pr-8">
+              <span className="text-red-600">Unpaid Referral Report</span>
+              <Button onClick={handlePrintUnpaidReport} className="ml-4 bg-red-600 hover:bg-red-700">
+                <Printer className="mr-2 h-4 w-4" />
+                Print Report
+              </Button>
+            </DialogTitle>
+          </DialogHeader>
+
+          <div id="unpaid-report-content">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Date of Admission</TableHead>
+                  <TableHead>Visit ID</TableHead>
+                  <TableHead>Patient Name</TableHead>
+                  <TableHead>Referral Doctor Name</TableHead>
+                  <TableHead className="text-right">Patient Bill Amount</TableHead>
+                  <TableHead>Payment Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {unpaidReferralVisits.map((visit) => (
+                  <TableRow key={visit.id}>
+                    <TableCell>{visit.admission_date || '-'}</TableCell>
+                    <TableCell>{visit.visit_id || '-'}</TableCell>
+                    <TableCell>{visit.patients?.name || '-'}</TableCell>
+                    <TableCell>{visit.referees?.name || '-'}</TableCell>
+                    <TableCell className="text-right">
+                      {visit.referee_discharge_amt_paid ? `₹${visit.referee_discharge_amt_paid}` : '-'}
+                    </TableCell>
+                    <TableCell className="text-red-600 font-medium">{visit.referral_payment_status || '-'}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+
+          <div className="flex justify-between items-center pt-4 border-t">
+            <span className="text-sm text-muted-foreground">
+              Total Unpaid: {unpaidReferralVisits.length} records
+            </span>
+            <Button onClick={handlePrintUnpaidReport} className="bg-red-600 hover:bg-red-700">
+              <Printer className="mr-2 h-4 w-4" />
+              Print Report
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
