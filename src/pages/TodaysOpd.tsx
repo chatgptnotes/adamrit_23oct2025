@@ -17,8 +17,11 @@ import { DateRange } from 'react-day-picker';
 import { format } from 'date-fns';
 
 const TodaysOpd = () => {
-  const { hospitalConfig } = useAuth();
+  const { hospitalConfig, user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
+  
+  // Check if current user is a marketing manager
+  const isMarketingManager = user?.role === 'marketing_manager';
 
   // State for referral report preview modal
   const [isReferralReportOpen, setIsReferralReportOpen] = useState(false);
@@ -413,24 +416,29 @@ const TodaysOpd = () => {
                 <Download className="h-3 w-3" />
                 Export XLS
               </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleOpenReferralReport}
-                className="flex items-center gap-1 text-xs h-8"
-              >
-                <Download className="h-3 w-3" />
-                Referral Report
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleOpenUnpaidReport}
-                className="flex items-center gap-1 text-xs h-8 text-red-600 border-red-300 hover:bg-red-50"
-              >
-                <Download className="h-3 w-3" />
-                Unpaid Referral
-              </Button>
+              {/* Only show referral-related buttons for marketing managers */}
+              {isMarketingManager && (
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleOpenReferralReport}
+                    className="flex items-center gap-1 text-xs h-8"
+                  >
+                    <Download className="h-3 w-3" />
+                    Referral Report
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleOpenUnpaidReport}
+                    className="flex items-center gap-1 text-xs h-8 text-red-600 border-red-300 hover:bg-red-50"
+                  >
+                    <Download className="h-3 w-3" />
+                    Unpaid Referral
+                  </Button>
+                </>
+              )}
               <DateRangePicker
                 date={dateRange}
                 onDateChange={handleDateRangeChange}
@@ -468,7 +476,7 @@ const TodaysOpd = () => {
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
             </div>
           ) : (
-            <OpdPatientTable patients={filteredPatients} refetch={refetch} />
+            <OpdPatientTable patients={filteredPatients} refetch={refetch} isMarketingManager={isMarketingManager} />
           )}
         </CardContent>
       </Card>

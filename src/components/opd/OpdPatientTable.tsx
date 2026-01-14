@@ -47,6 +47,7 @@ interface Patient {
 interface OpdPatientTableProps {
   patients: Patient[];
   refetch?: () => void;
+  isMarketingManager?: boolean;
 }
 
 // Referral Payment Dropdown Component
@@ -165,7 +166,7 @@ const RefereeAmountCell = ({
   );
 };
 
-export const OpdPatientTable = ({ patients, refetch }: OpdPatientTableProps) => {
+export const OpdPatientTable = ({ patients, refetch, isMarketingManager = false }: OpdPatientTableProps) => {
   const navigate = useNavigate();
   const { isAdmin } = useAuth();
   const [selectedPatientForVisit, setSelectedPatientForVisit] = useState<Patient | null>(null);
@@ -1285,8 +1286,9 @@ Verified by: [To be verified by doctor]`;
             <TableHead className="font-medium print:hidden">Visit Type</TableHead>
             <TableHead className="font-medium">Doctor</TableHead>
             <TableHead className="font-medium print:hidden">Referral Doctor</TableHead>
-            <TableHead className="font-medium print:hidden">Referee DOA_Amt Paid</TableHead>
-            <TableHead className="font-medium print:hidden">Referral Payment</TableHead>
+            {/* Only show referral-related columns for marketing managers */}
+            {isMarketingManager && <TableHead className="font-medium print:hidden">Referee DOA_Amt Paid</TableHead>}
+            {isMarketingManager && <TableHead className="font-medium print:hidden">Referral Payment</TableHead>}
             <TableHead className="font-medium print:hidden">Diagnosis</TableHead>
             <TableHead className="text-center font-medium print:hidden">Payment Received</TableHead>
             <TableHead className="hidden print:table-cell font-medium">Paid Amount</TableHead>
@@ -1376,14 +1378,18 @@ Verified by: [To be verified by doctor]`;
               <TableCell className="print:hidden text-xs">
                 {patient.referees?.name || '-'}
               </TableCell>
-              {/* Screen-only: Referee Amount */}
-              <TableCell className="print:hidden">
-                <RefereeAmountCell patient={patient} onUpdate={refetch} />
-              </TableCell>
-              {/* Screen-only: Referral Payment Status */}
-              <TableCell className="print:hidden">
-                <ReferralPaymentDropdown patient={patient} onUpdate={refetch} />
-              </TableCell>
+              {/* Screen-only: Referee Amount - Only show for marketing managers */}
+              {isMarketingManager && (
+                <TableCell className="print:hidden">
+                  <RefereeAmountCell patient={patient} onUpdate={refetch} />
+                </TableCell>
+              )}
+              {/* Screen-only: Referral Payment Status - Only show for marketing managers */}
+              {isMarketingManager && (
+                <TableCell className="print:hidden">
+                  <ReferralPaymentDropdown patient={patient} onUpdate={refetch} />
+                </TableCell>
+              )}
               {/* Screen-only: Diagnosis */}
               <TableCell className="print:hidden">
                 {patient.diagnosis || 'General'}
