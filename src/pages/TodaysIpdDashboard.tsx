@@ -34,7 +34,7 @@ import { EditPatientDialog } from '@/components/EditPatientDialog';
 import { DocumentUploadDialog } from '@/components/DocumentUploadDialog';
 import { usePatients } from '@/hooks/usePatients';
 import { CascadingBillingStatusDropdown } from '@/components/shared/CascadingBillingStatusDropdown';
-import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuSeparator, DropdownMenuItem } from '@/components/ui/dropdown-menu';
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuSeparator, DropdownMenuItem, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent } from '@/components/ui/dropdown-menu';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -314,6 +314,13 @@ const TodaysIpdDashboard = () => {
 
   // Print functionality
   const [showPrintPreview, setShowPrintPreview] = useState(false);
+
+  // Referral report preview modal
+  const [isReferralReportOpen, setIsReferralReportOpen] = useState(false);
+
+  // Unpaid referral report modal
+  const [isUnpaidReportOpen, setIsUnpaidReportOpen] = useState(false);
+
   const {
     selectedIds: printSelectedIds,
     setSelectedIds: setPrintSelectedIds,
@@ -1730,16 +1737,18 @@ const TodaysIpdDashboard = () => {
         visit.appointment_with?.toLowerCase().includes(searchTerm.toLowerCase());
 
       const matchesBillingExecutive = !billingExecutiveFilter ||
-        visit.billing_executive === billingExecutiveFilter;
+        visit.billing_executive?.toLowerCase().trim() === billingExecutiveFilter.toLowerCase().trim();
 
       const matchesBillingStatus = !billingStatusFilter ||
-        visit.billing_status === billingStatusFilter;
+        visit.billing_status?.toLowerCase().trim() === billingStatusFilter.toLowerCase().trim();
 
       const matchesBunch = !bunchFilter ||
-        visit.bunch_no === bunchFilter;
+        (visit.bunch_no != null && String(visit.bunch_no) === bunchFilter);
 
       const matchesCorporate = !corporateFilter ||
-        visit.patients?.corporate?.toLowerCase().trim() === corporateFilter.toLowerCase().trim();
+        (corporateFilter.toLowerCase() === 'private'
+          ? (!visit.patients?.corporate || visit.patients?.corporate?.toLowerCase().trim() === 'private')
+          : visit.patients?.corporate?.toLowerCase().trim() === corporateFilter.toLowerCase().trim());
 
 
       const includeBy = (selected: string[], value?: string | null) =>
@@ -2211,20 +2220,131 @@ const TodaysIpdDashboard = () => {
     XLSX.writeFile(wb, `IPD_Patients_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
-  const handleExportReferralReport = () => {
-    const reportData = filteredVisits.map(visit => ({
-      'Date of Admission': visit.visit_date || '-',
-      'Visit ID': visit.visit_id || '-',
-      'Patient Name': visit.patients?.name || '-',
-      'Referral Doctor Name': visit.referees?.name || '-',
-      'Patient Bill Amount': visit.referee_doa_amt_paid ? `₹${visit.referee_doa_amt_paid}` : '-',
-      'Payment Status': visit.referral_payment_status || '-'
-    }));
+  // Open Referral Report Preview Modal
+  const handleOpenReferralReport = () => {
+    setIsReferralReportOpen(true);
+  };
 
-    const ws = XLSX.utils.json_to_sheet(reportData);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Referral Report');
-    XLSX.writeFile(wb, `IPD_Referral_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
+  // Print Referral Report
+  const handlePrintReferralReport = () => {
+    const printContent = document.getElementById('ipd-referral-report-content');
+    if (printContent) {
+      const printWindow = window.open('', '_blank');
+      if (printWindow) {
+        printWindow.document.write(`
+          <html>
+            <head>
+              <title>IPD Referral Report - ${format(new Date(), 'dd MMM yyyy')}</title>
+              <style>
+                body {
+                  font-family: Arial, sans-serif;
+                  padding: 20px;
+                  font-size: 12px;
+                  margin: 0;
+                }
+                h1 { text-align: center; margin-bottom: 5px; font-size: 18px; }
+                .subtitle { text-align: center; color: #666; margin-bottom: 15px; font-size: 11px; }
+                .header-info {
+                  display: flex;
+                  justify-content: space-between;
+                  margin-bottom: 15px;
+                  padding: 8px;
+                  background: #f5f5f5;
+                  font-size: 10px;
+                }
+                table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+                th, td { border: 1px solid #000; padding: 6px; text-align: left; font-size: 10px; }
+                th { background-color: #f0f0f0; font-weight: bold; }
+                tr:nth-child(even) { background-color: #f9f9f9; }
+                .text-right { text-align: right; }
+                @media print {
+                  body { margin: 0; }
+                  @page { margin: 0.5in; size: A4 landscape; }
+                }
+              </style>
+            </head>
+            <body>
+              <h1>IPD Referral Report</h1>
+              <p class="subtitle">IPD Patients - Referral Details</p>
+              <div class="header-info">
+                <span><strong>Print Date:</strong> ${format(new Date(), 'dd MMM yyyy, hh:mm a')}</span>
+                <span><strong>Total Records:</strong> ${filteredVisits.length}</span>
+              </div>
+              ${printContent.innerHTML}
+            </body>
+          </html>
+        `);
+        printWindow.document.close();
+        printWindow.print();
+        printWindow.close();
+      }
+    }
+  };
+
+  // Filter for unpaid referral visits
+  const unpaidReferralVisits = filteredVisits.filter(
+    visit => visit.referral_payment_status === 'Unpaid'
+  );
+
+  // Open Unpaid Referral Report Modal
+  const handleOpenUnpaidReport = () => {
+    setIsUnpaidReportOpen(true);
+  };
+
+  // Print Unpaid Referral Report
+  const handlePrintUnpaidReport = () => {
+    const printContent = document.getElementById('ipd-unpaid-report-content');
+    if (printContent) {
+      const printWindow = window.open('', '_blank');
+      if (printWindow) {
+        printWindow.document.write(`
+          <html>
+            <head>
+              <title>IPD Unpaid Referral Report - ${format(new Date(), 'dd MMM yyyy')}</title>
+              <style>
+                body {
+                  font-family: Arial, sans-serif;
+                  padding: 20px;
+                  font-size: 12px;
+                  margin: 0;
+                }
+                h1 { text-align: center; margin-bottom: 5px; font-size: 18px; }
+                .subtitle { text-align: center; color: #666; margin-bottom: 15px; font-size: 11px; }
+                .header-info {
+                  display: flex;
+                  justify-content: space-between;
+                  margin-bottom: 15px;
+                  padding: 8px;
+                  background: #f5f5f5;
+                  font-size: 10px;
+                }
+                table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+                th, td { border: 1px solid #000; padding: 6px; text-align: left; font-size: 10px; }
+                th { background-color: #f0f0f0; font-weight: bold; }
+                tr:nth-child(even) { background-color: #f9f9f9; }
+                .text-right { text-align: right; }
+                @media print {
+                  body { margin: 0; }
+                  @page { margin: 0.5in; size: A4 landscape; }
+                }
+              </style>
+            </head>
+            <body>
+              <h1>IPD Unpaid Referral Report</h1>
+              <p class="subtitle">IPD Patients - Unpaid Referral Details</p>
+              <div class="header-info">
+                <span><strong>Print Date:</strong> ${format(new Date(), 'dd MMM yyyy, hh:mm a')}</span>
+                <span><strong>Total Unpaid:</strong> ${unpaidReferralVisits.length}</span>
+              </div>
+              ${printContent.innerHTML}
+            </body>
+          </html>
+        `);
+        printWindow.document.close();
+        printWindow.print();
+        printWindow.close();
+      }
+    }
   };
 
   const handlePrintConfirm = () => {
@@ -2402,171 +2522,162 @@ const TodaysIpdDashboard = () => {
               date={dateRange}
               onDateChange={handleDateRangeChange}
             />
-            <Button
-              onClick={handlePrint}
-              variant="outline"
-              className="flex items-center gap-2"
-            >
-              <Printer className="h-4 w-4" />
-              Print List
-            </Button>
-            <Button
-              onClick={handleExportToExcel}
-              variant="outline"
-              className="flex items-center gap-2"
-            >
-              <Download className="h-4 w-4" />
-              Export XLS
-            </Button>
-            <Button
-              onClick={handleExportReferralReport}
-              variant="outline"
-              className="flex items-center gap-2"
-            >
-              <Download className="h-4 w-4" />
-              Referral Report
-            </Button>
-            <Button
-              onClick={() => setHideColumns(!hideColumns)}
-              variant="outline"
-              className="flex items-center gap-2"
-            >
-              {hideColumns ? 'Show Columns' : 'Hide Columns'}
-            </Button>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" className="flex items-center gap-2">
-                  <ArrowUpDown className="h-4 w-4" />
-                  Sort By
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuItem onClick={() => setSortBy('sr_no')} className={sortBy === 'sr_no' ? 'bg-accent' : ''}>
-                  Sr No (Ascending) {sortBy === 'sr_no' && '✓'}
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setSortBy('sr_no_desc')} className={sortBy === 'sr_no_desc' ? 'bg-accent' : ''}>
-                  Sr No (Descending) {sortBy === 'sr_no_desc' && '✓'}
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => setSortBy('latest')} className={sortBy === 'latest' ? 'bg-accent' : ''}>
-                  Latest First {sortBy === 'latest' && '✓'}
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setSortBy('oldest')} className={sortBy === 'oldest' ? 'bg-accent' : ''}>
-                  Oldest First {sortBy === 'oldest' && '✓'}
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => setSortBy('name_asc')} className={sortBy === 'name_asc' ? 'bg-accent' : ''}>
-                  Patient Name (A-Z) {sortBy === 'name_asc' && '✓'}
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setSortBy('name_desc')} className={sortBy === 'name_desc' ? 'bg-accent' : ''}>
-                  Patient Name (Z-A) {sortBy === 'name_desc' && '✓'}
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => setSortBy('visit_id_asc')} className={sortBy === 'visit_id_asc' ? 'bg-accent' : ''}>
-                  Visit ID (Ascending) {sortBy === 'visit_id_asc' && '✓'}
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setSortBy('visit_id_desc')} className={sortBy === 'visit_id_desc' ? 'bg-accent' : ''}>
-                  Visit ID (Descending) {sortBy === 'visit_id_desc' && '✓'}
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-            <select
-              value={billingExecutiveFilter}
-              onChange={(e) => {
-                console.log('Billing Executive selected:', e.target.value);
-                setBillingExecutiveFilter(e.target.value);
-                setCurrentPage(1);
-              }}
-              className="w-48 h-10 text-sm border border-gray-300 rounded-md px-3 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">All Billing Executives</option>
-              <option value="Dr.B.K.Murali">Dr.B.K.Murali</option>
-              <option value="Ruby">Ruby</option>
-              <option value="Shrikant">Shrikant</option>
-              <option value="Gaurav">Gaurav</option>
-              <option value="Dr. Swapnil">Dr. Swapnil</option>
-              <option value="Dr.Sachin">Dr.Sachin</option>
-              <option value="Dr.Shiraj">Dr.Shiraj</option>
-              <option value="Dr. Sharad">Dr. Sharad</option>
-              <option value="Shashank">Shashank</option>
-              <option value="Shweta">Shweta</option>
-              <option value="Suraj">Suraj</option>
-              <option value="Nitin">Nitin</option>
-              <option value="Sonali">Sonali</option>
-              <option value="Ruchika">Ruchika</option>
-              <option value="Pragati">Pragati</option>
-              <option value="Rachana">Rachana</option>
-              <option value="Kashish">Kashish</option>
-              <option value="Aman">Aman</option>
-              <option value="Dolly">Dolly</option>
-              <option value="Ruchi">Ruchi</option>
-              <option value="Gayatri">Gayatri</option>
-              <option value="Noor">Noor</option>
-              <option value="Nisha">Nisha</option>
-              <option value="Diksha">Diksha</option>
-              <option value="Ayush">Ayush</option>
-              <option value="Kiran">Kiran</option>
-              <option value="Pratik">Pratik</option>
-              <option value="Azhar">Azhar</option>
-              <option value="Tejas">Tejas</option>
-              <option value="Abhishek">Abhishek</option>
-              <option value="Chandrprakash">Chandrprakash</option>
-            </select>
-
-            <select
-              value={billingStatusFilter}
-              onChange={(e) => { setBillingStatusFilter(e.target.value); setCurrentPage(1); }}
-              className="w-48 h-10 text-sm border border-gray-300 rounded-md px-3 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">All Billing Status</option>
-              {[
-                'Approval Pending',
-                'ID Pending',
-                'Doctor Planning Done',
-                'Bill Completed',
-                'Bill Submitted',
-                'Bill uploaded, not couriered',
-                'Bill uploaded, couriered',
-                'Payment received'
-              ].map((opt) => (
-                <option key={opt} value={opt}>
-                  {opt === 'Bill Completed' ? 'Bill PDF Completed' : (opt === 'Bill Submitted' ? 'Bill submitted - DSC done' : opt)}
-                </option>
-              ))}
-            </select>
-            <select
-              value={corporateFilter}
-              onChange={(e) => { setCorporateFilter(e.target.value); setCurrentPage(1); }}
-              className="w-48 h-10 text-sm border border-gray-300 rounded-md px-3 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">All Corporates</option>
-              {corporates.map((corporate) => (
-                <option key={corporate.id} value={corporate.name}>
-                  {corporate.name}
-                </option>
-              ))}
-            </select>
-            <select
-              value={bunchFilter}
-              onChange={(e) => { setBunchFilter(e.target.value); setCurrentPage(1); }}
-              className="w-36 h-10 text-sm border border-gray-300 rounded-md px-3 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">All Bunches</option>
-              {Array.from(new Set((todaysVisits || []).map(visit => visit.bunch_no).filter(Boolean))).sort().map((bunchNo) => (
-                <option key={bunchNo} value={bunchNo}>
-                  Bunch {bunchNo}
-                </option>
-              ))}
-            </select>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
               <Input
                 placeholder="Search visits..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10 w-80"
+                className="pl-10 w-48"
               />
             </div>
+            <Button
+              onClick={handlePrint}
+              variant="outline"
+              className="flex items-center gap-1 text-xs h-8"
+            >
+              <Printer className="h-3 w-3" />
+              Print List
+            </Button>
+            <Button
+              onClick={handleExportToExcel}
+              variant="outline"
+              className="flex items-center gap-1 text-xs h-8"
+            >
+              <Download className="h-3 w-3" />
+              Export XLS
+            </Button>
+            <Button
+              onClick={handleOpenReferralReport}
+              variant="outline"
+              className="flex items-center gap-1 text-xs h-8"
+            >
+              <Download className="h-3 w-3" />
+              Referral Report
+            </Button>
+            <Button
+              onClick={handleOpenUnpaidReport}
+              variant="outline"
+              className="flex items-center gap-1 text-xs h-8 text-red-600 border-red-300 hover:bg-red-50"
+            >
+              <Download className="h-3 w-3" />
+              Unpaid Referral
+            </Button>
+            <Button
+              onClick={() => setHideColumns(!hideColumns)}
+              variant="outline"
+              className="flex items-center gap-1 text-xs h-8"
+            >
+              {hideColumns ? 'Show Columns' : 'Hide Columns'}
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" className="flex items-center gap-1 text-xs h-8">
+                  <Filter className="h-3 w-3" />
+                  Filters
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                {/* Sort By Submenu */}
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger>
+                    <ArrowUpDown className="h-3 w-3 mr-2" />
+                    Sort By
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent>
+                    <DropdownMenuItem onSelect={() => setSortBy('sr_no')} className={sortBy === 'sr_no' ? 'bg-accent' : ''}>
+                      Sr No (Ascending) {sortBy === 'sr_no' && '✓'}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setSortBy('sr_no_desc')} className={sortBy === 'sr_no_desc' ? 'bg-accent' : ''}>
+                      Sr No (Descending) {sortBy === 'sr_no_desc' && '✓'}
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onSelect={() => setSortBy('latest')} className={sortBy === 'latest' ? 'bg-accent' : ''}>
+                      Latest First {sortBy === 'latest' && '✓'}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setSortBy('oldest')} className={sortBy === 'oldest' ? 'bg-accent' : ''}>
+                      Oldest First {sortBy === 'oldest' && '✓'}
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onSelect={() => setSortBy('name_asc')} className={sortBy === 'name_asc' ? 'bg-accent' : ''}>
+                      Patient Name (A-Z) {sortBy === 'name_asc' && '✓'}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setSortBy('name_desc')} className={sortBy === 'name_desc' ? 'bg-accent' : ''}>
+                      Patient Name (Z-A) {sortBy === 'name_desc' && '✓'}
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onSelect={() => setSortBy('visit_id_asc')} className={sortBy === 'visit_id_asc' ? 'bg-accent' : ''}>
+                      Visit ID (Ascending) {sortBy === 'visit_id_asc' && '✓'}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setSortBy('visit_id_desc')} className={sortBy === 'visit_id_desc' ? 'bg-accent' : ''}>
+                      Visit ID (Descending) {sortBy === 'visit_id_desc' && '✓'}
+                    </DropdownMenuItem>
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+
+                <DropdownMenuSeparator />
+
+                {/* Billing Executive Submenu */}
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger>Billing Executive</DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent className="max-h-64 overflow-y-auto">
+                    <DropdownMenuItem onSelect={() => setBillingExecutiveFilter('')} className={billingExecutiveFilter === '' ? 'bg-accent' : ''}>
+                      All {billingExecutiveFilter === '' && '✓'}
+                    </DropdownMenuItem>
+                    {['Dr.B.K.Murali', 'Ruby', 'Shrikant', 'Gaurav', 'Dr. Swapnil', 'Dr.Sachin', 'Dr.Shiraj', 'Dr. Sharad', 'Shashank', 'Shweta', 'Suraj', 'Nitin', 'Sonali', 'Ruchika', 'Pragati', 'Rachana', 'Kashish', 'Aman', 'Dolly', 'Ruchi', 'Gayatri', 'Noor', 'Nisha', 'Diksha', 'Ayush', 'Kiran', 'Pratik', 'Azhar', 'Tejas', 'Abhishek', 'Chandrprakash'].map((exec) => (
+                      <DropdownMenuItem key={exec} onSelect={() => setBillingExecutiveFilter(exec)} className={billingExecutiveFilter === exec ? 'bg-accent' : ''}>
+                        {exec} {billingExecutiveFilter === exec && '✓'}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+
+                {/* Billing Status Submenu */}
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger>Billing Status</DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent>
+                    <DropdownMenuItem onSelect={() => setBillingStatusFilter('')} className={billingStatusFilter === '' ? 'bg-accent' : ''}>
+                      All {billingStatusFilter === '' && '✓'}
+                    </DropdownMenuItem>
+                    {['Approval Pending', 'ID Pending', 'Doctor Planning Done', 'Bill Completed', 'Bill Submitted', 'Bill uploaded, not couriered', 'Bill uploaded, couriered', 'Payment received'].map((status) => (
+                      <DropdownMenuItem key={status} onSelect={() => setBillingStatusFilter(status)} className={billingStatusFilter === status ? 'bg-accent' : ''}>
+                        {status === 'Bill Completed' ? 'Bill PDF Completed' : (status === 'Bill Submitted' ? 'Bill submitted - DSC done' : status)} {billingStatusFilter === status && '✓'}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+
+                {/* Corporate Submenu */}
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger>Corporate</DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent className="max-h-64 overflow-y-auto">
+                    <DropdownMenuItem onSelect={() => setCorporateFilter('')} className={corporateFilter === '' ? 'bg-accent' : ''}>
+                      All {corporateFilter === '' && '✓'}
+                    </DropdownMenuItem>
+                    {corporates.map((corporate) => (
+                      <DropdownMenuItem key={corporate.id} onSelect={() => setCorporateFilter(corporate.name)} className={corporateFilter === corporate.name ? 'bg-accent' : ''}>
+                        {corporate.name} {corporateFilter === corporate.name && '✓'}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+
+                {/* Bunch Submenu */}
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger>Bunch</DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent>
+                    <DropdownMenuItem onSelect={() => setBunchFilter('')} className={bunchFilter === '' ? 'bg-accent' : ''}>
+                      All {bunchFilter === '' && '✓'}
+                    </DropdownMenuItem>
+                    {Array.from(new Set((todaysVisits || []).map(visit => visit.bunch_no).filter(Boolean))).sort().map((bunchNo) => (
+                      <DropdownMenuItem key={bunchNo} onSelect={() => setBunchFilter(bunchNo as string)} className={bunchFilter === bunchNo ? 'bg-accent' : ''}>
+                        Bunch {bunchNo} {bunchFilter === bunchNo && '✓'}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
 
@@ -3648,6 +3759,114 @@ const TodaysIpdDashboard = () => {
           display: none;
         }
       `}</style>
+
+      {/* Referral Report Preview Modal */}
+      <Dialog open={isReferralReportOpen} onOpenChange={setIsReferralReportOpen}>
+        <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center justify-between pr-8">
+              <span>IPD Referral Report Preview</span>
+              <Button onClick={handlePrintReferralReport} className="ml-4">
+                <Printer className="mr-2 h-4 w-4" />
+                Print Report
+              </Button>
+            </DialogTitle>
+          </DialogHeader>
+
+          <div id="ipd-referral-report-content">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Date of Admission</TableHead>
+                  <TableHead>Visit ID</TableHead>
+                  <TableHead>Patient Name</TableHead>
+                  <TableHead>Referral Doctor Name</TableHead>
+                  <TableHead className="text-right">Patient Bill Amount</TableHead>
+                  <TableHead>Payment Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredVisits.map((visit) => (
+                  <TableRow key={visit.id}>
+                    <TableCell>{visit.visit_date || '-'}</TableCell>
+                    <TableCell>{visit.visit_id || '-'}</TableCell>
+                    <TableCell>{visit.patients?.name || '-'}</TableCell>
+                    <TableCell>{visit.referees?.name || '-'}</TableCell>
+                    <TableCell className="text-right">
+                      {visit.referee_doa_amt_paid ? `₹${visit.referee_doa_amt_paid}` : '-'}
+                    </TableCell>
+                    <TableCell>{visit.referral_payment_status || '-'}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+
+          <div className="flex justify-between items-center pt-4 border-t">
+            <span className="text-sm text-muted-foreground">
+              Total: {filteredVisits.length} records
+            </span>
+            <Button onClick={handlePrintReferralReport} className="bg-blue-600 hover:bg-blue-700">
+              <Printer className="mr-2 h-4 w-4" />
+              Print Report
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Unpaid Referral Report Preview Modal */}
+      <Dialog open={isUnpaidReportOpen} onOpenChange={setIsUnpaidReportOpen}>
+        <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center justify-between pr-8">
+              <span className="text-red-600">IPD Unpaid Referral Report</span>
+              <Button onClick={handlePrintUnpaidReport} className="ml-4 bg-red-600 hover:bg-red-700">
+                <Printer className="mr-2 h-4 w-4" />
+                Print Report
+              </Button>
+            </DialogTitle>
+          </DialogHeader>
+
+          <div id="ipd-unpaid-referral-report-content">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Date of Admission</TableHead>
+                  <TableHead>Visit ID</TableHead>
+                  <TableHead>Patient Name</TableHead>
+                  <TableHead>Referral Doctor Name</TableHead>
+                  <TableHead className="text-right">Patient Bill Amount</TableHead>
+                  <TableHead>Payment Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {unpaidReferralVisits.map((visit) => (
+                  <TableRow key={visit.id}>
+                    <TableCell>{visit.visit_date || '-'}</TableCell>
+                    <TableCell>{visit.visit_id || '-'}</TableCell>
+                    <TableCell>{visit.patients?.name || '-'}</TableCell>
+                    <TableCell>{visit.referees?.name || '-'}</TableCell>
+                    <TableCell className="text-right">
+                      {visit.referee_doa_amt_paid ? `₹${visit.referee_doa_amt_paid}` : '-'}
+                    </TableCell>
+                    <TableCell className="text-red-600 font-medium">{visit.referral_payment_status || '-'}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+
+          <div className="flex justify-between items-center pt-4 border-t">
+            <span className="text-sm text-muted-foreground">
+              Total Unpaid: {unpaidReferralVisits.length} records
+            </span>
+            <Button onClick={handlePrintUnpaidReport} className="bg-red-600 hover:bg-red-700">
+              <Printer className="mr-2 h-4 w-4" />
+              Print Report
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

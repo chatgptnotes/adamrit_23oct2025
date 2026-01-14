@@ -7,6 +7,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Printer, Search, ClipboardList, Download } from 'lucide-react';
 import { OpdStatisticsCards } from '@/components/opd/OpdStatisticsCards';
 import { OpdPatientTable } from '@/components/opd/OpdPatientTable';
@@ -17,6 +19,12 @@ import { format } from 'date-fns';
 const TodaysOpd = () => {
   const { hospitalConfig } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
+
+  // State for referral report preview modal
+  const [isReferralReportOpen, setIsReferralReportOpen] = useState(false);
+
+  // State for unpaid referral report modal
+  const [isUnpaidReportOpen, setIsUnpaidReportOpen] = useState(false);
 
   // URL-persisted state
   const searchTerm = searchParams.get('search') || '';
@@ -210,25 +218,131 @@ const TodaysOpd = () => {
     XLSX.writeFile(wb, `OPD_Patients_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
-  const handleExportReferralReport = () => {
-    console.log('📊 Exporting Referral Report...');
-    console.log('📅 Date range:', startDate, 'to', endDate);
-    console.log('👥 Filtered patients count:', filteredPatients.length);
-    console.log('📋 OPD patients count:', opdPatients.length);
+  // Open Referral Report Preview Modal
+  const handleOpenReferralReport = () => {
+    setIsReferralReportOpen(true);
+  };
 
-    const reportData = filteredPatients.map(patient => ({
-      'Date of Admission': patient.visit_date || '-',
-      'Visit ID': patient.visit_id || '-',
-      'Patient Name': patient.patients?.name || '-',
-      'Referral Doctor Name': patient.referees?.name || '-',
-      'Patient Bill Amount': patient.referee_doa_amt_paid ? `₹${patient.referee_doa_amt_paid}` : '-',
-      'Payment Status': patient.referral_payment_status || '-'
-    }));
+  // Print Referral Report
+  const handlePrintReferralReport = () => {
+    const printContent = document.getElementById('opd-referral-report-content');
+    if (printContent) {
+      const printWindow = window.open('', '_blank');
+      if (printWindow) {
+        printWindow.document.write(`
+          <html>
+            <head>
+              <title>OPD Referral Report - ${format(new Date(), 'dd MMM yyyy')}</title>
+              <style>
+                body {
+                  font-family: Arial, sans-serif;
+                  padding: 20px;
+                  font-size: 12px;
+                  margin: 0;
+                }
+                h1 { text-align: center; margin-bottom: 5px; font-size: 18px; }
+                .subtitle { text-align: center; color: #666; margin-bottom: 15px; font-size: 11px; }
+                .header-info {
+                  display: flex;
+                  justify-content: space-between;
+                  margin-bottom: 15px;
+                  padding: 8px;
+                  background: #f5f5f5;
+                  font-size: 10px;
+                }
+                table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+                th, td { border: 1px solid #000; padding: 6px; text-align: left; font-size: 10px; }
+                th { background-color: #f0f0f0; font-weight: bold; }
+                tr:nth-child(even) { background-color: #f9f9f9; }
+                .text-right { text-align: right; }
+                @media print {
+                  body { margin: 0; }
+                  @page { margin: 0.5in; size: A4 landscape; }
+                }
+              </style>
+            </head>
+            <body>
+              <h1>OPD Referral Report</h1>
+              <p class="subtitle">OPD Patients - Referral Details</p>
+              <div class="header-info">
+                <span><strong>Print Date:</strong> ${format(new Date(), 'dd MMM yyyy, hh:mm a')}</span>
+                <span><strong>Total Records:</strong> ${filteredPatients.length}</span>
+              </div>
+              ${printContent.innerHTML}
+            </body>
+          </html>
+        `);
+        printWindow.document.close();
+        printWindow.print();
+        printWindow.close();
+      }
+    }
+  };
 
-    const ws = XLSX.utils.json_to_sheet(reportData);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Referral Report');
-    XLSX.writeFile(wb, `Referral_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
+  // Filter for unpaid referral patients
+  const unpaidReferralPatients = filteredPatients.filter(
+    patient => patient.referral_payment_status === 'Unpaid'
+  );
+
+  // Open Unpaid Referral Report Modal
+  const handleOpenUnpaidReport = () => {
+    setIsUnpaidReportOpen(true);
+  };
+
+  // Print Unpaid Referral Report
+  const handlePrintUnpaidReport = () => {
+    const printContent = document.getElementById('opd-unpaid-report-content');
+    if (printContent) {
+      const printWindow = window.open('', '_blank');
+      if (printWindow) {
+        printWindow.document.write(`
+          <html>
+            <head>
+              <title>OPD Unpaid Referral Report - ${format(new Date(), 'dd MMM yyyy')}</title>
+              <style>
+                body {
+                  font-family: Arial, sans-serif;
+                  padding: 20px;
+                  font-size: 12px;
+                  margin: 0;
+                }
+                h1 { text-align: center; margin-bottom: 5px; font-size: 18px; }
+                .subtitle { text-align: center; color: #666; margin-bottom: 15px; font-size: 11px; }
+                .header-info {
+                  display: flex;
+                  justify-content: space-between;
+                  margin-bottom: 15px;
+                  padding: 8px;
+                  background: #f5f5f5;
+                  font-size: 10px;
+                }
+                table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+                th, td { border: 1px solid #000; padding: 6px; text-align: left; font-size: 10px; }
+                th { background-color: #f0f0f0; font-weight: bold; }
+                tr:nth-child(even) { background-color: #f9f9f9; }
+                .text-right { text-align: right; }
+                @media print {
+                  body { margin: 0; }
+                  @page { margin: 0.5in; size: A4 landscape; }
+                }
+              </style>
+            </head>
+            <body>
+              <h1>OPD Unpaid Referral Report</h1>
+              <p class="subtitle">OPD Patients - Unpaid Referral Details</p>
+              <div class="header-info">
+                <span><strong>Print Date:</strong> ${format(new Date(), 'dd MMM yyyy, hh:mm a')}</span>
+                <span><strong>Total Unpaid:</strong> ${unpaidReferralPatients.length}</span>
+              </div>
+              ${printContent.innerHTML}
+            </body>
+          </html>
+        `);
+        printWindow.document.close();
+        printWindow.print();
+        printWindow.close();
+      }
+    }
   };
 
   // Debug: Check if there are any visits in the database
@@ -271,33 +385,51 @@ const TodaysOpd = () => {
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-4 print:hidden">
+            <div className="flex items-center gap-2 print:hidden">
+              <div className="relative">
+                <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
+                <Input
+                  placeholder="Search patients..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-7 w-[200px] h-8 text-xs"
+                />
+              </div>
               <Button
                 variant="outline"
                 size="sm"
                 onClick={handlePrintList}
-                className="flex items-center gap-2"
+                className="flex items-center gap-1 text-xs h-8"
               >
-                <Printer className="h-4 w-4" />
+                <Printer className="h-3 w-3" />
                 Print List
               </Button>
               <Button
                 variant="outline"
                 size="sm"
                 onClick={handleExportToExcel}
-                className="flex items-center gap-2"
+                className="flex items-center gap-1 text-xs h-8"
               >
-                <Download className="h-4 w-4" />
+                <Download className="h-3 w-3" />
                 Export XLS
               </Button>
               <Button
                 variant="outline"
                 size="sm"
-                onClick={handleExportReferralReport}
-                className="flex items-center gap-2"
+                onClick={handleOpenReferralReport}
+                className="flex items-center gap-1 text-xs h-8"
               >
-                <Download className="h-4 w-4" />
+                <Download className="h-3 w-3" />
                 Referral Report
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleOpenUnpaidReport}
+                className="flex items-center gap-1 text-xs h-8 text-red-600 border-red-300 hover:bg-red-50"
+              >
+                <Download className="h-3 w-3" />
+                Unpaid Referral
               </Button>
               <DateRangePicker
                 date={dateRange}
@@ -306,7 +438,7 @@ const TodaysOpd = () => {
               <select
                 value={corporateFilter}
                 onChange={(e) => setCorporateFilter(e.target.value)}
-                className="h-10 text-sm border border-gray-300 rounded-md px-3 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="h-8 text-xs border border-gray-300 rounded-md px-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="">All Corporates</option>
                 {corporates.map((corporate) => (
@@ -315,15 +447,6 @@ const TodaysOpd = () => {
                   </option>
                 ))}
               </select>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search patients..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-9 w-[250px]"
-                />
-              </div>
             </div>
           </div>
         </CardHeader>
@@ -349,6 +472,114 @@ const TodaysOpd = () => {
           )}
         </CardContent>
       </Card>
+
+      {/* Referral Report Preview Modal */}
+      <Dialog open={isReferralReportOpen} onOpenChange={setIsReferralReportOpen}>
+        <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center justify-between pr-8">
+              <span>OPD Referral Report Preview</span>
+              <Button onClick={handlePrintReferralReport} className="ml-4">
+                <Printer className="mr-2 h-4 w-4" />
+                Print Report
+              </Button>
+            </DialogTitle>
+          </DialogHeader>
+
+          <div id="opd-referral-report-content">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Date of Admission</TableHead>
+                  <TableHead>Visit ID</TableHead>
+                  <TableHead>Patient Name</TableHead>
+                  <TableHead>Referral Doctor Name</TableHead>
+                  <TableHead className="text-right">Patient Bill Amount</TableHead>
+                  <TableHead>Payment Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredPatients.map((patient) => (
+                  <TableRow key={patient.id}>
+                    <TableCell>{patient.visit_date || '-'}</TableCell>
+                    <TableCell>{patient.visit_id || '-'}</TableCell>
+                    <TableCell>{patient.patients?.name || '-'}</TableCell>
+                    <TableCell>{patient.referees?.name || '-'}</TableCell>
+                    <TableCell className="text-right">
+                      {patient.referee_doa_amt_paid ? `₹${patient.referee_doa_amt_paid}` : '-'}
+                    </TableCell>
+                    <TableCell>{patient.referral_payment_status || '-'}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+
+          <div className="flex justify-between items-center pt-4 border-t">
+            <span className="text-sm text-muted-foreground">
+              Total: {filteredPatients.length} records
+            </span>
+            <Button onClick={handlePrintReferralReport} className="bg-blue-600 hover:bg-blue-700">
+              <Printer className="mr-2 h-4 w-4" />
+              Print Report
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Unpaid Referral Report Modal */}
+      <Dialog open={isUnpaidReportOpen} onOpenChange={setIsUnpaidReportOpen}>
+        <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center justify-between pr-8">
+              <span className="text-red-600">OPD Unpaid Referral Report</span>
+              <Button onClick={handlePrintUnpaidReport} className="ml-4 bg-red-600 hover:bg-red-700">
+                <Printer className="mr-2 h-4 w-4" />
+                Print Report
+              </Button>
+            </DialogTitle>
+          </DialogHeader>
+
+          <div id="opd-unpaid-report-content">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Date of Admission</TableHead>
+                  <TableHead>Visit ID</TableHead>
+                  <TableHead>Patient Name</TableHead>
+                  <TableHead>Referral Doctor Name</TableHead>
+                  <TableHead className="text-right">Patient Bill Amount</TableHead>
+                  <TableHead>Payment Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {unpaidReferralPatients.map((patient) => (
+                  <TableRow key={patient.id}>
+                    <TableCell>{patient.visit_date || '-'}</TableCell>
+                    <TableCell>{patient.visit_id || '-'}</TableCell>
+                    <TableCell>{patient.patients?.name || '-'}</TableCell>
+                    <TableCell>{patient.referees?.name || '-'}</TableCell>
+                    <TableCell className="text-right">
+                      {patient.referee_doa_amt_paid ? `₹${patient.referee_doa_amt_paid}` : '-'}
+                    </TableCell>
+                    <TableCell className="text-red-600 font-medium">{patient.referral_payment_status || '-'}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+
+          <div className="flex justify-between items-center pt-4 border-t">
+            <span className="text-sm text-muted-foreground">
+              Total Unpaid: {unpaidReferralPatients.length} records
+            </span>
+            <Button onClick={handlePrintUnpaidReport} className="bg-red-600 hover:bg-red-700">
+              <Printer className="mr-2 h-4 w-4" />
+              Print Report
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
