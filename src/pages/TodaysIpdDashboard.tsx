@@ -165,6 +165,9 @@ const IpdRefereeAmountCell = ({
 const TodaysIpdDashboard = () => {
   const { isAdmin, hospitalConfig, user } = useAuth();
   const navigate = useNavigate();
+  
+  // Check if current user is a marketing manager
+  const isMarketingManager = user?.role === 'marketing_manager';
   const [searchParams, setSearchParams] = useSearchParams();
 
   // URL-persisted state
@@ -2547,22 +2550,27 @@ const TodaysIpdDashboard = () => {
               <Download className="h-3 w-3" />
               Export XLS
             </Button>
-            <Button
-              onClick={handleOpenReferralReport}
-              variant="outline"
-              className="flex items-center gap-1 text-xs h-8"
-            >
-              <Download className="h-3 w-3" />
-              Referral Report
-            </Button>
-            <Button
-              onClick={handleOpenUnpaidReport}
-              variant="outline"
-              className="flex items-center gap-1 text-xs h-8 text-red-600 border-red-300 hover:bg-red-50"
-            >
-              <Download className="h-3 w-3" />
-              Unpaid Referral
-            </Button>
+            {/* Only show referral-related buttons for marketing managers */}
+            {isMarketingManager && (
+              <>
+                <Button
+                  onClick={handleOpenReferralReport}
+                  variant="outline"
+                  className="flex items-center gap-1 text-xs h-8"
+                >
+                  <Download className="h-3 w-3" />
+                  Referral Report
+                </Button>
+                <Button
+                  onClick={handleOpenUnpaidReport}
+                  variant="outline"
+                  className="flex items-center gap-1 text-xs h-8 text-red-600 border-red-300 hover:bg-red-50"
+                >
+                  <Download className="h-3 w-3" />
+                  Unpaid Referral
+                </Button>
+              </>
+            )}
             <Button
               onClick={() => setHideColumns(!hideColumns)}
               variant="outline"
@@ -2758,8 +2766,9 @@ const TodaysIpdDashboard = () => {
                 <TableHead className="font-semibold">Admission Date</TableHead>
                 <TableHead className="font-semibold">Days Admitted</TableHead>
                 <TableHead className="font-semibold">Referral Doctor</TableHead>
-                <TableHead className="font-semibold">Referee DOA_Amt Paid</TableHead>
-                <TableHead className="font-semibold">Referral Payment</TableHead>
+                {/* Only show referral-related columns for marketing managers */}
+                {isMarketingManager && <TableHead className="font-semibold">Referee DOA_Amt Paid</TableHead>}
+                {isMarketingManager && <TableHead className="font-semibold">Referral Payment</TableHead>}
                 <TableHead className="font-semibold">Discharge Date</TableHead>
                 <TableHead className="font-semibold">Summaries and Certificates</TableHead>
                 <TableHead className="font-semibold">Getpass Notification</TableHead>
@@ -3092,12 +3101,17 @@ const TodaysIpdDashboard = () => {
                   <TableCell className="text-xs">
                     {visit.referees?.name || '-'}
                   </TableCell>
-                  <TableCell>
-                    <IpdRefereeAmountCell visit={visit} onUpdate={refetch} />
-                  </TableCell>
-                  <TableCell>
-                    <IpdReferralPaymentDropdown visit={visit} onUpdate={refetch} />
-                  </TableCell>
+                  {/* Only show referral-related cells for marketing managers */}
+                  {isMarketingManager && (
+                    <TableCell>
+                      <IpdRefereeAmountCell visit={visit} onUpdate={refetch} />
+                    </TableCell>
+                  )}
+                  {isMarketingManager && (
+                    <TableCell>
+                      <IpdReferralPaymentDropdown visit={visit} onUpdate={refetch} />
+                    </TableCell>
+                  )}
                   <TableCell>
                     {visit.discharge_date ? (
                       (() => {
