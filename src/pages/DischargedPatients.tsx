@@ -217,6 +217,9 @@ const DischargedPatients = () => {
   const { user, hospitalConfig } = useAuth();
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
+  
+  // Check if current user is a marketing manager
+  const isMarketingManager = user?.role === 'marketing_manager';
 
   // URL-persisted state
   const searchTerm = searchParams.get('search') || '';
@@ -1287,24 +1290,29 @@ const DischargedPatients = () => {
             <Printer className="h-4 w-4" />
             Print
           </Button>
-          <Button
-            onClick={handleOpenReferralReport}
-            variant="outline"
-            size="sm"
-            className="flex items-center gap-2"
-          >
-            <FileText className="h-4 w-4" />
-            Referral Report
-          </Button>
-          <Button
-            onClick={handleOpenUnpaidReport}
-            variant="outline"
-            size="sm"
-            className="flex items-center gap-2 text-red-600 border-red-300 hover:bg-red-50"
-          >
-            <FileText className="h-4 w-4" />
-            Unpaid Referral
-          </Button>
+          {/* Only show referral-related buttons for marketing managers */}
+          {isMarketingManager && (
+            <>
+              <Button
+                onClick={handleOpenReferralReport}
+                variant="outline"
+                size="sm"
+                className="flex items-center gap-2"
+              >
+                <FileText className="h-4 w-4" />
+                Referral Report
+              </Button>
+              <Button
+                onClick={handleOpenUnpaidReport}
+                variant="outline"
+                size="sm"
+                className="flex items-center gap-2 text-red-600 border-red-300 hover:bg-red-50"
+              >
+                <FileText className="h-4 w-4" />
+                Unpaid Referral
+              </Button>
+            </>
+          )}
           <Badge variant="outline" className="flex items-center gap-1">
             <Users className="h-3 w-3" />
             {filteredVisits?.length || 0} patients
@@ -1495,9 +1503,10 @@ const DischargedPatients = () => {
                     <TableHead>Days Admitted</TableHead>
                     <TableHead>Billing Status</TableHead>
                     <TableHead>Corporate</TableHead>
-                    <TableHead>Referral Doctor</TableHead>
-                    <TableHead>Discharge Amt Paid</TableHead>
-                    <TableHead>Referral Payment</TableHead>
+                    {/* Only show referral-related columns for marketing managers */}
+                    {isMarketingManager && <TableHead>Referral Doctor</TableHead>}
+                    {isMarketingManager && <TableHead>Discharge Amt Paid</TableHead>}
+                    {isMarketingManager && <TableHead>Referral Payment</TableHead>}
                     <TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -1579,15 +1588,22 @@ const DischargedPatients = () => {
                       <TableCell>
                         {visit.patients?.corporate || '—'}
                       </TableCell>
-                      <TableCell>
-                        {visit.referees?.name || '—'}
-                      </TableCell>
-                      <TableCell>
-                        <RefereeAmountCell visit={visit} onUpdate={() => refetch()} isAdmin={user?.role === 'admin' || user?.role === 'marketing_manager'} />
-                      </TableCell>
-                      <TableCell>
-                        <ReferralPaymentDropdown visit={visit} onUpdate={() => refetch()} isAdmin={user?.role === 'admin' || user?.role === 'marketing_manager'} />
-                      </TableCell>
+                      {/* Only show referral-related cells for marketing managers */}
+                      {isMarketingManager && (
+                        <TableCell>
+                          {visit.referees?.name || '—'}
+                        </TableCell>
+                      )}
+                      {isMarketingManager && (
+                        <TableCell>
+                          <RefereeAmountCell visit={visit} onUpdate={() => refetch()} isAdmin={user?.role === 'admin' || user?.role === 'marketing_manager'} />
+                        </TableCell>
+                      )}
+                      {isMarketingManager && (
+                        <TableCell>
+                          <ReferralPaymentDropdown visit={visit} onUpdate={() => refetch()} isAdmin={user?.role === 'admin' || user?.role === 'marketing_manager'} />
+                        </TableCell>
+                      )}
                       <TableCell>
                         <div className="flex items-center gap-2">
                           <Button
