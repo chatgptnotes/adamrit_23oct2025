@@ -132,7 +132,7 @@ const ReferralPaymentDropdown = ({
         <option value="Spot Paid">Spot Paid</option>
         <option value="Unpaid">Unpaid</option>
         <option value="Direct">Direct</option>
-        <option value="Back Paid">Back Paid</option>
+        <option value="Backing Paid">Backing Paid</option>
       </select>
       {isUpdating && (
         <Loader2 className="absolute right-1 top-1/2 transform -translate-y-1/2 h-3 w-3 animate-spin" />

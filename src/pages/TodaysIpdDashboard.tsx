@@ -91,7 +91,7 @@ const IpdReferralPaymentDropdown = ({
         <option value="Spot Paid">Spot Paid</option>
         <option value="Unpaid">Unpaid</option>
         <option value="Direct">Direct</option>
-        <option value="Back Paid">Back Paid</option>
+        <option value="Backing Paid">Backing Paid</option>
       </select>
       {isUpdating && (
         <Loader2 className="absolute right-1 top-1/2 transform -translate-y-1/2 h-3 w-3 animate-spin" />
@@ -2754,12 +2754,12 @@ const TodaysIpdDashboard = () => {
                 {!hideColumns && <TableHead className="font-semibold">Visit Type</TableHead>}
                 <TableHead className="font-semibold">Stickers</TableHead>
                 <TableHead className="font-semibold">Doctor</TableHead>
-                <TableHead className="font-semibold">Referral Doctor</TableHead>
-                <TableHead className="font-semibold">Referee DOA_Amt Paid</TableHead>
-                <TableHead className="font-semibold">Referral Payment</TableHead>
                 <TableHead className="font-semibold">Diagnosis</TableHead>
                 <TableHead className="font-semibold">Admission Date</TableHead>
                 <TableHead className="font-semibold">Days Admitted</TableHead>
+                <TableHead className="font-semibold">Referral Doctor</TableHead>
+                <TableHead className="font-semibold">Referee DOA_Amt Paid</TableHead>
+                <TableHead className="font-semibold">Referral Payment</TableHead>
                 <TableHead className="font-semibold">Discharge Date</TableHead>
                 <TableHead className="font-semibold">Summaries and Certificates</TableHead>
                 <TableHead className="font-semibold">Getpass Notification</TableHead>
@@ -3080,15 +3080,6 @@ const TodaysIpdDashboard = () => {
                   <TableCell>
                     {visit.appointment_with}
                   </TableCell>
-                  <TableCell className="text-xs">
-                    {visit.referees?.name || '-'}
-                  </TableCell>
-                  <TableCell>
-                    <IpdRefereeAmountCell visit={visit} onUpdate={refetch} />
-                  </TableCell>
-                  <TableCell>
-                    <IpdReferralPaymentDropdown visit={visit} onUpdate={refetch} />
-                  </TableCell>
                   <TableCell>
                     General
                   </TableCell>
@@ -3097,6 +3088,15 @@ const TodaysIpdDashboard = () => {
                   </TableCell>
                   <TableCell>
                     {visit.admission_date ? `${Math.ceil((((visit.discharge_date ? new Date(visit.discharge_date).getTime() : Date.now()) - new Date(visit.admission_date).getTime())) / (1000 * 60 * 60 * 24))} days` : '—'}
+                  </TableCell>
+                  <TableCell className="text-xs">
+                    {visit.referees?.name || '-'}
+                  </TableCell>
+                  <TableCell>
+                    <IpdRefereeAmountCell visit={visit} onUpdate={refetch} />
+                  </TableCell>
+                  <TableCell>
+                    <IpdReferralPaymentDropdown visit={visit} onUpdate={refetch} />
                   </TableCell>
                   <TableCell>
                     {visit.discharge_date ? (

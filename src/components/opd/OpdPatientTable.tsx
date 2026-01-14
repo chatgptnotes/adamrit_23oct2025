@@ -93,7 +93,7 @@ const ReferralPaymentDropdown = ({
         <option value="Spot Paid">Spot Paid</option>
         <option value="Unpaid">Unpaid</option>
         <option value="Direct">Direct</option>
-        <option value="Back Paid">Back Paid</option>
+        <option value="Backing Paid">Backing Paid</option>
       </select>
       {isUpdating && (
         <Loader2 className="absolute right-1 top-1/2 transform -translate-y-1/2 h-3 w-3 animate-spin" />
@@ -1284,9 +1284,6 @@ Verified by: [To be verified by doctor]`;
             <TableHead className="hidden print:table-cell font-medium">Address</TableHead>
             <TableHead className="font-medium print:hidden">Visit Type</TableHead>
             <TableHead className="font-medium">Doctor</TableHead>
-            <TableHead className="font-medium print:hidden">Referral Doctor</TableHead>
-            <TableHead className="font-medium print:hidden">Referee DOA_Amt Paid</TableHead>
-            <TableHead className="font-medium print:hidden">Referral Payment</TableHead>
             <TableHead className="font-medium print:hidden">Diagnosis</TableHead>
             <TableHead className="text-center font-medium print:hidden">Payment Received</TableHead>
             <TableHead className="hidden print:table-cell font-medium">Paid Amount</TableHead>
@@ -1294,6 +1291,9 @@ Verified by: [To be verified by doctor]`;
             <TableHead className="text-center font-medium print:hidden">Bill</TableHead>
             <TableHead className="text-center font-medium print:hidden">Admit To Hospital</TableHead>
             <TableHead className="text-center font-medium print:hidden">Admission Notes</TableHead>
+            <TableHead className="font-medium print:hidden">Referral Doctor</TableHead>
+            <TableHead className="font-medium print:hidden">Referee DOA_Amt Paid</TableHead>
+            <TableHead className="font-medium print:hidden">Referral Payment</TableHead>
             <TableHead className="text-center font-medium print:hidden">Physiotherapy Bill</TableHead>
             <TableHead className="text-center font-medium print:hidden">Stickers</TableHead>
             <TableHead className="text-center font-medium print:hidden">OPD Summary</TableHead>
@@ -1372,18 +1372,6 @@ Verified by: [To be verified by doctor]`;
               <TableCell>
                 {patient.appointment_with || 'Not Assigned'}
               </TableCell>
-              {/* Screen-only: Referral Doctor */}
-              <TableCell className="print:hidden text-xs">
-                {patient.referees?.name || '-'}
-              </TableCell>
-              {/* Screen-only: Referee Amount */}
-              <TableCell className="print:hidden">
-                <RefereeAmountCell patient={patient} onUpdate={refetch} />
-              </TableCell>
-              {/* Screen-only: Referral Payment Status */}
-              <TableCell className="print:hidden">
-                <ReferralPaymentDropdown patient={patient} onUpdate={refetch} />
-              </TableCell>
               {/* Screen-only: Diagnosis */}
               <TableCell className="print:hidden">
                 {patient.diagnosis || 'General'}
@@ -1431,6 +1419,18 @@ Verified by: [To be verified by doctor]`;
                 >
                   <ClipboardEdit className="h-4 w-4 text-amber-600" />
                 </Button>
+              </TableCell>
+              {/* Screen-only: Referral Doctor */}
+              <TableCell className="print:hidden text-xs">
+                {patient.referees?.name || '-'}
+              </TableCell>
+              {/* Screen-only: Referee Amount */}
+              <TableCell className="print:hidden">
+                <RefereeAmountCell patient={patient} onUpdate={refetch} />
+              </TableCell>
+              {/* Screen-only: Referral Payment Status */}
+              <TableCell className="print:hidden">
+                <ReferralPaymentDropdown patient={patient} onUpdate={refetch} />
               </TableCell>
               {/* Screen-only: Physiotherapy Bill */}
               <TableCell className="text-center print:hidden">
