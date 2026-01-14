@@ -2782,30 +2782,39 @@ const LabOrders = () => {
 
       // Calculate formulas if this is a result_value change
       if (field === 'result_value' && selectedTestsForEntry.length > 0) {
-        const currentTestRow = selectedTestsForEntry[0]; // Assuming single test entry
-
-        // Create a combined test row with sub_tests from testSubTests state
-        // FIX: Use test_name instead of id to access testSubTests
-        const testRowWithSubTests = {
-          ...currentTestRow,
-          sub_tests: testSubTests[currentTestRow.test_name] || []
-        };
-
-        console.log('🔄 Triggering formula calculation after value change');
-        console.log('📊 Test row test_name:', currentTestRow.test_name);
-        console.log('📊 Sub-tests available:', testRowWithSubTests.sub_tests.length);
-        console.log('📊 Sub-tests with formulas:', testRowWithSubTests.sub_tests.filter((st: any) => st.formula).map((st: any) => ({ name: st.name, formula: st.formula })));
-
-        const calculatedValues = calculateFormulas(updated, testRowWithSubTests);
-
-        // Merge calculated values into updated form data
-        Object.keys(calculatedValues).forEach(key => {
-          console.log(`📝 Updating ${key} with calculated value: ${calculatedValues[key]}`);
-          updated[key] = {
-            ...updated[key],
-            result_value: calculatedValues[key]
-          };
+        // FIXED: Process ALL selected tests, not just the first one
+        console.log('🔄 Triggering formula calculation for ALL selected tests');
+        
+        // Determine which test this testId belongs to
+        const relevantTestRow = selectedTestsForEntry.find(testRow => {
+          const testKey = testRow.id;
+          return testId.startsWith(testKey) || testId === testKey;
         });
+
+        if (relevantTestRow) {
+          // Create a combined test row with sub_tests from testSubTests state
+          const testRowWithSubTests = {
+            ...relevantTestRow,
+            sub_tests: testSubTests[relevantTestRow.test_name] || []
+          };
+
+          console.log('📊 Processing formulas for test:', relevantTestRow.test_name);
+          console.log('📊 Sub-tests available:', testRowWithSubTests.sub_tests.length);
+          console.log('📊 Sub-tests with formulas:', testRowWithSubTests.sub_tests.filter((st: any) => st.formula).map((st: any) => ({ name: st.name, formula: st.formula })));
+
+          const calculatedValues = calculateFormulas(updated, testRowWithSubTests);
+
+          // Merge calculated values into updated form data
+          Object.keys(calculatedValues).forEach(key => {
+            console.log(`📝 Updating ${key} with calculated value: ${calculatedValues[key]}`);
+            updated[key] = {
+              ...updated[key],
+              result_value: calculatedValues[key]
+            };
+          });
+        } else {
+          console.log('⚠️ Could not find relevant test row for testId:', testId);
+        }
       }
 
       console.log('📋 Updated form state keys:', Object.keys(updated));
