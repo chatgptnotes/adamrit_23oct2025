@@ -314,6 +314,20 @@ export const BasicInfoFields: React.FC<BasicInfoFieldsProps> = ({
         />
       </div>
 
+      {/* Relationship Manager */}
+      <div>
+        <Label htmlFor="relationshipManager">Relationship Manager</Label>
+        <SingleSelectFieldSelect
+          tableName="relationship_managers"
+          fieldName="relationshipManager"
+          value={formData.relationshipManager || ''}
+          onChange={onSelectChange('relationshipManager' as keyof Patient)}
+          placeholder="Search for relationship manager..."
+          displayField="name"
+          searchFields={['name', 'contact_no']}
+        />
+      </div>
+
       {/* Hope Surgeon */}
       <div>
         <Label htmlFor="hopeSurgeon">Hope Surgeon</Label>

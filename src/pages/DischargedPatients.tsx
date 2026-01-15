@@ -1507,7 +1507,7 @@ const DischargedPatients = () => {
                     <TableHead>Billing Status</TableHead>
                     <TableHead>Corporate</TableHead>
                     {/* Only show referral-related columns for marketing managers */}
-                    {isMarketingManager && <TableHead>Referral Doctor</TableHead>}
+                    {isMarketingManager && <TableHead>Referral Doctor/Relationship Manager</TableHead>}
                     {isMarketingManager && <TableHead>Discharge Amt Paid</TableHead>}
                     {isMarketingManager && <TableHead>Referral Payment</TableHead>}
                     <TableHead>Actions</TableHead>

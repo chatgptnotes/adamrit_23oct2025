@@ -1,7 +1,7 @@
 import React from 'react';
 import { SearchableFieldSelect } from '@/components/AddPatientDialog/SearchableFieldSelect';
 
-type TableName = 'cghs_surgery' | 'complications' | 'medication' | 'lab' | 'radiology' | 'esic_surgeons' | 'referees' | 'hope_surgeons' | 'hope_consultants';
+type TableName = 'cghs_surgery' | 'complications' | 'medication' | 'lab' | 'radiology' | 'esic_surgeons' | 'referees' | 'hope_surgeons' | 'hope_consultants' | 'relationship_managers';
 
 interface SingleSelectFieldSelectProps {
   tableName: TableName;

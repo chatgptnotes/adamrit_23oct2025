@@ -501,7 +501,7 @@ const TodaysOpd = () => {
                   <TableHead>Date of Admission</TableHead>
                   <TableHead>Visit ID</TableHead>
                   <TableHead>Patient Name</TableHead>
-                  <TableHead>Referral Doctor Name</TableHead>
+                  <TableHead>Referral Doctor/Relationship Manager</TableHead>
                   <TableHead className="text-right">Patient Bill Amount</TableHead>
                   <TableHead>Payment Status</TableHead>
                 </TableRow>
@@ -555,7 +555,7 @@ const TodaysOpd = () => {
                   <TableHead>Date of Admission</TableHead>
                   <TableHead>Visit ID</TableHead>
                   <TableHead>Patient Name</TableHead>
-                  <TableHead>Referral Doctor Name</TableHead>
+                  <TableHead>Referral Doctor/Relationship Manager</TableHead>
                   <TableHead className="text-right">Patient Bill Amount</TableHead>
                   <TableHead>Payment Status</TableHead>
                 </TableRow>

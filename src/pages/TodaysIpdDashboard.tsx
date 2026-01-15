@@ -1424,6 +1424,10 @@ const TodaysIpdDashboard = () => {
           referees (
             id,
             name
+          ),
+          relationship_managers (
+            id,
+            name
           )
         `)
         .eq('patient_type', 'IPD')
@@ -2763,7 +2767,7 @@ const TodaysIpdDashboard = () => {
                 <TableHead className="font-semibold">Diagnosis</TableHead>
                 <TableHead className="font-semibold">Admission Date</TableHead>
                 <TableHead className="font-semibold">Days Admitted</TableHead>
-                <TableHead className="font-semibold">Referral Doctor</TableHead>
+                <TableHead className="font-semibold">Referral Doctor/Relationship Manager</TableHead>
                 {/* Only show referral-related columns for marketing managers */}
                 {isMarketingManager && <TableHead className="font-semibold">Referee DOA_Amt Paid</TableHead>}
                 {isMarketingManager && <TableHead className="font-semibold">Referral Payment</TableHead>}
@@ -3097,7 +3101,10 @@ const TodaysIpdDashboard = () => {
                     {visit.admission_date ? `${Math.ceil((((visit.discharge_date ? new Date(visit.discharge_date).getTime() : Date.now()) - new Date(visit.admission_date).getTime())) / (1000 * 60 * 60 * 24))} days` : '—'}
                   </TableCell>
                   <TableCell className="text-xs">
-                    {visit.referees?.name || '-'}
+                    <div>{visit.referees?.name || '-'}</div>
+                    {visit.relationship_managers?.name && (
+                      <div className="text-gray-500">{visit.relationship_managers.name}</div>
+                    )}
                   </TableCell>
                   {/* Only show referral-related cells for marketing managers */}
                   {isMarketingManager && (

@@ -119,7 +119,8 @@ export const EditPatientDialog: React.FC<EditPatientDialogProps> = ({
         surgeon: patient.surgeon || '',
         consultant: patient.consultant || '',
         hopeSurgeon: patient.hopeSurgeon || '',
-        hopeConsultants: patient.hopeConsultants || ''
+        hopeConsultants: patient.hopeConsultants || '',
+        relationshipManager: patient.relationshipManager || ''
       };
 
       // If we have visit data, populate visit-related fields from the current visit
@@ -156,6 +157,8 @@ export const EditPatientDialog: React.FC<EditPatientDialogProps> = ({
                 validPatientFields.hopeConsultants = remark.replace('Hope Consultants: ', '');
               } else if (remark.startsWith('Surgery Status: ')) {
                 validPatientFields.sanctionStatus = remark.replace('Surgery Status: ', '');
+              } else if (remark.startsWith('Relationship Manager: ')) {
+                validPatientFields.relationshipManager = remark.replace('Relationship Manager: ', '');
               }
             });
           }
@@ -238,6 +241,17 @@ export const EditPatientDialog: React.FC<EditPatientDialogProps> = ({
 
       // 2. Update or create visit data
       if (patient.visitId) {
+        // Lookup relationship manager ID by name
+        let relationshipManagerId = null;
+        if (formData.relationshipManager) {
+          const { data: rmData } = await supabase
+            .from('relationship_managers')
+            .select('id')
+            .eq('name', formData.relationshipManager)
+            .single();
+          relationshipManagerId = rmData?.id || null;
+        }
+
         const visitUpdateData = {
           // Primary diagnosis - store as diagnosis_id if we need to link to diagnoses table
           // For now, storing as text in a custom field
@@ -256,9 +270,13 @@ export const EditPatientDialog: React.FC<EditPatientDialogProps> = ({
             formData.consultant ? `Referee: ${formData.consultant}` : null,
             formData.hopeSurgeon ? `Hope Surgeon: ${formData.hopeSurgeon}` : null,
             formData.hopeConsultants ? `Hope Consultants: ${formData.hopeConsultants}` : null,
-            formData.sanctionStatus ? `Surgery Status: ${formData.sanctionStatus}` : null
+            formData.sanctionStatus ? `Surgery Status: ${formData.sanctionStatus}` : null,
+            formData.relationshipManager ? `Relationship Manager: ${formData.relationshipManager}` : null
           ].filter(Boolean).join('; ') || null,
-          
+
+          // Relationship Manager as FK
+          relationship_manager_id: relationshipManagerId,
+
           updated_at: new Date().toISOString()
         };
 
