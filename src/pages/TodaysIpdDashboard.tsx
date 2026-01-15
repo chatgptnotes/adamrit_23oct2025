@@ -1421,7 +1421,7 @@ const TodaysIpdDashboard = () => {
             emergency_contact_name,
             emergency_contact_mobile
           ),
-          referees (
+          referees!referring_doctor_id (
             id,
             name
           ),
@@ -3799,7 +3799,7 @@ const TodaysIpdDashboard = () => {
                   <TableHead>Date of Admission</TableHead>
                   <TableHead>Visit ID</TableHead>
                   <TableHead>Patient Name</TableHead>
-                  <TableHead>Referral Doctor Name</TableHead>
+                  <TableHead>Referral Doctor/Relationship Manager</TableHead>
                   <TableHead className="text-right">Patient Bill Amount</TableHead>
                   <TableHead>Payment Status</TableHead>
                 </TableRow>
@@ -3810,7 +3810,12 @@ const TodaysIpdDashboard = () => {
                     <TableCell>{visit.visit_date || '-'}</TableCell>
                     <TableCell>{visit.visit_id || '-'}</TableCell>
                     <TableCell>{visit.patients?.name || '-'}</TableCell>
-                    <TableCell>{visit.referees?.name || '-'}</TableCell>
+                    <TableCell>
+                      <div>{visit.referees?.name || '-'}</div>
+                      {visit.relationship_managers?.name && (
+                        <div>{visit.relationship_managers.name}</div>
+                      )}
+                    </TableCell>
                     <TableCell className="text-right">
                       {visit.referee_doa_amt_paid ? `₹${visit.referee_doa_amt_paid}` : '-'}
                     </TableCell>
@@ -3853,7 +3858,7 @@ const TodaysIpdDashboard = () => {
                   <TableHead>Date of Admission</TableHead>
                   <TableHead>Visit ID</TableHead>
                   <TableHead>Patient Name</TableHead>
-                  <TableHead>Referral Doctor Name</TableHead>
+                  <TableHead>Referral Doctor/Relationship Manager</TableHead>
                   <TableHead className="text-right">Patient Bill Amount</TableHead>
                   <TableHead>Payment Status</TableHead>
                 </TableRow>
@@ -3864,7 +3869,12 @@ const TodaysIpdDashboard = () => {
                     <TableCell>{visit.visit_date || '-'}</TableCell>
                     <TableCell>{visit.visit_id || '-'}</TableCell>
                     <TableCell>{visit.patients?.name || '-'}</TableCell>
-                    <TableCell>{visit.referees?.name || '-'}</TableCell>
+                    <TableCell>
+                      <div>{visit.referees?.name || '-'}</div>
+                      {visit.relationship_managers?.name && (
+                        <div>{visit.relationship_managers.name}</div>
+                      )}
+                    </TableCell>
                     <TableCell className="text-right">
                       {visit.referee_doa_amt_paid ? `₹${visit.referee_doa_amt_paid}` : '-'}
                     </TableCell>
