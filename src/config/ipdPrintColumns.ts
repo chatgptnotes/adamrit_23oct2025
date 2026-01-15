@@ -211,6 +211,19 @@ export const IPD_PRINT_COLUMNS: ReportColumn[] = [
     }
   },
   {
+    id: 'referral_doctor_rm',
+    label: 'Referral Doctor/Relationship Manager',
+    accessorKey: 'referees.name',
+    printable: true,
+    widthPx: 180,
+    align: 'left',
+    format: (value, row) => {
+      const referee = row?.referees?.name || '-';
+      const rm = row?.relationship_managers?.name || '';
+      return rm ? `${referee} / ${rm}` : referee;
+    }
+  },
+  {
     id: 'discharge_date',
     label: 'Discharge Date',
     accessorKey: 'discharge_date',

@@ -196,7 +196,7 @@ const AppContent = () => {
           <div className="min-h-screen flex w-full">
             <AppSidebar {...counts} />
             <main className="flex-1">
-              <div className="p-2">
+              <div className="p-2 ml-4">
                 <SidebarTrigger />
               </div>
               <AppRoutes />
