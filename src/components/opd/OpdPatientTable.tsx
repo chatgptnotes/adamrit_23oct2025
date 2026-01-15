@@ -1429,7 +1429,10 @@ Verified by: [To be verified by doctor]`;
               </TableCell>
               {/* Screen-only: Referral Doctor */}
               <TableCell className="print:hidden text-xs">
-                {patient.referees?.name || '-'}
+                <div>{patient.referees?.name || '-'}</div>
+                {patient.relationship_managers?.name && (
+                  <div>{patient.relationship_managers.name}</div>
+                )}
               </TableCell>
               {/* Screen-only: Referee Amount - Only show for marketing managers */}
               {isMarketingManager && (

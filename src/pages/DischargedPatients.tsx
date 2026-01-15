@@ -580,6 +580,9 @@ const DischargedPatients = () => {
           referees(
             name
           ),
+          relationship_managers(
+            name
+          ),
           ipd_discharge_summary!visit_id(
             status
           )
@@ -1594,7 +1597,10 @@ const DischargedPatients = () => {
                       {/* Only show referral-related cells for marketing managers */}
                       {isMarketingManager && (
                         <TableCell>
-                          {visit.referees?.name || '—'}
+                          <div>{visit.referees?.name || '—'}</div>
+                          {visit.relationship_managers?.name && (
+                            <div>{visit.relationship_managers.name}</div>
+                          )}
                         </TableCell>
                       )}
                       {isMarketingManager && (
@@ -1877,7 +1883,12 @@ const DischargedPatients = () => {
                     <TableCell>{visit.admission_date || '-'}</TableCell>
                     <TableCell>{visit.visit_id || '-'}</TableCell>
                     <TableCell>{visit.patients?.name || '-'}</TableCell>
-                    <TableCell>{visit.referees?.name || '-'}</TableCell>
+                    <TableCell>
+                      <div>{visit.referees?.name || '-'}</div>
+                      {visit.relationship_managers?.name && (
+                        <div>{visit.relationship_managers.name}</div>
+                      )}
+                    </TableCell>
                     <TableCell className="text-right">
                       {visit.referee_discharge_amt_paid ? `₹${visit.referee_discharge_amt_paid}` : '-'}
                     </TableCell>
@@ -1931,7 +1942,12 @@ const DischargedPatients = () => {
                     <TableCell>{visit.admission_date || '-'}</TableCell>
                     <TableCell>{visit.visit_id || '-'}</TableCell>
                     <TableCell>{visit.patients?.name || '-'}</TableCell>
-                    <TableCell>{visit.referees?.name || '-'}</TableCell>
+                    <TableCell>
+                      <div>{visit.referees?.name || '-'}</div>
+                      {visit.relationship_managers?.name && (
+                        <div>{visit.relationship_managers.name}</div>
+                      )}
+                    </TableCell>
                     <TableCell className="text-right">
                       {visit.referee_discharge_amt_paid ? `₹${visit.referee_discharge_amt_paid}` : '-'}
                     </TableCell>

@@ -3103,7 +3103,7 @@ const TodaysIpdDashboard = () => {
                   <TableCell className="text-xs">
                     <div>{visit.referees?.name || '-'}</div>
                     {visit.relationship_managers?.name && (
-                      <div className="text-gray-500">{visit.relationship_managers.name}</div>
+                      <div>{visit.relationship_managers.name}</div>
                     )}
                   </TableCell>
                   {/* Only show referral-related cells for marketing managers */}
