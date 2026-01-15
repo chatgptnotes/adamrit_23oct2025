@@ -2772,7 +2772,7 @@ const TodaysIpdDashboard = () => {
                 <TableHead className="font-semibold">Discharge Date</TableHead>
                 <TableHead className="font-semibold">Summaries and Certificates</TableHead>
                 <TableHead className="font-semibold">Getpass Notification</TableHead>
-                {isAdmin && <TableHead className="font-semibold">Actions</TableHead>}
+                {(isAdmin || isMarketingManager) && <TableHead className="font-semibold">Actions</TableHead>}
               </TableRow>
               <TableRow className="bg-muted/30">
                 {!hideColumns && <TableHead></TableHead>}
@@ -2829,7 +2829,7 @@ const TodaysIpdDashboard = () => {
                 <TableHead></TableHead>
                 <TableHead></TableHead>
                 <TableHead></TableHead>
-                {isAdmin && <TableHead></TableHead>}
+                {(isAdmin || isMarketingManager) && <TableHead></TableHead>}
               </TableRow>
             </TableHeader>
 
@@ -3157,7 +3157,7 @@ const TodaysIpdDashboard = () => {
                       Add Notification
                     </Button>
                   </TableCell>
-                  {isAdmin && (
+                  {(isAdmin || isMarketingManager) && (
                    <TableCell>
                      <div className="flex items-center gap-2">
                        <Button
@@ -3238,7 +3238,7 @@ const TodaysIpdDashboard = () => {
                            </AlertDialogContent>
                          </AlertDialog>
                        )}
-                       {isAdmin && (
+                       {(isAdmin || isMarketingManager) && (
                          <Button
                            variant="ghost"
                            size="sm"
