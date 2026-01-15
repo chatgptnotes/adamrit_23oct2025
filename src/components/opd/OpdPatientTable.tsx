@@ -11,6 +11,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { useDebounce } from 'use-debounce';
 import { useAuth } from '@/contexts/AuthContext';
 import { printSticker } from '@/utils/stickerPrinter';
+import { useQuery } from '@tanstack/react-query';
+import { RefereeDoaPaymentModal } from '@/components/ipd/RefereeDoaPaymentModal';
 
 interface Patient {
   id: string;
@@ -103,7 +105,7 @@ const ReferralPaymentDropdown = ({
   );
 };
 
-// Referee Amount Input Component with Save Button
+// Referee DOA Amount Cell with Payment Modal
 const RefereeAmountCell = ({
   patient,
   onUpdate
@@ -111,58 +113,61 @@ const RefereeAmountCell = ({
   patient: Patient;
   onUpdate?: () => void;
 }) => {
-  const { toast } = useToast();
-  const [value, setValue] = useState(patient.referee_doa_amt_paid?.toString() || '');
-  const [isUpdating, setIsUpdating] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
-  const handleSave = async () => {
-    const numValue = value ? parseFloat(value) : null;
-    setIsUpdating(true);
-    try {
-      const { error } = await supabase
-        .from('visits')
-        .update({ referee_doa_amt_paid: numValue })
-        .eq('id', patient.id);
+  // Fetch total payments for this visit
+  const { data: payments = [], isLoading } = useQuery({
+    queryKey: ['referee-doa-payments-total', patient.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('referee_doa_payments')
+        .select('amount')
+        .eq('visit_id', patient.id);
 
       if (error) {
-        console.error('Error updating referee amount:', error);
-        toast({
-          title: "Error",
-          description: "Failed to save amount",
-          variant: "destructive"
-        });
-      } else {
-        toast({
-          title: "Saved",
-          description: "Amount saved successfully",
-        });
-        onUpdate?.();
+        console.error('Error fetching payments:', error);
+        return [];
       }
-    } catch (err) {
-      console.error('Error updating referee amount:', err);
-    } finally {
-      setIsUpdating(false);
-    }
+      return data || [];
+    },
+    staleTime: 30000
+  });
+
+  // Calculate total
+  const totalAmount = payments.reduce((sum: number, p: any) => sum + Number(p.amount), 0);
+
+  // Create visit object for modal (needs visit_id and patients)
+  const visitForModal = {
+    id: patient.id,
+    visit_id: patient.visit_id || '',
+    patients: patient.patients
   };
 
   return (
-    <div className="flex flex-col items-center gap-1">
-      <input
-        type="number"
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        placeholder="Amount"
-        className="w-20 h-6 text-xs border border-gray-300 rounded px-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-        disabled={isUpdating}
-      />
-      <button
-        onClick={handleSave}
-        disabled={isUpdating}
-        className="h-4 px-2 text-[9px] bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+    <>
+      <Button
+        variant={totalAmount > 0 ? "default" : "outline"}
+        size="sm"
+        className={`h-6 px-2 text-xs ${totalAmount > 0 ? 'bg-green-600 hover:bg-green-700' : ''}`}
+        onClick={() => setIsModalOpen(true)}
+        disabled={isLoading}
       >
-        {isUpdating ? <Loader2 className="h-2 w-2 animate-spin" /> : 'Save'}
-      </button>
-    </div>
+        {isLoading ? (
+          <Loader2 className="h-3 w-3 animate-spin" />
+        ) : totalAmount > 0 ? (
+          `₹${totalAmount.toLocaleString()}`
+        ) : (
+          'Pay'
+        )}
+      </Button>
+
+      <RefereeDoaPaymentModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        visit={visitForModal}
+        onUpdate={onUpdate}
+      />
+    </>
   );
 };
 

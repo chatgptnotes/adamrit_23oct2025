@@ -31,6 +31,7 @@ import { toast } from "@/hooks/use-toast";
 import { format } from 'date-fns';
 import { CascadingBillingStatusDropdown } from '@/components/shared/CascadingBillingStatusDropdown';
 import { EnhancedDatePicker } from '@/components/ui/enhanced-date-picker';
+import { RefereeDoaPaymentModal } from '@/components/ipd/RefereeDoaPaymentModal';
 
 interface Visit {
   id: string;
@@ -141,7 +142,7 @@ const ReferralPaymentDropdown = ({
   );
 };
 
-// Referee Amount Input Component - Admin only can edit
+// Referee Discharge Amount Cell with Payment Modal
 const RefereeAmountCell = ({
   visit,
   onUpdate,
@@ -151,64 +152,66 @@ const RefereeAmountCell = ({
   onUpdate?: () => void;
   isAdmin: boolean;
 }) => {
-  const [value, setValue] = useState(visit.referee_discharge_amt_paid?.toString() || '');
-  const [isUpdating, setIsUpdating] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
-  const handleSave = async () => {
-    const numValue = value ? parseFloat(value) : null;
-
-    setIsUpdating(true);
-    try {
-      const { error } = await supabase
-        .from('visits')
-        .update({ referee_discharge_amt_paid: numValue })
-        .eq('id', visit.id);
+  // Fetch total payments for this visit
+  const { data: payments = [], isLoading } = useQuery({
+    queryKey: ['referee-doa-payments-total', visit.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('referee_doa_payments')
+        .select('amount')
+        .eq('visit_id', visit.id);
 
       if (error) {
-        console.error('Error updating referee amount:', error);
-        toast({
-          title: "Error",
-          description: "Failed to save amount",
-          variant: "destructive"
-        });
-      } else {
-        toast({
-          title: "Saved",
-          description: "Amount saved successfully",
-        });
-        onUpdate?.();
+        console.error('Error fetching payments:', error);
+        return [];
       }
-    } catch (err) {
-      console.error('Error updating referee amount:', err);
-    } finally {
-      setIsUpdating(false);
-    }
-  };
+      return data || [];
+    },
+    staleTime: 30000
+  });
+
+  // Calculate total
+  const totalAmount = payments.reduce((sum: number, p: any) => sum + Number(p.amount), 0);
 
   // Non-admin users can only view the value
   if (!isAdmin) {
-    return <span className="text-xs">{visit.referee_discharge_amt_paid ? `₹${visit.referee_discharge_amt_paid}` : '—'}</span>;
+    return <span className="text-xs">{totalAmount > 0 ? `₹${totalAmount.toLocaleString()}` : '—'}</span>;
   }
 
-  // Admin users get the input field with save button below
+  // Create visit object for modal
+  const visitForModal = {
+    id: visit.id,
+    visit_id: visit.visit_id,
+    patients: visit.patients
+  };
+
   return (
-    <div className="flex flex-col items-center gap-1">
-      <input
-        type="number"
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        placeholder="Amount"
-        className="w-20 h-6 text-xs border border-gray-300 rounded px-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-        disabled={isUpdating}
-      />
-      <button
-        onClick={handleSave}
-        disabled={isUpdating}
-        className="h-4 px-2 text-[9px] bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+    <>
+      <Button
+        variant={totalAmount > 0 ? "default" : "outline"}
+        size="sm"
+        className={`h-6 px-2 text-xs ${totalAmount > 0 ? 'bg-green-600 hover:bg-green-700' : ''}`}
+        onClick={() => setIsModalOpen(true)}
+        disabled={isLoading}
       >
-        {isUpdating ? <Loader2 className="h-2 w-2 animate-spin" /> : 'Save'}
-      </button>
-    </div>
+        {isLoading ? (
+          <Loader2 className="h-3 w-3 animate-spin" />
+        ) : totalAmount > 0 ? (
+          `₹${totalAmount.toLocaleString()}`
+        ) : (
+          'Pay'
+        )}
+      </Button>
+
+      <RefereeDoaPaymentModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        visit={visitForModal}
+        onUpdate={onUpdate}
+      />
+    </>
   );
 };
 
