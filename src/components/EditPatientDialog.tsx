@@ -309,10 +309,13 @@ export const EditPatientDialog: React.FC<EditPatientDialogProps> = ({
       queryClient.invalidateQueries({ queryKey: ['patient-data-edit'] });
       queryClient.invalidateQueries({ queryKey: ['patients'] }); // Main patient list query
       queryClient.invalidateQueries({ queryKey: ['dashboard-patients'] }); // Dashboard patient list query
+      queryClient.invalidateQueries({ queryKey: ['todays-visits'] }); // IPD Dashboard
+      queryClient.invalidateQueries({ queryKey: ['discharged-patients'] }); // Discharged Patients
 
       // Force refetch of patient data to ensure UI updates
       setTimeout(() => {
         queryClient.refetchQueries({ queryKey: ['patients'] });
+        queryClient.refetchQueries({ queryKey: ['todays-visits'] });
       }, 100);
 
       // Call the parent onSave callback
@@ -327,6 +330,9 @@ export const EditPatientDialog: React.FC<EditPatientDialogProps> = ({
           results.visit ? 'visit data' : null
         ].filter(Boolean).join(' and ')}. Patient cards will refresh automatically.`,
       });
+
+      // Close the modal after successful save
+      onClose();
     },
     onError: (error: any) => {
       console.error('Save error:', error);
