@@ -10,7 +10,7 @@ import { supabase } from '@/integrations/supabase/client';
 
 type TableName = 'cghs_surgery' | 'complications' | 'medication' | 'lab' | 'radiology' |
                  'esic_surgeons' | 'referees' | 'hope_surgeons' | 'hope_consultants' |
-                 'diagnoses' | 'sst_treatments';
+                 'diagnoses' | 'sst_treatments' | 'relationship_managers';
 
 interface SearchableFieldSelectProps {
   // Option 1: Pass options directly (original interface)

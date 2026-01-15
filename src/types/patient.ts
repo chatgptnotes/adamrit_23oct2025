@@ -14,6 +14,7 @@ export interface Patient {
   consultant?: string;
   hopeSurgeon?: string;
   hopeConsultants?: string;
+  relationshipManager?: string;
   visitId?: string;
   visitIdDisplay?: string;
   

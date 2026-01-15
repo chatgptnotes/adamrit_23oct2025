@@ -1297,7 +1297,7 @@ Verified by: [To be verified by doctor]`;
             <TableHead className="text-center font-medium print:hidden">Bill</TableHead>
             <TableHead className="text-center font-medium print:hidden">Admit To Hospital</TableHead>
             <TableHead className="text-center font-medium print:hidden">Admission Notes</TableHead>
-            <TableHead className="font-medium print:hidden">Referral Doctor</TableHead>
+            <TableHead className="font-medium print:hidden">Referral Doctor/Relationship Manager</TableHead>
             {/* Only show referral-related columns for marketing managers */}
             {isMarketingManager && <TableHead className="font-medium print:hidden">Referee DOA_Amt Paid</TableHead>}
             {isMarketingManager && <TableHead className="font-medium print:hidden">Referral Payment</TableHead>}
@@ -1429,7 +1429,10 @@ Verified by: [To be verified by doctor]`;
               </TableCell>
               {/* Screen-only: Referral Doctor */}
               <TableCell className="print:hidden text-xs">
-                {patient.referees?.name || '-'}
+                <div>{patient.referees?.name || '-'}</div>
+                {patient.relationship_managers?.name && (
+                  <div>{patient.relationship_managers.name}</div>
+                )}
               </TableCell>
               {/* Screen-only: Referee Amount - Only show for marketing managers */}
               {isMarketingManager && (

@@ -115,6 +115,10 @@ const TodaysOpd = () => {
           referees (
             id,
             name
+          ),
+          relationship_managers (
+            id,
+            name
           )
         `)
         .eq('patient_type', 'OPD')
@@ -501,7 +505,7 @@ const TodaysOpd = () => {
                   <TableHead>Date of Admission</TableHead>
                   <TableHead>Visit ID</TableHead>
                   <TableHead>Patient Name</TableHead>
-                  <TableHead>Referral Doctor Name</TableHead>
+                  <TableHead>Referral Doctor/Relationship Manager</TableHead>
                   <TableHead className="text-right">Patient Bill Amount</TableHead>
                   <TableHead>Payment Status</TableHead>
                 </TableRow>
@@ -512,7 +516,12 @@ const TodaysOpd = () => {
                     <TableCell>{patient.visit_date || '-'}</TableCell>
                     <TableCell>{patient.visit_id || '-'}</TableCell>
                     <TableCell>{patient.patients?.name || '-'}</TableCell>
-                    <TableCell>{patient.referees?.name || '-'}</TableCell>
+                    <TableCell>
+                      <div>{patient.referees?.name || '-'}</div>
+                      {patient.relationship_managers?.name && (
+                        <div>{patient.relationship_managers.name}</div>
+                      )}
+                    </TableCell>
                     <TableCell className="text-right">
                       {patient.referee_doa_amt_paid ? `₹${patient.referee_doa_amt_paid}` : '-'}
                     </TableCell>
@@ -555,7 +564,7 @@ const TodaysOpd = () => {
                   <TableHead>Date of Admission</TableHead>
                   <TableHead>Visit ID</TableHead>
                   <TableHead>Patient Name</TableHead>
-                  <TableHead>Referral Doctor Name</TableHead>
+                  <TableHead>Referral Doctor/Relationship Manager</TableHead>
                   <TableHead className="text-right">Patient Bill Amount</TableHead>
                   <TableHead>Payment Status</TableHead>
                 </TableRow>
@@ -566,7 +575,12 @@ const TodaysOpd = () => {
                     <TableCell>{patient.visit_date || '-'}</TableCell>
                     <TableCell>{patient.visit_id || '-'}</TableCell>
                     <TableCell>{patient.patients?.name || '-'}</TableCell>
-                    <TableCell>{patient.referees?.name || '-'}</TableCell>
+                    <TableCell>
+                      <div>{patient.referees?.name || '-'}</div>
+                      {patient.relationship_managers?.name && (
+                        <div>{patient.relationship_managers.name}</div>
+                      )}
+                    </TableCell>
                     <TableCell className="text-right">
                       {patient.referee_doa_amt_paid ? `₹${patient.referee_doa_amt_paid}` : '-'}
                     </TableCell>
