@@ -2,7 +2,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { X, ChevronDown, ChevronUp } from 'lucide-react';
@@ -196,72 +195,70 @@ export const SearchableFieldSelect: React.FC<SearchableFieldSelectProps> = ({
       </div>
 
       {isOpen && (
-        <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-hidden">
-          <ScrollArea className="max-h-60">
-            {isLoading && tableName && (
-              <div className="p-4 text-center text-gray-500">
-                Loading...
-              </div>
-            )}
+        <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-80 overflow-y-auto">
+          {isLoading && tableName && (
+            <div className="p-4 text-center text-gray-500">
+              Loading...
+            </div>
+          )}
 
-            {!isLoading && filteredOptions.length > 0 && (
-              <div className="p-2">
-                {filteredOptions.map((option, index) => (
-                  <div
-                    key={`${option.id}-${index}`}
-                    className="flex items-center gap-2 p-2 hover:bg-gray-100 cursor-pointer rounded"
-                    onClick={() => handleSelect(option.name)}
-                  >
-                    <Checkbox
-                      checked={valueArray.some(v =>
-                        v?.toLowerCase().trim() === option.name?.toLowerCase().trim() ||
-                        v === option.id
-                      )}
-                      onChange={() => {}} // Controlled by onClick
-                      className="pointer-events-none"
-                    />
-                    <div className="flex-1 min-w-0">
-                      <div className="font-medium truncate">{option.name}</div>
-                      {showDescriptions && option.description && (
-                        <div className="text-sm text-gray-600 truncate">{option.description}</div>
-                      )}
-                      {showCategories && option.category && (
-                        <div className="text-xs text-gray-500">{option.category}</div>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {allowCustom && onCustomAdd && (
-              <div className="border-t p-2">
-                <div className="flex gap-2">
-                  <Input
-                    value={customValue}
-                    onChange={(e) => setCustomValue(e.target.value)}
-                    placeholder="Add custom value..."
-                    className="flex-1"
-                    onKeyPress={(e) => e.key === 'Enter' && handleCustomAdd()}
+          {!isLoading && filteredOptions.length > 0 && (
+            <div className="p-2">
+              {filteredOptions.map((option, index) => (
+                <div
+                  key={`${option.id}-${index}`}
+                  className="flex items-center gap-2 p-2 hover:bg-gray-100 cursor-pointer rounded"
+                  onClick={() => handleSelect(option.name)}
+                >
+                  <Checkbox
+                    checked={valueArray.some(v =>
+                      v?.toLowerCase().trim() === option.name?.toLowerCase().trim() ||
+                      v === option.id
+                    )}
+                    onChange={() => {}} // Controlled by onClick
+                    className="pointer-events-none"
                   />
-                  <Button
-                    type="button"
-                    size="sm"
-                    onClick={handleCustomAdd}
-                    disabled={!customValue.trim()}
-                  >
-                    Add
-                  </Button>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium truncate">{option.name}</div>
+                    {showDescriptions && option.description && (
+                      <div className="text-sm text-gray-600 truncate">{option.description}</div>
+                    )}
+                    {showCategories && option.category && (
+                      <div className="text-xs text-gray-500">{option.category}</div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            )}
+              ))}
+            </div>
+          )}
 
-            {!isLoading && filteredOptions.length === 0 && !allowCustom && (
-              <div className="p-4 text-center text-gray-500">
-                No options found
+          {allowCustom && onCustomAdd && (
+            <div className="border-t p-2">
+              <div className="flex gap-2">
+                <Input
+                  value={customValue}
+                  onChange={(e) => setCustomValue(e.target.value)}
+                  placeholder="Add custom value..."
+                  className="flex-1"
+                  onKeyPress={(e) => e.key === 'Enter' && handleCustomAdd()}
+                />
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={handleCustomAdd}
+                  disabled={!customValue.trim()}
+                >
+                  Add
+                </Button>
               </div>
-            )}
-          </ScrollArea>
+            </div>
+          )}
+
+          {!isLoading && filteredOptions.length === 0 && !allowCustom && (
+            <div className="p-4 text-center text-gray-500">
+              No options found
+            </div>
+          )}
         </div>
       )}
     </div>
