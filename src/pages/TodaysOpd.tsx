@@ -29,6 +29,13 @@ const TodaysOpd = () => {
   // State for unpaid referral report modal
   const [isUnpaidReportOpen, setIsUnpaidReportOpen] = useState(false);
 
+  // State for DOA payments (individual payments with dates)
+  const [doaPayments, setDoaPayments] = useState<Record<string, Array<{
+    amount: number;
+    payment_date: string;
+    notes: string | null;
+  }>>>({});
+
   // URL-persisted state
   const searchTerm = searchParams.get('search') || '';
   const corporateFilter = searchParams.get('corporate') || '';
@@ -209,6 +216,54 @@ const TodaysOpd = () => {
     total: filteredPatients.length
   };
 
+  // Fetch DOA payments for referral report
+  useEffect(() => {
+    const fetchDoaPayments = async () => {
+      if (!opdPatients || opdPatients.length === 0) return;
+
+      const visitUuids = opdPatients.map((p: any) => p.id).filter(Boolean) as string[];
+      if (visitUuids.length === 0) return;
+
+      try {
+        const { data: doaData, error: doaError } = await supabase
+          .from('referee_doa_payments')
+          .select('visit_id, amount, payment_date, notes')
+          .in('visit_id', visitUuids)
+          .order('payment_date', { ascending: true });
+
+        if (doaError) {
+          console.error('Error fetching DOA payments:', doaError);
+          return;
+        }
+
+        if (doaData) {
+          const doaByVisit: Record<string, Array<{
+            amount: number;
+            payment_date: string;
+            notes: string | null;
+          }>> = {};
+          doaData.forEach((payment: any) => {
+            if (payment.visit_id) {
+              if (!doaByVisit[payment.visit_id]) {
+                doaByVisit[payment.visit_id] = [];
+              }
+              doaByVisit[payment.visit_id].push({
+                amount: Number(payment.amount),
+                payment_date: payment.payment_date,
+                notes: payment.notes
+              });
+            }
+          });
+          setDoaPayments(doaByVisit);
+        }
+      } catch (error) {
+        console.error('Error fetching DOA payments:', error);
+      }
+    };
+
+    fetchDoaPayments();
+  }, [opdPatients]);
+
   const handlePrintList = () => {
     window.print();
   };
@@ -239,7 +294,7 @@ const TodaysOpd = () => {
         printWindow.document.write(`
           <html>
             <head>
-              <title>OPD Referral Report - ${format(new Date(), 'dd MMM yyyy')}</title>
+              <title>Referral Amount Summary - ${format(new Date(), 'dd MMM yyyy')}</title>
               <style>
                 body {
                   font-family: Arial, sans-serif;
@@ -269,7 +324,7 @@ const TodaysOpd = () => {
               </style>
             </head>
             <body>
-              <h1>OPD Referral Report</h1>
+              <h1>Referral Amount Summary</h1>
               <p class="subtitle">OPD Patients - Referral Details</p>
               <div class="header-info">
                 <span><strong>Print Date:</strong> ${format(new Date(), 'dd MMM yyyy, hh:mm a')}</span>
@@ -286,9 +341,10 @@ const TodaysOpd = () => {
     }
   };
 
-  // Filter for unpaid referral patients
+  // Filter for unpaid referral patients (excludes patients with any payments)
   const unpaidReferralPatients = filteredPatients.filter(
-    patient => patient.referral_payment_status === 'Unpaid'
+    patient => (!patient.referral_payment_status || patient.referral_payment_status === 'Unpaid') &&
+               (!doaPayments[patient.id] || doaPayments[patient.id].length === 0)
   );
 
   // Open Unpaid Referral Report Modal
@@ -305,7 +361,7 @@ const TodaysOpd = () => {
         printWindow.document.write(`
           <html>
             <head>
-              <title>OPD Unpaid Referral Report - ${format(new Date(), 'dd MMM yyyy')}</title>
+              <title>Unpaid Referral Amount Summary - ${format(new Date(), 'dd MMM yyyy')}</title>
               <style>
                 body {
                   font-family: Arial, sans-serif;
@@ -335,7 +391,7 @@ const TodaysOpd = () => {
               </style>
             </head>
             <body>
-              <h1>OPD Unpaid Referral Report</h1>
+              <h1>Unpaid Referral Amount Summary</h1>
               <p class="subtitle">OPD Patients - Unpaid Referral Details</p>
               <div class="header-info">
                 <span><strong>Print Date:</strong> ${format(new Date(), 'dd MMM yyyy, hh:mm a')}</span>
@@ -489,13 +545,7 @@ const TodaysOpd = () => {
       <Dialog open={isReferralReportOpen} onOpenChange={setIsReferralReportOpen}>
         <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="flex items-center justify-between pr-8">
-              <span>OPD Referral Report Preview</span>
-              <Button onClick={handlePrintReferralReport} className="ml-4">
-                <Printer className="mr-2 h-4 w-4" />
-                Print Report
-              </Button>
-            </DialogTitle>
+            <DialogTitle>OPD Referral Report Preview</DialogTitle>
           </DialogHeader>
 
           <div id="opd-referral-report-content">
@@ -506,7 +556,8 @@ const TodaysOpd = () => {
                   <TableHead>Visit ID</TableHead>
                   <TableHead>Patient Name</TableHead>
                   <TableHead>Referral Doctor/Relationship Manager</TableHead>
-                  <TableHead className="text-right">Patient Bill Amount</TableHead>
+                  <TableHead>Referee DOA Amt Paid</TableHead>
+                  <TableHead>Total Amount Paid</TableHead>
                   <TableHead>Payment Status</TableHead>
                 </TableRow>
               </TableHeader>
@@ -522,8 +573,21 @@ const TodaysOpd = () => {
                         <div>{patient.relationship_managers.name}</div>
                       )}
                     </TableCell>
-                    <TableCell className="text-right">
-                      {patient.referee_doa_amt_paid ? `₹${patient.referee_doa_amt_paid}` : '-'}
+                    <TableCell>
+                      {doaPayments[patient.id]?.length > 0 ? (
+                        <div className="space-y-1">
+                          {doaPayments[patient.id].map((payment, idx) => (
+                            <div key={idx} className="text-sm">
+                              ₹{payment.amount.toLocaleString()} ({format(new Date(payment.payment_date), 'dd MMM')})
+                            </div>
+                          ))}
+                        </div>
+                      ) : '-'}
+                    </TableCell>
+                    <TableCell>
+                      {doaPayments[patient.id]?.length > 0
+                        ? `₹${doaPayments[patient.id].reduce((sum, p) => sum + p.amount, 0).toLocaleString()}`
+                        : '-'}
                     </TableCell>
                     <TableCell>{patient.referral_payment_status || '-'}</TableCell>
                   </TableRow>
@@ -536,10 +600,15 @@ const TodaysOpd = () => {
             <span className="text-sm text-muted-foreground">
               Total: {filteredPatients.length} records
             </span>
-            <Button onClick={handlePrintReferralReport} className="bg-blue-600 hover:bg-blue-700">
-              <Printer className="mr-2 h-4 w-4" />
-              Print Report
-            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setIsReferralReportOpen(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handlePrintReferralReport} className="bg-blue-600 hover:bg-blue-700">
+                <Printer className="mr-2 h-4 w-4" />
+                Print Report
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
@@ -548,13 +617,7 @@ const TodaysOpd = () => {
       <Dialog open={isUnpaidReportOpen} onOpenChange={setIsUnpaidReportOpen}>
         <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="flex items-center justify-between pr-8">
-              <span className="text-red-600">OPD Unpaid Referral Report</span>
-              <Button onClick={handlePrintUnpaidReport} className="ml-4 bg-red-600 hover:bg-red-700">
-                <Printer className="mr-2 h-4 w-4" />
-                Print Report
-              </Button>
-            </DialogTitle>
+            <DialogTitle className="text-red-600">Unpaid Referral Amount Summary</DialogTitle>
           </DialogHeader>
 
           <div id="opd-unpaid-report-content">
@@ -565,7 +628,8 @@ const TodaysOpd = () => {
                   <TableHead>Visit ID</TableHead>
                   <TableHead>Patient Name</TableHead>
                   <TableHead>Referral Doctor/Relationship Manager</TableHead>
-                  <TableHead className="text-right">Patient Bill Amount</TableHead>
+                  <TableHead>Referee DOA Amt Paid</TableHead>
+                  <TableHead>Total Amount Paid</TableHead>
                   <TableHead>Payment Status</TableHead>
                 </TableRow>
               </TableHeader>
@@ -581,8 +645,21 @@ const TodaysOpd = () => {
                         <div>{patient.relationship_managers.name}</div>
                       )}
                     </TableCell>
-                    <TableCell className="text-right">
-                      {patient.referee_doa_amt_paid ? `₹${patient.referee_doa_amt_paid}` : '-'}
+                    <TableCell>
+                      {doaPayments[patient.id]?.length > 0 ? (
+                        <div className="space-y-1">
+                          {doaPayments[patient.id].map((payment, idx) => (
+                            <div key={idx} className="text-sm">
+                              ₹{payment.amount.toLocaleString()} ({format(new Date(payment.payment_date), 'dd MMM')})
+                            </div>
+                          ))}
+                        </div>
+                      ) : '-'}
+                    </TableCell>
+                    <TableCell>
+                      {doaPayments[patient.id]?.length > 0
+                        ? `₹${doaPayments[patient.id].reduce((sum, p) => sum + p.amount, 0).toLocaleString()}`
+                        : '-'}
                     </TableCell>
                     <TableCell className="text-red-600 font-medium">{patient.referral_payment_status || '-'}</TableCell>
                   </TableRow>
@@ -595,10 +672,15 @@ const TodaysOpd = () => {
             <span className="text-sm text-muted-foreground">
               Total Unpaid: {unpaidReferralPatients.length} records
             </span>
-            <Button onClick={handlePrintUnpaidReport} className="bg-red-600 hover:bg-red-700">
-              <Printer className="mr-2 h-4 w-4" />
-              Print Report
-            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setIsUnpaidReportOpen(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handlePrintUnpaidReport} className="bg-red-600 hover:bg-red-700">
+                <Printer className="mr-2 h-4 w-4" />
+                Print Report
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
