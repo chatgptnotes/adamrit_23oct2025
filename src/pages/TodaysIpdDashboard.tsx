@@ -312,6 +312,11 @@ const TodaysIpdDashboard = () => {
   // Advance payment status tracking
   const [advancePayments, setAdvancePayments] = useState<Record<string, number>>({});
   const [billTotals, setBillTotals] = useState<Record<string, number>>({});
+  const [doaPayments, setDoaPayments] = useState<Record<string, Array<{
+    amount: number;
+    payment_date: string;
+    notes: string | null;
+  }>>>({});
 
   // Print functionality
   const [showPrintPreview, setShowPrintPreview] = useState(false);
@@ -1569,6 +1574,39 @@ const TodaysIpdDashboard = () => {
           });
           setBillTotals(billByVisit);
         }
+
+        // Fetch DOA payments for referral report (with dates for detailed display)
+        const visitUuids = todaysVisits.map(v => v.id).filter(Boolean) as string[];
+        if (visitUuids.length > 0) {
+          const { data: doaData, error: doaError } = await supabase
+            .from('referee_doa_payments')
+            .select('visit_id, amount, payment_date, notes')
+            .in('visit_id', visitUuids)
+            .order('payment_date', { ascending: true });
+
+          if (doaError) {
+            console.error('Error fetching DOA payments:', doaError);
+          } else if (doaData) {
+            const doaByVisit: Record<string, Array<{
+              amount: number;
+              payment_date: string;
+              notes: string | null;
+            }>> = {};
+            doaData.forEach((payment: any) => {
+              if (payment.visit_id) {
+                if (!doaByVisit[payment.visit_id]) {
+                  doaByVisit[payment.visit_id] = [];
+                }
+                doaByVisit[payment.visit_id].push({
+                  amount: Number(payment.amount),
+                  payment_date: payment.payment_date,
+                  notes: payment.notes
+                });
+              }
+            });
+            setDoaPayments(doaByVisit);
+          }
+        }
       } catch (error) {
         console.error('Error fetching payment data:', error);
       }
@@ -2239,7 +2277,7 @@ const TodaysIpdDashboard = () => {
         printWindow.document.write(`
           <html>
             <head>
-              <title>IPD Referral Report - ${format(new Date(), 'dd MMM yyyy')}</title>
+              <title>Referral Amount Summary - ${format(new Date(), 'dd MMM yyyy')}</title>
               <style>
                 body {
                   font-family: Arial, sans-serif;
@@ -2269,7 +2307,7 @@ const TodaysIpdDashboard = () => {
               </style>
             </head>
             <body>
-              <h1>IPD Referral Report</h1>
+              <h1>Referral Amount Summary</h1>
               <p class="subtitle">IPD Patients - Referral Details</p>
               <div class="header-info">
                 <span><strong>Print Date:</strong> ${format(new Date(), 'dd MMM yyyy, hh:mm a')}</span>
@@ -2286,9 +2324,10 @@ const TodaysIpdDashboard = () => {
     }
   };
 
-  // Filter for unpaid referral visits
+  // Filter for unpaid referral visits (excludes patients with any payments)
   const unpaidReferralVisits = filteredVisits.filter(
-    visit => visit.referral_payment_status === 'Unpaid'
+    visit => (!visit.referral_payment_status || visit.referral_payment_status === 'Unpaid') &&
+             (!doaPayments[visit.id] || doaPayments[visit.id].length === 0)
   );
 
   // Open Unpaid Referral Report Modal
@@ -2298,7 +2337,7 @@ const TodaysIpdDashboard = () => {
 
   // Print Unpaid Referral Report
   const handlePrintUnpaidReport = () => {
-    const printContent = document.getElementById('ipd-unpaid-report-content');
+    const printContent = document.getElementById('ipd-unpaid-referral-report-content');
     if (printContent) {
       const printWindow = window.open('', '_blank');
       if (printWindow) {
@@ -3783,13 +3822,7 @@ const TodaysIpdDashboard = () => {
       <Dialog open={isReferralReportOpen} onOpenChange={setIsReferralReportOpen}>
         <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="flex items-center justify-between pr-8">
-              <span>IPD Referral Report Preview</span>
-              <Button onClick={handlePrintReferralReport} className="ml-4">
-                <Printer className="mr-2 h-4 w-4" />
-                Print Report
-              </Button>
-            </DialogTitle>
+            <DialogTitle>IPD Referral Report Preview</DialogTitle>
           </DialogHeader>
 
           <div id="ipd-referral-report-content">
@@ -3800,7 +3833,8 @@ const TodaysIpdDashboard = () => {
                   <TableHead>Visit ID</TableHead>
                   <TableHead>Patient Name</TableHead>
                   <TableHead>Referral Doctor/Relationship Manager</TableHead>
-                  <TableHead className="text-right">Patient Bill Amount</TableHead>
+                  <TableHead>Referee DOA Amt Paid</TableHead>
+                  <TableHead>Total Amount Paid</TableHead>
                   <TableHead>Payment Status</TableHead>
                 </TableRow>
               </TableHeader>
@@ -3816,8 +3850,21 @@ const TodaysIpdDashboard = () => {
                         <div>{visit.relationship_managers.name}</div>
                       )}
                     </TableCell>
-                    <TableCell className="text-right">
-                      {visit.referee_doa_amt_paid ? `₹${visit.referee_doa_amt_paid}` : '-'}
+                    <TableCell>
+                      {doaPayments[visit.id]?.length > 0 ? (
+                        <div className="space-y-1">
+                          {doaPayments[visit.id].map((payment, idx) => (
+                            <div key={idx} className="text-sm">
+                              ₹{payment.amount.toLocaleString()} ({format(new Date(payment.payment_date), 'dd MMM')})
+                            </div>
+                          ))}
+                        </div>
+                      ) : '-'}
+                    </TableCell>
+                    <TableCell>
+                      {doaPayments[visit.id]?.length > 0
+                        ? `₹${doaPayments[visit.id].reduce((sum, p) => sum + p.amount, 0).toLocaleString()}`
+                        : '-'}
                     </TableCell>
                     <TableCell>{visit.referral_payment_status || '-'}</TableCell>
                   </TableRow>
@@ -3830,10 +3877,15 @@ const TodaysIpdDashboard = () => {
             <span className="text-sm text-muted-foreground">
               Total: {filteredVisits.length} records
             </span>
-            <Button onClick={handlePrintReferralReport} className="bg-blue-600 hover:bg-blue-700">
-              <Printer className="mr-2 h-4 w-4" />
-              Print Report
-            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setIsReferralReportOpen(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handlePrintReferralReport} className="bg-blue-600 hover:bg-blue-700">
+                <Printer className="mr-2 h-4 w-4" />
+                Print Report
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
@@ -3842,13 +3894,7 @@ const TodaysIpdDashboard = () => {
       <Dialog open={isUnpaidReportOpen} onOpenChange={setIsUnpaidReportOpen}>
         <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="flex items-center justify-between pr-8">
-              <span className="text-red-600">IPD Unpaid Referral Report</span>
-              <Button onClick={handlePrintUnpaidReport} className="ml-4 bg-red-600 hover:bg-red-700">
-                <Printer className="mr-2 h-4 w-4" />
-                Print Report
-              </Button>
-            </DialogTitle>
+            <DialogTitle className="text-red-600">IPD Unpaid Referral Report</DialogTitle>
           </DialogHeader>
 
           <div id="ipd-unpaid-referral-report-content">
@@ -3859,7 +3905,8 @@ const TodaysIpdDashboard = () => {
                   <TableHead>Visit ID</TableHead>
                   <TableHead>Patient Name</TableHead>
                   <TableHead>Referral Doctor/Relationship Manager</TableHead>
-                  <TableHead className="text-right">Patient Bill Amount</TableHead>
+                  <TableHead>Referee DOA Amt Paid</TableHead>
+                  <TableHead>Total Amount Paid</TableHead>
                   <TableHead>Payment Status</TableHead>
                 </TableRow>
               </TableHeader>
@@ -3875,8 +3922,26 @@ const TodaysIpdDashboard = () => {
                         <div>{visit.relationship_managers.name}</div>
                       )}
                     </TableCell>
-                    <TableCell className="text-right">
-                      {visit.referee_doa_amt_paid ? `₹${visit.referee_doa_amt_paid}` : '-'}
+                    <TableCell>
+                      {doaPayments[visit.id]?.length > 0 ? (
+                        <div className="space-y-1">
+                          {doaPayments[visit.id].map((payment, idx) => (
+                            <div key={idx} className="text-sm">
+                              ₹{payment.amount.toLocaleString()} ({format(new Date(payment.payment_date), 'dd MMM')})
+                            </div>
+                          ))}
+                          {doaPayments[visit.id].length > 1 && (
+                            <div className="font-semibold border-t pt-1 mt-1">
+                              Total: ₹{doaPayments[visit.id].reduce((sum, p) => sum + p.amount, 0).toLocaleString()}
+                            </div>
+                          )}
+                        </div>
+                      ) : '-'}
+                    </TableCell>
+                    <TableCell>
+                      {doaPayments[visit.id]?.length > 0
+                        ? `₹${doaPayments[visit.id].reduce((sum, p) => sum + p.amount, 0).toLocaleString()}`
+                        : '-'}
                     </TableCell>
                     <TableCell className="text-red-600 font-medium">{visit.referral_payment_status || '-'}</TableCell>
                   </TableRow>
@@ -3889,10 +3954,15 @@ const TodaysIpdDashboard = () => {
             <span className="text-sm text-muted-foreground">
               Total Unpaid: {unpaidReferralVisits.length} records
             </span>
-            <Button onClick={handlePrintUnpaidReport} className="bg-red-600 hover:bg-red-700">
-              <Printer className="mr-2 h-4 w-4" />
-              Print Report
-            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setIsUnpaidReportOpen(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handlePrintUnpaidReport} className="bg-red-600 hover:bg-red-700">
+                <Printer className="mr-2 h-4 w-4" />
+                Print Report
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
