@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -108,6 +109,8 @@ export const AdvancePaymentModal: React.FC<AdvancePaymentModalProps> = ({
   patientData,
   onPaymentAdded
 }) => {
+  const { hospitalType } = useAuth();
+
   const [formData, setFormData] = useState({
     advanceAmount: '',
     isRefund: false,
@@ -595,7 +598,12 @@ export const AdvancePaymentModal: React.FC<AdvancePaymentModalProps> = ({
   const handlePrintReceipt = (payment: PaymentTransaction) => {
     // Generate receipt number (you can customize this logic)
     const receiptNumber = payment.id ? payment.id.slice(-6).toUpperCase() : Math.random().toString().slice(-6);
-    
+
+    // Determine hospital name based on login
+    const hospitalName = hospitalType === 'ayushman'
+      ? 'Ayushman Hospital Nagpur'
+      : 'Hope Hospital Nagpur';
+
     // Convert amount to words
     const amountInWords = (amount: number): string => {
       const ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine'];
@@ -694,6 +702,16 @@ export const AdvancePaymentModal: React.FC<AdvancePaymentModalProps> = ({
               text-align: center;
               width: 200px;
             }
+            .hospital-header {
+              text-align: center;
+              padding: 15px 20px;
+              border-bottom: 1px solid #000;
+            }
+            .hospital-name {
+              font-size: 20px;
+              font-weight: bold;
+              margin: 0;
+            }
             @page {
               size: A4 portrait;
               margin: 15mm;
@@ -742,6 +760,9 @@ export const AdvancePaymentModal: React.FC<AdvancePaymentModalProps> = ({
         </head>
         <body>
           <div class="receipt-container">
+            <div class="hospital-header">
+              <h1 class="hospital-name">${hospitalName}</h1>
+            </div>
             <div class="header">
               <button class="print-btn" onclick="window.print()">Print</button>
             </div>

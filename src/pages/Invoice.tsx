@@ -34,7 +34,7 @@ const Invoice = () => {
   const navigate = useNavigate();
   const { visitId } = useParams<{ visitId: string }>();
   const { hospitalConfig } = useAuth();
-  const hospitalName = hospitalConfig?.name === 'ayushman' ? 'Ayushman Hospital' : 'Hope Hospital';
+  const hospitalName = hospitalConfig?.name === 'ayushman' ? 'Ayushman Hospital Nagpur' : 'Hope Hospital Nagpur';
 
   // Fetch patient and visit data
   const { data: visitData, isLoading } = useQuery({
@@ -1615,7 +1615,7 @@ const Invoice = () => {
           </style>
         </head>
         <body>
-          <div class="print-header">Hospital Management System Billing</div>
+          <div class="print-header">${hospitalName}</div>
 
           <div class="invoice-container">
             <!-- Patient Information -->
