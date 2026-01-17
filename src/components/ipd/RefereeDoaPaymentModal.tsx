@@ -18,6 +18,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from '@/hooks/use-toast';
 import { Loader2, Trash2, Plus } from 'lucide-react';
 import { format } from 'date-fns';
@@ -31,6 +32,7 @@ interface RefereeDoaPaymentModalProps {
     patients?: {
       name: string;
     };
+    referral_payment_status?: string | null;
   };
   onUpdate?: () => void;
 }
@@ -40,6 +42,7 @@ interface Payment {
   amount: number;
   payment_date: string;
   notes: string | null;
+  referral_payment_status: string | null;
   created_at: string;
 }
 
@@ -52,6 +55,7 @@ export const RefereeDoaPaymentModal: React.FC<RefereeDoaPaymentModalProps> = ({
   const queryClient = useQueryClient();
   const [newAmount, setNewAmount] = useState('');
   const [newNotes, setNewNotes] = useState('');
+  const [referralPaymentStatus, setReferralPaymentStatus] = useState('');
 
   // Fetch payments for this visit
   const { data: payments = [], isLoading } = useQuery({
@@ -83,12 +87,14 @@ export const RefereeDoaPaymentModal: React.FC<RefereeDoaPaymentModalProps> = ({
         throw new Error('Please enter a valid amount');
       }
 
+      // Insert payment into referee_doa_payments
       const { error } = await supabase
         .from('referee_doa_payments')
         .insert({
           visit_id: visit.id,
           amount: amount,
-          notes: newNotes.trim() || null
+          notes: newNotes.trim() || null,
+          referral_payment_status: referralPaymentStatus || null
         });
 
       if (error) throw error;
@@ -98,6 +104,7 @@ export const RefereeDoaPaymentModal: React.FC<RefereeDoaPaymentModalProps> = ({
       queryClient.invalidateQueries({ queryKey: ['ipd-visits'] });
       setNewAmount('');
       setNewNotes('');
+      setReferralPaymentStatus('');
       toast({
         title: 'Payment Added',
         description: `Payment of ₹${newAmount} added successfully`
@@ -185,6 +192,7 @@ export const RefereeDoaPaymentModal: React.FC<RefereeDoaPaymentModalProps> = ({
                       <TableHead>Date</TableHead>
                       <TableHead className="text-right">Amount</TableHead>
                       <TableHead>Notes</TableHead>
+                      <TableHead>Referral Payment</TableHead>
                       <TableHead className="w-10"></TableHead>
                     </TableRow>
                   </TableHeader>
@@ -199,6 +207,9 @@ export const RefereeDoaPaymentModal: React.FC<RefereeDoaPaymentModalProps> = ({
                         </TableCell>
                         <TableCell className="text-sm text-muted-foreground">
                           {payment.notes || '-'}
+                        </TableCell>
+                        <TableCell className="text-sm">
+                          {payment.referral_payment_status || '-'}
                         </TableCell>
                         <TableCell>
                           <Button
@@ -253,6 +264,20 @@ export const RefereeDoaPaymentModal: React.FC<RefereeDoaPaymentModalProps> = ({
                   className="mt-1"
                 />
               </div>
+            </div>
+            <div className="mt-3">
+              <Label htmlFor="referralPayment" className="text-xs">Referral Payment</Label>
+              <Select value={referralPaymentStatus} onValueChange={setReferralPaymentStatus}>
+                <SelectTrigger className="mt-1">
+                  <SelectValue placeholder="Select status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Spot paid">Spot paid</SelectItem>
+                  <SelectItem value="Unpaid">Unpaid</SelectItem>
+                  <SelectItem value="Direct">Direct</SelectItem>
+                  <SelectItem value="Backing paid">Backing paid</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <Button
               onClick={handleAddPayment}

@@ -65,11 +65,13 @@ const rolePermissions: Record<UserRole, Permission[]> = {
   ],
 
   marketing_manager: [
-    // Marketing managers have same permissions as user + can edit Referral Payment
+    // Marketing managers have same permissions as user + can edit/delete masters (referees)
     Permission.VIEW_MASTERS,
     Permission.CREATE_RECORDS,
     Permission.EDIT_RECORDS,
     Permission.VIEW_RECORDS,
+    Permission.EDIT_MASTERS,
+    Permission.DELETE_MASTERS,
   ],
 };
 
