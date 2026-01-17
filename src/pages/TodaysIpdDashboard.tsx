@@ -48,59 +48,6 @@ import { DateRange } from 'react-day-picker';
 import '@/styles/print.css';
 import { RefereeDoaPaymentModal } from '@/components/ipd/RefereeDoaPaymentModal';
 
-// Referral Payment Dropdown Component for IPD
-const IpdReferralPaymentDropdown = ({
-  visit,
-  onUpdate
-}: {
-  visit: any;
-  onUpdate?: () => void;
-}) => {
-  const [value, setValue] = useState(visit.referral_payment_status || '');
-  const [isUpdating, setIsUpdating] = useState(false);
-
-  const handleChange = async (newValue: string) => {
-    setValue(newValue);
-    setIsUpdating(true);
-    try {
-      const { error } = await supabase
-        .from('visits')
-        .update({ referral_payment_status: newValue || null })
-        .eq('id', visit.id);
-
-      if (error) {
-        console.error('Error updating referral payment status:', error);
-      } else {
-        onUpdate?.();
-      }
-    } catch (err) {
-      console.error('Error updating referral payment status:', err);
-    } finally {
-      setIsUpdating(false);
-    }
-  };
-
-  return (
-    <div className="relative">
-      <select
-        value={value}
-        onChange={(e) => handleChange(e.target.value)}
-        className="w-20 h-6 text-[10px] border border-gray-300 rounded px-1 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-        disabled={isUpdating}
-      >
-        <option value="">Select</option>
-        <option value="Spot Paid">Spot Paid</option>
-        <option value="Unpaid">Unpaid</option>
-        <option value="Direct">Direct</option>
-        <option value="Backing Paid">Backing Paid</option>
-      </select>
-      {isUpdating && (
-        <Loader2 className="absolute right-1 top-1/2 transform -translate-y-1/2 h-3 w-3 animate-spin" />
-      )}
-    </div>
-  );
-};
-
 // Referee DOA Amount Cell with Payment Modal
 const IpdRefereeAmountCell = ({
   visit,
@@ -316,6 +263,7 @@ const TodaysIpdDashboard = () => {
     amount: number;
     payment_date: string;
     notes: string | null;
+    referral_payment_status: string | null;
   }>>>({});
 
   // Print functionality
@@ -1580,9 +1528,9 @@ const TodaysIpdDashboard = () => {
         if (visitUuids.length > 0) {
           const { data: doaData, error: doaError } = await supabase
             .from('referee_doa_payments')
-            .select('visit_id, amount, payment_date, notes')
+            .select('visit_id, amount, payment_date, notes, referral_payment_status')
             .in('visit_id', visitUuids)
-            .order('payment_date', { ascending: true });
+            .order('payment_date', { ascending: false });
 
           if (doaError) {
             console.error('Error fetching DOA payments:', doaError);
@@ -1591,6 +1539,7 @@ const TodaysIpdDashboard = () => {
               amount: number;
               payment_date: string;
               notes: string | null;
+              referral_payment_status: string | null;
             }>> = {};
             doaData.forEach((payment: any) => {
               if (payment.visit_id) {
@@ -1600,7 +1549,8 @@ const TodaysIpdDashboard = () => {
                 doaByVisit[payment.visit_id].push({
                   amount: Number(payment.amount),
                   payment_date: payment.payment_date,
-                  notes: payment.notes
+                  notes: payment.notes,
+                  referral_payment_status: payment.referral_payment_status
                 });
               }
             });
@@ -2324,11 +2274,40 @@ const TodaysIpdDashboard = () => {
     }
   };
 
-  // Filter for unpaid referral visits (excludes patients with any payments)
-  const unpaidReferralVisits = filteredVisits.filter(
-    visit => (!visit.referral_payment_status || visit.referral_payment_status === 'Unpaid') &&
-             (!doaPayments[visit.id] || doaPayments[visit.id].length === 0)
-  );
+  // Filter for unpaid referral visits (excludes DIRECT referrals and patients with paid status)
+  const unpaidReferralVisits = filteredVisits.filter(visit => {
+    // Exclude DIRECT referrals
+    const refereeName = visit.referees?.name?.toUpperCase();
+    const rmName = visit.relationship_managers?.name?.toUpperCase();
+    if (refereeName === 'DIRECT' || rmName === 'DIRECT') {
+      return false;
+    }
+
+    // Check if any payment has "Spot paid" or "Backing paid" status
+    const visitPayments = doaPayments[visit.id] || [];
+    const hasPaidStatus = visitPayments.some(
+      payment => payment.referral_payment_status === 'Spot paid' ||
+                 payment.referral_payment_status === 'Backing paid'
+    );
+    if (hasPaidStatus) {
+      return false;
+    }
+
+    // Original condition - only show truly unpaid visits
+    return (!visit.referral_payment_status || visit.referral_payment_status === 'Unpaid') &&
+           visitPayments.length === 0;
+  });
+
+  // Filter for referral report (excludes DIRECT referrals)
+  const referralReportVisits = filteredVisits.filter(visit => {
+    const refereeName = visit.referees?.name?.toUpperCase();
+    const rmName = visit.relationship_managers?.name?.toUpperCase();
+    // Exclude DIRECT referrals
+    if (refereeName === 'DIRECT' || rmName === 'DIRECT') {
+      return false;
+    }
+    return true;
+  });
 
   // Open Unpaid Referral Report Modal
   const handleOpenUnpaidReport = () => {
@@ -3152,8 +3131,10 @@ const TodaysIpdDashboard = () => {
                     </TableCell>
                   )}
                   {isMarketingManager && (
-                    <TableCell>
-                      <IpdReferralPaymentDropdown visit={visit} onUpdate={refetch} />
+                    <TableCell className="text-sm">
+                      {doaPayments[visit.id]?.length > 0
+                        ? doaPayments[visit.id][0]?.referral_payment_status || '-'
+                        : '-'}
                     </TableCell>
                   )}
                   <TableCell>
@@ -3839,7 +3820,7 @@ const TodaysIpdDashboard = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredVisits.map((visit) => (
+                {referralReportVisits.map((visit) => (
                   <TableRow key={visit.id}>
                     <TableCell>{visit.visit_date || '-'}</TableCell>
                     <TableCell>{visit.visit_id || '-'}</TableCell>
@@ -3875,7 +3856,7 @@ const TodaysIpdDashboard = () => {
 
           <div className="flex justify-between items-center pt-4 border-t">
             <span className="text-sm text-muted-foreground">
-              Total: {filteredVisits.length} records
+              Total: {referralReportVisits.length} records
             </span>
             <div className="flex gap-2">
               <Button variant="outline" onClick={() => setIsReferralReportOpen(false)}>

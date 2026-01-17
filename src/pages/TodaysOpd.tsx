@@ -34,6 +34,7 @@ const TodaysOpd = () => {
     amount: number;
     payment_date: string;
     notes: string | null;
+    referral_payment_status: string | null;
   }>>>({});
 
   // URL-persisted state
@@ -227,9 +228,9 @@ const TodaysOpd = () => {
       try {
         const { data: doaData, error: doaError } = await supabase
           .from('referee_doa_payments')
-          .select('visit_id, amount, payment_date, notes')
+          .select('visit_id, amount, payment_date, notes, referral_payment_status')
           .in('visit_id', visitUuids)
-          .order('payment_date', { ascending: true });
+          .order('payment_date', { ascending: false });
 
         if (doaError) {
           console.error('Error fetching DOA payments:', doaError);
@@ -241,6 +242,7 @@ const TodaysOpd = () => {
             amount: number;
             payment_date: string;
             notes: string | null;
+            referral_payment_status: string | null;
           }>> = {};
           doaData.forEach((payment: any) => {
             if (payment.visit_id) {
@@ -250,7 +252,8 @@ const TodaysOpd = () => {
               doaByVisit[payment.visit_id].push({
                 amount: Number(payment.amount),
                 payment_date: payment.payment_date,
-                notes: payment.notes
+                notes: payment.notes,
+                referral_payment_status: payment.referral_payment_status
               });
             }
           });
@@ -328,7 +331,7 @@ const TodaysOpd = () => {
               <p class="subtitle">OPD Patients - Referral Details</p>
               <div class="header-info">
                 <span><strong>Print Date:</strong> ${format(new Date(), 'dd MMM yyyy, hh:mm a')}</span>
-                <span><strong>Total Records:</strong> ${filteredPatients.length}</span>
+                <span><strong>Total Records:</strong> ${referralReportPatients.length}</span>
               </div>
               ${printContent.innerHTML}
             </body>
@@ -341,11 +344,40 @@ const TodaysOpd = () => {
     }
   };
 
-  // Filter for unpaid referral patients (excludes patients with any payments)
-  const unpaidReferralPatients = filteredPatients.filter(
-    patient => (!patient.referral_payment_status || patient.referral_payment_status === 'Unpaid') &&
-               (!doaPayments[patient.id] || doaPayments[patient.id].length === 0)
-  );
+  // Filter for unpaid referral patients (excludes DIRECT referrals and patients with paid status)
+  const unpaidReferralPatients = filteredPatients.filter(patient => {
+    // Exclude DIRECT referrals
+    const refereeName = patient.referees?.name?.toUpperCase();
+    const rmName = patient.relationship_managers?.name?.toUpperCase();
+    if (refereeName === 'DIRECT' || rmName === 'DIRECT') {
+      return false;
+    }
+
+    // Check if any payment has "Spot paid" or "Backing paid" status
+    const patientPayments = doaPayments[patient.id] || [];
+    const hasPaidStatus = patientPayments.some(
+      payment => payment.referral_payment_status === 'Spot paid' ||
+                 payment.referral_payment_status === 'Backing paid'
+    );
+    if (hasPaidStatus) {
+      return false;
+    }
+
+    // Original condition - only show truly unpaid patients
+    return (!patient.referral_payment_status || patient.referral_payment_status === 'Unpaid') &&
+           patientPayments.length === 0;
+  });
+
+  // Filter for referral report (excludes DIRECT referrals)
+  const referralReportPatients = filteredPatients.filter(patient => {
+    const refereeName = patient.referees?.name?.toUpperCase();
+    const rmName = patient.relationship_managers?.name?.toUpperCase();
+    // Exclude DIRECT referrals
+    if (refereeName === 'DIRECT' || rmName === 'DIRECT') {
+      return false;
+    }
+    return true;
+  });
 
   // Open Unpaid Referral Report Modal
   const handleOpenUnpaidReport = () => {
@@ -562,7 +594,7 @@ const TodaysOpd = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredPatients.map((patient) => (
+                {referralReportPatients.map((patient) => (
                   <TableRow key={patient.id}>
                     <TableCell>{patient.visit_date || '-'}</TableCell>
                     <TableCell>{patient.visit_id || '-'}</TableCell>
@@ -598,7 +630,7 @@ const TodaysOpd = () => {
 
           <div className="flex justify-between items-center pt-4 border-t">
             <span className="text-sm text-muted-foreground">
-              Total: {filteredPatients.length} records
+              Total: {referralReportPatients.length} records
             </span>
             <div className="flex gap-2">
               <Button variant="outline" onClick={() => setIsReferralReportOpen(false)}>

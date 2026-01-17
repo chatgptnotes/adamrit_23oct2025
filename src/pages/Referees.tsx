@@ -6,10 +6,11 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Search, Building2, Trash2 } from 'lucide-react';
+import { Plus, Search, Building2, Trash2, Edit } from 'lucide-react';
 import { AddItemDialog } from '@/components/AddItemDialog';
 import { useToast } from '@/hooks/use-toast';
 import { usePermissions } from '@/hooks/usePermissions';
+import { useCorporateData } from '@/hooks/useCorporateData';
 
 interface Referee {
   id: string;
@@ -24,9 +25,12 @@ interface Referee {
 const Referees = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [selectedReferee, setSelectedReferee] = useState<Referee | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { canEditMasters } = usePermissions();
+  const { corporateOptions } = useCorporateData();
 
   const { data: referees = [], isLoading } = useQuery({
     queryKey: ['referees'],
@@ -101,6 +105,38 @@ const Referees = () => {
     }
   });
 
+  const editMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: Partial<Referee> }) => {
+      const { error } = await supabase
+        .from('referees')
+        .update({
+          name: data.name,
+          specialty: data.specialty || null,
+          institution: data.institution || null,
+          contact_info: data.contact_info || null,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', id);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['referees'] });
+      toast({
+        title: "Success",
+        description: "Referee updated successfully",
+      });
+    },
+    onError: (error) => {
+      console.error('Edit referee error:', error);
+      toast({
+        title: "Error",
+        description: "Failed to update referee",
+        variant: "destructive"
+      });
+    }
+  });
+
   const filteredReferees = referees.filter(referee =>
     referee.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     referee.specialty?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -122,6 +158,14 @@ const Referees = () => {
     }
   };
 
+  const handleEdit = (formData: Record<string, string>) => {
+    if (selectedReferee) {
+      editMutation.mutate({ id: selectedReferee.id, data: formData });
+    }
+    setIsEditDialogOpen(false);
+    setSelectedReferee(null);
+  };
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-6">
@@ -134,8 +178,8 @@ const Referees = () => {
 
   const fields = [
     { key: 'name', label: 'Name', type: 'text' as const, required: true },
-    { key: 'specialty', label: 'Specialty', type: 'text' as const },
-    { key: 'institution', label: 'Institution', type: 'text' as const },
+    { key: 'specialty', label: 'Specialty', type: 'select' as const, options: ['Doctor', 'Ambulance Driver', 'Auto Driver'] },
+    { key: 'institution', label: 'Institution', type: 'select' as const, options: corporateOptions },
     { key: 'contact_info', label: 'Contact Info', type: 'text' as const }
   ];
 
@@ -187,6 +231,20 @@ const Referees = () => {
                       <Button
                         variant="outline"
                         size="sm"
+                        onClick={() => {
+                          setSelectedReferee(referee);
+                          setIsEditDialogOpen(true);
+                        }}
+                        className="text-blue-600 hover:text-blue-700"
+                        title="Edit referee"
+                      >
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                    )}
+                    {canEditMasters && (
+                      <Button
+                        variant="outline"
+                        size="sm"
                         onClick={() => handleDelete(referee.id)}
                         className="text-red-600 hover:text-red-700"
                         title="Delete referee"
@@ -223,6 +281,23 @@ const Referees = () => {
           onAdd={handleAdd}
           title="Add Referee"
           fields={fields}
+        />
+
+        <AddItemDialog
+          isOpen={isEditDialogOpen}
+          onClose={() => {
+            setIsEditDialogOpen(false);
+            setSelectedReferee(null);
+          }}
+          onAdd={handleEdit}
+          title="Edit Referee"
+          fields={fields}
+          initialData={selectedReferee ? {
+            name: selectedReferee.name || '',
+            specialty: selectedReferee.specialty || '',
+            institution: selectedReferee.institution || '',
+            contact_info: selectedReferee.contact_info || ''
+          } : undefined}
         />
       </div>
     </div>

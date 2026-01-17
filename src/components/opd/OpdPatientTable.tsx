@@ -52,59 +52,6 @@ interface OpdPatientTableProps {
   isMarketingManager?: boolean;
 }
 
-// Referral Payment Dropdown Component
-const ReferralPaymentDropdown = ({
-  patient,
-  onUpdate
-}: {
-  patient: Patient;
-  onUpdate?: () => void;
-}) => {
-  const [value, setValue] = useState(patient.referral_payment_status || '');
-  const [isUpdating, setIsUpdating] = useState(false);
-
-  const handleChange = async (newValue: string) => {
-    setValue(newValue);
-    setIsUpdating(true);
-    try {
-      const { error } = await supabase
-        .from('visits')
-        .update({ referral_payment_status: newValue || null })
-        .eq('id', patient.id);
-
-      if (error) {
-        console.error('Error updating referral payment status:', error);
-      } else {
-        onUpdate?.();
-      }
-    } catch (err) {
-      console.error('Error updating referral payment status:', err);
-    } finally {
-      setIsUpdating(false);
-    }
-  };
-
-  return (
-    <div className="relative">
-      <select
-        value={value}
-        onChange={(e) => handleChange(e.target.value)}
-        className="w-20 h-6 text-[10px] border border-gray-300 rounded px-1 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-        disabled={isUpdating}
-      >
-        <option value="">Select</option>
-        <option value="Spot Paid">Spot Paid</option>
-        <option value="Unpaid">Unpaid</option>
-        <option value="Direct">Direct</option>
-        <option value="Backing Paid">Backing Paid</option>
-      </select>
-      {isUpdating && (
-        <Loader2 className="absolute right-1 top-1/2 transform -translate-y-1/2 h-3 w-3 animate-spin" />
-      )}
-    </div>
-  );
-};
-
 // Referee DOA Amount Cell with Payment Modal
 const RefereeAmountCell = ({
   patient,
@@ -169,6 +116,34 @@ const RefereeAmountCell = ({
       />
     </>
   );
+};
+
+// Referral Payment Status Cell - displays latest referral_payment_status from referee_doa_payments
+const ReferralPaymentStatusCell = ({ patient }: { patient: Patient }) => {
+  const { data: latestStatus, isLoading } = useQuery({
+    queryKey: ['referee-doa-payment-status', patient.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('referee_doa_payments')
+        .select('referral_payment_status')
+        .eq('visit_id', patient.id)
+        .order('payment_date', { ascending: false })
+        .limit(1);
+
+      if (error) {
+        console.error('Error fetching referral payment status:', error);
+        return null;
+      }
+      return data?.[0]?.referral_payment_status || null;
+    },
+    staleTime: 30000
+  });
+
+  if (isLoading) {
+    return <Loader2 className="h-3 w-3 animate-spin" />;
+  }
+
+  return <span className="text-xs">{latestStatus || '-'}</span>;
 };
 
 export const OpdPatientTable = ({ patients, refetch, isMarketingManager = false }: OpdPatientTableProps) => {
@@ -1440,10 +1415,9 @@ Verified by: [To be verified by doctor]`;
                   <RefereeAmountCell patient={patient} onUpdate={refetch} />
                 </TableCell>
               )}
-              {/* Screen-only: Referral Payment Status - Only show for marketing managers */}
               {isMarketingManager && (
                 <TableCell className="print:hidden">
-                  <ReferralPaymentDropdown patient={patient} onUpdate={refetch} />
+                  <ReferralPaymentStatusCell patient={patient} />
                 </TableCell>
               )}
               {/* Screen-only: Physiotherapy Bill */}
