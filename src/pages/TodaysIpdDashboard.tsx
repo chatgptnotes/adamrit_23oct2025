@@ -3847,7 +3847,7 @@ const TodaysIpdDashboard = () => {
                         ? `₹${doaPayments[visit.id].reduce((sum, p) => sum + p.amount, 0).toLocaleString()}`
                         : '-'}
                     </TableCell>
-                    <TableCell>{visit.referral_payment_status || '-'}</TableCell>
+                    <TableCell>{doaPayments[visit.id]?.[0]?.referral_payment_status || '-'}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -3924,7 +3924,7 @@ const TodaysIpdDashboard = () => {
                         ? `₹${doaPayments[visit.id].reduce((sum, p) => sum + p.amount, 0).toLocaleString()}`
                         : '-'}
                     </TableCell>
-                    <TableCell className="text-red-600 font-medium">{visit.referral_payment_status || '-'}</TableCell>
+                    <TableCell className="text-red-600 font-medium">{doaPayments[visit.id]?.[0]?.referral_payment_status || '-'}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

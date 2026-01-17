@@ -621,7 +621,7 @@ const TodaysOpd = () => {
                         ? `₹${doaPayments[patient.id].reduce((sum, p) => sum + p.amount, 0).toLocaleString()}`
                         : '-'}
                     </TableCell>
-                    <TableCell>{patient.referral_payment_status || '-'}</TableCell>
+                    <TableCell>{doaPayments[patient.id]?.[0]?.referral_payment_status || '-'}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -693,7 +693,7 @@ const TodaysOpd = () => {
                         ? `₹${doaPayments[patient.id].reduce((sum, p) => sum + p.amount, 0).toLocaleString()}`
                         : '-'}
                     </TableCell>
-                    <TableCell className="text-red-600 font-medium">{patient.referral_payment_status || '-'}</TableCell>
+                    <TableCell className="text-red-600 font-medium">{doaPayments[patient.id]?.[0]?.referral_payment_status || '-'}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
