@@ -64,7 +64,6 @@ const fetchBillAgingData = async (hospitalName?: string): Promise<BillAgingRecor
     .select(`
       id,
       visit_id,
-      corporate,
       bill_amount,
       received_amount,
       deduction_amount,
@@ -75,7 +74,8 @@ const fetchBillAgingData = async (hospitalName?: string): Promise<BillAgingRecor
       visits!inner!visit_id(
         admission_date,
         discharge_date,
-        patients!inner(id, name, hospital_name)
+        claim_id,
+        patients!inner(id, name, hospital_name, corporate)
       )
     `)
     .not('date_of_submission', 'is', null)
@@ -104,9 +104,10 @@ const fetchBillAgingData = async (hospitalName?: string): Promise<BillAgingRecor
     return {
       id: item.id,
       visit_id: item.visit_id,
+      claim_id: item.visits?.claim_id || null,
       patient_name: item.visits?.patients?.name || '',
       patient_id: item.visits?.patients?.id || '',
-      corporate: item.corporate || '',
+      corporate: item.visits?.patients?.corporate || '',
       hospital_name: item.visits?.patients?.hospital_name || '',
       admission_date: item.visits?.admission_date || null,
       discharge_date: item.visits?.discharge_date || null,
@@ -273,9 +274,10 @@ export const useBillAgingReport = (hospitalName?: string) => {
       if (filters.searchTerm) {
         const searchLower = filters.searchTerm.toLowerCase();
         const matchesVisitId = record.visit_id?.toLowerCase().includes(searchLower);
+        const matchesClaimId = record.claim_id?.toLowerCase().includes(searchLower);
         const matchesPatientName = record.patient_name?.toLowerCase().includes(searchLower);
         const matchesCorporate = record.corporate?.toLowerCase().includes(searchLower);
-        if (!matchesVisitId && !matchesPatientName && !matchesCorporate) {
+        if (!matchesVisitId && !matchesClaimId && !matchesPatientName && !matchesCorporate) {
           return false;
         }
       }

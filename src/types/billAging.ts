@@ -10,6 +10,7 @@ export type BillAgingStatus = 'Pending' | 'Received' | 'Partial' | 'Overdue';
 export interface BillAgingRecord {
   id: string;
   visit_id: string;
+  claim_id: string | null;
   patient_name: string;
   patient_id: string;
   corporate: string;

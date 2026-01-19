@@ -249,6 +249,7 @@ const BillAgingStatement: React.FC = () => {
     const exportData = data.map((record, index) => ({
       'Sr. No.': index + 1,
       'Visit ID': record.visit_id,
+      'Claim ID': record.claim_id || '-',
       'Patient Name': record.patient_name,
       'Corporate/TPA': record.corporate || '-',
       'Hospital': record.hospital_name || '-',
@@ -267,6 +268,7 @@ const BillAgingStatement: React.FC = () => {
     exportData.push({
       'Sr. No.': '' as any,
       'Visit ID': 'TOTAL',
+      'Claim ID': '',
       'Patient Name': `${summary.total_bills} Bills`,
       'Corporate/TPA': '',
       'Hospital': '',
@@ -468,7 +470,7 @@ const BillAgingStatement: React.FC = () => {
               <div className="relative">
                 <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder="Visit ID, Patient..."
+                  placeholder="Visit ID, Claim ID, Patient..."
                   className="h-9 pl-8"
                   value={filters.searchTerm}
                   onChange={(e) => setFilters({ ...filters, searchTerm: e.target.value })}
@@ -572,6 +574,14 @@ const BillAgingStatement: React.FC = () => {
                     </TableHead>
                     <TableHead
                       className="cursor-pointer hover:bg-muted"
+                      onClick={() => handleSort('claim_id')}
+                    >
+                      <div className="flex items-center gap-1">
+                        Claim ID {renderSortIcon('claim_id')}
+                      </div>
+                    </TableHead>
+                    <TableHead
+                      className="cursor-pointer hover:bg-muted"
                       onClick={() => handleSort('patient_name')}
                     >
                       <div className="flex items-center gap-1">
@@ -657,7 +667,7 @@ const BillAgingStatement: React.FC = () => {
                 <TableBody>
                   {data.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={14} className="text-center py-8 text-muted-foreground">
+                      <TableCell colSpan={15} className="text-center py-8 text-muted-foreground">
                         No records found
                       </TableCell>
                     </TableRow>
@@ -672,7 +682,7 @@ const BillAgingStatement: React.FC = () => {
                           <React.Fragment key={bucket}>
                             {/* Bucket Heading Row */}
                             <TableRow className={getHeadingRowClass(bucket)}>
-                              <TableCell colSpan={14} className="py-3">
+                              <TableCell colSpan={15} className="py-3">
                                 <div className="flex items-center gap-2">
                                   <Badge
                                     className={`${getAgingBucketBadgeClass(bucket)} text-sm px-3 py-1`}
@@ -695,6 +705,7 @@ const BillAgingStatement: React.FC = () => {
                                     {serialNo}
                                   </TableCell>
                                   <TableCell className="font-medium">{record.visit_id}</TableCell>
+                                  <TableCell className="font-medium">{record.claim_id || '-'}</TableCell>
                                   <TableCell>{record.patient_name}</TableCell>
                                   <TableCell>{record.corporate || '-'}</TableCell>
                                   <TableCell className="text-right">
@@ -807,6 +818,7 @@ const BillAgingStatement: React.FC = () => {
             <TableRow className="bg-muted/50">
               <TableHead className="w-12 text-center">Sr.</TableHead>
               <TableHead>Visit ID</TableHead>
+              <TableHead>Claim ID</TableHead>
               <TableHead>Patient Name</TableHead>
               <TableHead>Corporate</TableHead>
               <TableHead className="text-right">Bill Amt</TableHead>
@@ -827,7 +839,7 @@ const BillAgingStatement: React.FC = () => {
                   <React.Fragment key={bucket}>
                     {/* Bucket Heading Row */}
                     <TableRow className={getPrintHeadingRowClass(bucket)}>
-                      <TableCell colSpan={9} className="py-2 font-bold">
+                      <TableCell colSpan={10} className="py-2 font-bold">
                         {bucket} Days ({bucketRecords.length} {bucketRecords.length === 1 ? 'patient' : 'patients'})
                       </TableCell>
                     </TableRow>
@@ -838,6 +850,7 @@ const BillAgingStatement: React.FC = () => {
                         <TableRow key={record.id}>
                           <TableCell className="text-center">{serialNo}</TableCell>
                           <TableCell className="font-medium">{record.visit_id}</TableCell>
+                          <TableCell className="font-medium">{record.claim_id || '-'}</TableCell>
                           <TableCell>{record.patient_name}</TableCell>
                           <TableCell>{getCorporateShortName(record.corporate || '-')}</TableCell>
                           <TableCell className="text-right">{formatCurrency(record.bill_amount)}</TableCell>
