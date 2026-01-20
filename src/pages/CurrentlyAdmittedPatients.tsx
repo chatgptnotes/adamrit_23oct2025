@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -15,7 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, Search, Users, Calendar, Clock, FileText, Building2 } from "lucide-react";
+import { Loader2, Search, Users, Calendar, Clock, FileText, Building2, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from "@/hooks/use-toast";
 
@@ -123,6 +123,10 @@ const CurrentlyAdmittedPatients = () => {
   const statusFilter = searchParams.get('status') || 'all';
   const corporateFilter = searchParams.get('corporate') || 'all';
 
+  // Pagination - URL persisted
+  const currentPage = parseInt(searchParams.get('page') || '1');
+  const itemsPerPage = 10;
+
   // Helper to update URL params
   const updateParams = (updates: Record<string, string | null>) => {
     const newParams = new URLSearchParams(searchParams);
@@ -140,6 +144,7 @@ const CurrentlyAdmittedPatients = () => {
   const setSearchTerm = (value: string) => updateParams({ search: value });
   const setStatusFilter = (value: string) => updateParams({ status: value });
   const setCorporateFilter = (value: string) => updateParams({ corporate: value });
+  const setCurrentPage = (value: number) => updateParams({ page: value.toString() });
 
 
   // Fetch available corporates for filter dropdown
@@ -277,6 +282,38 @@ const CurrentlyAdmittedPatients = () => {
 
     return matchesSearch && matchesStatus && matchesCorporate;
   });
+
+  // Pagination calculations
+  const totalCount = filteredVisits.length;
+  const totalPages = Math.ceil(totalCount / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedVisits = filteredVisits.slice(startIndex, endIndex);
+
+  // Pagination helper functions
+  const goToFirstPage = () => setCurrentPage(1);
+  const goToLastPage = () => setCurrentPage(totalPages);
+  const goToPreviousPage = () => setCurrentPage(Math.max(1, currentPage - 1));
+  const goToNextPage = () => setCurrentPage(Math.min(totalPages, currentPage + 1));
+
+  const getPageNumbers = () => {
+    const pages: number[] = [];
+    const maxVisiblePages = 5;
+    let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
+    const endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+    if (endPage - startPage < maxVisiblePages - 1) {
+      startPage = Math.max(1, endPage - maxVisiblePages + 1);
+    }
+    for (let i = startPage; i <= endPage; i++) {
+      pages.push(i);
+    }
+    return pages;
+  };
+
+  // Reset page to 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, statusFilter, corporateFilter]);
 
   const stats = (() => {
     const total = filteredVisits.length;
@@ -456,7 +493,7 @@ const CurrentlyAdmittedPatients = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredVisits.map((visit) => (
+                  {paginatedVisits.map((visit) => (
                     <TableRow key={visit.id}>
                       <TableCell className="font-medium">
                         {visit.room_management?.ward_type && visit.room_allotted ? (
@@ -514,6 +551,42 @@ const CurrentlyAdmittedPatients = () => {
                   ))}
                 </TableBody>
               </Table>
+            </div>
+          )}
+
+          {/* Pagination Controls */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between px-6 py-4 border-t">
+              <div className="flex items-center gap-2 text-sm text-gray-600">
+                <span>Showing {startIndex + 1} to {Math.min(endIndex, totalCount)} of {totalCount} patients</span>
+                <span className="text-gray-400">|</span>
+                <span>Page {currentPage} of {totalPages}</span>
+              </div>
+
+              <div className="flex items-center gap-1">
+                <Button variant="outline" size="sm" onClick={goToFirstPage} disabled={currentPage === 1}>
+                  <ChevronsLeft className="h-4 w-4" />
+                </Button>
+                <Button variant="outline" size="sm" onClick={goToPreviousPage} disabled={currentPage === 1}>
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                {getPageNumbers().map((pageNum) => (
+                  <Button
+                    key={pageNum}
+                    variant={currentPage === pageNum ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setCurrentPage(pageNum)}
+                  >
+                    {pageNum}
+                  </Button>
+                ))}
+                <Button variant="outline" size="sm" onClick={goToNextPage} disabled={currentPage === totalPages}>
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+                <Button variant="outline" size="sm" onClick={goToLastPage} disabled={currentPage === totalPages}>
+                  <ChevronsRight className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
           )}
         </CardContent>

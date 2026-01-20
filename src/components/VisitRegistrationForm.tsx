@@ -195,6 +195,7 @@ export const VisitRegistrationForm: React.FC<VisitRegistrationFormProps> = ({
 
     if (!formData.reasonForVisit || formData.reasonForVisit.trim() === '') missingFields.push('Reason for Visit');
     if (!formData.patientType || formData.patientType.trim() === '') missingFields.push('Patient Type');
+    if (!formData.claimId || formData.claimId.trim() === '') missingFields.push('Claim Id');
 
     // Validate ward and room only for IPD/Emergency patients
     const requiresWardRoom = formData.patientType === 'IPD' ||
