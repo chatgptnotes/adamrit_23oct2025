@@ -19,6 +19,7 @@ interface VisitDetailsSectionProps {
     roomAllotted?: string;
     referringDoctor?: string;
     relationshipManager?: string;
+    claimId?: string;
   };
   handleInputChange: (field: string, value: string) => void;
   existingVisit?: any; // Optional existing visit data for edit mode
@@ -484,6 +485,19 @@ export const VisitDetailsSection: React.FC<VisitDetailsSectionProps> = ({
               ))}
             </SelectContent>
           </Select>
+        </div>
+
+        {/* Claim Id */}
+        <div className="space-y-2">
+          <Label htmlFor="claimId" className="text-sm font-medium">
+            Claim Id <span className="text-red-500">*</span>
+          </Label>
+          <Input
+            id="claimId"
+            placeholder="Enter Claim Id"
+            value={formData.claimId || ''}
+            onChange={(e) => handleInputChange('claimId', e.target.value)}
+          />
         </div>
 
         {/* Row 4 - Ward and Room Allocation (Only for IPD/Emergency) */}
