@@ -47,6 +47,7 @@ const CghsSurgery = lazy(() => import("../pages/CghsSurgery"));
 const CghsSurgeryMaster = lazy(() => import("../pages/CghsSurgeryMaster"));
 const EsicSurgeons = lazy(() => import("../pages/EsicSurgeons"));
 const Referees = lazy(() => import("../pages/Referees"));
+const ImplantMaster = lazy(() => import("../pages/ImplantMaster"));
 const HopeSurgeons = lazy(() => import("../pages/HopeSurgeons"));
 const HopeConsultants = lazy(() => import("../pages/HopeConsultants"));
 const HopeAnaesthetists = lazy(() => import("../pages/HopeAnaesthetists"));
@@ -144,6 +145,7 @@ export const AppRoutes = () => {
         <Route path="/treatment-sheet" element={<Suspense fallback={<PageLoader />}><TreatmentSheet /></Suspense>} />
         <Route path="/esic-surgeons" element={<Suspense fallback={<PageLoader />}><EsicSurgeons /></Suspense>} />
         <Route path="/referees" element={<Suspense fallback={<PageLoader />}><Referees /></Suspense>} />
+        <Route path="/implant-master" element={<Suspense fallback={<PageLoader />}><ImplantMaster /></Suspense>} />
         <Route path="/relationship-manager" element={<Suspense fallback={<PageLoader />}><RelationshipManager /></Suspense>} />
         <Route path="/hope-surgeons" element={<Suspense fallback={<PageLoader />}><HopeSurgeons /></Suspense>} />
         <Route path="/hope-consultants" element={<Suspense fallback={<PageLoader />}><HopeConsultants /></Suspense>} />

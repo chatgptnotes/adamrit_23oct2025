@@ -527,6 +527,44 @@ const Invoice = () => {
     enabled: !!visitId
   });
 
+  // Fetch implants from visit_implants table
+  const { data: implantOrdersData } = useQuery({
+    queryKey: ['invoice-visit-implants', visitId],
+    queryFn: async () => {
+      console.log('=== IMPLANT ORDERS FETCH ===');
+      console.log('Fetching implants for visitId:', visitId);
+
+      if (!visitId) return [];
+
+      // Get visit UUID first
+      const { data: visitData, error: visitError } = await supabase
+        .from('visits')
+        .select('id')
+        .eq('visit_id', visitId)
+        .single();
+
+      if (visitError || !visitData?.id) {
+        console.error('Visit not found for implants:', visitError);
+        return [];
+      }
+
+      const { data, error } = await supabase
+        .from('visit_implants' as any)
+        .select('*')
+        .eq('visit_id', visitData.id)
+        .eq('status', 'Active');
+
+      console.log('Implant orders query result:', { data, error });
+
+      if (error) {
+        console.error('Error fetching implant orders:', error);
+        return [];
+      }
+      return data || [];
+    },
+    enabled: !!visitId
+  });
+
   // Fetch mandatory services from junction table (actual saved services for this visit)
   const { data: mandatoryServicesData } = useQuery({
     queryKey: ['invoice-mandatory-services-junction', visitId],
@@ -950,6 +988,32 @@ const Invoice = () => {
       return services;
     }
 
+    if (chargeFilter === 'implants') {
+      console.log('=== CREATING IMPLANT SERVICES ===');
+      console.log('implantOrdersData:', implantOrdersData);
+
+      if (implantOrdersData && implantOrdersData.length > 0) {
+        implantOrdersData.forEach((visitImplant: any) => {
+          const rate = parseFloat(visitImplant.rate) || 0;
+          const qty = visitImplant.quantity || 1;
+          const amount = parseFloat(visitImplant.amount) || (rate * qty);
+
+          services.push({
+            srNo: srNo++,
+            item: visitImplant.implant_name || 'Implant',
+            rate: rate,
+            qty: qty,
+            amount: amount,
+            type: 'implant'
+          });
+        });
+      } else {
+        console.log('No implant orders data found');
+      }
+      console.log('Implant services created:', services);
+      return services;
+    }
+
     if (chargeFilter === 'accommodation') {
       console.log('=== CREATING ACCOMMODATION SERVICES ===');
       console.log('accommodationData:', accommodationData);
@@ -1147,6 +1211,38 @@ const Invoice = () => {
       }
     } else {
       console.log('No surgery orders found for this visit');
+    }
+
+    // Add implant charges from visit_implants table
+    console.log('=== IMPLANT CHARGES INTEGRATION ===');
+    console.log('implantOrdersData:', implantOrdersData);
+
+    let totalImplantCharges = 0;
+    if (implantOrdersData && implantOrdersData.length > 0) {
+      implantOrdersData.forEach((visitImplant: any) => {
+        const amount = parseFloat(visitImplant.amount) ||
+          (parseFloat(visitImplant.rate) * (visitImplant.quantity || 1)) || 0;
+        totalImplantCharges += amount;
+        console.log('Adding implant to total:', {
+          name: visitImplant.implant_name,
+          amount: amount
+        });
+      });
+
+      // Add single summary line for all implant charges
+      if (totalImplantCharges > 0) {
+        console.log('Adding Implant Charges summary line:', totalImplantCharges);
+        services.push({
+          srNo: srNo++,
+          item: 'Implant Charges',
+          rate: totalImplantCharges,
+          qty: 1,
+          amount: totalImplantCharges,
+          type: 'implant'
+        });
+      }
+    } else {
+      console.log('No implant orders found for this visit');
     }
 
     // Add mandatory services from junction table (actual saved services with correct rates)

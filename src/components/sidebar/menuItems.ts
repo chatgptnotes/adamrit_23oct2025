@@ -73,6 +73,11 @@ export const menuItems = [
     icon: Syringe,
   },
   {
+    title: "Implant Master",
+    url: "/implant-master",
+    icon: Syringe,
+  },
+  {
     title: "Diagnoses",
     url: "/diagnoses",
     icon: Activity,
