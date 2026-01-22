@@ -7,16 +7,17 @@ interface User {
   id?: string;
   email: string;
   username: string;
-  role: 'admin' | 'doctor' | 'nurse' | 'user' | 'marketing_manager';
+  role: 'superadmin' | 'admin' | 'doctor' | 'nurse' | 'user' | 'marketing_manager';
   hospitalType: HospitalType;
 }
 
 interface AuthContextType {
   user: User | null;
   login: (credentials: { email: string; password: string }) => Promise<boolean>;
-  signup: (userData: { email: string; password: string; role: 'admin' | 'doctor' | 'nurse' | 'user' | 'marketing_manager'; hospitalType: HospitalType }) => Promise<{ success: boolean; error?: string }>;
+  signup: (userData: { email: string; password: string; role: 'superadmin' | 'admin' | 'doctor' | 'nurse' | 'user' | 'marketing_manager'; hospitalType: HospitalType }) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
   isAuthenticated: boolean;
+  isSuperAdmin: boolean;
   isAdmin: boolean;
   hospitalType: HospitalType | null;
   hospitalConfig: ReturnType<typeof getHospitalConfig>;
@@ -137,7 +138,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   };
 
   // Signup functionality
-  const signup = async (userData: { email: string; password: string; role: 'admin' | 'doctor' | 'nurse' | 'user' | 'marketing_manager'; hospitalType: HospitalType }): Promise<{ success: boolean; error?: string }> => {
+  const signup = async (userData: { email: string; password: string; role: 'superadmin' | 'admin' | 'doctor' | 'nurse' | 'user' | 'marketing_manager'; hospitalType: HospitalType }): Promise<{ success: boolean; error?: string }> => {
     try {
       // Rate limiting check
       const clientIP = 'default'; // In production, get actual client IP
@@ -215,7 +216,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     signup,
     logout,
     isAuthenticated: !!user,
-    isAdmin: user?.role === 'admin',
+    isSuperAdmin: user?.role === 'superadmin',
+    isAdmin: user?.role === 'admin' || user?.role === 'superadmin',
     hospitalType: user?.hospitalType || null,
     hospitalConfig,
     showLanding,
