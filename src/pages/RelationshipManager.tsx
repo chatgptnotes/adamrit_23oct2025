@@ -4,7 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Plus, Search, Users, Trash2, Phone } from 'lucide-react';
+import { Plus, Search, Users, Trash2, Phone, Edit } from 'lucide-react';
 import { AddItemDialog } from '@/components/AddItemDialog';
 import { useToast } from '@/hooks/use-toast';
 import { usePermissions } from '@/hooks/usePermissions';
@@ -20,6 +20,8 @@ interface RelationshipManagerType {
 const RelationshipManager = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [selectedManager, setSelectedManager] = useState<RelationshipManagerType | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { canEditMasters } = usePermissions();
@@ -98,6 +100,38 @@ const RelationshipManager = () => {
     }
   });
 
+  const editMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: Partial<RelationshipManagerType> }) => {
+      const { error } = await supabase
+        .from('relationship_managers')
+        .update({
+          name: data.name,
+          contact_no: data.contact_no || null,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['relationship-managers'] });
+      queryClient.invalidateQueries({ queryKey: ['relationship-managers-count'] });
+      toast({
+        title: "Success",
+        description: "Relationship Manager updated successfully",
+      });
+      setIsEditDialogOpen(false);
+      setSelectedManager(null);
+    },
+    onError: (error: any) => {
+      console.error('Edit relationship manager error:', error);
+      toast({
+        title: "Error",
+        description: "Failed to update relationship manager",
+        variant: "destructive"
+      });
+    }
+  });
+
   const filteredManagers = managers.filter((manager: RelationshipManagerType) =>
     manager.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     manager.contact_no?.toLowerCase().includes(searchTerm.toLowerCase())
@@ -113,6 +147,15 @@ const RelationshipManager = () => {
   const handleDelete = (id: string) => {
     if (confirm('Are you sure you want to delete this relationship manager?')) {
       deleteMutation.mutate(id);
+    }
+  };
+
+  const handleEdit = (formData: Record<string, string>) => {
+    if (selectedManager) {
+      editMutation.mutate({
+        id: selectedManager.id,
+        data: { name: formData.name, contact_no: formData.contact_no }
+      });
     }
   };
 
@@ -179,6 +222,20 @@ const RelationshipManager = () => {
                       <Button
                         variant="outline"
                         size="sm"
+                        onClick={() => {
+                          setSelectedManager(manager);
+                          setIsEditDialogOpen(true);
+                        }}
+                        className="text-blue-600 hover:text-blue-700 ml-2"
+                        title="Edit relationship manager"
+                      >
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                    )}
+                    {canEditMasters && (
+                      <Button
+                        variant="outline"
+                        size="sm"
                         onClick={() => handleDelete(manager.id)}
                         className="text-red-600 hover:text-red-700 ml-2"
                         title="Delete relationship manager"
@@ -208,6 +265,21 @@ const RelationshipManager = () => {
           onAdd={handleAdd}
           title="Add Relationship Manager"
           fields={fields}
+        />
+
+        <AddItemDialog
+          isOpen={isEditDialogOpen}
+          onClose={() => {
+            setIsEditDialogOpen(false);
+            setSelectedManager(null);
+          }}
+          onAdd={handleEdit}
+          title="Edit Relationship Manager"
+          fields={fields}
+          initialData={selectedManager ? {
+            name: selectedManager.name || '',
+            contact_no: selectedManager.contact_no || ''
+          } : undefined}
         />
       </div>
     </div>
