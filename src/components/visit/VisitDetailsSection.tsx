@@ -333,41 +333,33 @@ export const VisitDetailsSection: React.FC<VisitDetailsSectionProps> = ({
           <Label htmlFor="appointmentWith" className="text-sm font-medium">
             Appointment With <span className="text-red-500">*</span>
           </Label>
-          <Select 
-            value={formData.appointmentWith} 
+          <SearchableSelect
+            options={[
+              { value: 'none', label: 'None' },
+              ...(formData.appointmentWith &&
+                 formData.appointmentWith !== 'none' &&
+                 !doctors.some(d => d.name === formData.appointmentWith)
+                ? [{ value: formData.appointmentWith, label: `${formData.appointmentWith} (Current)` }]
+                : []),
+              ...doctors.map((doctor) => ({
+                value: doctor.name,
+                label: `${doctor.name}${doctor.specialty ? ` (${doctor.specialty})` : ''}`
+              }))
+            ]}
+            value={formData.appointmentWith || ''}
             onValueChange={(value) => handleInputChange('appointmentWith', value)}
-            disabled={isLoading}
-          >
-            <SelectTrigger>
-              <SelectValue 
-                placeholder={
-                  isLoading 
-                    ? "Loading doctors..." 
-                    : error 
-                    ? "Error loading doctors"
-                    : doctors.length === 0 
-                    ? "No doctors available" 
-                    : "Select Doctor"
-                } 
-              />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none">None</SelectItem>
-              {/* If current value doesn't match any doctor, keep it as an option */}
-              {formData.appointmentWith &&
-               formData.appointmentWith !== 'none' &&
-               !doctors.some(d => d.name === formData.appointmentWith) && (
-                <SelectItem value={formData.appointmentWith}>
-                  {formData.appointmentWith} (Current)
-                </SelectItem>
-              )}
-              {!isLoading && !error && doctors.length > 0 && doctors.map((doctor) => (
-                <SelectItem key={doctor.id} value={doctor.name}>
-                  {doctor.name}{doctor.specialty ? ` (${doctor.specialty})` : ''}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            placeholder={
+              isLoading
+                ? "Loading doctors..."
+                : error
+                ? "Error loading doctors"
+                : doctors.length === 0
+                ? "No doctors available"
+                : "Select Doctor"
+            }
+            searchPlaceholder="Search doctors..."
+            emptyText="No doctor found."
+          />
           {error && (
             <p className="text-sm text-red-500">{error}</p>
           )}
@@ -456,31 +448,26 @@ export const VisitDetailsSection: React.FC<VisitDetailsSectionProps> = ({
           <Label htmlFor="relationshipManager" className="text-sm font-medium">
             Relationship Manager
           </Label>
-          <Select
+          <SearchableSelect
+            options={[
+              { value: 'none', label: 'None' },
+              ...relationshipManagers.map((manager) => ({
+                value: manager.name,
+                label: manager.name
+              }))
+            ]}
             value={formData.relationshipManager || ''}
             onValueChange={(value) => handleInputChange('relationshipManager', value)}
-            disabled={isLoadingRelationshipManagers}
-          >
-            <SelectTrigger>
-              <SelectValue
-                placeholder={
-                  isLoadingRelationshipManagers
-                    ? "Loading..."
-                    : relationshipManagers.length === 0
-                    ? "No managers available"
-                    : "Select Relationship Manager"
-                }
-              />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none">None</SelectItem>
-              {!isLoadingRelationshipManagers && relationshipManagers.length > 0 && relationshipManagers.map((manager) => (
-                <SelectItem key={manager.id} value={manager.name}>
-                  {manager.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            placeholder={
+              isLoadingRelationshipManagers
+                ? "Loading..."
+                : relationshipManagers.length === 0
+                ? "No managers available"
+                : "Select Relationship Manager"
+            }
+            searchPlaceholder="Search managers..."
+            emptyText="No manager found."
+          />
         </div>
 
         {/* Claim Id */}
