@@ -191,6 +191,13 @@ const DischargedPatients = () => {
   // Check if current user is a marketing manager
   const isMarketingManager = user?.role === 'marketing_manager';
 
+  // Allowed emails to see Referral Doctor/Relationship Manager column
+  const ALLOWED_REFERRAL_COLUMN_EMAILS = [
+    'marketingmanager@hope.com',
+    'marketingmanager@ayushman.com'
+  ];
+  const canSeeReferralColumn = ALLOWED_REFERRAL_COLUMN_EMAILS.includes(user?.email?.toLowerCase() || '');
+
   // URL-persisted state
   const searchTerm = searchParams.get('search') || '';
   const statusFilter = searchParams.get('status') || 'all';
@@ -1564,7 +1571,7 @@ const DischargedPatients = () => {
                     <TableHead>Billing Status</TableHead>
                     <TableHead>Corporate</TableHead>
                     {/* Only show referral-related columns for marketing managers */}
-                    {isMarketingManager && <TableHead>Referral Doctor/Relationship Manager</TableHead>}
+                    {canSeeReferralColumn && <TableHead>Referral Doctor/Relationship Manager</TableHead>}
                     {isMarketingManager && <TableHead>Discharge Amt Paid</TableHead>}
                     {isMarketingManager && <TableHead>Referral Payment</TableHead>}
                     <TableHead>Actions</TableHead>
@@ -1649,7 +1656,7 @@ const DischargedPatients = () => {
                         {visit.patients?.corporate || '—'}
                       </TableCell>
                       {/* Only show referral-related cells for marketing managers */}
-                      {isMarketingManager && (
+                      {canSeeReferralColumn && (
                         <TableCell>
                           <div>{visit.referees?.name || '—'}</div>
                           {visit.relationship_managers?.name && (
