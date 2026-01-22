@@ -4,6 +4,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { EnhancedDatePicker } from '@/components/ui/enhanced-date-picker';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface VisitDetailsSectionProps {
   visitDate: Date;
@@ -32,6 +33,7 @@ export const VisitDetailsSection: React.FC<VisitDetailsSectionProps> = ({
   handleInputChange,
   existingVisit
 }) => {
+  const { hospitalConfig } = useAuth();
   const [doctors, setDoctors] = useState<Array<{ id: string; name: string; specialty: string }>>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -55,19 +57,25 @@ export const VisitDetailsSection: React.FC<VisitDetailsSectionProps> = ({
       try {
         setIsLoading(true);
         setError(null);
-        console.log('Fetching doctors from hope_surgeons table...');
-        
+
+        // Determine table based on hospital
+        const tableName = hospitalConfig?.name === 'ayushman'
+          ? 'ayushman_consultants'
+          : 'hope_consultants';
+
+        console.log(`Fetching doctors from ${tableName} table...`);
+
         const { data, error } = await supabase
-          .from('hope_surgeons')
+          .from(tableName)
           .select('id, name, specialty')
           .order('name');
-        
+
         if (error) {
           console.error('Error fetching doctors:', error);
           setError('Failed to load doctors');
           setDoctors([]);
         } else {
-          console.log('Doctors fetched successfully:', data);
+          console.log(`Doctors fetched from ${tableName}:`, data?.length);
           setDoctors(data || []);
         }
       } catch (error) {
@@ -80,7 +88,7 @@ export const VisitDetailsSection: React.FC<VisitDetailsSectionProps> = ({
     };
 
     fetchDoctors();
-  }, []);
+  }, [hospitalConfig?.name]);
 
   // Fetch referees from referees table
   useEffect(() => {

@@ -1144,6 +1144,21 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
 
     if (visitSurgeryData && visitSurgeryData.length > 0) {
       try {
+        // Get previously saved surgery data (if any) to preserve implants
+        // This is needed because visit_surgeries table has no implant column,
+        // so user-entered implants for Surgery #2+ would be lost without this
+        let savedSurgeryRows: any[] = [];
+        if (patientData?.summary?.surgery_details) {
+          try {
+            const savedData = JSON.parse(patientData.summary.surgery_details);
+            if (savedData.surgeryRows && Array.isArray(savedData.surgeryRows)) {
+              savedSurgeryRows = savedData.surgeryRows;
+            }
+          } catch (e) {
+            console.log('Could not parse saved surgery details');
+          }
+        }
+
         // Map each surgery to its own form row
         const mappedSurgeryRows = visitSurgeryData.map((surgery: any, index: number) => {
           const surgeryInfo = surgery?.cghs_surgery;
@@ -1153,7 +1168,10 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
           const surgeon = isFirst && otNotesData?.surgeon ? otNotesData.surgeon : (surgery?.surgeon || '');
           const anesthetist = isFirst && otNotesData?.anaesthetist ? otNotesData.anaesthetist : (surgery?.anaesthetist_name || '');
           const anesthesia = isFirst && otNotesData?.anaesthesia ? otNotesData.anaesthesia : (surgery?.anaesthesia_type || '');
-          const implant = isFirst && otNotesData?.implant ? otNotesData.implant : (surgery?.implant || '');
+
+          // For implant: prefer OT notes for first surgery, then check saved data, then visit_surgeries
+          const savedImplant = savedSurgeryRows[index]?.implant || '';
+          const implant = isFirst && otNotesData?.implant ? otNotesData.implant : (savedImplant || surgery?.implant || '');
 
           // Use surgery date from visit_surgeries or OT notes
           const surgeryDate = surgery?.surgery_date ? new Date(surgery.surgery_date) :

@@ -1755,23 +1755,45 @@ PLEASE CONTACT: 7030974619, 9373111709.
     let radiologyInvestigations = [];
     let labInvestigationsData = [];
 
-    // Fetch OT notes
+    // Fetch OT notes (ALL records for multiple surgeries)
     try {
-      const { data: otNote } = await supabase
+      const { data: otNotes } = await supabase
         .from('ot_notes')
         .select('*')
         .eq('visit_id', visitId)
-        .single();
+        .order('created_at', { ascending: true });
 
-      if (!otNote) {
-        const { data: otNote2 } = await supabase
+      if (!otNotes || otNotes.length === 0) {
+        // Fallback: Try with patient_id
+        const { data: otNotes2 } = await supabase
           .from('ot_notes')
           .select('*')
           .eq('patient_id', patient.patient_id || patient.patients?.id)
-          .single();
-        otData = otNote2;
+          .order('created_at', { ascending: true });
+
+        if (otNotes2 && otNotes2.length > 0) {
+          // Combine data from all OT notes
+          otData = {
+            ...otNotes2[0],
+            // Collect all implants (filter out empty values)
+            implant: otNotes2.map(n => n.implant).filter(Boolean).join(', '),
+            // Collect all procedures
+            procedure_performed: otNotes2.map(n => n.procedure_performed).filter(Boolean).join(', '),
+            // Collect all surgeons (unique)
+            surgeon: [...new Set(otNotes2.map(n => n.surgeon).filter(Boolean))].join(', ')
+          };
+        }
       } else {
-        otData = otNote;
+        // Combine data from all OT notes
+        otData = {
+          ...otNotes[0],
+          // Collect all implants (filter out empty values)
+          implant: otNotes.map(n => n.implant).filter(Boolean).join(', '),
+          // Collect all procedures
+          procedure_performed: otNotes.map(n => n.procedure_performed).filter(Boolean).join(', '),
+          // Collect all surgeons (unique)
+          surgeon: [...new Set(otNotes.map(n => n.surgeon).filter(Boolean))].join(', ')
+        };
       }
     } catch (error) {
       console.log('No OT data available');
