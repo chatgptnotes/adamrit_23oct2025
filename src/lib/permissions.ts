@@ -3,7 +3,7 @@
  * Defines role-based permissions for the hospital management system
  */
 
-export type UserRole = 'admin' | 'doctor' | 'nurse' | 'user' | 'marketing_manager';
+export type UserRole = 'superadmin' | 'admin' | 'doctor' | 'nurse' | 'user' | 'marketing_manager';
 
 export enum Permission {
   // Master Data Permissions
@@ -27,6 +27,19 @@ export enum Permission {
  * Defines which permissions each role has
  */
 const rolePermissions: Record<UserRole, Permission[]> = {
+  superadmin: [
+    // SuperAdmin has ALL permissions - highest level access
+    Permission.EDIT_MASTERS,
+    Permission.DELETE_MASTERS,
+    Permission.VIEW_MASTERS,
+    Permission.MANAGE_USERS,
+    Permission.VIEW_USERS,
+    Permission.DELETE_RECORDS,
+    Permission.EDIT_RECORDS,
+    Permission.CREATE_RECORDS,
+    Permission.VIEW_RECORDS,
+  ],
+
   admin: [
     // Admin has ALL permissions
     Permission.EDIT_MASTERS,

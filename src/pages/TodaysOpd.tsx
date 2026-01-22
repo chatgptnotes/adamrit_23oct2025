@@ -20,8 +20,8 @@ const TodaysOpd = () => {
   const { hospitalConfig, user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   
-  // Check if current user is a marketing manager
-  const isMarketingManager = user?.role === 'marketing_manager';
+  // Check if current user is a marketing manager or superadmin
+  const isMarketingManager = user?.role === 'marketing_manager' || user?.role === 'superadmin';
 
   // State for referral report preview modal
   const [isReferralReportOpen, setIsReferralReportOpen] = useState(false);

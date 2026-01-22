@@ -116,19 +116,6 @@ const LoginPage: React.FC = () => {
             </Button>
           </form>
         </CardContent>
-        
-        <CardFooter className="text-center">
-          <p className="text-sm text-gray-600">
-            Don't have an account?{' '}
-            <button 
-              type="button"
-              className="text-blue-600 hover:underline font-medium"
-              onClick={() => window.location.href = '/signup'}
-            >
-              Create one here
-            </button>
-          </p>
-        </CardFooter>
       </Card>
     </div>
   );
