@@ -1666,7 +1666,7 @@ const DischargedPatients = () => {
                       )}
                       {isMarketingManager && (
                         <TableCell>
-                          <RefereeAmountCell visit={visit} onUpdate={() => refetch()} isAdmin={user?.role === 'admin' || user?.role === 'marketing_manager'} />
+                          <RefereeAmountCell visit={visit} onUpdate={() => refetch()} isAdmin={user?.role === 'admin' || user?.role === 'marketing_manager' || user?.role === 'superadmin'} />
                         </TableCell>
                       )}
                       {isMarketingManager && (
@@ -1688,7 +1688,7 @@ const DischargedPatients = () => {
                             <FileText className="h-4 w-4 mr-1" />
                             Gate Pass
                           </Button>
-                          {user?.role === 'admin' && (
+                          {(user?.role === 'admin' || user?.role === 'superadmin') && (
                             <Button
                               variant="outline"
                               size="sm"
