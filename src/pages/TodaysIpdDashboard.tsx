@@ -113,6 +113,14 @@ const TodaysIpdDashboard = () => {
   
   // Check if current user is a marketing manager
   const isMarketingManager = user?.role === 'marketing_manager';
+
+  // Allowed emails to see Referral Doctor/Relationship Manager column
+  const ALLOWED_REFERRAL_COLUMN_EMAILS = [
+    'marketingmanager@hope.com',
+    'marketingmanager@ayushman.com'
+  ];
+  const canSeeReferralColumn = ALLOWED_REFERRAL_COLUMN_EMAILS.includes(user?.email?.toLowerCase() || '');
+
   const [searchParams, setSearchParams] = useSearchParams();
 
   // URL-persisted state
@@ -2785,7 +2793,7 @@ const TodaysIpdDashboard = () => {
                 <TableHead className="font-semibold">Diagnosis</TableHead>
                 <TableHead className="font-semibold">Admission Date</TableHead>
                 <TableHead className="font-semibold">Days Admitted</TableHead>
-                <TableHead className="font-semibold">Referral Doctor/Relationship Manager</TableHead>
+                {canSeeReferralColumn && <TableHead className="font-semibold">Referral Doctor/Relationship Manager</TableHead>}
                 {/* Only show referral-related columns for marketing managers */}
                 {isMarketingManager && <TableHead className="font-semibold">Referee DOA_Amt Paid</TableHead>}
                 {isMarketingManager && <TableHead className="font-semibold">Referral Payment</TableHead>}
@@ -2842,7 +2850,7 @@ const TodaysIpdDashboard = () => {
                 <TableHead></TableHead>
                 <TableHead></TableHead>
                 <TableHead></TableHead>
-                <TableHead></TableHead>
+                {canSeeReferralColumn && <TableHead></TableHead>}
                 <TableHead></TableHead>
                 <TableHead></TableHead>
                 <TableHead></TableHead>
@@ -3118,12 +3126,14 @@ const TodaysIpdDashboard = () => {
                   <TableCell>
                     {visit.admission_date ? `${Math.ceil((((visit.discharge_date ? new Date(visit.discharge_date).getTime() : Date.now()) - new Date(visit.admission_date).getTime())) / (1000 * 60 * 60 * 24))} days` : '—'}
                   </TableCell>
-                  <TableCell className="text-xs">
-                    <div>{visit.referees?.name || '-'}</div>
-                    {visit.relationship_managers?.name && (
-                      <div>{visit.relationship_managers.name}</div>
-                    )}
-                  </TableCell>
+                  {canSeeReferralColumn && (
+                    <TableCell className="text-xs">
+                      <div>{visit.referees?.name || '-'}</div>
+                      {visit.relationship_managers?.name && (
+                        <div>{visit.relationship_managers.name}</div>
+                      )}
+                    </TableCell>
+                  )}
                   {/* Only show referral-related cells for marketing managers */}
                   {isMarketingManager && (
                     <TableCell>

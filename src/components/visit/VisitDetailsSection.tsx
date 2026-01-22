@@ -3,6 +3,7 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { EnhancedDatePicker } from '@/components/ui/enhanced-date-picker';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 import { supabase } from '@/integrations/supabase/client';
 
 interface VisitDetailsSectionProps {
@@ -428,31 +429,26 @@ export const VisitDetailsSection: React.FC<VisitDetailsSectionProps> = ({
           <Label htmlFor="referringDoctor" className="text-sm font-medium">
             Referring Doctor
           </Label>
-          <Select
+          <SearchableSelect
+            options={[
+              { value: 'none', label: 'None' },
+              ...referees.map((referee) => ({
+                value: referee.name,
+                label: `${referee.name}${referee.specialty ? ` (${referee.specialty})` : ''}`
+              }))
+            ]}
             value={formData.referringDoctor || ''}
             onValueChange={(value) => handleInputChange('referringDoctor', value)}
-            disabled={isLoadingReferees}
-          >
-            <SelectTrigger>
-              <SelectValue
-                placeholder={
-                  isLoadingReferees
-                    ? "Loading referees..."
-                    : referees.length === 0
-                    ? "No referees available"
-                    : "Select Referring Doctor"
-                }
-              />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none">None</SelectItem>
-              {!isLoadingReferees && referees.length > 0 && referees.map((referee) => (
-                <SelectItem key={referee.id} value={referee.name}>
-                  {referee.name}{referee.specialty ? ` (${referee.specialty})` : ''}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            placeholder={
+              isLoadingReferees
+                ? "Loading referees..."
+                : referees.length === 0
+                ? "No referees available"
+                : "Select Referring Doctor"
+            }
+            searchPlaceholder="Search referees..."
+            emptyText="No referee found."
+          />
         </div>
 
         {/* Relationship Manager */}

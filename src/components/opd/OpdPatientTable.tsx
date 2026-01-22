@@ -148,7 +148,15 @@ const ReferralPaymentStatusCell = ({ patient }: { patient: Patient }) => {
 
 export const OpdPatientTable = ({ patients, refetch, isMarketingManager = false }: OpdPatientTableProps) => {
   const navigate = useNavigate();
-  const { isAdmin } = useAuth();
+  const { isAdmin, user } = useAuth();
+
+  // Allowed emails to see Referral Doctor/Relationship Manager column
+  const ALLOWED_REFERRAL_COLUMN_EMAILS = [
+    'marketingmanager@hope.com',
+    'marketingmanager@ayushman.com'
+  ];
+  const canSeeReferralColumn = ALLOWED_REFERRAL_COLUMN_EMAILS.includes(user?.email?.toLowerCase() || '');
+
   const [selectedPatientForVisit, setSelectedPatientForVisit] = useState<Patient | null>(null);
   const [isVisitFormOpen, setIsVisitFormOpen] = useState(false);
   const [hiddenPatients, setHiddenPatients] = useState<Set<string>>(new Set());
@@ -1272,7 +1280,7 @@ Verified by: [To be verified by doctor]`;
             <TableHead className="text-center font-medium print:hidden">Bill</TableHead>
             <TableHead className="text-center font-medium print:hidden">Admit To Hospital</TableHead>
             <TableHead className="text-center font-medium print:hidden">Admission Notes</TableHead>
-            <TableHead className="font-medium print:hidden">Referral Doctor/Relationship Manager</TableHead>
+            {canSeeReferralColumn && <TableHead className="font-medium print:hidden">Referral Doctor/Relationship Manager</TableHead>}
             {/* Only show referral-related columns for marketing managers */}
             {isMarketingManager && <TableHead className="font-medium print:hidden">Referee DOA_Amt Paid</TableHead>}
             {isMarketingManager && <TableHead className="font-medium print:hidden">Referral Payment</TableHead>}
@@ -1402,13 +1410,15 @@ Verified by: [To be verified by doctor]`;
                   <ClipboardEdit className="h-4 w-4 text-amber-600" />
                 </Button>
               </TableCell>
-              {/* Screen-only: Referral Doctor */}
-              <TableCell className="print:hidden text-xs">
-                <div>{patient.referees?.name || '-'}</div>
-                {patient.relationship_managers?.name && (
-                  <div>{patient.relationship_managers.name}</div>
-                )}
-              </TableCell>
+              {/* Screen-only: Referral Doctor - Only for specific marketing managers */}
+              {canSeeReferralColumn && (
+                <TableCell className="print:hidden text-xs">
+                  <div>{patient.referees?.name || '-'}</div>
+                  {patient.relationship_managers?.name && (
+                    <div>{patient.relationship_managers.name}</div>
+                  )}
+                </TableCell>
+              )}
               {/* Screen-only: Referee Amount - Only show for marketing managers */}
               {isMarketingManager && (
                 <TableCell className="print:hidden">
