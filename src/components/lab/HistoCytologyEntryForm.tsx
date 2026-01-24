@@ -77,6 +77,7 @@ const HistoCytologyEntryForm: React.FC<HistoCytologyEntryFormProps> = ({
   const [formData, setFormData] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
+  const [sampleCollectedDate, setSampleCollectedDate] = useState<string | null>(null);
 
   // Fetch dynamic tabs from lab_test_config
   useEffect(() => {
@@ -180,6 +181,30 @@ const HistoCytologyEntryForm: React.FC<HistoCytologyEntryFormProps> = ({
     };
 
     fetchDynamicTabs();
+  }, [selectedTests]);
+
+  // Fetch sample collected date from visit_labs
+  useEffect(() => {
+    const fetchSampleCollectedDate = async () => {
+      if (!selectedTests[0]?.id) return;
+
+      try {
+        const { data, error } = await supabase
+          .from('visit_labs')
+          .select('collected_date')
+          .eq('id', selectedTests[0].id)
+          .single();
+
+        if (!error && data?.collected_date) {
+          setSampleCollectedDate(data.collected_date);
+          console.log('✅ Got sample collected date:', data.collected_date);
+        }
+      } catch (err) {
+        console.error('Error fetching collected_date:', err);
+      }
+    };
+
+    fetchSampleCollectedDate();
   }, [selectedTests]);
 
   // Load existing data if available
@@ -434,7 +459,7 @@ const HistoCytologyEntryForm: React.FC<HistoCytologyEntryFormProps> = ({
               <div class="patient-info-row"><strong>Patient Name :</strong> ${patientInfo.patient_name || 'N/A'}</div>
               <div class="patient-info-row"><strong>Patient ID :</strong> ${patientInfo.patient_id || patientInfo.order_number || 'N/A'}</div>
               <div class="patient-info-row"><strong>Ref By :</strong> ${patientInfo.ordering_doctor || 'N/A'}</div>
-              <div class="patient-info-row"><strong>Sample Received :</strong> ${new Date().toLocaleString()}</div>
+              <div class="patient-info-row"><strong>Sample Received :</strong> ${sampleCollectedDate ? new Date(sampleCollectedDate).toLocaleString() : new Date().toLocaleString()}</div>
               <div class="patient-info-row"><strong>Request No. :</strong> ${patientInfo.id || 'N/A'}</div>
             </div>
             <div class="patient-info-col">

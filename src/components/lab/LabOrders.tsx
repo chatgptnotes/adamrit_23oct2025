@@ -260,6 +260,7 @@ const LabOrders = () => {
 
   // Sample taken and included states (now for individual tests)
   const [sampleTakenTests, setSampleTakenTests] = useState<string[]>([]);
+  const [sampleTakenTimes, setSampleTakenTimes] = useState<Record<string, string>>({}); // Store checkbox tick time
   const [includedTests, setIncludedTests] = useState<string[]>([]);
   const [selectedPatientForSampling, setSelectedPatientForSampling] = useState<string | null>(null); // Track which patient is selected for sampling
   const [isEntryModeOpen, setIsEntryModeOpen] = useState(false);
@@ -373,12 +374,23 @@ const LabOrders = () => {
       });
       setTestSampleStatus(newStatus);
 
+      // Capture current time for all selected tests
+      const currentTime = new Date().toISOString();
+      const newTimes: Record<string, string> = {};
+      allTestIds.forEach(id => {
+        if (testSampleStatus[id] !== 'saved') {
+          newTimes[id] = currentTime;
+        }
+      });
+      setSampleTakenTimes(prev => ({ ...prev, ...newTimes }));
+
       // Clear patient locking when selecting all
       setSelectedPatientForSampling(null);
     } else {
       // Deselect all
       setSampleTakenTests([]);
       setIncludedTests([]);
+      setSampleTakenTimes({}); // Clear all stored times
 
       // Reset status for tests that aren't saved
       const newStatus = { ...testSampleStatus };
@@ -1468,10 +1480,12 @@ const LabOrders = () => {
 
       // Update visit_labs records to mark samples as taken (collected)
       const updatePromises = testIds.map(async (testId) => {
+        // Use the time when checkbox was ticked, not the save button click time
+        const collectedTime = sampleTakenTimes[testId] || new Date().toISOString();
         const { error } = await supabase
           .from('visit_labs')
           .update({
-            collected_date: new Date().toISOString(),
+            collected_date: collectedTime,
             status: 'collected'
           })
           .eq('id', testId);
@@ -1498,6 +1512,7 @@ const LabOrders = () => {
     onSuccess: (testIds) => {
       // Clear sample taken tests and reset included tests
       setSampleTakenTests([]);
+      setSampleTakenTimes({}); // Clear stored checkbox tick times
       setIncludedTests([]);
       setSelectedPatientForSampling(null); // Clear selected patient
 
@@ -3267,11 +3282,36 @@ const LabOrders = () => {
       console.log('✅ Got visit_id from saved results:', actualVisitId);
     }
 
-    // Fetch sample collection time from lab_orders table
+    // Fetch sample collection time from visit_labs table (where collected_date is stored)
     let sampleReceivedDate = reportDate;
     let sampleReceivedTime = reportTime;
 
-    if (patientInfo?.order_number) {
+    // First try to get collected_date from visit_labs (correct source)
+    if (firstTestId) {
+      try {
+        const { data: visitLabData, error: visitLabError } = await supabase
+          .from('visit_labs')
+          .select('collected_date')
+          .eq('id', firstTestId)
+          .single();
+
+        if (!visitLabError && visitLabData?.collected_date) {
+          const sampleDate = new Date(visitLabData.collected_date);
+          sampleReceivedDate = sampleDate.toLocaleDateString('en-GB', {
+            day: '2-digit', month: '2-digit', year: 'numeric'
+          });
+          sampleReceivedTime = sampleDate.toLocaleTimeString('en-GB', {
+            hour: '2-digit', minute: '2-digit', second: '2-digit'
+          });
+          console.log('✅ Got sample time from visit_labs.collected_date:', sampleReceivedDate, sampleReceivedTime);
+        }
+      } catch (err) {
+        console.error('❌ Error fetching sample time from visit_labs:', err);
+      }
+    }
+
+    // Fallback to lab_orders if visit_labs doesn't have the date
+    if (sampleReceivedDate === reportDate && patientInfo?.order_number) {
       try {
         const { data: orderData, error: orderError } = await supabase
           .from('lab_orders')
@@ -3280,18 +3320,14 @@ const LabOrders = () => {
           .single();
 
         if (!orderError && orderData) {
-          // Prefer sample_received_datetime, then sample_collection_datetime,
-          // then order_date+order_time, then created_at
           let sampleDateTime = orderData.sample_received_datetime ||
                                orderData.sample_collection_datetime;
 
-          // If no specific sample datetime, try order_date + order_time
           if (!sampleDateTime && orderData.order_date) {
             const orderTimeStr = orderData.order_time || '00:00:00';
             sampleDateTime = `${orderData.order_date}T${orderTimeStr}`;
           }
 
-          // Final fallback to created_at
           if (!sampleDateTime) {
             sampleDateTime = orderData.created_at;
           }
@@ -3304,11 +3340,11 @@ const LabOrders = () => {
             sampleReceivedTime = sampleDate.toLocaleTimeString('en-GB', {
               hour: '2-digit', minute: '2-digit', second: '2-digit'
             });
-            console.log('✅ Got sample time from lab_orders:', sampleReceivedDate, sampleReceivedTime);
+            console.log('✅ Got sample time from lab_orders (fallback):', sampleReceivedDate, sampleReceivedTime);
           }
         }
       } catch (err) {
-        console.error('❌ Error fetching sample time:', err);
+        console.error('❌ Error fetching sample time from lab_orders:', err);
       }
     }
 
@@ -4538,10 +4574,18 @@ const LabOrders = () => {
                                   }
                                   setSampleTakenTests(prev => [...prev, testRow.id]);
                                   setTestSampleStatus(prev => ({ ...prev, [testRow.id]: 'taken' }));
+                                  // Capture the EXACT time when checkbox is ticked
+                                  setSampleTakenTimes(prev => ({ ...prev, [testRow.id]: new Date().toISOString() }));
                                 } else {
                                   setSampleTakenTests(prev => prev.filter(id => id !== testRow.id));
                                   setTestSampleStatus(prev => ({ ...prev, [testRow.id]: 'not_taken' }));
                                   setIncludedTests(prev => prev.filter(id => id !== testRow.id));
+                                  // Remove the stored time when unchecked
+                                  setSampleTakenTimes(prev => {
+                                    const newTimes = { ...prev };
+                                    delete newTimes[testRow.id];
+                                    return newTimes;
+                                  });
 
                                   // If no more samples are selected for this patient, clear the selected patient
                                   const remainingSamplesForPatient = sampleTakenTests.filter(id => {

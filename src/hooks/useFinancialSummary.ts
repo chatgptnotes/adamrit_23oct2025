@@ -581,6 +581,40 @@ export const useFinancialSummary = (billId?: string, visitId?: string, savedMedi
     }
   };
 
+const fetchAnesthetistTotal = async (): Promise<number> => {
+    if (!visitId) return 0;
+
+    try {
+      // Get visit UUID first
+      const { data: visitData, error: visitError } = await supabase
+        .from('visits')
+        .select('id')
+        .eq('visit_id', visitId)
+        .single();
+
+      if (visitError || !visitData) return 0;
+
+      // Fetch anesthetists from visit_anesthetists table
+      const { data: anesthetistData, error: anesthetistError } = await supabase
+        .from('visit_anesthetists')
+        .select('rate')
+        .eq('visit_id', visitData.id);
+
+      if (anesthetistError || !anesthetistData) return 0;
+
+      // Calculate total
+      const total = anesthetistData.reduce((sum, item: any) => {
+        return sum + (parseFloat(item.rate) || 0);
+      }, 0);
+
+      console.log('💉 Anesthetist total calculated:', total);
+      return total;
+    } catch (error) {
+      console.error('Error fetching anesthetist total:', error);
+      return 0;
+    }
+  };
+
   // Fetch implant total from visit_implants table
   const fetchImplantTotal = async (): Promise<number> => {
     if (!visitId) return 0;
@@ -1682,6 +1716,7 @@ export const useFinancialSummary = (billId?: string, visitId?: string, savedMedi
         advancePaymentTotal,
         refundedTotal,
         surgeryTotal,
+        anesthetistTotal,
         implantTotal
       ] = await Promise.all([
         fetchLabTestsTotal(),
@@ -1693,11 +1728,12 @@ export const useFinancialSummary = (billId?: string, visitId?: string, savedMedi
         fetchAdvancePaymentTotal(),
         fetchRefundedAmount(),
         fetchSurgeryTotal(),
+        fetchAnesthetistTotal(),
         fetchImplantTotal()
       ]);
 
-      // Calculate grand total (including surgery and implant)
-      const grandTotal = labTotal + clinicalTotal + mandatoryTotal + radiologyTotal + pharmacyTotal + accommodationTotal + surgeryTotal + implantTotal;
+      // Calculate grand total (including surgery, anesthetist, and implant)
+      const grandTotal = labTotal + clinicalTotal + mandatoryTotal + radiologyTotal + pharmacyTotal + accommodationTotal + surgeryTotal + anesthetistTotal + implantTotal;
       console.log('✅ [AUTO-POPULATE] Step 1 Complete: Calculated totals only');
 
       // 🔥 STEP 2: Update ONLY totals, preserve existing discount values from state
@@ -1723,6 +1759,7 @@ export const useFinancialSummary = (billId?: string, visitId?: string, savedMedi
             surgery: surgeryTotal.toString(),
             implant: implantTotal.toString(),
             mandatoryServices: mandatoryTotal.toString(),
+            physiotherapy: anesthetistTotal.toString(), // Anesthetist total (field named physiotherapy for compatibility)
             accommodationCharges: accommodationTotal.toString(),
             total: grandTotal.toString()
           },

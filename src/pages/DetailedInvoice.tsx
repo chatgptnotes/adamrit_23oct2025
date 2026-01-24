@@ -18,6 +18,7 @@ const DetailedInvoice = () => {
   const [selectedLabItems, setSelectedLabItems] = useState<number[]>([]);
   const [selectedRadiologyItems, setSelectedRadiologyItems] = useState<number[]>([]);
   const [selectedSurgeryItems, setSelectedSurgeryItems] = useState<number[]>([]);
+  const [selectedAnesthetistItems, setSelectedAnesthetistItems] = useState<number[]>([]);
   const [selectedImplantItems, setSelectedImplantItems] = useState<number[]>([]);
 
   // Close function that goes back or to a specific page
@@ -363,12 +364,13 @@ const DetailedInvoice = () => {
     XLSX.writeFile(workbook, fileName);
   };
 
-  // Print section functions for Laboratory, Radiology, Surgery, Implants
-  const handlePrintSectionAll = (section: 'laboratory' | 'radiology' | 'surgery' | 'implants') => {
+  // Print section functions for Laboratory, Radiology, Surgery, Anesthetist, Implants
+  const handlePrintSectionAll = (section: 'laboratory' | 'radiology' | 'surgery' | 'anesthetist' | 'implants') => {
     const sectionTitles = {
       laboratory: 'LABORATORY',
       radiology: 'RADIOLOGY',
       surgery: 'SURGERY',
+      anesthetist: 'ANESTHETIST',
       implants: 'IMPLANTS'
     };
 
@@ -462,17 +464,19 @@ const DetailedInvoice = () => {
     }
   };
 
-  const handlePrintSectionSelected = (section: 'laboratory' | 'radiology' | 'surgery' | 'implants') => {
+  const handlePrintSectionSelected = (section: 'laboratory' | 'radiology' | 'surgery' | 'anesthetist' | 'implants') => {
     const sectionTitles = {
       laboratory: 'LABORATORY',
       radiology: 'RADIOLOGY',
       surgery: 'SURGERY',
+      anesthetist: 'ANESTHETIST',
       implants: 'IMPLANTS'
     };
 
     const selectedIndices = section === 'laboratory' ? selectedLabItems :
                            section === 'radiology' ? selectedRadiologyItems :
                            section === 'surgery' ? selectedSurgeryItems :
+                           section === 'anesthetist' ? selectedAnesthetistItems :
                            selectedImplantItems;
 
     const allItems = serviceData[section] || [];
@@ -567,11 +571,12 @@ const DetailedInvoice = () => {
     }
   };
 
-  const handlePrintSectionSummary = (section: 'laboratory' | 'radiology' | 'surgery' | 'implants') => {
+  const handlePrintSectionSummary = (section: 'laboratory' | 'radiology' | 'surgery' | 'anesthetist' | 'implants') => {
     const sectionTitles = {
       laboratory: 'LABORATORY',
       radiology: 'RADIOLOGY',
       surgery: 'SURGERY',
+      anesthetist: 'ANESTHETIST',
       implants: 'IMPLANTS'
     };
 
@@ -647,7 +652,7 @@ const DetailedInvoice = () => {
   };
 
   // Toggle item selection
-  const toggleItemSelection = (section: 'laboratory' | 'radiology' | 'surgery' | 'implants', index: number) => {
+  const toggleItemSelection = (section: 'laboratory' | 'radiology' | 'surgery' | 'anesthetist' | 'implants', index: number) => {
     if (section === 'laboratory') {
       setSelectedLabItems(prev =>
         prev.includes(index) ? prev.filter(i => i !== index) : [...prev, index]
@@ -658,6 +663,10 @@ const DetailedInvoice = () => {
       );
     } else if (section === 'surgery') {
       setSelectedSurgeryItems(prev =>
+        prev.includes(index) ? prev.filter(i => i !== index) : [...prev, index]
+      );
+    } else if (section === 'anesthetist') {
+      setSelectedAnesthetistItems(prev =>
         prev.includes(index) ? prev.filter(i => i !== index) : [...prev, index]
       );
     } else {
@@ -987,6 +996,25 @@ const DetailedInvoice = () => {
         }
       }
 
+      // Fetch anesthetist data for this visit
+      let anesthetistOrders: any[] = [];
+      if (actualVisitId) {
+        console.log('🔍 Fetching anesthetists for actualVisitId:', actualVisitId);
+        const { data: anesthetistData, error: anesthetistError } = await supabase
+          .from('visit_anesthetists')
+          .select('*')
+          .eq('visit_id', actualVisitId);
+
+        console.log('📡 Anesthetist response:', { data: anesthetistData, error: anesthetistError });
+
+        if (anesthetistError) {
+          console.error('❌ Error fetching anesthetists:', anesthetistError);
+        } else {
+          anesthetistOrders = anesthetistData || [];
+          console.log('✅ Anesthetists fetched:', anesthetistOrders.length, 'records');
+        }
+      }
+
       // Fetch implants for this visit
       let implantOrders = [];
       if (actualVisitId) {
@@ -1051,6 +1079,7 @@ const DetailedInvoice = () => {
         clinicalServices,
         accommodationOrders,
         surgeryOrders,
+        anesthetistOrders,
         implantOrders,
         mandatoryServices
       };
@@ -1072,6 +1101,7 @@ const DetailedInvoice = () => {
       console.log('💊 Pharmacy orders:', visitData.pharmacyOrders);
       console.log('🏥 Clinical services:', visitData.clinicalServices);
       console.log('🏥 Surgery orders:', visitData.surgeryOrders);
+      console.log('💉 Anesthetist orders:', visitData.anesthetistOrders);
       console.log('🔩 Implant orders:', visitData.implantOrders);
 
       // Calculate total amount from all services
@@ -1202,6 +1232,12 @@ const DetailedInvoice = () => {
       rate: surgery.rate && surgery.rate > 0
         ? Number(surgery.rate)
         : parseFloat(String(surgery.cghs_surgery?.NABH_NABL_Rate || '0').replace(/[^\d.]/g, '')) || 0
+    })) || [],
+    anesthetist: visitData?.anesthetistOrders?.map((anesthetist: any, index: number) => ({
+      item: `${anesthetist.anesthetist_name || 'Anesthetist'} (${anesthetist.anesthetist_type || 'N/A'})`,
+      dateTime: anesthetist.created_at ? format(new Date(anesthetist.created_at), 'dd/MM/yyyy HH:mm:ss') : '',
+      qty: 1,
+      rate: parseFloat(anesthetist.rate) || 0
     })) || [],
     implants: visitData?.implantOrders?.map((implant, index) => ({
       item: implant.implant_name ? `Implant ${implant.implant_name}` : 'Implant',
@@ -1595,6 +1631,44 @@ const DetailedInvoice = () => {
                 {serviceData.surgery.length === 0 && (!serviceData.implants || serviceData.implants.length === 0) && (
                   <tr>
                     <td className="border border-gray-400 p-1 text-center" colSpan={6}>No surgeries performed</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* ANESTHETIST */}
+          <div className="mb-4">
+            <div className="bg-gray-200 border border-gray-400 border-t-0 p-1 flex justify-between items-center">
+              <strong className="text-xs">ANESTHETIST</strong>
+              <div className="flex gap-1">
+                <button onClick={() => handlePrintSectionAll('anesthetist')} className="text-xs bg-green-100 px-1 hover:bg-green-200 cursor-pointer" title="Print All">📊</button>
+                <button onClick={() => handlePrintSectionSelected('anesthetist')} className="text-xs bg-blue-100 px-1 hover:bg-blue-200 cursor-pointer" title="Print Selected">🖨️</button>
+                <button onClick={() => handlePrintSectionSummary('anesthetist')} className="text-xs bg-red-100 px-1 hover:bg-red-200 cursor-pointer" title="Print Summary">📋</button>
+              </div>
+            </div>
+            <table className="w-full border-collapse border border-gray-400 border-t-0 text-xs">
+              <tbody>
+                {serviceData.anesthetist.map((item, index) => (
+                  <tr key={index}>
+                    <td className="border border-gray-400 p-1 text-center w-8">
+                      <input
+                        type="checkbox"
+                        checked={selectedAnesthetistItems.includes(index)}
+                        onChange={() => toggleItemSelection('anesthetist', index)}
+                        className="cursor-pointer"
+                      />
+                    </td>
+                    <td className="border border-gray-400 p-1 text-center w-12">{index + 1}</td>
+                    <td className="border border-gray-400 p-1">{item.item}</td>
+                    <td className="border border-gray-400 p-1 text-center w-32">{item.dateTime}</td>
+                    <td className="border border-gray-400 p-1 text-center w-16">{item.qty}</td>
+                    <td className="border border-gray-400 p-1 text-center w-24">{item.rate}</td>
+                  </tr>
+                ))}
+                {serviceData.anesthetist.length === 0 && (
+                  <tr>
+                    <td className="border border-gray-400 p-1 text-center" colSpan={6}>No anesthetist charges</td>
                   </tr>
                 )}
               </tbody>

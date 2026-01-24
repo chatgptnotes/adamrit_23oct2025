@@ -527,6 +527,41 @@ const Invoice = () => {
     enabled: !!visitId
   });
 
+  // Fetch anesthetists from visit_anesthetists table
+  const { data: anesthetistData } = useQuery({
+    queryKey: ['invoice-visit-anesthetists', visitId],
+    queryFn: async () => {
+      console.log('=== ANESTHETIST FETCH ===');
+      if (!visitId) return [];
+
+      // Get visit UUID first
+      const { data: visitData, error: visitError } = await supabase
+        .from('visits')
+        .select('id')
+        .eq('visit_id', visitId)
+        .single();
+
+      if (visitError || !visitData?.id) {
+        console.error('Visit not found for anesthetists:', visitError);
+        return [];
+      }
+
+      const { data, error } = await supabase
+        .from('visit_anesthetists')
+        .select('*')
+        .eq('visit_id', visitData.id);
+
+      console.log('Anesthetist query result:', { data, error });
+
+      if (error) {
+        console.error('Error fetching anesthetists:', error);
+        return [];
+      }
+      return data || [];
+    },
+    enabled: !!visitId
+  });
+
   // Fetch implants from visit_implants table
   const { data: implantOrdersData } = useQuery({
     queryKey: ['invoice-visit-implants', visitId],
@@ -1038,6 +1073,11 @@ const Invoice = () => {
     }
 
     // Default: show all charges (bill data + lab + radiology + mandatory services + clinical services)
+    // Helper functions to categorize services
+    const isRegistrationCharges = (name: string) => name?.toLowerCase().includes('registration');
+    const isDoctorCharges = (name: string) => name?.toLowerCase().includes('doctor charges');
+    const isSurgeonEntry = (name: string) => /^(dr\.|dr\s)/i.test(name?.trim() || '');
+
     // Don't add static General Ward - let mandatory services be the primary charges
     if (!billData?.bill_sections) {
       // Start with empty services array - mandatory services will be added later
@@ -1177,89 +1217,21 @@ const Invoice = () => {
       }
     }
 
-    // Add surgery charges from visit_surgeries junction table
-    console.log('=== SURGERY CHARGES INTEGRATION ===');
-    console.log('surgeryOrdersData:', surgeryOrdersData);
-    console.log('surgeryOrdersData length:', surgeryOrdersData?.length);
-
-    let totalSurgeryCharges = 0;
-    if (surgeryOrdersData && surgeryOrdersData.length > 0) {
-      surgeryOrdersData.forEach((visitSurgery: any) => {
-        // Use stored rate first, fallback to cghs_surgery.NABH_NABL_Rate
-        const surgeryRate = visitSurgery.rate && visitSurgery.rate > 0
-          ? Number(visitSurgery.rate)
-          : parseFloat(String(visitSurgery.cghs_surgery?.NABH_NABL_Rate || '0').replace(/[^\d.]/g, '')) || 0;
-        totalSurgeryCharges += surgeryRate;
-        console.log('Adding surgery to total:', {
-          name: visitSurgery.cghs_surgery?.name,
-          storedRate: visitSurgery.rate,
-          surgeryRate: surgeryRate
-        });
-      });
-
-      // Add single summary line for all surgery charges
-      if (totalSurgeryCharges > 0) {
-        console.log('Adding Surgery Charges summary line:', totalSurgeryCharges);
-        services.push({
-          srNo: srNo++,
-          item: 'Surgery Charges',
-          rate: totalSurgeryCharges,
-          qty: 1,
-          amount: totalSurgeryCharges,
-          type: 'surgery'
-        });
-      }
-    } else {
-      console.log('No surgery orders found for this visit');
-    }
-
-    // Add implant charges from visit_implants table
-    console.log('=== IMPLANT CHARGES INTEGRATION ===');
-    console.log('implantOrdersData:', implantOrdersData);
-
-    let totalImplantCharges = 0;
-    if (implantOrdersData && implantOrdersData.length > 0) {
-      implantOrdersData.forEach((visitImplant: any) => {
-        const amount = parseFloat(visitImplant.amount) ||
-          (parseFloat(visitImplant.rate) * (visitImplant.quantity || 1)) || 0;
-        totalImplantCharges += amount;
-        console.log('Adding implant to total:', {
-          name: visitImplant.implant_name,
-          amount: amount
-        });
-      });
-
-      // Add single summary line for all implant charges
-      if (totalImplantCharges > 0) {
-        console.log('Adding Implant Charges summary line:', totalImplantCharges);
-        services.push({
-          srNo: srNo++,
-          item: 'Implant Charges',
-          rate: totalImplantCharges,
-          qty: 1,
-          amount: totalImplantCharges,
-          type: 'implant'
-        });
-      }
-    } else {
-      console.log('No implant orders found for this visit');
-    }
-
     // Add mandatory services from junction table (actual saved services with correct rates)
     console.log('=== MANDATORY SERVICES INTEGRATION (JUNCTION TABLE) ===');
     console.log('mandatoryServicesData:', mandatoryServicesData);
     console.log('mandatoryServicesData length:', mandatoryServicesData?.length);
 
+    // ===== 1. REGISTRATION CHARGES (from mandatory services - if exists) =====
+    console.log('=== 1. REGISTRATION CHARGES ===');
     if (mandatoryServicesData && mandatoryServicesData.length > 0) {
-      console.log('Adding mandatory services from junction table');
-      mandatoryServicesData.forEach((mandatoryService) => {
-        console.log('Processing saved mandatory service:', mandatoryService);
+      const registrationServices = mandatoryServicesData.filter((s) => isRegistrationCharges(s.service_name));
+      console.log('Registration charges services found:', registrationServices.length);
 
-        // Format dates like accommodation
+      registrationServices.forEach((mandatoryService) => {
         const startDate = mandatoryService.start_date ? format(new Date(mandatoryService.start_date), 'dd-MM-yyyy') : '';
         const endDate = mandatoryService.end_date ? format(new Date(mandatoryService.end_date), 'dd-MM-yyyy') : '';
 
-        // Calculate days between start and end date
         let days = mandatoryService.quantity || 1;
         if (mandatoryService.start_date && mandatoryService.end_date) {
           const start = new Date(mandatoryService.start_date);
@@ -1267,108 +1239,67 @@ const Invoice = () => {
           days = Math.max(1, Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1);
         }
 
-        // Use rate_used from junction table (actual rate that was selected and saved)
         const rate = mandatoryService.rate_used || mandatoryService.amount || 0;
-        // Calculate amount = rate × days when dates exist, else use stored amount
         const amount = (mandatoryService.start_date && mandatoryService.end_date)
           ? (rate * days)
           : (mandatoryService.amount || (rate * days));
 
-        // Format item with date range
         const dateRange = startDate && endDate ? ` (${startDate} to ${endDate})` : '';
         const itemDescription = `${mandatoryService.service_name}${dateRange}`;
 
-        console.log('Junction table service data:', {
-          name: mandatoryService.service_name,
-          rate: rate,
-          days: days,
-          amount: amount,
-          rateType: mandatoryService.rate_type,
-          startDate,
-          endDate
-        });
-
         if (rate > 0) {
-          console.log('Adding mandatory service to invoice:', itemDescription, 'Rate:', rate);
           services.push({
             srNo: srNo++,
             item: itemDescription,
             rate: rate,
             qty: days,
             amount: amount,
-            type: 'other'
+            type: 'registration'
           });
-        } else {
-          console.log('Skipping mandatory service (rate = 0):', mandatoryService.service_name);
         }
       });
-    } else {
-      console.log('No mandatory services found in junction table for this visit');
     }
 
-    // Add clinical services from junction table (actual saved services with correct rates)
-    console.log('=== CLINICAL SERVICES INTEGRATION (JUNCTION TABLE) ===');
-    console.log('clinicalServicesData:', clinicalServicesData);
-    console.log('clinicalServicesData length:', clinicalServicesData?.length);
+    // ===== 2. CONSULTANT DOCTOR CHARGES (from mandatory services) =====
+    console.log('=== 2. CONSULTANT DOCTOR CHARGES ===');
+    if (mandatoryServicesData && mandatoryServicesData.length > 0) {
+      const doctorChargesServices = mandatoryServicesData.filter((s) => isDoctorCharges(s.service_name));
+      console.log('Doctor charges services found:', doctorChargesServices.length);
 
-    if (clinicalServicesData && clinicalServicesData.length > 0) {
-      console.log('Adding clinical services from junction table');
-      clinicalServicesData.forEach((clinicalService) => {
-        console.log('Processing saved clinical service:', clinicalService);
+      doctorChargesServices.forEach((mandatoryService) => {
+        const startDate = mandatoryService.start_date ? format(new Date(mandatoryService.start_date), 'dd-MM-yyyy') : '';
+        const endDate = mandatoryService.end_date ? format(new Date(mandatoryService.end_date), 'dd-MM-yyyy') : '';
 
-        // Format dates like accommodation
-        const startDate = clinicalService.start_date ? format(new Date(clinicalService.start_date), 'dd-MM-yyyy') : '';
-        const endDate = clinicalService.end_date ? format(new Date(clinicalService.end_date), 'dd-MM-yyyy') : '';
-
-        // Calculate days between start and end date
-        let days = clinicalService.quantity || 1;
-        if (clinicalService.start_date && clinicalService.end_date) {
-          const start = new Date(clinicalService.start_date);
-          const end = new Date(clinicalService.end_date);
+        let days = mandatoryService.quantity || 1;
+        if (mandatoryService.start_date && mandatoryService.end_date) {
+          const start = new Date(mandatoryService.start_date);
+          const end = new Date(mandatoryService.end_date);
           days = Math.max(1, Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1);
         }
 
-        // Use rate_used from junction table (actual rate that was selected and saved)
-        const rate = clinicalService.rate_used || clinicalService.amount || 0;
-        // Calculate amount = rate × days when dates exist, else use stored amount
-        const amount = (clinicalService.start_date && clinicalService.end_date)
+        const rate = mandatoryService.rate_used || mandatoryService.amount || 0;
+        const amount = (mandatoryService.start_date && mandatoryService.end_date)
           ? (rate * days)
-          : (clinicalService.amount || (rate * days));
+          : (mandatoryService.amount || (rate * days));
 
-        // Format item with date range
         const dateRange = startDate && endDate ? ` (${startDate} to ${endDate})` : '';
-        const itemDescription = `${clinicalService.service_name}${dateRange}`;
-
-        console.log('Junction table clinical service data:', {
-          name: clinicalService.service_name,
-          rate: rate,
-          days: days,
-          amount: amount,
-          rateType: clinicalService.rate_type,
-          startDate,
-          endDate
-        });
+        const itemDescription = `${mandatoryService.service_name}${dateRange}`;
 
         if (rate > 0) {
-          console.log('Adding clinical service to invoice:', itemDescription, 'Rate:', rate);
           services.push({
             srNo: srNo++,
             item: itemDescription,
             rate: rate,
             qty: days,
             amount: amount,
-            type: 'other'
+            type: 'doctor'
           });
-        } else {
-          console.log('Skipping clinical service (rate = 0):', clinicalService.service_name);
         }
       });
-    } else {
-      console.log('No clinical services found in junction table for this visit');
     }
 
-    // Add accommodation charges from visit_accommodations junction table
-    console.log('=== ACCOMMODATION CHARGES INTEGRATION ===');
+    // ===== 3. ACCOMMODATION CHARGES =====
+    console.log('=== 3. ACCOMMODATION CHARGES ===');
     console.log('accommodationData:', accommodationData);
     console.log('accommodationData length:', accommodationData?.length);
 
@@ -1378,7 +1309,6 @@ const Invoice = () => {
         const startDate = visitAccom.start_date ? format(new Date(visitAccom.start_date), 'dd-MM-yyyy') : '';
         const endDate = visitAccom.end_date ? format(new Date(visitAccom.end_date), 'dd-MM-yyyy') : '';
 
-        // Calculate days between start and end date
         let days = 1;
         if (visitAccom.start_date && visitAccom.end_date) {
           const start = new Date(visitAccom.start_date);
@@ -1389,7 +1319,6 @@ const Invoice = () => {
         const ratePerDay = parseFloat(visitAccom.rate_used) || 0;
         const totalAmount = parseFloat(visitAccom.amount) || (ratePerDay * days);
 
-        // Format item with room type and date range
         const dateRange = startDate && endDate ? ` (${startDate} to ${endDate})` : '';
         const itemDescription = `${roomType}${dateRange}`;
 
@@ -1413,6 +1342,332 @@ const Invoice = () => {
       });
     } else {
       console.log('No accommodation data found for this visit');
+    }
+
+    // ===== 4. SURGERY CHARGES =====
+    console.log('=== 4. SURGERY CHARGES ===');
+    console.log('surgeryOrdersData:', surgeryOrdersData);
+    console.log('surgeryOrdersData length:', surgeryOrdersData?.length);
+
+    let totalSurgeryCharges = 0;
+    if (surgeryOrdersData && surgeryOrdersData.length > 0) {
+      surgeryOrdersData.forEach((visitSurgery: any) => {
+        const surgeryRate = visitSurgery.rate && visitSurgery.rate > 0
+          ? Number(visitSurgery.rate)
+          : parseFloat(String(visitSurgery.cghs_surgery?.NABH_NABL_Rate || '0').replace(/[^\d.]/g, '')) || 0;
+        totalSurgeryCharges += surgeryRate;
+        console.log('Adding surgery to total:', {
+          name: visitSurgery.cghs_surgery?.name,
+          storedRate: visitSurgery.rate,
+          surgeryRate: surgeryRate
+        });
+      });
+
+      if (totalSurgeryCharges > 0) {
+        console.log('Adding Surgery Charges summary line:', totalSurgeryCharges);
+        services.push({
+          srNo: srNo++,
+          item: 'Surgery Charges',
+          rate: totalSurgeryCharges,
+          qty: 1,
+          amount: totalSurgeryCharges,
+          type: 'surgery'
+        });
+      }
+    } else {
+      console.log('No surgery orders found for this visit');
+    }
+
+    // ===== 5. IMPLANT CHARGES (from surgery data) =====
+    console.log('=== 4. IMPLANT CHARGES ===');
+    let totalImplantCharges = 0;
+    if (surgeryOrdersData && surgeryOrdersData.length > 0) {
+      surgeryOrdersData.forEach((visitSurgery: any) => {
+        const implantCost = parseFloat(visitSurgery.implant_cost) || 0;
+        if (implantCost > 0) {
+          totalImplantCharges += implantCost;
+          console.log('Adding implant cost:', {
+            surgery: visitSurgery.cghs_surgery?.name,
+            implantCost: implantCost
+          });
+        }
+      });
+
+      if (totalImplantCharges > 0) {
+        console.log('Adding Implant Charges summary line:', totalImplantCharges);
+        services.push({
+          srNo: srNo++,
+          item: 'Implant Charges',
+          rate: totalImplantCharges,
+          qty: 1,
+          amount: totalImplantCharges,
+          type: 'implant'
+        });
+      }
+    }
+
+    // ===== 6. ANESTHETIST CHARGES =====
+    console.log('=== 5. ANESTHETIST CHARGES ===');
+    console.log('anesthetistData:', anesthetistData);
+    console.log('anesthetistData length:', anesthetistData?.length);
+
+    let totalAnesthetistCharges = 0;
+    if (anesthetistData && anesthetistData.length > 0) {
+      anesthetistData.forEach((anesthetist: any) => {
+        const anesthetistRate = parseFloat(anesthetist.rate) || 0;
+        totalAnesthetistCharges += anesthetistRate;
+        console.log('Adding anesthetist to total:', {
+          name: anesthetist.anesthetist_name,
+          type: anesthetist.anesthetist_type,
+          rate: anesthetistRate
+        });
+      });
+
+      if (totalAnesthetistCharges > 0) {
+        const anesthetistNames = anesthetistData.map((a: any) => a.anesthetist_name).filter(Boolean).join(', ');
+        console.log('Adding Anesthetist Charges summary line:', totalAnesthetistCharges, 'Names:', anesthetistNames);
+        services.push({
+          srNo: srNo++,
+          item: anesthetistNames ? `Anesthetist Charges - ${anesthetistNames}` : 'Anesthetist Charges',
+          rate: totalAnesthetistCharges,
+          qty: 1,
+          amount: totalAnesthetistCharges,
+          type: 'anesthetist'
+        });
+      }
+    } else {
+      console.log('No anesthetist data found for this visit');
+    }
+
+    // ===== 7. SURGEON DOCTOR RATE (individual doctor name entries) =====
+    console.log('=== 6. SURGEON DOCTOR ENTRIES ===');
+    // From mandatory services - entries starting with Dr. or DR.
+    if (mandatoryServicesData && mandatoryServicesData.length > 0) {
+      const surgeonServices = mandatoryServicesData.filter((s) =>
+        isSurgeonEntry(s.service_name) && !isDoctorCharges(s.service_name)
+      );
+      console.log('Surgeon services found in mandatory:', surgeonServices.length);
+
+      surgeonServices.forEach((mandatoryService) => {
+        const startDate = mandatoryService.start_date ? format(new Date(mandatoryService.start_date), 'dd-MM-yyyy') : '';
+        const endDate = mandatoryService.end_date ? format(new Date(mandatoryService.end_date), 'dd-MM-yyyy') : '';
+
+        let days = mandatoryService.quantity || 1;
+        if (mandatoryService.start_date && mandatoryService.end_date) {
+          const start = new Date(mandatoryService.start_date);
+          const end = new Date(mandatoryService.end_date);
+          days = Math.max(1, Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+        }
+
+        const rate = mandatoryService.rate_used || mandatoryService.amount || 0;
+        const amount = (mandatoryService.start_date && mandatoryService.end_date)
+          ? (rate * days)
+          : (mandatoryService.amount || (rate * days));
+
+        const dateRange = startDate && endDate ? ` (${startDate} to ${endDate})` : '';
+        const itemDescription = `${mandatoryService.service_name}${dateRange}`;
+
+        if (rate > 0) {
+          services.push({
+            srNo: srNo++,
+            item: itemDescription,
+            rate: rate,
+            qty: days,
+            amount: amount,
+            type: 'surgeon'
+          });
+        }
+      });
+    }
+
+    // From clinical services - entries starting with Dr. or DR.
+    if (clinicalServicesData && clinicalServicesData.length > 0) {
+      const surgeonClinicalServices = clinicalServicesData.filter((s) => isSurgeonEntry(s.service_name));
+      console.log('Surgeon services found in clinical:', surgeonClinicalServices.length);
+
+      surgeonClinicalServices.forEach((clinicalService) => {
+        const startDate = clinicalService.start_date ? format(new Date(clinicalService.start_date), 'dd-MM-yyyy') : '';
+        const endDate = clinicalService.end_date ? format(new Date(clinicalService.end_date), 'dd-MM-yyyy') : '';
+
+        let days = clinicalService.quantity || 1;
+        if (clinicalService.start_date && clinicalService.end_date) {
+          const start = new Date(clinicalService.start_date);
+          const end = new Date(clinicalService.end_date);
+          days = Math.max(1, Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+        }
+
+        const rate = clinicalService.rate_used || clinicalService.amount || 0;
+        const amount = (clinicalService.start_date && clinicalService.end_date)
+          ? (rate * days)
+          : (clinicalService.amount || (rate * days));
+
+        const dateRange = startDate && endDate ? ` (${startDate} to ${endDate})` : '';
+        const itemDescription = `${clinicalService.service_name}${dateRange}`;
+
+        if (rate > 0) {
+          services.push({
+            srNo: srNo++,
+            item: itemDescription,
+            rate: rate,
+            qty: days,
+            amount: amount,
+            type: 'surgeon'
+          });
+        }
+      });
+    }
+
+    // ===== 8. CLINICAL SERVICES (excluding surgeon entries) =====
+    console.log('=== 7. CLINICAL SERVICES ===');
+    console.log('clinicalServicesData:', clinicalServicesData);
+    console.log('clinicalServicesData length:', clinicalServicesData?.length);
+
+    if (clinicalServicesData && clinicalServicesData.length > 0) {
+      const regularClinicalServices = clinicalServicesData.filter((s) => !isSurgeonEntry(s.service_name));
+      console.log('Regular clinical services (non-surgeon):', regularClinicalServices.length);
+
+      regularClinicalServices.forEach((clinicalService) => {
+        const startDate = clinicalService.start_date ? format(new Date(clinicalService.start_date), 'dd-MM-yyyy') : '';
+        const endDate = clinicalService.end_date ? format(new Date(clinicalService.end_date), 'dd-MM-yyyy') : '';
+
+        let days = clinicalService.quantity || 1;
+        if (clinicalService.start_date && clinicalService.end_date) {
+          const start = new Date(clinicalService.start_date);
+          const end = new Date(clinicalService.end_date);
+          days = Math.max(1, Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+        }
+
+        const rate = clinicalService.rate_used || clinicalService.amount || 0;
+        const amount = (clinicalService.start_date && clinicalService.end_date)
+          ? (rate * days)
+          : (clinicalService.amount || (rate * days));
+
+        const dateRange = startDate && endDate ? ` (${startDate} to ${endDate})` : '';
+        const itemDescription = `${clinicalService.service_name}${dateRange}`;
+
+        if (rate > 0) {
+          console.log('Adding clinical service to invoice:', itemDescription, 'Rate:', rate);
+          services.push({
+            srNo: srNo++,
+            item: itemDescription,
+            rate: rate,
+            qty: days,
+            amount: amount,
+            type: 'clinical'
+          });
+        }
+      });
+    } else {
+      console.log('No clinical services found in junction table for this visit');
+    }
+
+    // ===== 9. MANDATORY SERVICES (excluding registration, doctor charges and surgeon entries) =====
+    console.log('=== 9. MANDATORY SERVICES ===');
+    console.log('mandatoryServicesData:', mandatoryServicesData);
+    console.log('mandatoryServicesData length:', mandatoryServicesData?.length);
+
+    if (mandatoryServicesData && mandatoryServicesData.length > 0) {
+      const regularMandatoryServices = mandatoryServicesData.filter((s) =>
+        !isRegistrationCharges(s.service_name) && !isDoctorCharges(s.service_name) && !isSurgeonEntry(s.service_name)
+      );
+      console.log('Regular mandatory services (non-registration, non-doctor):', regularMandatoryServices.length);
+
+      regularMandatoryServices.forEach((mandatoryService) => {
+        const startDate = mandatoryService.start_date ? format(new Date(mandatoryService.start_date), 'dd-MM-yyyy') : '';
+        const endDate = mandatoryService.end_date ? format(new Date(mandatoryService.end_date), 'dd-MM-yyyy') : '';
+
+        let days = mandatoryService.quantity || 1;
+        if (mandatoryService.start_date && mandatoryService.end_date) {
+          const start = new Date(mandatoryService.start_date);
+          const end = new Date(mandatoryService.end_date);
+          days = Math.max(1, Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+        }
+
+        const rate = mandatoryService.rate_used || mandatoryService.amount || 0;
+        const amount = (mandatoryService.start_date && mandatoryService.end_date)
+          ? (rate * days)
+          : (mandatoryService.amount || (rate * days));
+
+        const dateRange = startDate && endDate ? ` (${startDate} to ${endDate})` : '';
+        const itemDescription = `${mandatoryService.service_name}${dateRange}`;
+
+        if (rate > 0) {
+          console.log('Adding mandatory service to invoice:', itemDescription, 'Rate:', rate);
+          services.push({
+            srNo: srNo++,
+            item: itemDescription,
+            rate: rate,
+            qty: days,
+            amount: amount,
+            type: 'mandatory'
+          });
+        }
+      });
+    } else {
+      console.log('No mandatory services found in junction table for this visit');
+    }
+
+    // ===== 10. LABORATORY CHARGES =====
+    console.log('=== 9. LABORATORY CHARGES ===');
+    console.log('labOrdersData:', labOrdersData);
+
+    let totalLabCharges = 0;
+    if (labOrdersData && labOrdersData.length > 0) {
+      labOrdersData.forEach((visitLab, index) => {
+        const labDetail = visitLab.lab;
+        const storedCost = visitLab.cost || 0;
+
+        console.log(`Lab ${index + 1}: ${labDetail?.name}`, {
+          storedCost: storedCost,
+          usingSavedCost: true
+        });
+
+        totalLabCharges += storedCost;
+      });
+
+      console.log('✅ Total lab charges (using stored costs):', totalLabCharges);
+    }
+
+    if (totalLabCharges > 0) {
+      console.log(`📊 Adding Laboratory Charges summary line: ₹${totalLabCharges}`);
+      services.push({
+        srNo: srNo++,
+        item: 'Laboratory Charges',
+        rate: totalLabCharges,
+        qty: 1,
+        amount: totalLabCharges,
+        type: 'lab'
+      });
+    } else {
+      console.warn('⚠️ Total lab charges is 0! No lab tests found or all rates are 0.');
+    }
+
+    // ===== 11. RADIOLOGY CHARGES =====
+    console.log('=== 10. RADIOLOGY CHARGES ===');
+    let totalRadiologyCharges = 0;
+    if (radiologyOrdersData && radiologyOrdersData.length > 0) {
+      radiologyOrdersData.forEach((visitRadiology) => {
+        const rate = visitRadiology.cost ? parseFloat(visitRadiology.cost.toString()) : (visitRadiology.unit_rate ? parseFloat(visitRadiology.unit_rate.toString()) : 1000);
+        totalRadiologyCharges += rate;
+        console.log('Adding radiology to total:', {
+          name: visitRadiology.radiology?.name,
+          storedCost: visitRadiology.cost,
+          unitRate: visitRadiology.unit_rate,
+          rate: rate
+        });
+      });
+
+      if (totalRadiologyCharges > 0) {
+        console.log('Adding Radiology Charges summary line:', totalRadiologyCharges);
+        services.push({
+          srNo: srNo++,
+          item: 'Radiology Charges',
+          rate: totalRadiologyCharges,
+          qty: 1,
+          amount: totalRadiologyCharges,
+          type: 'radiology'
+        });
+      }
     }
 
     return services;

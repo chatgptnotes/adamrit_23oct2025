@@ -2497,6 +2497,8 @@ const FinalBill = () => {
   const [savedClinicalServicesData, setSavedClinicalServicesData] = useState<any[]>([]);
   const [savedMandatoryServicesData, setSavedMandatoryServicesData] = useState<any[]>([]);
   const [savedAccommodationData, setSavedAccommodationData] = useState<any[]>([]);
+  const [savedImplantData, setSavedImplantData] = useState<any[]>([]);
+  const [savedAnesthetistData, setSavedAnesthetistData] = useState<any[]>([]);
   const [savedPathologyCharges, setSavedPathologyCharges] = useState<any[]>([]);
 
   // State initialization flags to prevent duplicate fetches
@@ -3064,6 +3066,8 @@ const FinalBill = () => {
         fetchSavedRadiologyData().catch(err => console.error('❌ [PAGE LOAD] Radiology data fetch failed:', err)),
         fetchSavedMedicationData().catch(err => console.error('❌ [PAGE LOAD] Medication data fetch failed:', err)),
         fetchSavedClinicalServicesData().catch(err => console.error('❌ [PAGE LOAD] Clinical services fetch failed:', err)),
+        fetchSavedImplantData().catch(err => console.error('❌ [PAGE LOAD] Implant data fetch failed:', err)),
+        fetchSavedAnesthetistData().catch(err => console.error('❌ [PAGE LOAD] Anesthetist data fetch failed:', err)),
 
         // Special enhanced handling for mandatory services
         fetchSavedMandatoryServicesData().then(result => {
@@ -8559,6 +8563,96 @@ INSTRUCTIONS:
     }
   };
 
+  // Function to fetch saved implant data
+  const fetchSavedImplantData = async () => {
+    if (!visitId) {
+      console.log('⚠️ [IMPLANT FETCH] No visitId available');
+      return [];
+    }
+
+    try {
+      console.log('🔍 [IMPLANT FETCH] Starting fetch for visitId:', visitId);
+
+      // Get visit UUID
+      const { data: visitData, error: visitError } = await supabase
+        .from('visits')
+        .select('id')
+        .eq('visit_id', visitId)
+        .single();
+
+      if (visitError || !visitData) {
+        console.error('❌ [IMPLANT FETCH] Visit not found:', visitError);
+        return [];
+      }
+
+      console.log('✅ [IMPLANT FETCH] Visit found:', visitData.id);
+
+      // Fetch implant data
+      const { data: implantData, error: implantError } = await supabase
+        .from('visit_implants')
+        .select('*')
+        .eq('visit_id', visitData.id)
+        .order('created_at', { ascending: false });
+
+      if (implantError) {
+        console.error('❌ [IMPLANT FETCH] Error fetching implants:', implantError);
+        return [];
+      }
+
+      console.log('✅ [IMPLANT FETCH] Data:', implantData);
+      setSavedImplantData(implantData || []);
+      return implantData || [];
+    } catch (error) {
+      console.error('❌ [IMPLANT FETCH] Unexpected error:', error);
+      return [];
+    }
+  };
+
+  // Function to fetch saved anesthetist data
+  const fetchSavedAnesthetistData = async () => {
+    if (!visitId) {
+      console.log('⚠️ [ANESTHETIST FETCH] No visitId available');
+      return [];
+    }
+
+    try {
+      console.log('🔍 [ANESTHETIST FETCH] Starting fetch for visitId:', visitId);
+
+      // Get visit UUID
+      const { data: visitData, error: visitError } = await supabase
+        .from('visits')
+        .select('id')
+        .eq('visit_id', visitId)
+        .single();
+
+      if (visitError || !visitData) {
+        console.error('❌ [ANESTHETIST FETCH] Visit not found:', visitError);
+        return [];
+      }
+
+      console.log('✅ [ANESTHETIST FETCH] Visit found:', visitData.id);
+
+      // Fetch anesthetist data
+      const { data: anesthetistData, error: anesthetistError } = await supabase
+        .from('visit_anesthetists')
+        .select('*')
+        .eq('visit_id', visitData.id)
+        .order('created_at', { ascending: false });
+
+      if (anesthetistError) {
+        console.error('❌ [ANESTHETIST FETCH] Error fetching anesthetists:', anesthetistError);
+        return [];
+      }
+
+      console.log('✅ [ANESTHETIST FETCH] Data:', anesthetistData);
+      setSavedAnesthetistData(anesthetistData || []);
+      return anesthetistData || [];
+    } catch (error) {
+      console.error('❌ [ANESTHETIST FETCH] Unexpected error:', error);
+      return [];
+    }
+  };
+
   // Function to add accommodation to visit (dates will be edited in table)
   const handleAddAccommodation = async (accommodation: any) => {
     if (!visitId) {
@@ -10047,6 +10141,31 @@ INSTRUCTIONS:
       return transformedData;
     },
     enabled: serviceSearchTerm.length >= 2 && activeServiceTab === "Radiology",
+  });
+
+  // Anesthetist search - hospital-based table selection
+  const { data: searchedAnesthetists = [], isLoading: isSearchingAnesthetists } = useQuery({
+    queryKey: ['anesthetist-search', serviceSearchTerm, hospitalConfig?.name],
+    queryFn: async () => {
+      if (!serviceSearchTerm || serviceSearchTerm.length < 2) return [];
+
+      const tableName = hospitalConfig?.name === 'hope' ? 'hope_anaesthetists' : 'ayushman_anaesthetists';
+
+      const { data, error } = await supabase
+        .from(tableName)
+        .select('name, specialty, general_rate, spinal_rate, contact_info')
+        .ilike('name', `%${serviceSearchTerm}%`)
+        .order('name')
+        .limit(20);
+
+      if (error) {
+        console.error('Error searching anesthetists:', error);
+        return [];
+      }
+
+      return data || [];
+    },
+    enabled: serviceSearchTerm.length >= 2 && activeServiceTab === "Anesthetist",
   });
 
   // Search query for implant services
@@ -17018,15 +17137,9 @@ Dr. Murali B K
                     "Radiology",
                     "Pharmacy",
                     "Implant",
-                    "Blood",
-                    "Surgery",
                     "Mandatory services",
-                    "Physiotherapy",
-                    "Consultation",
-                    "Surgery for internal report and payslips",
-                    "Inpatient cost",
-                    "Private",
-                    "Accommodation charges"
+                    "Accommodation charges",
+                    "Anesthetist"
                   ].map((tab) => (
                     <Button
                       key={tab}
@@ -17303,6 +17416,117 @@ Dr. Murali B K
                                 </div>
                               )}
                             </>
+                          )}
+                        </>
+                      )}
+
+                      {activeServiceTab === "Anesthetist" && (
+                        <>
+                          {isSearchingAnesthetists ? (
+                            <div className="p-2 text-gray-500 text-sm">Searching anesthetists...</div>
+                          ) : searchedAnesthetists.length === 0 && serviceSearchTerm.length >= 2 ? (
+                            <div className="p-2 text-gray-500 text-sm">No anesthetists found</div>
+                          ) : serviceSearchTerm.length < 2 ? (
+                            <div className="p-2 text-gray-500 text-sm">Type at least 2 characters to search</div>
+                          ) : (
+                            searchedAnesthetists.flatMap((anesthetist: any, index: number) => [
+                              // General Rate Row
+                              <div
+                                key={`${index}-general`}
+                                className="p-2 hover:bg-blue-50 cursor-pointer border-b border-gray-100"
+                                onClick={async () => {
+                                  try {
+                                    // Get visit UUID
+                                    const { data: visitData, error: visitError } = await supabase
+                                      .from('visits')
+                                      .select('id')
+                                      .eq('visit_id', visitId)
+                                      .single();
+
+                                    if (visitError || !visitData) {
+                                      toast.error('Failed to find visit');
+                                      return;
+                                    }
+
+                                    // Save to visit_anesthetists
+                                    const { error: insertError } = await supabase
+                                      .from('visit_anesthetists')
+                                      .insert({
+                                        visit_id: visitData.id,
+                                        anesthetist_name: anesthetist.name,
+                                        anesthetist_type: 'General',
+                                        rate: parseFloat(anesthetist.general_rate) || 0
+                                      });
+
+                                    if (insertError) {
+                                      console.error('Error saving anesthetist:', insertError);
+                                      toast.error(`Failed to save: ${insertError.message}`);
+                                      return;
+                                    }
+
+                                    toast.success(`Saved: ${anesthetist.name} - General ₹${anesthetist.general_rate || 0}`);
+                                    setServiceSearchTerm("");
+                                    // Refresh financial summary
+                                    if (refreshFinancialSummary) refreshFinancialSummary();
+                                  } catch (err: any) {
+                                    console.error('Error:', err);
+                                    toast.error(`Error: ${err?.message || 'Unknown error'}`);
+                                  }
+                                }}
+                              >
+                                <div className="font-medium text-sm">
+                                  {anesthetist.name} - General ₹{anesthetist.general_rate || 'N/A'}
+                                </div>
+                              </div>,
+                              // Spinal Rate Row
+                              <div
+                                key={`${index}-spinal`}
+                                className="p-2 hover:bg-blue-50 cursor-pointer border-b border-gray-100"
+                                onClick={async () => {
+                                  try {
+                                    // Get visit UUID
+                                    const { data: visitData, error: visitError } = await supabase
+                                      .from('visits')
+                                      .select('id')
+                                      .eq('visit_id', visitId)
+                                      .single();
+
+                                    if (visitError || !visitData) {
+                                      toast.error('Failed to find visit');
+                                      return;
+                                    }
+
+                                    // Save to visit_anesthetists
+                                    const { error: insertError } = await supabase
+                                      .from('visit_anesthetists')
+                                      .insert({
+                                        visit_id: visitData.id,
+                                        anesthetist_name: anesthetist.name,
+                                        anesthetist_type: 'Spinal',
+                                        rate: parseFloat(anesthetist.spinal_rate) || 0
+                                      });
+
+                                    if (insertError) {
+                                      console.error('Error saving anesthetist:', insertError);
+                                      toast.error(`Failed to save: ${insertError.message}`);
+                                      return;
+                                    }
+
+                                    toast.success(`Saved: ${anesthetist.name} - Spinal ₹${anesthetist.spinal_rate || 0}`);
+                                    setServiceSearchTerm("");
+                                    // Refresh financial summary
+                                    if (refreshFinancialSummary) refreshFinancialSummary();
+                                  } catch (err: any) {
+                                    console.error('Error:', err);
+                                    toast.error(`Error: ${err?.message || 'Unknown error'}`);
+                                  }
+                                }}
+                              >
+                                <div className="font-medium text-sm">
+                                  {anesthetist.name} - Spinal ₹{anesthetist.spinal_rate || 'N/A'}
+                                </div>
+                              </div>
+                            ])
                           )}
                         </>
                       )}
@@ -18600,6 +18824,42 @@ Dr. Murali B K
                           Accommodation ({savedAccommodationData.length})
                         </button>
                         <button
+                          className={`px-4 py-2 text-sm font-medium ${savedDataTab === 'implant'
+                            ? 'border-b-2 border-blue-500 text-blue-600 bg-blue-50'
+                            : 'text-gray-500 hover:text-gray-700'
+                            }`}
+                          onClick={async () => {
+                            setSavedDataTab('implant');
+                            if (savedImplantData.length === 0 && visitId) {
+                              try {
+                                await fetchSavedImplantData();
+                              } catch (err) {
+                                console.error('❌ [TAB SWITCH] Implant fetch failed:', err);
+                              }
+                            }
+                          }}
+                        >
+                          Implant ({savedImplantData.length})
+                        </button>
+                        <button
+                          className={`px-4 py-2 text-sm font-medium ${savedDataTab === 'anesthetist'
+                            ? 'border-b-2 border-blue-500 text-blue-600 bg-blue-50'
+                            : 'text-gray-500 hover:text-gray-700'
+                            }`}
+                          onClick={async () => {
+                            setSavedDataTab('anesthetist');
+                            if (savedAnesthetistData.length === 0 && visitId) {
+                              try {
+                                await fetchSavedAnesthetistData();
+                              } catch (err) {
+                                console.error('❌ [TAB SWITCH] Anesthetist fetch failed:', err);
+                              }
+                            }
+                          }}
+                        >
+                          Anesthetist ({savedAnesthetistData.length})
+                        </button>
+                        <button
                           className={`px-4 py-2 text-sm font-medium ${savedDataTab === 'discount'
                             ? 'border-b-2 border-blue-500 text-blue-600 bg-blue-50'
                             : 'text-gray-500 hover:text-gray-700'
@@ -19290,6 +19550,138 @@ Dr. Murali B K
                               }, 1000); // 1 second delay to ensure database commit
                             }}
                           />
+                        )}
+                        {savedDataTab === 'implant' && (
+                          <div>
+                            <div className="flex justify-between items-center mb-3">
+                              <h5 className="font-medium text-gray-900">
+                                Saved Implants ({savedImplantData.length})
+                              </h5>
+                              <span className="text-orange-600 font-bold">
+                                Total: ₹{savedImplantData.reduce((sum, item) => sum + (parseFloat(item.rate) || parseFloat(item.cost) || 0), 0).toLocaleString()}
+                              </span>
+                            </div>
+                            {savedImplantData.length === 0 ? (
+                              <div className="text-center py-8 text-gray-500">
+                                <p>No implants saved for this visit</p>
+                              </div>
+                            ) : (
+                              <div className="overflow-x-auto">
+                                <table className="w-full text-sm border border-gray-300">
+                                  <thead className="bg-gray-100">
+                                    <tr>
+                                      <th className="text-left p-2 border border-gray-300 font-semibold">Date/Time</th>
+                                      <th className="text-left p-2 border border-gray-300 font-semibold">Implant Name</th>
+                                      <th className="text-center p-2 border border-gray-300 font-semibold">Quantity</th>
+                                      <th className="text-right p-2 border border-gray-300 font-semibold">Rate</th>
+                                      <th className="text-center p-2 border border-gray-300 font-semibold">Action</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {savedImplantData.map((implant) => (
+                                      <tr key={implant.id} className="hover:bg-gray-50">
+                                        <td className="p-2 border border-gray-300">
+                                          {implant.created_at ? new Date(implant.created_at).toLocaleString() : '-'}
+                                        </td>
+                                        <td className="p-2 border border-gray-300 font-medium">{implant.implant_name || implant.name || '-'}</td>
+                                        <td className="p-2 border border-gray-300 text-center">{implant.quantity || 1}</td>
+                                        <td className="p-2 border border-gray-300 text-right text-orange-600 font-medium">
+                                          ₹{(parseFloat(implant.rate) || parseFloat(implant.cost) || 0).toLocaleString()}
+                                        </td>
+                                        <td className="p-2 border border-gray-300 text-center">
+                                          <button
+                                            onClick={async () => {
+                                              if (confirm('Are you sure you want to delete this implant?')) {
+                                                const { error } = await supabase
+                                                  .from('visit_implants')
+                                                  .delete()
+                                                  .eq('id', implant.id);
+                                                if (error) {
+                                                  toast.error('Failed to delete implant');
+                                                } else {
+                                                  toast.success('Implant deleted');
+                                                  fetchSavedImplantData();
+                                                }
+                                              }
+                                            }}
+                                            className="text-red-500 hover:text-red-700"
+                                          >
+                                            🗑️
+                                          </button>
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        {savedDataTab === 'anesthetist' && (
+                          <div>
+                            <div className="flex justify-between items-center mb-3">
+                              <h5 className="font-medium text-gray-900">
+                                Saved Anesthetists ({savedAnesthetistData.length})
+                              </h5>
+                              <span className="text-orange-600 font-bold">
+                                Total: ₹{savedAnesthetistData.reduce((sum, item) => sum + (parseFloat(item.rate) || 0), 0).toLocaleString()}
+                              </span>
+                            </div>
+                            {savedAnesthetistData.length === 0 ? (
+                              <div className="text-center py-8 text-gray-500">
+                                <p>No anesthetists saved for this visit</p>
+                              </div>
+                            ) : (
+                              <div className="overflow-x-auto">
+                                <table className="w-full text-sm border border-gray-300">
+                                  <thead className="bg-gray-100">
+                                    <tr>
+                                      <th className="text-left p-2 border border-gray-300 font-semibold">Date/Time</th>
+                                      <th className="text-left p-2 border border-gray-300 font-semibold">Anesthetist Name</th>
+                                      <th className="text-center p-2 border border-gray-300 font-semibold">Type</th>
+                                      <th className="text-right p-2 border border-gray-300 font-semibold">Rate</th>
+                                      <th className="text-center p-2 border border-gray-300 font-semibold">Action</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {savedAnesthetistData.map((anesthetist) => (
+                                      <tr key={anesthetist.id} className="hover:bg-gray-50">
+                                        <td className="p-2 border border-gray-300">
+                                          {anesthetist.created_at ? new Date(anesthetist.created_at).toLocaleString() : '-'}
+                                        </td>
+                                        <td className="p-2 border border-gray-300 font-medium">{anesthetist.anesthetist_name || '-'}</td>
+                                        <td className="p-2 border border-gray-300 text-center">{anesthetist.anesthetist_type || '-'}</td>
+                                        <td className="p-2 border border-gray-300 text-right text-orange-600 font-medium">
+                                          ₹{(parseFloat(anesthetist.rate) || 0).toLocaleString()}
+                                        </td>
+                                        <td className="p-2 border border-gray-300 text-center">
+                                          <button
+                                            onClick={async () => {
+                                              if (confirm('Are you sure you want to delete this anesthetist?')) {
+                                                const { error } = await supabase
+                                                  .from('visit_anesthetists')
+                                                  .delete()
+                                                  .eq('id', anesthetist.id);
+                                                if (error) {
+                                                  toast.error('Failed to delete anesthetist');
+                                                } else {
+                                                  toast.success('Anesthetist deleted');
+                                                  fetchSavedAnesthetistData();
+                                                }
+                                              }
+                                            }}
+                                            className="text-red-500 hover:text-red-700"
+                                          >
+                                            🗑️
+                                          </button>
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            )}
+                          </div>
                         )}
                       </div>
                     </div>
@@ -20431,14 +20823,10 @@ Dr. Murali B K
                           <th className="border border-gray-300 p-3 text-center font-bold min-w-[110px]">Radiology</th>
                           <th className="border border-gray-300 p-3 text-center font-bold min-w-[110px]">Pharmacy</th>
                           <th className="border border-gray-300 p-3 text-center font-bold min-w-[110px]">Implant</th>
-                          <th className="border border-gray-300 p-3 text-center font-bold min-w-[110px]">Blood</th>
                           <th className="border border-gray-300 p-3 text-center font-bold min-w-[110px]">Surgery</th>
                           <th className="border border-gray-300 p-3 text-center font-bold min-w-[110px]">Mandatory<br/>services</th>
-                          <th className="border border-gray-300 p-3 text-center font-bold min-w-[110px]">Physiotherapy</th>
+                          <th className="border border-gray-300 p-3 text-center font-bold min-w-[110px]">Anesthetist</th>
                           <th className="border border-gray-300 p-3 text-center font-bold min-w-[110px]">Consultation</th>
-                          <th className="border border-gray-300 p-3 text-center font-bold min-w-[130px]">Surgery for<br/>Internal Report<br/>and Yojnas</th>
-                          <th className="border border-gray-300 p-3 text-center font-bold min-w-[110px]">Implant<br/>Cost</th>
-                          <th className="border border-gray-300 p-3 text-center font-bold min-w-[110px]">Private</th>
                           <th className="border border-gray-300 p-3 text-center font-bold min-w-[130px]">Accommodation<br/>charges</th>
                           <th className="border border-gray-300 p-3 text-center font-bold min-w-[110px] bg-blue-600 text-white">Total</th>
                         </tr>
@@ -20481,11 +20869,6 @@ Dr. Murali B K
                           </td>
                           <td className="border border-gray-300 p-3 min-w-[120px]">
                             <div className="w-full px-3 py-2 text-sm text-center bg-gray-50 rounded border border-gray-200 min-h-[38px] flex items-center justify-center">
-                              {financialSummaryData.totalAmount.blood || '0'}
-                            </div>
-                          </td>
-                          <td className="border border-gray-300 p-3 min-w-[120px]">
-                            <div className="w-full px-3 py-2 text-sm text-center bg-gray-50 rounded border border-gray-200 min-h-[38px] flex items-center justify-center">
                               {financialSummaryData.totalAmount.surgery || '0'}
                             </div>
                           </td>
@@ -20502,21 +20885,6 @@ Dr. Murali B K
                           <td className="border border-gray-300 p-3 min-w-[120px]">
                             <div className="w-full px-3 py-2 text-sm text-center bg-gray-50 rounded border border-gray-200 min-h-[38px] flex items-center justify-center">
                               {financialSummaryData.totalAmount.consultation || '0'}
-                            </div>
-                          </td>
-                          <td className="border border-gray-300 p-3 min-w-[120px]">
-                            <div className="w-full px-3 py-2 text-sm text-center bg-gray-50 rounded border border-gray-200 min-h-[38px] flex items-center justify-center">
-                              {financialSummaryData.totalAmount.surgeryInternalReport || '0'}
-                            </div>
-                          </td>
-                          <td className="border border-gray-300 p-3 min-w-[120px]">
-                            <div className="w-full px-3 py-2 text-sm text-center bg-gray-50 rounded border border-gray-200 min-h-[38px] flex items-center justify-center">
-                              {financialSummaryData.totalAmount.implantCost || '0'}
-                            </div>
-                          </td>
-                          <td className="border border-gray-300 p-3 min-w-[120px]">
-                            <div className="w-full px-3 py-2 text-sm text-center bg-gray-50 rounded border border-gray-200 min-h-[38px] flex items-center justify-center">
-                              {financialSummaryData.totalAmount.private || '0'}
                             </div>
                           </td>
                           <td className="border border-gray-300 p-3 min-w-[120px]">
@@ -20567,11 +20935,6 @@ Dr. Murali B K
                           </td>
                           <td className="border border-gray-300 p-3 min-w-[120px]">
                             <div className="w-full px-3 py-2 text-sm text-center bg-gray-50 rounded border border-gray-200 min-h-[38px] flex items-center justify-center">
-                              {financialSummaryData.discount.blood || '0'}
-                            </div>
-                          </td>
-                          <td className="border border-gray-300 p-3 min-w-[120px]">
-                            <div className="w-full px-3 py-2 text-sm text-center bg-gray-50 rounded border border-gray-200 min-h-[38px] flex items-center justify-center">
                               {financialSummaryData.discount.surgery || '0'}
                             </div>
                           </td>
@@ -20588,21 +20951,6 @@ Dr. Murali B K
                           <td className="border border-gray-300 p-3 min-w-[120px]">
                             <div className="w-full px-3 py-2 text-sm text-center bg-gray-50 rounded border border-gray-200 min-h-[38px] flex items-center justify-center">
                               {financialSummaryData.discount.consultation || '0'}
-                            </div>
-                          </td>
-                          <td className="border border-gray-300 p-3 min-w-[120px]">
-                            <div className="w-full px-3 py-2 text-sm text-center bg-gray-50 rounded border border-gray-200 min-h-[38px] flex items-center justify-center">
-                              {financialSummaryData.discount.surgeryInternalReport || '0'}
-                            </div>
-                          </td>
-                          <td className="border border-gray-300 p-3 min-w-[120px]">
-                            <div className="w-full px-3 py-2 text-sm text-center bg-gray-50 rounded border border-gray-200 min-h-[38px] flex items-center justify-center">
-                              {financialSummaryData.discount.implantCost || '0'}
-                            </div>
-                          </td>
-                          <td className="border border-gray-300 p-3 min-w-[120px]">
-                            <div className="w-full px-3 py-2 text-sm text-center bg-gray-50 rounded border border-gray-200 min-h-[38px] flex items-center justify-center">
-                              {financialSummaryData.discount.private || '0'}
                             </div>
                           </td>
                           <td className="border border-gray-300 p-3 min-w-[120px]">
@@ -20653,11 +21001,6 @@ Dr. Murali B K
                           </td>
                           <td className="border border-gray-300 p-3 min-w-[120px]">
                             <div className="w-full px-3 py-2 text-sm text-center bg-gray-50 rounded border border-gray-200 min-h-[38px] flex items-center justify-center">
-                              {financialSummaryData.amountPaid.blood || '0'}
-                            </div>
-                          </td>
-                          <td className="border border-gray-300 p-3 min-w-[120px]">
-                            <div className="w-full px-3 py-2 text-sm text-center bg-gray-50 rounded border border-gray-200 min-h-[38px] flex items-center justify-center">
                               {financialSummaryData.amountPaid.surgery || '0'}
                             </div>
                           </td>
@@ -20674,21 +21017,6 @@ Dr. Murali B K
                           <td className="border border-gray-300 p-3 min-w-[120px]">
                             <div className="w-full px-3 py-2 text-sm text-center bg-gray-50 rounded border border-gray-200 min-h-[38px] flex items-center justify-center">
                               {financialSummaryData.amountPaid.consultation || '0'}
-                            </div>
-                          </td>
-                          <td className="border border-gray-300 p-3 min-w-[120px]">
-                            <div className="w-full px-3 py-2 text-sm text-center bg-gray-50 rounded border border-gray-200 min-h-[38px] flex items-center justify-center">
-                              {financialSummaryData.amountPaid.surgeryInternalReport || '0'}
-                            </div>
-                          </td>
-                          <td className="border border-gray-300 p-3 min-w-[120px]">
-                            <div className="w-full px-3 py-2 text-sm text-center bg-gray-50 rounded border border-gray-200 min-h-[38px] flex items-center justify-center">
-                              {financialSummaryData.amountPaid.implantCost || '0'}
-                            </div>
-                          </td>
-                          <td className="border border-gray-300 p-3 min-w-[120px]">
-                            <div className="w-full px-3 py-2 text-sm text-center bg-gray-50 rounded border border-gray-200 min-h-[38px] flex items-center justify-center">
-                              {financialSummaryData.amountPaid.private || '0'}
                             </div>
                           </td>
                           <td className="border border-gray-300 p-3 min-w-[120px]">
@@ -20739,11 +21067,6 @@ Dr. Murali B K
                           </td>
                           <td className="border border-gray-300 p-3 min-w-[120px]">
                             <div className="w-full px-3 py-2 text-sm text-center bg-gray-50 rounded border border-gray-200 min-h-[38px] flex items-center justify-center">
-                              {financialSummaryData.refundedAmount.blood || '0'}
-                            </div>
-                          </td>
-                          <td className="border border-gray-300 p-3 min-w-[120px]">
-                            <div className="w-full px-3 py-2 text-sm text-center bg-gray-50 rounded border border-gray-200 min-h-[38px] flex items-center justify-center">
                               {financialSummaryData.refundedAmount.surgery || '0'}
                             </div>
                           </td>
@@ -20760,21 +21083,6 @@ Dr. Murali B K
                           <td className="border border-gray-300 p-3 min-w-[120px]">
                             <div className="w-full px-3 py-2 text-sm text-center bg-gray-50 rounded border border-gray-200 min-h-[38px] flex items-center justify-center">
                               {financialSummaryData.refundedAmount.consultation || '0'}
-                            </div>
-                          </td>
-                          <td className="border border-gray-300 p-3 min-w-[120px]">
-                            <div className="w-full px-3 py-2 text-sm text-center bg-gray-50 rounded border border-gray-200 min-h-[38px] flex items-center justify-center">
-                              {financialSummaryData.refundedAmount.surgeryInternalReport || '0'}
-                            </div>
-                          </td>
-                          <td className="border border-gray-300 p-3 min-w-[120px]">
-                            <div className="w-full px-3 py-2 text-sm text-center bg-gray-50 rounded border border-gray-200 min-h-[38px] flex items-center justify-center">
-                              {financialSummaryData.refundedAmount.implantCost || '0'}
-                            </div>
-                          </td>
-                          <td className="border border-gray-300 p-3 min-w-[120px]">
-                            <div className="w-full px-3 py-2 text-sm text-center bg-gray-50 rounded border border-gray-200 min-h-[38px] flex items-center justify-center">
-                              {financialSummaryData.refundedAmount.private || '0'}
                             </div>
                           </td>
                           <td className="border border-gray-300 p-3 min-w-[120px]">
@@ -20826,11 +21134,6 @@ Dr. Murali B K
                           </td>
                           <td className="border border-gray-300 p-3 min-w-[120px]">
                             <div className="w-full px-3 py-2 text-sm text-center bg-white rounded border border-gray-200 min-h-[38px] flex items-center justify-center">
-                              {financialSummaryData.finalPayment?.blood || '0'}
-                            </div>
-                          </td>
-                          <td className="border border-gray-300 p-3 min-w-[120px]">
-                            <div className="w-full px-3 py-2 text-sm text-center bg-white rounded border border-gray-200 min-h-[38px] flex items-center justify-center">
                               {financialSummaryData.finalPayment?.surgery || '0'}
                             </div>
                           </td>
@@ -20847,21 +21150,6 @@ Dr. Murali B K
                           <td className="border border-gray-300 p-3 min-w-[120px]">
                             <div className="w-full px-3 py-2 text-sm text-center bg-white rounded border border-gray-200 min-h-[38px] flex items-center justify-center">
                               {financialSummaryData.finalPayment?.consultation || '0'}
-                            </div>
-                          </td>
-                          <td className="border border-gray-300 p-3 min-w-[120px]">
-                            <div className="w-full px-3 py-2 text-sm text-center bg-white rounded border border-gray-200 min-h-[38px] flex items-center justify-center">
-                              {financialSummaryData.finalPayment?.surgeryInternalReport || '0'}
-                            </div>
-                          </td>
-                          <td className="border border-gray-300 p-3 min-w-[120px]">
-                            <div className="w-full px-3 py-2 text-sm text-center bg-white rounded border border-gray-200 min-h-[38px] flex items-center justify-center">
-                              {financialSummaryData.finalPayment?.implantCost || '0'}
-                            </div>
-                          </td>
-                          <td className="border border-gray-300 p-3 min-w-[120px]">
-                            <div className="w-full px-3 py-2 text-sm text-center bg-white rounded border border-gray-200 min-h-[38px] flex items-center justify-center">
-                              {financialSummaryData.finalPayment?.private || '0'}
                             </div>
                           </td>
                           <td className="border border-gray-300 p-3 min-w-[120px]">
@@ -20913,11 +21201,6 @@ Dr. Murali B K
                           </td>
                           <td className="border border-gray-300 p-3 min-w-[120px]">
                             <div className="w-full px-3 py-2 text-sm text-center bg-gray-50 rounded border border-gray-200 min-h-[38px] flex items-center justify-center">
-                              {financialSummaryData.balance.blood || '0'}
-                            </div>
-                          </td>
-                          <td className="border border-gray-300 p-3 min-w-[120px]">
-                            <div className="w-full px-3 py-2 text-sm text-center bg-gray-50 rounded border border-gray-200 min-h-[38px] flex items-center justify-center">
                               {financialSummaryData.balance.surgery || '0'}
                             </div>
                           </td>
@@ -20934,21 +21217,6 @@ Dr. Murali B K
                           <td className="border border-gray-300 p-3 min-w-[120px]">
                             <div className="w-full px-3 py-2 text-sm text-center bg-gray-50 rounded border border-gray-200 min-h-[38px] flex items-center justify-center">
                               {financialSummaryData.balance.consultation || '0'}
-                            </div>
-                          </td>
-                          <td className="border border-gray-300 p-3 min-w-[120px]">
-                            <div className="w-full px-3 py-2 text-sm text-center bg-gray-50 rounded border border-gray-200 min-h-[38px] flex items-center justify-center">
-                              {financialSummaryData.balance.surgeryInternalReport || '0'}
-                            </div>
-                          </td>
-                          <td className="border border-gray-300 p-3 min-w-[120px]">
-                            <div className="w-full px-3 py-2 text-sm text-center bg-gray-50 rounded border border-gray-200 min-h-[38px] flex items-center justify-center">
-                              {financialSummaryData.balance.implantCost || '0'}
-                            </div>
-                          </td>
-                          <td className="border border-gray-300 p-3 min-w-[120px]">
-                            <div className="w-full px-3 py-2 text-sm text-center bg-gray-50 rounded border border-gray-200 min-h-[38px] flex items-center justify-center">
-                              {financialSummaryData.balance.private || '0'}
                             </div>
                           </td>
                           <td className="border border-gray-300 p-3 min-w-[120px]">
