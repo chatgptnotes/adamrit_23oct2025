@@ -1607,69 +1607,6 @@ const Invoice = () => {
       console.log('No mandatory services found in junction table for this visit');
     }
 
-    // ===== 10. LABORATORY CHARGES =====
-    console.log('=== 9. LABORATORY CHARGES ===');
-    console.log('labOrdersData:', labOrdersData);
-
-    let totalLabCharges = 0;
-    if (labOrdersData && labOrdersData.length > 0) {
-      labOrdersData.forEach((visitLab, index) => {
-        const labDetail = visitLab.lab;
-        const storedCost = visitLab.cost || 0;
-
-        console.log(`Lab ${index + 1}: ${labDetail?.name}`, {
-          storedCost: storedCost,
-          usingSavedCost: true
-        });
-
-        totalLabCharges += storedCost;
-      });
-
-      console.log('✅ Total lab charges (using stored costs):', totalLabCharges);
-    }
-
-    if (totalLabCharges > 0) {
-      console.log(`📊 Adding Laboratory Charges summary line: ₹${totalLabCharges}`);
-      services.push({
-        srNo: srNo++,
-        item: 'Laboratory Charges',
-        rate: totalLabCharges,
-        qty: 1,
-        amount: totalLabCharges,
-        type: 'lab'
-      });
-    } else {
-      console.warn('⚠️ Total lab charges is 0! No lab tests found or all rates are 0.');
-    }
-
-    // ===== 11. RADIOLOGY CHARGES =====
-    console.log('=== 10. RADIOLOGY CHARGES ===');
-    let totalRadiologyCharges = 0;
-    if (radiologyOrdersData && radiologyOrdersData.length > 0) {
-      radiologyOrdersData.forEach((visitRadiology) => {
-        const rate = visitRadiology.cost ? parseFloat(visitRadiology.cost.toString()) : (visitRadiology.unit_rate ? parseFloat(visitRadiology.unit_rate.toString()) : 1000);
-        totalRadiologyCharges += rate;
-        console.log('Adding radiology to total:', {
-          name: visitRadiology.radiology?.name,
-          storedCost: visitRadiology.cost,
-          unitRate: visitRadiology.unit_rate,
-          rate: rate
-        });
-      });
-
-      if (totalRadiologyCharges > 0) {
-        console.log('Adding Radiology Charges summary line:', totalRadiologyCharges);
-        services.push({
-          srNo: srNo++,
-          item: 'Radiology Charges',
-          rate: totalRadiologyCharges,
-          qty: 1,
-          amount: totalRadiologyCharges,
-          type: 'radiology'
-        });
-      }
-    }
-
     return services;
   };
 
