@@ -227,7 +227,7 @@ const LabOrders = () => {
   const [selectedOrders, setSelectedOrders] = useState<string[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
-  const [patientStatusFilter, setPatientStatusFilter] = useState('Currently Admitted'); // New filter for patient admission status
+  const [patientStatusFilter, setPatientStatusFilter] = useState('All'); // Show all patients by default (date-wise)
 
   // Laboratory Dashboard Filters
   const [isDischargedFilter, setIsDischargedFilter] = useState(false);
@@ -872,7 +872,7 @@ const LabOrders = () => {
       const { data: formulasData, error: formulaError } = await supabase
         .from('lab_test_formulas')
         .select('*')
-        .eq('test_name', testName);
+        .ilike('test_name', testName);  // Changed to ilike for case-insensitive matching
 
       console.log('📐 Formulas fetched:', formulasData?.length || 0, 'formulas');
       if (formulaError) {
@@ -892,6 +892,7 @@ const LabOrders = () => {
         });
       }
       console.log('📊 Formula map created with', formulasMap.size, 'entries');
+      console.log('📊 Formula map keys:', Array.from(formulasMap.keys()));
 
       console.log('📊 Raw sub-tests found for', testName, ':', subTestsData);
       console.log('👤 Patient info:', { age: patientAge, gender: patientGender });
@@ -1010,7 +1011,10 @@ const LabOrders = () => {
               nestedDisplayUnit = defaultNestedUnit;
             }
 
+            // Look up formula for this nested sub-test from formulasMap
+            const nestedFormulaData = formulasMap.get(nested.name);
             console.log(`    ↳ Nested: ${nested.name}, unit: ${nestedDisplayUnit}, range: ${nestedRange}, patientGender: ${patientGender}`);
+            console.log(`    📐 Nested formula lookup: "${nested.name}" => ${nestedFormulaData?.formula || 'none'}`);
 
             processedSubTests.push({
               id: `${bestMatch.id}_nested_${idx}`,
@@ -1025,8 +1029,9 @@ const LabOrders = () => {
               isNested: true,
               parentId: bestMatch.id,
               isMandatory: nested.is_mandatory !== false, // Use individual nested sub-test's mandatory status
-              test_type: nested.test_type || 'Numeric', // NEW: Include test type
-              text_value: nested.text_value || null      // NEW: Include text value
+              test_type: nestedFormulaData?.test_type || nested.test_type || 'Numeric', // Load from formulasMap first
+              text_value: nestedFormulaData?.text_value || nested.text_value || null,  // Load from formulasMap first
+              formula: nestedFormulaData?.formula || nested.formula || null            // FIX: Load from formulasMap for auto-calculation
             });
           });
         }
@@ -2029,7 +2034,7 @@ const LabOrders = () => {
       }
       // If 'All', no additional filter is applied
 
-      // Use date range from filters, default to today if not set
+      // Default to today's date if no date selected
       let fromDate: Date;
       let toDate: Date;
 
@@ -2037,7 +2042,7 @@ const LabOrders = () => {
         fromDate = new Date(dateRange.from);
         fromDate.setHours(0, 0, 0, 0);
       } else {
-        fromDate = new Date();
+        fromDate = new Date();  // Today
         fromDate.setHours(0, 0, 0, 0);
       }
 
@@ -2045,12 +2050,10 @@ const LabOrders = () => {
         toDate = new Date(dateRange.to);
         toDate.setHours(23, 59, 59, 999);
       } else {
-        toDate = new Date();
+        toDate = new Date();  // Today
         toDate.setHours(23, 59, 59, 999);
       }
 
-      // Only apply date filter if NOT searching by patient name
-      // When searching, show all results regardless of date
       if (!searchTerm) {
         query = query
           .gte('ordered_date', fromDate.toISOString())
@@ -2699,33 +2702,42 @@ const LabOrders = () => {
           currentTestRow.sub_tests.forEach((st: any) => {
             const subTestKey = `${currentTestRow.id}_subtest_${st.id}`;
             const subTestValue = mergedFormData[subTestKey]?.result_value;
+            // Trim sub-test name (nested sub-tests have leading spaces for indentation)
+            const trimmedName = st.name?.trim() || '';
 
             if (iterations === 1) {
-              console.log(`  🔍 Checking "${st.name}" (key: ${subTestKey}), value: "${subTestValue}"`);
+              console.log(`  🔍 Checking "${trimmedName}" (key: ${subTestKey}), value: "${subTestValue}"`);
             }
 
-            // Check if this test name is used in the formula
-            if (formula.includes(st.name)) {
+            // Check if this test name is used in the formula (use trimmed name)
+            if (formula.includes(trimmedName) && trimmedName) {
               if (!subTestValue || subTestValue.toString().trim() === '') {
                 // Dependency is empty or cleared
                 if (iterations === 1) {
-                  console.log(`    🗑️ "${st.name}" in formula is EMPTY - will clear calculated value`);
+                  console.log(`    🗑️ "${trimmedName}" in formula is EMPTY - will clear calculated value`);
                 }
                 hasEmptyDependency = true;
                 canCalculate = false;
               } else if (!isNaN(parseFloat(subTestValue))) {
                 // Replace test name with its value (case-sensitive, whole word match)
-                const regex = new RegExp(`\\b${st.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'g');
+                // Handle names that end with non-word characters (like parentheses)
+                // \b word boundary doesn't work after non-word chars like )
+                const escapedName = trimmedName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                const endsWithWordChar = /\w$/.test(trimmedName);
+                const pattern = endsWithWordChar
+                  ? `\\b${escapedName}\\b`
+                  : `\\b${escapedName}(?!\\w)`;  // Use negative lookahead instead of \b at end
+                const regex = new RegExp(pattern, 'g');
                 const beforeReplace = formula;
                 formula = formula.replace(regex, subTestValue.toString());
                 if (beforeReplace !== formula && iterations === 1) {
-                  console.log(`    ✅ Replaced "${st.name}" with ${subTestValue}`);
+                  console.log(`    ✅ Replaced "${trimmedName}" with ${subTestValue}`);
                   console.log(`    Formula now: ${formula}`);
                 }
               } else {
                 // Value exists but is not a valid number
                 if (iterations === 1) {
-                  console.log(`    ⚠️ "${st.name}" has invalid numeric value: ${subTestValue}`);
+                  console.log(`    ⚠️ "${trimmedName}" has invalid numeric value: ${subTestValue}`);
                 }
                 canCalculate = false;
               }
