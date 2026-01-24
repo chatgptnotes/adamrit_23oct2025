@@ -1129,9 +1129,9 @@ const LabPanelManager: React.FC = () => {
           console.log(`🔍 DEBUG: Processing subTest[${subTestIndex}]: "${subTest.name}"`);
           currentSubTestNames.add(subTest.name);
           
-          if (subTest.nestedSubTests && Array.isArray(subTest.nestedSubTests)) {
-            console.log(`  📁 Has ${subTest.nestedSubTests.length} nested sub-tests:`);
-            subTest.nestedSubTests.forEach((nestedSubTest, nestedIndex) => {
+          if (subTest.subTests && Array.isArray(subTest.subTests)) {
+            console.log(`  📁 Has ${subTest.subTests.length} nested sub-tests:`);
+            subTest.subTests.forEach((nestedSubTest, nestedIndex) => {
               console.log(`    🔸 Nested[${nestedIndex}]: "${nestedSubTest.name}"`);
               currentSubTestNames.add(nestedSubTest.name);
             });
@@ -1231,32 +1231,9 @@ const LabPanelManager: React.FC = () => {
             });
           }
         } else {
-          console.log('⚠️ NO FORMULAS MATCHED - IMPLEMENTING SAFETY FALLBACK');
-          
-          // SAFETY FALLBACK: If no formulas matched, restore all formulas anyway
-          // This prevents data loss and ensures formulas are preserved
-          console.log('🛡️ SAFETY MECHANISM: Restoring ALL backed up formulas as fallback');
-          
-          const { error: fallbackRestoreError } = await supabase
-            .from('lab_test_formulas')
-            .insert(existingFormulas.map(formula => ({
-              lab_id: formula.lab_id,
-              test_name: formula.test_name,
-              sub_test_name: formula.sub_test_name,
-              formula: formula.formula,
-              test_type: formula.test_type,
-              text_value: formula.text_value,
-              is_active: formula.is_active
-            })));
-            
-          if (fallbackRestoreError) {
-            console.error('❌ Error in fallback restoration:', fallbackRestoreError);
-          } else {
-            console.log('✅ SAFETY FALLBACK SUCCESSFUL - All formulas restored');
-            existingFormulas.forEach((formula, idx) => {
-              console.log(`  🛡️ Fallback restored[${idx}]: "${formula.sub_test_name}" = "${formula.formula}"`);
-            });
-          }
+          console.log('⚠️ NO FORMULAS MATCHED - Skipping restore (sub-tests may have been deleted)');
+          // Don't restore formulas for deleted sub-tests
+          // Only formulas for existing sub-tests should be preserved
         }
       } else {
         console.log('ℹ️ No formulas to restore');
@@ -2797,6 +2774,18 @@ const EditPanelForm: React.FC<EditPanelFormProps> = ({ panel, onSubmit }) => {
 
           // Skip if already created from lab_test_config
           if (subTestsMap.has(subTestKey)) continue;
+
+          // Skip if this formula belongs to a nested sub-test
+          let isNestedSubTest = false;
+          subTestsMap.forEach((subTest) => {
+            if (subTest.subTests && subTest.subTests.some(nested => nested.name === subTestKey)) {
+              isNestedSubTest = true;
+            }
+          });
+          if (isNestedSubTest) {
+            console.log(`⏭️ Skipping formula for nested sub-test: "${subTestKey}"`);
+            continue;
+          }
 
           const isTextType = formula.test_type === 'Text';
 
