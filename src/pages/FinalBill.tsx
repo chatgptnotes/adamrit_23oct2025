@@ -17467,7 +17467,7 @@ Dr. Murali B K
                                     toast.success(`Saved: ${anesthetist.name} - General ₹${anesthetist.general_rate || 0}`);
                                     setServiceSearchTerm("");
                                     // Refresh financial summary
-                                    if (refreshFinancialSummary) refreshFinancialSummary();
+                                    if (autoPopulateFinancialData) autoPopulateFinancialData();
                                   } catch (err: any) {
                                     console.error('Error:', err);
                                     toast.error(`Error: ${err?.message || 'Unknown error'}`);
@@ -17515,7 +17515,7 @@ Dr. Murali B K
                                     toast.success(`Saved: ${anesthetist.name} - Spinal ₹${anesthetist.spinal_rate || 0}`);
                                     setServiceSearchTerm("");
                                     // Refresh financial summary
-                                    if (refreshFinancialSummary) refreshFinancialSummary();
+                                    if (autoPopulateFinancialData) autoPopulateFinancialData();
                                   } catch (err: any) {
                                     console.error('Error:', err);
                                     toast.error(`Error: ${err?.message || 'Unknown error'}`);
