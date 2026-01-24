@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -11,6 +11,8 @@ export const useAyushmanConsultants = () => {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [editingConsultant, setEditingConsultant] = useState<AyushmanConsultant | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -123,6 +125,18 @@ export const useAyushmanConsultants = () => {
     consultant.specialty?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     consultant.department?.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  // Pagination calculations
+  const totalCount = filteredConsultants.length;
+  const totalPages = Math.ceil(totalCount / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedConsultants = filteredConsultants.slice(startIndex, endIndex);
+
+  // Reset page when search changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm]);
 
   const handleAdd = (formData: Record<string, string>) => {
     addMutation.mutate({
@@ -262,6 +276,12 @@ export const useAyushmanConsultants = () => {
     ayushmanConsultants,
     isLoading,
     filteredConsultants,
+    paginatedConsultants,
+    currentPage,
+    setCurrentPage,
+    totalPages,
+    totalCount,
+    itemsPerPage,
     handleAdd,
     handleEdit,
     handleUpdate,

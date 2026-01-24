@@ -532,6 +532,7 @@ const FinalBill = () => {
   const { hospitalConfig, user } = useAuth();
   const [surgeons, setSurgeons] = useState<{ id: string; name: string }[]>([]);
   const [anaesthetists, setAnaesthetists] = useState<{ id: string; name: string }[]>([]);
+  const [implantsList, setImplantsList] = useState<{ id: string; name: string }[]>([]);
   const [pathologyNote, setPathologyNote] = useState("");
   const [cghsSurgeries, setCghsSurgeries] = useState<{ id: string; name: string; NABH_NABL_Rate: string; code: string }[]>([]);
   const [vitalSigns] = useState<VitalSigns>({
@@ -739,8 +740,22 @@ const FinalBill = () => {
       }
     };
 
+    const fetchImplants = async () => {
+      const { data, error } = await supabase
+        .from('implants')
+        .select('id, name')
+        .order('name');
+
+      if (error) {
+        console.error("Error fetching implants:", error);
+      } else if (data) {
+        setImplantsList(data);
+      }
+    };
+
     fetchSurgeons();
     fetchAnaesthetists();
+    fetchImplants();
   }, [hospitalConfig]);
 
   // Fetch bill preparation data when component mounts
@@ -1875,6 +1890,14 @@ const FinalBill = () => {
   const [availablePharmacyServices, setAvailablePharmacyServices] = useState([]);
   const [isLoadingPharmacyServices, setIsLoadingPharmacyServices] = useState(true);
 
+  // Available implant services data - fetched from database
+  const [availableImplantServices, setAvailableImplantServices] = useState<any[]>([]);
+  const [isLoadingImplantServices, setIsLoadingImplantServices] = useState(true);
+
+  // Saved visit implants from visit_implants table
+  const [savedVisitImplants, setSavedVisitImplants] = useState<any[]>([]);
+  const [isLoadingSavedImplants, setIsLoadingSavedImplants] = useState(false);
+
   // Collapsible sections state
   const [isLeftSidebarCollapsed, setIsLeftSidebarCollapsed] = useState(false);
   const [isMiddleSectionCollapsed, setIsMiddleSectionCollapsed] = useState(false);
@@ -2013,6 +2036,246 @@ const FinalBill = () => {
     }
   }, [patientInfo?.corporate]);
 
+  // Fetch available implant services from database
+  useEffect(() => {
+    const fetchImplantServices = async () => {
+      try {
+        setIsLoadingImplantServices(true);
+        console.log('🔄 Starting to fetch implant services...');
+
+        // Fetch visit data for patient type determination
+        let visitDataResult = null;
+        if (visitId) {
+          const { data, error: visitError } = await supabase
+            .from('visits')
+            .select('id, patient_type, insurance_type')
+            .eq('visit_id', visitId)
+            .single();
+
+          if (!visitError && data) {
+            visitDataResult = data;
+            console.log('👤 fetchImplantServices - Visit data fetched:', {
+              patient_type: data.patient_type,
+              insurance_type: data.insurance_type
+            });
+          }
+        }
+
+        const { data, error } = await supabase
+          .from('implants')
+          .select('id, name, nabh_nabl_rate, non_nabh_nabl_rate, private_rate, bhopal_nabh_rate, bhopal_non_nabh_rate')
+          .order('name');
+
+        if (error) {
+          console.error('Error fetching implant services:', error);
+          toast.error('Failed to load implant services');
+        } else if (data) {
+          console.log('Implant services fetched successfully:', data.length, 'records');
+          console.log('Sample implant services:', data.slice(0, 3));
+
+          // Determine patient type to select appropriate rate
+          const patientType = (visitDataResult?.patient_type || patientInfo?.patient_type || '').toLowerCase().trim();
+          const corporate = (patientInfo?.corporate || '').toLowerCase().trim();
+
+          // Corporate field takes priority - check if patient has a corporate panel first
+          const hasCorporate = corporate.length > 0 && corporate !== 'private';
+
+          // Patient is private ONLY if they don't have a corporate panel
+          const isPrivatePatient = !hasCorporate && (patientType === 'private' || corporate === 'private');
+
+          // Check if corporate qualifies for Non-NABH rates (CGHS/ECHS/ESIC)
+          const usesNonNABHRate = hasCorporate &&
+            (corporate.includes('cghs') ||
+            corporate.includes('echs') ||
+            corporate.includes('esic'));
+
+          // Check if corporate qualifies for Bhopal NABH rates
+          const usesBhopaliNABHRate = hasCorporate &&
+            (corporate.includes('mp police') ||
+            corporate.includes('ordnance factory') ||
+            corporate.includes('ordnance factory itarsi'));
+
+          // Check if patient has other corporate
+          const usesNABHRate = hasCorporate && !usesNonNABHRate && !usesBhopaliNABHRate;
+
+          console.log('🔍 Patient Type for Implant Dropdown:', {
+            patientType,
+            corporate,
+            isPrivatePatient,
+            hasCorporate,
+            usesNonNABHRate,
+            usesBhopaliNABHRate,
+            usesNABHRate
+          });
+
+          // Map implants with appropriate rates based on patient type
+          const mappedImplants = data.map(implant => {
+            let cost = 0;
+            let rateSource = 'none';
+
+            // ALWAYS check private patient FIRST
+            if (isPrivatePatient && implant.private_rate && implant.private_rate > 0) {
+              cost = implant.private_rate;
+              rateSource = 'private';
+            } else if (usesNonNABHRate && implant.non_nabh_nabl_rate && implant.non_nabh_nabl_rate > 0) {
+              cost = implant.non_nabh_nabl_rate;
+              rateSource = 'non_nabh';
+            } else if (usesBhopaliNABHRate && implant.bhopal_nabh_rate && implant.bhopal_nabh_rate > 0) {
+              cost = implant.bhopal_nabh_rate;
+              rateSource = 'bhopal_nabh';
+            } else if (usesNABHRate && implant.private_rate && implant.private_rate > 0) {
+              cost = implant.private_rate;
+              rateSource = 'private';
+            }
+            // Fallback chain: use first available non-zero database rate
+            else if (implant.non_nabh_nabl_rate && implant.non_nabh_nabl_rate > 0) {
+              cost = implant.non_nabh_nabl_rate;
+              rateSource = 'non_nabh_fallback';
+            } else if (implant.nabh_nabl_rate && implant.nabh_nabl_rate > 0) {
+              cost = implant.nabh_nabl_rate;
+              rateSource = 'nabh_fallback';
+            } else if (implant.bhopal_nabh_rate && implant.bhopal_nabh_rate > 0) {
+              cost = implant.bhopal_nabh_rate;
+              rateSource = 'bhopal_nabh_fallback';
+            } else if (implant.private_rate && implant.private_rate > 0) {
+              cost = implant.private_rate;
+              rateSource = 'private_fallback';
+            }
+
+            return {
+              id: implant.id,
+              name: implant.name,
+              amount: cost,
+              code: '',
+              rateSource: rateSource
+            };
+          });
+
+          setAvailableImplantServices(mappedImplants);
+        }
+      } catch (error) {
+        console.error('Error in fetchImplantServices:', error);
+        toast.error('Failed to load implant services');
+      } finally {
+        setIsLoadingImplantServices(false);
+        console.log('🏁 Implant services fetch completed');
+      }
+    };
+
+    fetchImplantServices();
+  }, [visitId, patientInfo, servicesRefetchTrigger]);
+
+  // Fetch saved implants from visit_implants table and load into invoice
+  useEffect(() => {
+    const fetchSavedVisitImplants = async () => {
+      if (!visitId) return;
+
+      try {
+        setIsLoadingSavedImplants(true);
+        console.log('🔄 Fetching saved implants for visit:', visitId);
+
+        // First get the visit's UUID from visit_id string
+        const { data: visitData, error: visitError } = await supabase
+          .from('visits')
+          .select('id')
+          .eq('visit_id', visitId)
+          .single();
+
+        if (visitError || !visitData) {
+          console.log('⚠️ Could not find visit for implants fetch');
+          return;
+        }
+
+        // Fetch saved implants from visit_implants table
+        const { data: implants, error: implantsError } = await supabase
+          .from('visit_implants' as any)
+          .select(`
+            id,
+            implant_id,
+            implant_name,
+            quantity,
+            rate,
+            amount,
+            rate_type,
+            remarks,
+            status,
+            implants (
+              id,
+              name
+            )
+          `)
+          .eq('visit_id', visitData.id)
+          .eq('status', 'Active');
+
+        if (implantsError) {
+          console.error('❌ Error fetching saved implants:', implantsError);
+          return;
+        }
+
+        console.log('✅ Saved implants fetched:', implants?.length || 0);
+        setSavedVisitImplants(implants || []);
+
+        // Load saved implants into invoice items
+        if (implants && implants.length > 0) {
+          setInvoiceItems(prev => {
+            const updated = [...prev];
+
+            // Find or create Implant Services main item
+            let implantMainIndex = updated.findIndex(item =>
+              item.type === 'main' && item.description === 'Implant Services'
+            );
+
+            if (implantMainIndex === -1) {
+              const newImplantMain: MainItem = {
+                id: `main-implant-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                type: 'main',
+                srNo: (updated.length + 1).toString(),
+                description: 'Implant Services',
+                subItems: []
+              };
+              updated.push(newImplantMain);
+              implantMainIndex = updated.length - 1;
+            }
+
+            // Add each saved implant as sub-item (if not already added)
+            const mainItem = updated[implantMainIndex] as MainItem;
+
+            implants.forEach(implant => {
+              // Check if this implant is already in the invoice
+              const existingItem = mainItem.subItems.find(
+                sub => sub.id.includes(implant.implant_id)
+              );
+
+              if (!existingItem) {
+                const newImplantItem: StandardSubItem = {
+                  id: `implant-${implant.implant_id}-${implant.id}`,
+                  srNo: '',
+                  description: implant.implant_name,
+                  code: '',
+                  rate: implant.rate,
+                  qty: implant.quantity,
+                  amount: implant.amount,
+                  type: 'standard',
+                  dbId: implant.id // Store database ID for deletion
+                };
+                mainItem.subItems.push(newImplantItem);
+              }
+            });
+
+            return updated;
+          });
+          console.log('✅ Saved implants loaded into invoice');
+        }
+      } catch (error) {
+        console.error('❌ Error in fetchSavedVisitImplants:', error);
+      } finally {
+        setIsLoadingSavedImplants(false);
+      }
+    };
+
+    fetchSavedVisitImplants();
+  }, [visitId]);
+
   // OT Notes state - Support for multiple surgeries (description is shared)
   const [otNotesDataList, setOtNotesDataList] = useState<Array<{
     id: string;
@@ -2034,6 +2297,9 @@ const FinalBill = () => {
 
   // Shared description for all surgeries
   const [sharedDescription, setSharedDescription] = useState('');
+
+  // State to track saved OT notes data (for restoring implant and other fields)
+  const [savedOtNotesData, setSavedOtNotesData] = useState<any[]>([]);
 
   // Helper functions for multiple surgeries
   const addNewSurgery = () => {
@@ -2122,9 +2388,9 @@ const FinalBill = () => {
         setSharedDescription(otNotesRecords[0].description || '');
         console.log('Loaded shared description from saved OT Notes');
 
-        // NOTE: We do NOT load otNotesDataList here anymore
-        // The auto-populate effect will create forms based on Surgery Details
-        // This ensures procedure names always match Surgery Details
+        // Store full records so auto-populate can restore implant and other fields
+        setSavedOtNotesData(otNotesRecords);
+        console.log('Stored saved OT Notes data for restoring implant values');
       }
     } catch (error) {
       console.error('Error in fetchSavedOtNotes:', error);
@@ -2142,7 +2408,8 @@ const FinalBill = () => {
   useEffect(() => {
     console.log('Auto-populate effect running...', {
       patientInfoSurgeries: patientInfo?.surgeries?.length || 0,
-      savedSurgeriesLength: savedSurgeries?.length || 0
+      savedSurgeriesLength: savedSurgeries?.length || 0,
+      savedOtNotesDataLength: savedOtNotesData?.length || 0
     });
 
     // Get surgeries from either source
@@ -2161,20 +2428,31 @@ const FinalBill = () => {
     if (surgeries.length > 0) {
       console.log('Creating OT Notes forms for each surgery from Surgery Details...');
 
-      const newForms = surgeries.map((surgery: any) => {
+      const newForms = surgeries.map((surgery: any, index: number) => {
         // Handle both patientInfo.surgeries and savedSurgeries structure
         const surgeryName = surgery.cghs_surgery?.name || surgery.name || '';
         const surgeryCode = surgery.cghs_surgery?.code || surgery.code || '';
         const procedureName = surgeryName ? `${surgeryName} (${surgeryCode})` : '';
 
+        // Find matching saved OT note by index or procedure name to restore saved values
+        const savedNote = savedOtNotesData[index] ||
+          savedOtNotesData.find(note =>
+            note.procedure_performed === procedureName ||
+            note.surgery_name === surgeryName
+          );
+
+        if (savedNote) {
+          console.log(`Found saved OT note for surgery ${index}:`, savedNote.implant || 'no implant');
+        }
+
         return {
           id: crypto.randomUUID(),
-          date: new Date().toISOString().slice(0, 16),
+          date: savedNote?.date ? new Date(savedNote.date).toISOString().slice(0, 16) : new Date().toISOString().slice(0, 16),
           procedure: procedureName,
-          surgeons: [],
-          anaesthetist: '',
-          anaesthesia: '',
-          implant: ''
+          surgeons: savedNote?.surgeon ? savedNote.surgeon.split(', ').filter(Boolean) : [],
+          anaesthetist: savedNote?.anaesthetist || '',
+          anaesthesia: savedNote?.anaesthesia || '',
+          implant: savedNote?.implant || ''
         };
       });
 
@@ -2183,7 +2461,7 @@ const FinalBill = () => {
     } else {
       console.log('No surgeries found to populate');
     }
-  }, [patientInfo, savedSurgeries]);
+  }, [patientInfo, savedSurgeries, savedOtNotesData]);
 
   // State for treatment log data (simplified - no date functionality)
   const [treatmentLogData, setTreatmentLogData] = useState<{ [key: number]: { date: string, accommodation: string, medication: string, labAndRadiology: string } }>({});
@@ -2293,6 +2571,39 @@ const FinalBill = () => {
       });
     }
   }, [visitId, autoPopulateFinancialData]);
+
+  // Sync implant totals to Financial Summary
+  useEffect(() => {
+    // Find "Implant Services" in invoiceItems
+    const implantMainItem = invoiceItems.find(
+      item => item.type === 'main' && item.description === 'Implant Services'
+    );
+
+    if (implantMainItem && implantMainItem.type === 'main' && implantMainItem.subItems) {
+      // Calculate total from all implant sub-items
+      const implantTotal = implantMainItem.subItems.reduce((sum, subItem) => {
+        return sum + (parseFloat(subItem.amount?.toString() || '0') || 0);
+      }, 0);
+
+      // Update Financial Summary
+      setFinancialSummaryData(prev => ({
+        ...prev,
+        totalAmount: {
+          ...prev.totalAmount,
+          implant: implantTotal.toString()
+        }
+      }));
+    } else {
+      // No implants selected, set to 0
+      setFinancialSummaryData(prev => ({
+        ...prev,
+        totalAmount: {
+          ...prev.totalAmount,
+          implant: '0'
+        }
+      }));
+    }
+  }, [invoiceItems]);
 
   // Function to load saved requisitions from database
   const loadSavedRequisitions = async () => {
@@ -9002,9 +9313,41 @@ INSTRUCTIONS:
   };
 
   // Function to delete a sub-item from invoice
-  const deleteSubItem = (mainItemId: string, subItemId: string) => {
+  const deleteSubItem = async (mainItemId: string, subItemId: string) => {
     if (!confirm('Are you sure you want to delete this item?')) {
       return;
+    }
+
+    // Check if this is an implant item and delete from database
+    if (subItemId.startsWith('implant-')) {
+      try {
+        // Find the sub-item to get its database ID
+        const mainItem = invoiceItems.find(item => item.id === mainItemId && item.type === 'main') as MainItem;
+        const subItem = mainItem?.subItems.find(sub => sub.id === subItemId);
+
+        if (subItem && (subItem as any).dbId) {
+          // Delete from visit_implants table
+          const { error: deleteError } = await supabase
+            .from('visit_implants' as any)
+            .delete()
+            .eq('id', (subItem as any).dbId);
+
+          if (deleteError) {
+            console.error('❌ Error deleting implant from database:', deleteError);
+            toast.error('Failed to delete implant from database');
+            return;
+          }
+
+          console.log('✅ Implant deleted from database:', (subItem as any).dbId);
+
+          // Update saved implants state
+          setSavedVisitImplants(prev => prev.filter(imp => imp.id !== (subItem as any).dbId));
+        }
+      } catch (error) {
+        console.error('❌ Error in deleteSubItem for implant:', error);
+        toast.error('Failed to delete implant');
+        return;
+      }
     }
 
     setInvoiceItems(prev => prev.map(item => {
@@ -9017,6 +9360,8 @@ INSTRUCTIONS:
       }
       return item;
     }));
+
+    toast.success('Item deleted successfully');
   };
 
   const adjustmentOptions = [
@@ -9823,6 +10168,134 @@ INSTRUCTIONS:
     enabled: serviceSearchTerm.length >= 2 && activeServiceTab === "Anesthetist",
   });
 
+  // Search query for implant services
+  const { data: searchedImplantServices = [], isLoading: isSearchingImplants } = useQuery({
+    queryKey: ['implant-services-search', serviceSearchTerm, visitId, patientInfo?.corporate],
+    queryFn: async () => {
+      console.log('🔍 Implant search triggered:', {
+        serviceSearchTerm,
+        activeServiceTab,
+        visitId,
+        patientCorporate: patientInfo?.corporate,
+        patientInfoLoaded: !!patientInfo
+      });
+      if (!serviceSearchTerm || serviceSearchTerm.length < 2) return [];
+
+      // Fetch visit data to get patient_type
+      let visitDataResult = null;
+      if (visitId) {
+        const { data: visitData, error: visitError } = await supabase
+          .from('visits')
+          .select('id, patient_type, insurance_type')
+          .eq('visit_id', visitId)
+          .single();
+
+        if (!visitError && visitData) {
+          visitDataResult = visitData;
+        }
+      }
+
+      try {
+        const { data, error } = await supabase
+          .from('implants')
+          .select('id, name, nabh_nabl_rate, non_nabh_nabl_rate, private_rate, bhopal_nabh_rate, bhopal_non_nabh_rate')
+          .ilike('name', `%${serviceSearchTerm}%`)
+          .order('name')
+          .limit(20);
+
+        if (error) {
+          console.error('❌ Error searching implant services:', error);
+          return [];
+        }
+
+        console.log('✅ Implant search results:', data?.length || 0, 'records');
+
+        // Map the field names to expected format - use appropriate rates based on corporate type
+        const mappedData = data?.map(item => {
+          // Check patient type from BOTH patient_type AND corporate fields
+          const patientType = (visitDataResult?.patient_type || patientInfo?.patient_type || '').toLowerCase().trim();
+          const corporate = (patientInfo?.corporate || '').toLowerCase().trim();
+
+          // Corporate field takes priority - check if patient has a corporate panel first
+          const hasCorporate = corporate.length > 0 && corporate !== 'private';
+
+          // Patient is private ONLY if they don't have a corporate panel
+          const isPrivatePatient = !hasCorporate && (patientType === 'private' || corporate === 'private');
+
+          // Check if corporate qualifies for Non-NABH rates (CGHS/ECHS/ESIC)
+          const usesNonNABHRate = hasCorporate &&
+            (corporate.includes('cghs') ||
+            corporate.includes('echs') ||
+            corporate.includes('esic'));
+
+          // Check if corporate qualifies for Bhopal NABH rates
+          const usesBhopaliNABHRate = hasCorporate &&
+            (corporate.includes('mp police') ||
+            corporate.includes('ordnance factory') ||
+            corporate.includes('ordnance factory itarsi'));
+
+          // Check if corporate uses Private rates (ICICI Lombard)
+          const usesPrivateRate = hasCorporate &&
+            (corporate.includes('icici lombard') || corporate.includes('icici'));
+
+          // Check if patient has other corporate (not CGHS/ECHS/ESIC, not MP Police/Ordnance Factory, not ICICI)
+          const usesNABHRate = hasCorporate && !usesNonNABHRate && !usesBhopaliNABHRate && !usesPrivateRate;
+
+          // Select appropriate rate based on patient type
+          let cost = 0;
+          let rateSource = 'none';
+
+          // ALWAYS check private patient or ICICI Lombard FIRST
+          if ((isPrivatePatient || usesPrivateRate) && item.private_rate && item.private_rate > 0) {
+            cost = item.private_rate;
+            rateSource = 'private';
+          } else if (usesNonNABHRate && item.non_nabh_nabl_rate && item.non_nabh_nabl_rate > 0) {
+            cost = item.non_nabh_nabl_rate;
+            rateSource = 'non_nabh';
+          } else if (usesBhopaliNABHRate && item.bhopal_nabh_rate && item.bhopal_nabh_rate > 0) {
+            cost = item.bhopal_nabh_rate;
+            rateSource = 'bhopal_nabh';
+          } else if (usesNABHRate && item.private_rate && item.private_rate > 0) {
+            cost = item.private_rate;
+            rateSource = 'private';
+          } else if (item.private_rate && item.private_rate > 0) {
+            cost = item.private_rate;
+            rateSource = 'private_fallback';
+          }
+
+          console.log('🔍 Implant search mapping:', {
+            service: item.name,
+            patientType,
+            patientCorporate: patientInfo?.corporate || 'NOT SET',
+            isPrivatePatient,
+            hasCorporate,
+            usesNonNABHRate,
+            usesBhopaliNABHRate,
+            usesNABHRate,
+            privateRate: item.private_rate,
+            nabhRate: item.nabh_nabl_rate,
+            nonNabhRate: item.non_nabh_nabl_rate,
+            finalCost: cost,
+            rateSource
+          });
+
+          return {
+            id: item.id,
+            name: item.name,
+            amount: cost,
+            code: ''
+          };
+        }) || [];
+
+        return mappedData;
+      } catch (error) {
+        console.error('❌ Implant search error:', error);
+        return [];
+      }
+    },
+    enabled: serviceSearchTerm.length >= 2 && activeServiceTab === "Implant",
+  });
+
   // Use searched results when available, otherwise fall back to filtered pre-loaded data
   const filteredLabServices = (() => {
     const result = serviceSearchTerm.length >= 2 ? searchedLabServices :
@@ -9887,6 +10360,140 @@ INSTRUCTIONS:
     searchedRadiologyServicesData: searchedRadiologyServices?.slice(0, 2),
     availableRadiologyServicesData: availableRadiologyServices?.slice(0, 2)
   });
+
+  // Filtered implant services
+  const filteredImplantServices = (() => {
+    const result = serviceSearchTerm.length >= 2
+      ? searchedImplantServices
+      : availableImplantServices.filter(service =>
+          service.name?.toLowerCase().includes(serviceSearchTerm.toLowerCase())
+        );
+    return result;
+  })();
+
+  // Debug logging for implant services
+  console.log('🔍 Implant Services Debug:', {
+    serviceSearchTerm,
+    activeServiceTab,
+    searchTermLength: serviceSearchTerm.length,
+    shouldUseSearch: serviceSearchTerm.length >= 2,
+    searchedImplantServices: searchedImplantServices?.length || 0,
+    availableImplantServices: availableImplantServices?.length || 0,
+    filteredImplantServices: filteredImplantServices?.length || 0,
+    isSearchingImplants,
+    isLoadingImplantServices
+  });
+
+  // Function to add implant service to invoice and save to database
+  const addImplantServiceToInvoice = async (implantService: any) => {
+    // VALIDATION: Check if rate is available before adding
+    if (!implantService.amount || implantService.amount === 0) {
+      toast.error(
+        `Rate not available for "${implantService.name}". Please update the ${patientInfo?.corporate ? `${patientInfo.corporate} rate` : 'rate'} in the implants table first.`,
+        { duration: 5000 }
+      );
+      console.warn('⚠️ BLOCKED: Cannot add implant with no rate:', {
+        service: implantService.name,
+        amount: implantService.amount,
+        patientType: patientInfo?.corporate || 'PRIVATE',
+        message: 'Implant blocked from being added due to missing rate'
+      });
+      return;
+    }
+
+    try {
+      // First get the visit's UUID from visit_id string
+      const { data: visitData, error: visitError } = await supabase
+        .from('visits')
+        .select('id')
+        .eq('visit_id', visitId)
+        .single();
+
+      if (visitError || !visitData) {
+        console.error('❌ Could not find visit for saving implant:', visitError);
+        toast.error('Could not save implant - visit not found');
+        return;
+      }
+
+      // Save to visit_implants table
+      const implantData = {
+        visit_id: visitData.id,
+        implant_id: implantService.id,
+        implant_name: implantService.name,
+        quantity: 1,
+        rate: implantService.amount,
+        amount: implantService.amount,
+        rate_type: implantService.rateSource || 'private',
+        status: 'Active'
+      };
+
+      console.log('💾 Attempting to save implant:', implantData);
+
+      const { error: saveError } = await supabase
+        .from('visit_implants' as any)
+        .insert(implantData);
+
+      if (saveError) {
+        console.error('❌ Error saving implant to database:', saveError);
+        toast.error(`Failed to save implant: ${saveError.message}`);
+        return;
+      }
+
+      console.log('✅ Implant saved to database successfully');
+
+      // Generate a unique ID for the invoice item
+      const uniqueId = `implant-${implantService.id}-${Date.now()}`;
+
+      // Add implant service as sub-item
+      const newImplantItem: StandardSubItem = {
+        id: uniqueId,
+        srNo: '',
+        description: implantService.name,
+        code: implantService.code || '',
+        rate: implantService.amount,
+        qty: 1,
+        amount: implantService.amount,
+        type: 'standard'
+      };
+
+      setInvoiceItems(prev => {
+        const updated = [...prev];
+
+        // Find or create Implant Services main item within the state update
+        let implantMainIndex = updated.findIndex(item =>
+          item.type === 'main' && item.description === 'Implant Services'
+        );
+
+        if (implantMainIndex === -1) {
+          // Create new Implant Services main item
+          const newImplantMain: MainItem = {
+            id: `main-implant-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            type: 'main',
+            srNo: (updated.length + 1).toString(),
+            description: 'Implant Services',
+            subItems: []
+          };
+          updated.push(newImplantMain);
+          implantMainIndex = updated.length - 1;
+        }
+
+        // Update srNo for the implant item
+        newImplantItem.srNo = (updated.filter(item => item.type === 'main').length).toString();
+
+        if (updated[implantMainIndex] && updated[implantMainIndex].type === 'main') {
+          const mainItem = updated[implantMainIndex] as MainItem;
+          mainItem.subItems.push(newImplantItem);
+        }
+        return updated;
+      });
+
+      console.log('✅ Implant service added to invoice:', newImplantItem);
+      toast.success(`Added "${implantService.name}" to invoice`);
+    } catch (error) {
+      console.error('❌ Error in addImplantServiceToInvoice:', error);
+      toast.error('Failed to add implant');
+    }
+  };
 
   // Function to add pharmacy service to invoice
   const addPharmacyServiceToInvoice = (pharmacyService: any) => {
@@ -10295,12 +10902,11 @@ INSTRUCTIONS:
         if (!visitError && visitDataResult) {
           visitData = visitDataResult;
           // Determine patient category from various possible fields
+          // Note: Removed patient_type from chain to avoid showing "IPD" instead of billing category
           patientCategory =
             visitDataResult.category ||
-            visitDataResult.patient_type ||
             visitDataResult.insurance_type ||
             visitDataResult.patients?.category ||
-            visitDataResult.patients?.patient_type ||
             visitDataResult.patients?.insurance_type ||
             'Private';
 
@@ -10346,7 +10952,7 @@ INSTRUCTIONS:
           .ilike('service_name', `%${serviceSearchTerm}%`)
           .eq('status', 'Active')
           .order('service_name')
-          .limit(20);
+          .limit(500);
 
         searchResults = result.data;
         searchError = result.error;
@@ -10363,7 +10969,7 @@ INSTRUCTIONS:
             .from('mandatory_services')
             .select('*')
             .order('service_name')
-            .limit(50);
+            .limit(500);
 
           if (fallbackResult.error) {
             console.error('❌ Fallback mandatory services query error:', fallbackResult.error);
@@ -10390,18 +10996,20 @@ INSTRUCTIONS:
 
       console.log('🔍 Step 2 mandatory services results:', searchResults?.length || 0, 'services found');
 
-      // If we have results, filter by status
+      // Status already filtered in query (.eq('status', 'Active')), no need to filter again
       let finalData = searchResults || [];
-      finalData = finalData.filter(service => service.status === 'Active');
-      console.log('📊 After status filter (Active only):', finalData.length, 'mandatory services');
+      console.log('📊 Total mandatory services found:', finalData.length);
 
-      // Try hospital filtering if we have the data
+      // Try hospital filtering if we have the data - allow services with null/empty hospital_name
       if (finalData.length > 0) {
         // Check if any service has hospital_name field
         const hasHospitalField = finalData.some(service => 'hospital_name' in service);
         if (hasHospitalField) {
           console.log('✅ Hospital field found in mandatory services, filtering by:', hospitalFilter);
-          finalData = finalData.filter(service => service.hospital_name === hospitalFilter);
+          // Include services that match hospital OR have no hospital_name set
+          finalData = finalData.filter(service =>
+            !service.hospital_name || service.hospital_name === hospitalFilter
+          );
           console.log('📊 After hospital filter:', finalData.length, 'mandatory services');
         } else {
           console.log('ℹ️ No hospital_name field found in mandatory services, returning all active services');
@@ -15827,13 +16435,18 @@ Dr. Murali B K
                               {/* Implant Field */}
                               <div className="mb-3">
                                 <label className="block text-xs font-medium text-gray-600 mb-1">Implant</label>
-                                <input
-                                  type="text"
+                                <select
                                   className="w-full text-xs border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                                  placeholder="Implant details"
                                   value={surgeryForm.implant}
                                   onChange={(e) => updateSurgeryField(surgeryForm.id, 'implant', e.target.value)}
-                                />
+                                >
+                                  <option value="">Select Implant</option>
+                                  {implantsList.map((implant) => (
+                                    <option key={implant.id} value={implant.name}>
+                                      {implant.name}
+                                    </option>
+                                  ))}
+                                </select>
                               </div>
                             </div>
                           ))}
@@ -16914,6 +17527,53 @@ Dr. Murali B K
                                 </div>
                               </div>
                             ])
+                          )}
+                        </>
+                      )}
+
+                      {activeServiceTab === "Implant" && (
+                        <>
+                          {(isLoadingImplantServices || isSearchingImplants) ? (
+                            <div className="p-2 text-gray-500 text-sm">
+                              {serviceSearchTerm.length >= 2 ? 'Searching implant services...' : 'Loading implant services...'}
+                            </div>
+                          ) : (
+                            <>
+                              {filteredImplantServices && filteredImplantServices.length > 0 ? (
+                                filteredImplantServices.map((service) => (
+                                  <div
+                                    key={service.id}
+                                    className={`p-2 border-b border-gray-100 last:border-b-0 ${(!service.amount || service.amount === 0) ? 'bg-gray-50 cursor-not-allowed opacity-60' : 'hover:bg-gray-100 cursor-pointer'}`}
+                                    title={(!service.amount || service.amount === 0) ? `Rate not available - please update in database first` : `Click to add ${service.name}`}
+                                    onClick={() => {
+                                      addImplantServiceToInvoice(service);
+                                      setServiceSearchTerm("");
+                                    }}
+                                  >
+                                    <div className="flex justify-between items-center">
+                                      <div className="flex-1">
+                                        <div className={`font-medium text-sm ${(!service.amount || service.amount === 0) ? 'text-gray-400' : ''}`}>{service.name}</div>
+                                        {(!service.amount || service.amount === 0) && (
+                                          <div className="text-xs text-red-500 mt-1">Rate not available</div>
+                                        )}
+                                      </div>
+                                      <div className={`text-sm font-medium ${(!service.amount || service.amount === 0) ? 'text-red-500' : 'text-green-600'}`}>
+                                        {service.rateSource === 'private' && 'Private: '}
+                                        {service.rateSource === 'non_nabh' && 'Non-NABH: '}
+                                        {service.rateSource === 'bhopal_nabh' && 'Bhopal NABH: '}
+                                        {service.rateSource === 'nabh' && 'NABH: '}
+                                        {(service.rateSource === 'non_nabh_fallback' || service.rateSource === 'nabh_fallback' || service.rateSource === 'bhopal_nabh_fallback' || service.rateSource === 'private_fallback') && 'Fallback: '}
+                                        {service.amount ? `₹${service.amount}` : 'N/A'}
+                                      </div>
+                                    </div>
+                                  </div>
+                                ))
+                              ) : (
+                                <div className="p-2 text-sm text-gray-500 text-center">
+                                  {serviceSearchTerm.length >= 2 ? 'No implant services found' : 'Type to search implant services'}
+                                </div>
+                              )}
+                            </>
                           )}
                         </>
                       )}

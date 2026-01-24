@@ -581,7 +581,7 @@ export const useFinancialSummary = (billId?: string, visitId?: string, savedMedi
     }
   };
 
-  const fetchAnesthetistTotal = async (): Promise<number> => {
+const fetchAnesthetistTotal = async (): Promise<number> => {
     if (!visitId) return 0;
 
     try {
@@ -611,6 +611,55 @@ export const useFinancialSummary = (billId?: string, visitId?: string, savedMedi
       return total;
     } catch (error) {
       console.error('Error fetching anesthetist total:', error);
+      return 0;
+    }
+  };
+
+  // Fetch implant total from visit_implants table
+  const fetchImplantTotal = async (): Promise<number> => {
+    if (!visitId) return 0;
+
+    try {
+      console.log('🔧 Fetching implant total for visit:', visitId);
+
+      // Get visit UUID first
+      const { data: visitData, error: visitError } = await supabase
+        .from('visits')
+        .select('id')
+        .eq('visit_id', visitId)
+        .single();
+
+      if (visitError || !visitData) {
+        console.log('⚠️ Could not find visit for implant total');
+        return 0;
+      }
+
+      // Fetch implants from visit_implants table
+      const { data: implantData, error: implantError } = await supabase
+        .from('visit_implants' as any)
+        .select('amount, quantity, rate, status')
+        .eq('visit_id', visitData.id)
+        .eq('status', 'Active');
+
+      if (implantError) {
+        console.error('❌ Error fetching implants:', implantError);
+        return 0;
+      }
+
+      if (!implantData || implantData.length === 0) {
+        console.log('📝 No implants found for this visit');
+        return 0;
+      }
+
+      // Calculate total from amount column
+      const total = implantData.reduce((sum: number, item: any) => {
+        return sum + (parseFloat(item.amount) || 0);
+      }, 0);
+
+      console.log('💰 Implant total calculated:', total, 'from', implantData.length, 'implants');
+      return total;
+    } catch (error) {
+      console.error('Error fetching implant total:', error);
       return 0;
     }
   };
@@ -1667,7 +1716,8 @@ export const useFinancialSummary = (billId?: string, visitId?: string, savedMedi
         advancePaymentTotal,
         refundedTotal,
         surgeryTotal,
-        anesthetistTotal
+        anesthetistTotal,
+        implantTotal
       ] = await Promise.all([
         fetchLabTestsTotal(),
         fetchClinicalServicesTotal(),
@@ -1678,11 +1728,12 @@ export const useFinancialSummary = (billId?: string, visitId?: string, savedMedi
         fetchAdvancePaymentTotal(),
         fetchRefundedAmount(),
         fetchSurgeryTotal(),
-        fetchAnesthetistTotal()
+        fetchAnesthetistTotal(),
+        fetchImplantTotal()
       ]);
 
-      // Calculate grand total (including surgery and anesthetist)
-      const grandTotal = labTotal + clinicalTotal + mandatoryTotal + radiologyTotal + pharmacyTotal + accommodationTotal + surgeryTotal + anesthetistTotal;
+      // Calculate grand total (including surgery, anesthetist, and implant)
+      const grandTotal = labTotal + clinicalTotal + mandatoryTotal + radiologyTotal + pharmacyTotal + accommodationTotal + surgeryTotal + anesthetistTotal + implantTotal;
       console.log('✅ [AUTO-POPULATE] Step 1 Complete: Calculated totals only');
 
       // 🔥 STEP 2: Update ONLY totals, preserve existing discount values from state
@@ -1706,6 +1757,7 @@ export const useFinancialSummary = (billId?: string, visitId?: string, savedMedi
             radiology: radiologyTotal.toString(),
             pharmacy: pharmacyTotal.toString(),
             surgery: surgeryTotal.toString(),
+            implant: implantTotal.toString(),
             mandatoryServices: mandatoryTotal.toString(),
             physiotherapy: anesthetistTotal.toString(), // Anesthetist total (field named physiotherapy for compatibility)
             accommodationCharges: accommodationTotal.toString(),
@@ -1735,6 +1787,7 @@ export const useFinancialSummary = (billId?: string, visitId?: string, savedMedi
             radiology: (radiologyTotal - (parseFloat(prev.amountPaid.radiology) || 0) + (parseFloat(prev.refundedAmount.radiology) || 0)).toString(),
             pharmacy: (pharmacyTotal - (parseFloat(prev.amountPaid.pharmacy) || 0) + (parseFloat(prev.refundedAmount.pharmacy) || 0)).toString(),
             surgery: (surgeryTotal - (parseFloat(prev.amountPaid.surgery) || 0) + (parseFloat(prev.refundedAmount.surgery) || 0)).toString(),
+            implant: (implantTotal - (parseFloat(prev.amountPaid.implant) || 0) + (parseFloat(prev.refundedAmount.implant) || 0)).toString(),
             mandatoryServices: (mandatoryTotal - (parseFloat(prev.amountPaid.mandatoryServices) || 0) + (parseFloat(prev.refundedAmount.mandatoryServices) || 0)).toString(),
             total: (grandTotal - advancePaymentTotal + refundedTotal).toString()
           }

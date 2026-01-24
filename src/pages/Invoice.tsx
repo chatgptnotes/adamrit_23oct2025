@@ -562,6 +562,44 @@ const Invoice = () => {
     enabled: !!visitId
   });
 
+  // Fetch implants from visit_implants table
+  const { data: implantOrdersData } = useQuery({
+    queryKey: ['invoice-visit-implants', visitId],
+    queryFn: async () => {
+      console.log('=== IMPLANT ORDERS FETCH ===');
+      console.log('Fetching implants for visitId:', visitId);
+
+      if (!visitId) return [];
+
+      // Get visit UUID first
+      const { data: visitData, error: visitError } = await supabase
+        .from('visits')
+        .select('id')
+        .eq('visit_id', visitId)
+        .single();
+
+      if (visitError || !visitData?.id) {
+        console.error('Visit not found for implants:', visitError);
+        return [];
+      }
+
+      const { data, error } = await supabase
+        .from('visit_implants' as any)
+        .select('*')
+        .eq('visit_id', visitData.id)
+        .eq('status', 'Active');
+
+      console.log('Implant orders query result:', { data, error });
+
+      if (error) {
+        console.error('Error fetching implant orders:', error);
+        return [];
+      }
+      return data || [];
+    },
+    enabled: !!visitId
+  });
+
   // Fetch mandatory services from junction table (actual saved services for this visit)
   const { data: mandatoryServicesData } = useQuery({
     queryKey: ['invoice-mandatory-services-junction', visitId],
@@ -985,6 +1023,32 @@ const Invoice = () => {
       return services;
     }
 
+    if (chargeFilter === 'implants') {
+      console.log('=== CREATING IMPLANT SERVICES ===');
+      console.log('implantOrdersData:', implantOrdersData);
+
+      if (implantOrdersData && implantOrdersData.length > 0) {
+        implantOrdersData.forEach((visitImplant: any) => {
+          const rate = parseFloat(visitImplant.rate) || 0;
+          const qty = visitImplant.quantity || 1;
+          const amount = parseFloat(visitImplant.amount) || (rate * qty);
+
+          services.push({
+            srNo: srNo++,
+            item: visitImplant.implant_name || 'Implant',
+            rate: rate,
+            qty: qty,
+            amount: amount,
+            type: 'implant'
+          });
+        });
+      } else {
+        console.log('No implant orders data found');
+      }
+      console.log('Implant services created:', services);
+      return services;
+    }
+
     if (chargeFilter === 'accommodation') {
       console.log('=== CREATING ACCOMMODATION SERVICES ===');
       console.log('accommodationData:', accommodationData);
@@ -1046,7 +1110,119 @@ const Invoice = () => {
       });
     }
 
-    // ===== NEW ORDER: 1. REGISTRATION CHARGES (from mandatory services - if exists) =====
+    // NOW INCLUDING lab and radiology charges in "All Charges" view as SUMMARY LINES
+    // Calculate lab charges by recalculating rates dynamically (same logic as Final Bill)
+    console.log('=== CALCULATING LABORATORY CHARGES (DYNAMIC RATE CALCULATION) ===');
+    console.log('labOrdersData:', labOrdersData);
+    console.log('visitData patient info:', visitData?.patients);
+
+    let totalLabCharges = 0;
+
+    if (labOrdersData && labOrdersData.length > 0) {
+      // Get patient info to determine correct rate type
+      const patientType = (visitData?.patient_type || visitData?.patients?.patient_type || '').toLowerCase().trim();
+      const corporate = (visitData?.patients?.corporate || '').toLowerCase().trim();
+
+      // Corporate field takes priority - check if patient has a corporate panel first
+      const hasCorporate = corporate.length > 0 && corporate !== 'private';
+
+      // Patient is private ONLY if they don't have a corporate panel
+      const isPrivatePatient = !hasCorporate && (patientType === 'private' || corporate === 'private');
+
+      // Check if corporate qualifies for Non-NABH rates (CGHS/ECHS/ESIC)
+      const usesNonNABHRate = hasCorporate &&
+        (corporate.includes('cghs') ||
+        corporate.includes('echs') ||
+        corporate.includes('esic'));
+
+      // Check if corporate qualifies for Bhopal NABH rates
+      const usesBhopaliNABHRate = hasCorporate &&
+        (corporate.includes('mp police') ||
+        corporate.includes('ordnance factory') ||
+        corporate.includes('ordnance factory itarsi'));
+
+      // Check if patient has other corporate
+      const usesNABHRate = hasCorporate && !usesNonNABHRate && !usesBhopaliNABHRate;
+
+      console.log('🔍 Patient Type Determination:', {
+        patientType,
+        corporate,
+        isPrivatePatient,
+        hasCorporate,
+        usesNonNABHRate,
+        usesBhopaliNABHRate,
+        usesNABHRate
+      });
+
+      // USE STORED COST from visit_labs table (same as Final Bill)
+      labOrdersData.forEach((visitLab, index) => {
+        const labDetail = visitLab.lab;
+
+        // Use the stored cost from visit_labs table instead of recalculating
+        const storedCost = visitLab.cost || 0;
+
+        console.log(`Lab ${index + 1}: ${labDetail?.name}`, {
+          storedCost: storedCost,
+          usingSavedCost: true
+        });
+
+        totalLabCharges += storedCost;
+      });
+
+      console.log('✅ Total lab charges (using stored costs):', totalLabCharges);
+    }
+
+    // Add single summary line for all lab charges if total > 0
+    if (totalLabCharges > 0) {
+      console.log(`📊 Adding Laboratory Charges summary line: ₹${totalLabCharges}`);
+      services.push({
+        srNo: srNo++,
+        item: 'Laboratory Charges',
+        rate: totalLabCharges,
+        qty: 1,
+        amount: totalLabCharges,
+        type: 'lab'
+      });
+    } else {
+      console.warn('⚠️ Total lab charges is 0! No lab tests found or all rates are 0.');
+    }
+
+    // Calculate total radiology charges and add as single line
+    console.log('Calculating total radiology charges for All Charges view');
+    let totalRadiologyCharges = 0;
+    if (radiologyOrdersData && radiologyOrdersData.length > 0) {
+      radiologyOrdersData.forEach((visitRadiology) => {
+        // Use stored cost from visit_radiology table
+        const rate = visitRadiology.cost ? parseFloat(visitRadiology.cost.toString()) : (visitRadiology.unit_rate ? parseFloat(visitRadiology.unit_rate.toString()) : 1000);
+        totalRadiologyCharges += rate;
+        console.log('Adding radiology to total:', {
+          name: visitRadiology.radiology?.name,
+          storedCost: visitRadiology.cost,
+          unitRate: visitRadiology.unit_rate,
+          rate: rate
+        });
+      });
+
+      // Add single summary line for all radiology charges
+      if (totalRadiologyCharges > 0) {
+        console.log('Adding Radiology Charges summary line:', totalRadiologyCharges);
+        services.push({
+          srNo: srNo++,
+          item: 'Radiology Charges',
+          rate: totalRadiologyCharges,
+          qty: 1,
+          amount: totalRadiologyCharges,
+          type: 'radiology'
+        });
+      }
+    }
+
+    // Add mandatory services from junction table (actual saved services with correct rates)
+    console.log('=== MANDATORY SERVICES INTEGRATION (JUNCTION TABLE) ===');
+    console.log('mandatoryServicesData:', mandatoryServicesData);
+    console.log('mandatoryServicesData length:', mandatoryServicesData?.length);
+
+    // ===== 1. REGISTRATION CHARGES (from mandatory services - if exists) =====
     console.log('=== 1. REGISTRATION CHARGES ===');
     if (mandatoryServicesData && mandatoryServicesData.length > 0) {
       const registrationServices = mandatoryServicesData.filter((s) => isRegistrationCharges(s.service_name));

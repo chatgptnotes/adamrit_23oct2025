@@ -19,6 +19,7 @@ const DetailedInvoice = () => {
   const [selectedRadiologyItems, setSelectedRadiologyItems] = useState<number[]>([]);
   const [selectedSurgeryItems, setSelectedSurgeryItems] = useState<number[]>([]);
   const [selectedAnesthetistItems, setSelectedAnesthetistItems] = useState<number[]>([]);
+  const [selectedImplantItems, setSelectedImplantItems] = useState<number[]>([]);
 
   // Close function that goes back or to a specific page
   const handleClose = () => {
@@ -304,6 +305,17 @@ const DetailedInvoice = () => {
       servicesData.push(['-', 'No surgeries performed', '', '', '']);
     }
 
+    // IMPLANTS section
+    servicesData.push(['', '', '', '', '']);
+    servicesData.push(['IMPLANTS', '', '', '', '']);
+    if (serviceData.implants.length > 0) {
+      serviceData.implants.forEach((item, index) => {
+        servicesData.push([index + 1, item.item, item.dateTime, item.qty, item.rate]);
+      });
+    } else {
+      servicesData.push(['-', 'No implants used', '', '', '']);
+    }
+
     // MANDATORY SERVICES section
     servicesData.push(['', '', '', '', '']);
     servicesData.push(['MANDATORY SERVICES', '', '', '', '']);
@@ -352,13 +364,14 @@ const DetailedInvoice = () => {
     XLSX.writeFile(workbook, fileName);
   };
 
-  // Print section functions for Laboratory, Radiology, Surgery, Anesthetist
-  const handlePrintSectionAll = (section: 'laboratory' | 'radiology' | 'surgery' | 'anesthetist') => {
+  // Print section functions for Laboratory, Radiology, Surgery, Anesthetist, Implants
+  const handlePrintSectionAll = (section: 'laboratory' | 'radiology' | 'surgery' | 'anesthetist' | 'implants') => {
     const sectionTitles = {
       laboratory: 'LABORATORY',
       radiology: 'RADIOLOGY',
       surgery: 'SURGERY',
-      anesthetist: 'ANESTHETIST'
+      anesthetist: 'ANESTHETIST',
+      implants: 'IMPLANTS'
     };
 
     const items = serviceData[section] || [];
@@ -451,18 +464,20 @@ const DetailedInvoice = () => {
     }
   };
 
-  const handlePrintSectionSelected = (section: 'laboratory' | 'radiology' | 'surgery' | 'anesthetist') => {
+  const handlePrintSectionSelected = (section: 'laboratory' | 'radiology' | 'surgery' | 'anesthetist' | 'implants') => {
     const sectionTitles = {
       laboratory: 'LABORATORY',
       radiology: 'RADIOLOGY',
       surgery: 'SURGERY',
-      anesthetist: 'ANESTHETIST'
+      anesthetist: 'ANESTHETIST',
+      implants: 'IMPLANTS'
     };
 
     const selectedIndices = section === 'laboratory' ? selectedLabItems :
                            section === 'radiology' ? selectedRadiologyItems :
                            section === 'surgery' ? selectedSurgeryItems :
-                           selectedAnesthetistItems;
+                           section === 'anesthetist' ? selectedAnesthetistItems :
+                           selectedImplantItems;
 
     const allItems = serviceData[section] || [];
     const items = allItems.filter((_, index) => selectedIndices.includes(index));
@@ -556,12 +571,13 @@ const DetailedInvoice = () => {
     }
   };
 
-  const handlePrintSectionSummary = (section: 'laboratory' | 'radiology' | 'surgery' | 'anesthetist') => {
+  const handlePrintSectionSummary = (section: 'laboratory' | 'radiology' | 'surgery' | 'anesthetist' | 'implants') => {
     const sectionTitles = {
       laboratory: 'LABORATORY',
       radiology: 'RADIOLOGY',
       surgery: 'SURGERY',
-      anesthetist: 'ANESTHETIST'
+      anesthetist: 'ANESTHETIST',
+      implants: 'IMPLANTS'
     };
 
     const items = serviceData[section] || [];
@@ -636,7 +652,7 @@ const DetailedInvoice = () => {
   };
 
   // Toggle item selection
-  const toggleItemSelection = (section: 'laboratory' | 'radiology' | 'surgery' | 'anesthetist', index: number) => {
+  const toggleItemSelection = (section: 'laboratory' | 'radiology' | 'surgery' | 'anesthetist' | 'implants', index: number) => {
     if (section === 'laboratory') {
       setSelectedLabItems(prev =>
         prev.includes(index) ? prev.filter(i => i !== index) : [...prev, index]
@@ -651,6 +667,10 @@ const DetailedInvoice = () => {
       );
     } else if (section === 'anesthetist') {
       setSelectedAnesthetistItems(prev =>
+        prev.includes(index) ? prev.filter(i => i !== index) : [...prev, index]
+      );
+    } else {
+      setSelectedImplantItems(prev =>
         prev.includes(index) ? prev.filter(i => i !== index) : [...prev, index]
       );
     }
@@ -995,6 +1015,26 @@ const DetailedInvoice = () => {
         }
       }
 
+      // Fetch implants for this visit
+      let implantOrders = [];
+      if (actualVisitId) {
+        console.log('🔍 Fetching implants for actualVisitId:', actualVisitId);
+        const { data: implantData, error: implantError } = await supabase
+          .from('visit_implants')
+          .select('*')
+          .eq('visit_id', actualVisitId)
+          .eq('status', 'Active');
+
+        console.log('📡 Implants response:', { data: implantData, error: implantError });
+
+        if (implantError) {
+          console.error('❌ Error fetching implants:', implantError);
+        } else {
+          implantOrders = implantData || [];
+          console.log('✅ Implants fetched:', implantOrders.length, 'records');
+        }
+      }
+
       // Fetch mandatory services for this visit
       let mandatoryServices = [];
       if (actualVisitId) {
@@ -1040,6 +1080,7 @@ const DetailedInvoice = () => {
         accommodationOrders,
         surgeryOrders,
         anesthetistOrders,
+        implantOrders,
         mandatoryServices
       };
     },
@@ -1061,6 +1102,7 @@ const DetailedInvoice = () => {
       console.log('🏥 Clinical services:', visitData.clinicalServices);
       console.log('🏥 Surgery orders:', visitData.surgeryOrders);
       console.log('💉 Anesthetist orders:', visitData.anesthetistOrders);
+      console.log('🔩 Implant orders:', visitData.implantOrders);
 
       // Calculate total amount from all services
       const labTotal = visitData.labOrders.reduce((sum, order) => sum + ((order.lab?.private && order.lab.private > 0) ? order.lab.private : 100), 0);
@@ -1086,9 +1128,13 @@ const DetailedInvoice = () => {
         const amount = parseFloat(service.amount) || parseFloat(service.rate_used) || 0;
         return sum + amount;
       }, 0) || 0;
-      const totalAmount = labTotal + radioTotal + pharmaTotal + clinicalTotal + roomTotal + surgeryTotal + mandatoryTotal;
+      const implantTotal = visitData.implantOrders?.reduce((sum, implant) => {
+        const amount = parseFloat(implant.amount) || (implant.quantity * parseFloat(implant.rate)) || 0;
+        return sum + amount;
+      }, 0) || 0;
+      const totalAmount = labTotal + radioTotal + pharmaTotal + clinicalTotal + roomTotal + surgeryTotal + implantTotal + mandatoryTotal;
 
-      console.log('💰 Calculated totals - Lab:', labTotal, 'Radio:', radioTotal, 'Pharma:', pharmaTotal, 'Clinical:', clinicalTotal, 'Room:', roomTotal, 'Surgery:', surgeryTotal, 'Mandatory:', mandatoryTotal, 'Total:', totalAmount);
+      console.log('💰 Calculated totals - Lab:', labTotal, 'Radio:', radioTotal, 'Pharma:', pharmaTotal, 'Clinical:', clinicalTotal, 'Room:', roomTotal, 'Surgery:', surgeryTotal, 'Implants:', implantTotal, 'Mandatory:', mandatoryTotal, 'Total:', totalAmount);
 
       console.log('📝 Processing patient data with fields:', {
         'visit.visit_date': visit.visit_date,
@@ -1193,6 +1239,12 @@ const DetailedInvoice = () => {
       qty: 1,
       rate: parseFloat(anesthetist.rate) || 0
     })) || [],
+    implants: visitData?.implantOrders?.map((implant, index) => ({
+      item: implant.implant_name ? `Implant ${implant.implant_name}` : 'Implant',
+      dateTime: implant.created_at ? format(new Date(implant.created_at), 'dd/MM/yyyy HH:mm:ss') : '',
+      qty: implant.quantity || 1,
+      rate: parseFloat(implant.amount) || (implant.quantity * parseFloat(implant.rate)) || 0
+    })) || [],
     mandatory: visitData?.mandatoryServices?.map((service, index) => {
       // Calculate days from start_date to end_date
       let days = service.quantity || 1;
@@ -1230,6 +1282,7 @@ const DetailedInvoice = () => {
     serviceData.laboratory.reduce((sum, item) => sum + (item.rate || 0), 0) +
     serviceData.radiology.reduce((sum, item) => sum + (item.rate || 0), 0) +
     serviceData.surgery.reduce((sum, item) => sum + (item.rate || 0), 0) +
+    serviceData.implants.reduce((sum, item) => sum + (item.rate || 0), 0) +
     serviceData.mandatory.reduce((sum, item) => sum + (item.rate || 0), 0) +
     serviceData.pharmacy.reduce((sum, item) => sum + (item.rate || 0), 0);
 
@@ -1533,7 +1586,7 @@ const DetailedInvoice = () => {
             </table>
           </div>
 
-          {/* SURGERY */}
+          {/* SURGERY (includes implants) */}
           <div className="mb-4">
             <div className="bg-gray-200 border border-gray-400 border-t-0 p-1 flex justify-between items-center">
               <strong className="text-xs">SURGERY</strong>
@@ -1545,8 +1598,9 @@ const DetailedInvoice = () => {
             </div>
             <table className="w-full border-collapse border border-gray-400 border-t-0 text-xs">
               <tbody>
+                {/* Render surgery items */}
                 {serviceData.surgery.map((item, index) => (
-                  <tr key={index}>
+                  <tr key={`surgery-${index}`}>
                     <td className="border border-gray-400 p-1 text-center w-8">
                       <input
                         type="checkbox"
@@ -1562,7 +1616,19 @@ const DetailedInvoice = () => {
                     <td className="border border-gray-400 p-1 text-center w-24">{item.rate}</td>
                   </tr>
                 ))}
-                {serviceData.surgery.length === 0 && (
+                {/* Render implant items (numbering continues from surgery) */}
+                {serviceData.implants?.map((item, index) => (
+                  <tr key={`implant-${index}`}>
+                    <td className="border border-gray-400 p-1 text-center w-8"></td>
+                    <td className="border border-gray-400 p-1 text-center w-12">{serviceData.surgery.length + index + 1}</td>
+                    <td className="border border-gray-400 p-1">{item.item}</td>
+                    <td className="border border-gray-400 p-1 text-center w-32">{item.dateTime}</td>
+                    <td className="border border-gray-400 p-1 text-center w-16">{item.qty}</td>
+                    <td className="border border-gray-400 p-1 text-center w-24">{item.rate}</td>
+                  </tr>
+                ))}
+                {/* Show "No surgeries performed" only if BOTH are empty */}
+                {serviceData.surgery.length === 0 && (!serviceData.implants || serviceData.implants.length === 0) && (
                   <tr>
                     <td className="border border-gray-400 p-1 text-center" colSpan={6}>No surgeries performed</td>
                   </tr>

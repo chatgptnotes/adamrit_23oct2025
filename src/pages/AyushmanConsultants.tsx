@@ -12,7 +12,12 @@ const AyushmanConsultants = () => {
     isAddDialogOpen,
     setIsAddDialogOpen,
     isLoading,
-    filteredConsultants,
+    paginatedConsultants,
+    currentPage,
+    setCurrentPage,
+    totalPages,
+    totalCount,
+    itemsPerPage,
     handleAdd,
     handleEdit,
     handleDelete,
@@ -44,10 +49,15 @@ const AyushmanConsultants = () => {
         />
 
         <AyushmanConsultantsList
-          consultants={filteredConsultants}
+          consultants={paginatedConsultants}
           searchTerm={searchTerm}
           onEdit={handleEdit}
           onDelete={handleDelete}
+          currentPage={currentPage}
+          setCurrentPage={setCurrentPage}
+          totalPages={totalPages}
+          totalCount={totalCount}
+          itemsPerPage={itemsPerPage}
         />
 
         <AddItemDialog
