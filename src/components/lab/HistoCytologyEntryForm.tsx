@@ -523,7 +523,7 @@ const HistoCytologyEntryForm: React.FC<HistoCytologyEntryFormProps> = ({
             <span className="font-semibold">Age/Sex:</span> {patientInfo.patient_age || 'N/A'} / {patientInfo.patient_gender || 'N/A'}
           </div>
           <div>
-            <span className="font-semibold">Type:</span> {patientInfo.order_status || 'OPD'}
+            <span className="font-semibold">Type:</span> {patientInfo.corporate || 'OPD'}
           </div>
           <div>
             <span className="font-semibold">Ref By:</span> {patientInfo.ordering_doctor || 'N/A'}
