@@ -5820,16 +5820,24 @@ const LabOrders = () => {
                       className="hidden"
                       multiple
                       accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                      onChange={(e) => {
+                        const files = Array.from(e.target.files || []);
+                        setUploadedFiles(files);
+                        console.log('📎 Files selected:', files.map(f => f.name));
+                      }}
                     />
                     <button
                       type="button"
                       onClick={() => document.getElementById('main-file-upload')?.click()}
                       className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
-                      disabled={isFormSaved}
                     >
                       Choose File
                     </button>
-                    <span className="text-sm text-gray-500">No file chosen</span>
+                    <span className="text-sm text-gray-500">
+                      {uploadedFiles.length > 0
+                        ? uploadedFiles.map(f => f.name).join(', ')
+                        : 'No file chosen'}
+                    </span>
                   </div>
                 </div>
 
