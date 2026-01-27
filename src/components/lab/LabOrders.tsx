@@ -75,6 +75,7 @@ interface LabTestRow {
   visit_id?: string;  // Add visit_id field
   patient_id?: string; // Add patient_id field
   test_type?: string; // Test type from lab_test_config (Numeric or Text)
+  corporate?: string; // Patient's corporate type
 }
 
 interface PatientWithVisit {
@@ -333,8 +334,10 @@ const LabOrders = () => {
 
   // Calculate header checkbox states for Incl. column
   const getIncludedHeaderState = () => {
-    // Only count tests that have 'saved' status (enabled tests)
-    const eligibleTests = filteredTestRows.filter(t => testSampleStatus[t.id] === 'saved');
+    // Only count tests that have 'saved' status or 'collected' order_status (enabled tests)
+    const eligibleTests = filteredTestRows.filter(t =>
+      testSampleStatus[t.id] === 'saved' || t.order_status === 'collected'
+    );
 
     // If there are included tests, only consider tests from that patient
     const selectedPatient = getSelectedPatientFromIncludedTests();
@@ -410,8 +413,10 @@ const LabOrders = () => {
     if (checked === 'indeterminate') return;
 
     if (checked) {
-      // Only select tests with 'saved' status
-      const eligibleTests = filteredTestRows.filter(t => testSampleStatus[t.id] === 'saved');
+      // Only select tests with 'saved' status or 'collected' order_status
+      const eligibleTests = filteredTestRows.filter(t =>
+        testSampleStatus[t.id] === 'saved' || t.order_status === 'collected'
+      );
 
       if (eligibleTests.length === 0) return;
 
@@ -427,6 +432,43 @@ const LabOrders = () => {
     } else {
       // Deselect all
       setIncludedTests([]);
+    }
+  };
+
+  // Get checkbox state for patient's Incl. column (for patient header row)
+  const getPatientIncludedState = (patientTests: LabTestRow[]) => {
+    // Only count tests that are eligible (collected status)
+    const eligibleTests = patientTests.filter(t =>
+      testSampleStatus[t.id] === 'saved' || t.order_status === 'collected'
+    );
+
+    if (eligibleTests.length === 0) {
+      return { checked: false, indeterminate: false, disabled: true };
+    }
+
+    const selectedCount = eligibleTests.filter(t => includedTests.includes(t.id)).length;
+
+    return {
+      checked: selectedCount === eligibleTests.length,
+      indeterminate: selectedCount > 0 && selectedCount < eligibleTests.length,
+      disabled: false
+    };
+  };
+
+  // Handle select all Incl. for a specific patient
+  const handlePatientSelectAllIncluded = (patientTests: LabTestRow[], checked: boolean | 'indeterminate') => {
+    if (checked === 'indeterminate') return;
+
+    const eligibleTestIds = patientTests
+      .filter(t => testSampleStatus[t.id] === 'saved' || t.order_status === 'collected')
+      .map(t => t.id);
+
+    if (checked) {
+      // Add all eligible tests for this patient
+      setIncludedTests(prev => [...new Set([...prev, ...eligibleTestIds])]);
+    } else {
+      // Remove all tests for this patient
+      setIncludedTests(prev => prev.filter(id => !eligibleTestIds.includes(id)));
     }
   };
 
@@ -656,6 +698,9 @@ const LabOrders = () => {
 
   // Track tests that have actual saved results in lab_results table
   const [testsWithSavedResults, setTestsWithSavedResults] = useState<string[]>([]);
+
+  // NEW: State for previous test values (for hover tooltip)
+  const [previousTestValues, setPreviousTestValues] = useState<Record<string, any[]>>({});
 
   const [authenticatedResult, setAuthenticatedResult] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
@@ -1243,17 +1288,19 @@ const LabOrders = () => {
 
           console.log('🔍 Query params:', { visitId, labIds, testNames, patientName, orderedDate, startOfDay, endOfDay });
 
-          // Primary query: visit_id + lab_id (WITH DATE FILTER)
+          // Get visit_lab_ids for all selected tests (direct link to visit_labs table)
+          const visitLabIds = selectedTestsForEntry.map(t => t.id);
+          console.log('🔍 Querying by visit_lab_ids:', visitLabIds);
+
+          // Primary query: use visit_lab_id (direct link to visit_labs table)
+          // This works even when visit_id and lab_id are NULL in the database
           let { data: existingResults, error } = await supabase
             .from('lab_results')
             .select('*')
-            .eq('visit_id', visitId)
-            .in('lab_id', labIds)
-            .gte('created_at', startOfDay)
-            .lte('created_at', endOfDay)
+            .in('visit_lab_id', visitLabIds)
             .order('created_at', { ascending: false });
 
-          console.log('🔍 Primary query result:', { count: existingResults?.length || 0, error: error?.message });
+          console.log('🔍 Primary query result (visit_lab_id):', { count: existingResults?.length || 0, error: error?.message });
 
           // Deduplicate primary query results - keep only the most recent per test_name
           if (existingResults && existingResults.length > 0) {
@@ -1268,15 +1315,13 @@ const LabOrders = () => {
             console.log('✅ Deduplicated primary query results:', existingResults.length, 'unique tests');
           }
 
-          // Fallback: patient_name + date ONLY (ignores main_test_name which may be corrupted)
+          // Fallback: patient_name ONLY (ignores main_test_name which may be corrupted, no date filter)
           if ((!existingResults || existingResults.length === 0) && !error) {
-            console.log('🔄 Trying fallback: patient_name + date only (ignoring corrupted main_test_name)');
+            console.log('🔄 Trying fallback: patient_name only (ignoring corrupted main_test_name)');
             const { data: fallbackResults, error: fallbackError } = await supabase
               .from('lab_results')
               .select('*')
               .eq('patient_name', patientName)
-              .gte('created_at', startOfDay)
-              .lte('created_at', endOfDay)
               .order('created_at', { ascending: false });
 
             if (!fallbackError && fallbackResults && fallbackResults.length > 0) {
@@ -1475,6 +1520,49 @@ const LabOrders = () => {
 
       // Load saved lab results when Entry Mode opens
       loadExistingLabResults();
+
+      // Fetch previous test values for this patient (for hover tooltip)
+      const fetchPreviousTestValues = async () => {
+        const patientName = selectedTestsForEntry[0]?.patient_name;
+        if (!patientName) return;
+
+        try {
+          console.log('📊 Fetching previous test values for patient:', patientName);
+          const { data, error } = await supabase
+            .from('lab_results')
+            .select('test_name, result_value, result_unit, created_at')
+            .eq('patient_name', patientName)
+            .order('created_at', { ascending: false })
+            .limit(200);
+
+          if (error) {
+            console.error('Error fetching previous values:', error);
+            return;
+          }
+
+          if (data && data.length > 0) {
+            // Group by test_name (normalized)
+            const grouped = data.reduce((acc: Record<string, any[]>, r) => {
+              const testName = r.test_name?.trim().toLowerCase();
+              if (!testName) return acc;
+              if (!acc[testName]) acc[testName] = [];
+              acc[testName].push({
+                value: r.result_value,
+                unit: r.result_unit,
+                date: r.created_at
+              });
+              return acc;
+            }, {});
+
+            setPreviousTestValues(grouped);
+            console.log('✅ Loaded previous test values:', Object.keys(grouped).length, 'tests');
+          }
+        } catch (err) {
+          console.error('Error in fetchPreviousTestValues:', err);
+        }
+      };
+
+      fetchPreviousTestValues();
     }
   }, [selectedTestsForEntry, subTestsLoadingComplete]);
 
@@ -2011,7 +2099,8 @@ const LabOrders = () => {
               name,
               age,
               gender,
-              phone
+              phone,
+              corporate
             )
           ),
           lab!inner(
@@ -2038,21 +2127,35 @@ const LabOrders = () => {
       let fromDate: Date;
       let toDate: Date;
 
+      // DEBUG: Log date filter inputs
+      console.log('🔍 DEBUG DATE FILTER:', {
+        dateRangeFrom: dateRange.from,
+        dateRangeTo: dateRange.to,
+        searchTerm: searchTerm,
+        willApplyDateFilter: !searchTerm
+      });
+
       if (dateRange.from) {
-        fromDate = new Date(dateRange.from);
-        fromDate.setHours(0, 0, 0, 0);
+        const [year, month, day] = dateRange.from.split('-').map(Number);
+        fromDate = new Date(year, month - 1, day, 0, 0, 0, 0);
       } else {
         fromDate = new Date();  // Today
         fromDate.setHours(0, 0, 0, 0);
       }
 
       if (dateRange.to) {
-        toDate = new Date(dateRange.to);
-        toDate.setHours(23, 59, 59, 999);
+        const [year, month, day] = dateRange.to.split('-').map(Number);
+        toDate = new Date(year, month - 1, day, 23, 59, 59, 999);
       } else {
         toDate = new Date();  // Today
         toDate.setHours(23, 59, 59, 999);
       }
+
+      // DEBUG: Log parsed dates
+      console.log('🔍 DEBUG PARSED DATES:', {
+        fromDateISO: fromDate.toISOString(),
+        toDateISO: toDate.toISOString()
+      });
 
       if (!searchTerm) {
         query = query
@@ -2071,6 +2174,7 @@ const LabOrders = () => {
       }
 
       console.log('✅ Fetched', data?.length || 0, 'lab entries from visit_labs');
+      console.log('🔍 DEBUG QUERY RESULT:', { dataCount: data?.length || 0, error: error });
 
       // Debug: Check visit_id data
       console.log('🔍 DEBUG - First 3 entries:');
@@ -2103,7 +2207,8 @@ const LabOrders = () => {
         visit_id: entry.visits?.visit_id, // Visit ID text field (e.g., "IH25L06010")
         visit_uuid: entry.visit_id, // Actual UUID FK to visits table
         lab_uuid: entry.lab_id, // Actual UUID FK to lab table
-        patient_id: entry.visits?.patient_id // Add patient_id from visits table
+        patient_id: entry.visits?.patient_id, // Add patient_id from visits table
+        corporate: entry.visits?.patients?.corporate || 'OPD' // Patient's corporate type from patients table
       })) || [];
 
       return testRows;
@@ -2145,12 +2250,20 @@ const LabOrders = () => {
           // Process visit_labs data
           for (const testRow of labTestRows) {
             const visitLabData = visitLabsMap.get(testRow.id);
-            if (visitLabData && visitLabData.status === 'collected' && visitLabData.collected_date) {
+            console.log('🔍 DEBUG SAMPLE STATUS:', {
+              testId: testRow.id,
+              testName: testRow.test_name,
+              visitLabData: visitLabData,
+              status: visitLabData?.status,
+              willBeSaved: visitLabData && visitLabData.status === 'collected'
+            });
+            if (visitLabData && visitLabData.status === 'collected') {
               statusMap[testRow.id] = 'saved';
             } else {
               statusMap[testRow.id] = 'not_taken';
             }
           }
+          console.log('🔍 DEBUG FINAL STATUS MAP:', statusMap);
 
           // BATCH QUERY 2: Get all lab_results for relevant patients in ONE query
           const patientNames = [...new Set(labTestRows.map(t => t.patient_name))];
@@ -2207,7 +2320,7 @@ const LabOrders = () => {
           console.log('✅ Tests with saved results:', savedResultIds.length);
 
           setTestSampleStatus(statusMap);
-          setIncludedTests(includedTestIds);
+          setIncludedTests([]); // Don't auto-include - user must select manually from one patient
           console.log('✅ Sample status loaded (2 batch queries instead of 100+):', {
             totalTests: labTestRows.length,
             savedCount: Object.values(statusMap).filter(s => s === 'saved').length
@@ -2463,14 +2576,14 @@ const LabOrders = () => {
       testDate.setHours(0, 0, 0, 0); // Reset time to midnight
 
       if (dateRange.from) {
-        const fromDate = new Date(dateRange.from);
-        fromDate.setHours(0, 0, 0, 0);
+        const [year, month, day] = dateRange.from.split('-').map(Number);
+        const fromDate = new Date(year, month - 1, day, 0, 0, 0, 0);
         matchesDateFrom = testDate >= fromDate;
       }
 
       if (dateRange.to) {
-        const toDate = new Date(dateRange.to);
-        toDate.setHours(23, 59, 59, 999); // Set to end of day
+        const [year, month, day] = dateRange.to.split('-').map(Number);
+        const toDate = new Date(year, month - 1, day, 23, 59, 59, 999);
         matchesDateTo = testDate <= toDate;
       }
     }
@@ -3197,12 +3310,14 @@ const LabOrders = () => {
     if (testsForPrint.length === 0) return '';
 
     const patientInfo = testsForPrint[0];
-    const reportDate = new Date().toLocaleDateString('en-GB', {
+    // Use order date instead of current date for Report Date
+    const orderDate = patientInfo.order_date ? new Date(patientInfo.order_date) : new Date();
+    const reportDate = orderDate.toLocaleDateString('en-GB', {
       day: '2-digit',
       month: '2-digit',
       year: 'numeric'
     });
-    const reportTime = new Date().toLocaleTimeString('en-GB', {
+    const reportTime = orderDate.toLocaleTimeString('en-GB', {
       hour: '2-digit',
       minute: '2-digit',
       second: '2-digit'
@@ -3421,7 +3536,7 @@ const LabOrders = () => {
           
           .patient-info strong {
             display: inline-block;
-            width: 120px;
+            width: 145px;
             font-weight: bold;
           }
           
@@ -3576,8 +3691,23 @@ const LabOrders = () => {
           return acc;
         }, {} as Record<string, LabTestRow[]>);
 
-        // Generate content for each category
-        return Object.entries(testsByCategory).map(([category, testsInCategory]) => {
+        // Define category priority order for print
+        const categoryPriority: Record<string, number> = {
+          'HEMATOLOGY': 1,
+          'BIOCHEMISTRY': 2,
+          'SEROLOGY': 3,
+          'COAGULATION PROFILE': 4,
+        };
+
+        // Sort categories by priority (HEMATOLOGY first, then BIOCHEMISTRY, etc.)
+        const sortedCategories = Object.entries(testsByCategory).sort(([catA], [catB]) => {
+          const priorityA = categoryPriority[catA.toUpperCase()] || 99;
+          const priorityB = categoryPriority[catB.toUpperCase()] || 99;
+          return priorityA - priorityB;
+        });
+
+        // Generate content for each category (in sorted order)
+        return sortedCategories.map(([category, testsInCategory]) => {
           // Check if tests in this category are all text type
           const allTestsAreTextType = testsInCategory.every(testRow => {
             const subTests = testSubTests[testRow.test_name] || [];
@@ -4569,9 +4699,9 @@ const LabOrders = () => {
                         <TableCell>
                           <div className="flex items-center gap-2">
                             <Checkbox
-                              checked={sampleTakenTests.includes(testRow.id) || testSampleStatus[testRow.id] === 'saved'}
+                              checked={sampleTakenTests.includes(testRow.id) || testSampleStatus[testRow.id] === 'saved' || testRow.order_status === 'collected'}
                               disabled={
-                                testSampleStatus[testRow.id] === 'saved' ||
+                                (testSampleStatus[testRow.id] === 'saved' || testRow.order_status === 'collected') ||
                                 (selectedPatientForSampling !== null && selectedPatientForSampling !== getPatientKey(testRow)) ||
                                 (isEntryModeOpen && !selectedTestsForEntry.some(t => getPatientKey(t) === getPatientKey(testRow))) ||
                                 (getSelectedPatientFromIncludedTests() !== null && getSelectedPatientFromIncludedTests() !== getPatientKey(testRow))
@@ -4611,7 +4741,7 @@ const LabOrders = () => {
                                 }
                               }}
                             />
-                            {testSampleStatus[testRow.id] === 'saved' && (
+                            {(testSampleStatus[testRow.id] === 'saved' || testRow.order_status === 'collected') && (
                               <span className="text-xs text-green-600 font-medium">✓ Saved</span>
                             )}
                           </div>
@@ -4621,7 +4751,7 @@ const LabOrders = () => {
                             <Checkbox
                               checked={includedTests.includes(testRow.id)}
                               disabled={
-                                testSampleStatus[testRow.id] !== 'saved' ||
+                                (testSampleStatus[testRow.id] !== 'saved' && testRow.order_status !== 'collected') ||
                                 (selectedPatientForSampling !== null && selectedPatientForSampling !== getPatientKey(testRow)) ||
                                 (isEntryModeOpen && !selectedTestsForEntry.some(t => getPatientKey(t) === getPatientKey(testRow))) ||
                                 (getSelectedPatientFromIncludedTests() !== null && getSelectedPatientFromIncludedTests() !== getPatientKey(testRow))
@@ -5166,7 +5296,7 @@ const LabOrders = () => {
                 <div className="grid grid-cols-6 gap-4 text-sm">
                   <div><strong>Patient Name:</strong> {selectedTestsForEntry[0]?.patient_name}</div>
                   <div><strong>Age/Sex:</strong> {selectedTestsForEntry[0]?.patient_age} / {selectedTestsForEntry[0]?.patient_gender}</div>
-                  <div><strong>Type:</strong> OPD / BSNL</div>
+                  <div><strong>Type:</strong> {selectedTestsForEntry[0]?.corporate || 'OPD'}</div>
                   <div><strong>Ref By:</strong> {selectedTestsForEntry[0]?.ordering_doctor}</div>
                   <div><strong>Visit ID:</strong> {selectedTestsForEntry[0]?.visit_id || selectedTestsForEntry[0]?.order_number}</div>
                   <div><strong>Date:</strong> {formatDate(selectedTestsForEntry[0]?.order_date || '')}</div>
@@ -5489,7 +5619,19 @@ const LabOrders = () => {
                           <div key={subTestKey} className="bg-white border-t border-gray-100 p-4">
                             <div className="space-y-3">
                               <div className="flex items-center space-x-4">
-                                <span className={`text-sm font-medium ${isNestedSubTest ? 'ml-4 text-gray-700' : 'text-blue-900'}`}>
+                                <span
+                                  className={`text-sm font-medium cursor-help ${isNestedSubTest ? 'ml-4 text-gray-700' : 'text-blue-900'}`}
+                                  title={(() => {
+                                    const testNameKey = subTest.name?.trim().toLowerCase();
+                                    const prevValues = previousTestValues[testNameKey];
+                                    if (!prevValues || prevValues.length === 0) {
+                                      return 'No previous values';
+                                    }
+                                    return 'Previous Values:\n' + prevValues.slice(0, 5).map((v: any) =>
+                                      `${v.value} ${v.unit || ''} - ${new Date(v.date).toLocaleDateString('en-GB')}`
+                                    ).join('\n');
+                                  })()}
+                                >
                                   {subTest.name}
                                 </span>
                                 <input
@@ -5515,7 +5657,19 @@ const LabOrders = () => {
                           <div key={subTestKey} className="bg-white border-t border-gray-100">
                             <div className="grid grid-cols-3 gap-0 items-center min-h-[40px]">
                               <div className="p-2 border-r border-gray-300 flex items-center">
-                                <span className={`text-sm ${isNestedSubTest ? 'ml-8 text-gray-700' : 'ml-4'}`}>
+                                <span
+                                  className={`text-sm cursor-help ${isNestedSubTest ? 'ml-8 text-gray-700' : 'ml-4'}`}
+                                  title={(() => {
+                                    const testNameKey = subTest.name?.trim().toLowerCase();
+                                    const prevValues = previousTestValues[testNameKey];
+                                    if (!prevValues || prevValues.length === 0) {
+                                      return 'No previous values';
+                                    }
+                                    return 'Previous Values:\n' + prevValues.slice(0, 5).map((v: any) =>
+                                      `${v.value} ${v.unit || ''} - ${new Date(v.date).toLocaleDateString('en-GB')}`
+                                    ).join('\n');
+                                  })()}
+                                >
                                   {subTest.name}
                                 </span>
                               </div>
