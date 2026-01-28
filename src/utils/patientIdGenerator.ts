@@ -35,21 +35,44 @@ export const generatePatientId = async (hospitalType: HospitalType, date: Date =
   // Get today's date in YYYY-MM-DD format for counting patients
   const todayStr = date.toISOString().split('T')[0];
   
-  // Count existing patients for today with hospital prefix
+  // Get existing patients for today with hospital prefix, ordered by patients_id
   const { data: existingPatients, error } = await supabase
     .from('patients')
     .select('patients_id')
     .like('patients_id', `${hospitalPrefix}${year}${month}${day}%`)
-    .not('patients_id', 'is', null);
+    .not('patients_id', 'is', null)
+    .order('patients_id', { ascending: true });
   
   if (error) {
     console.error('Error counting patients for today:', error);
     throw error;
   }
   
-  // Calculate next serial number
-  const serialNumber = (existingPatients?.length || 0) + 1;
+  // Find the first available serial number to handle gaps in sequence
+  let serialNumber = 1;
+  const basePattern = `${hospitalPrefix}${year}${month}${day}`;
+  
+  if (existingPatients && existingPatients.length > 0) {
+    // Extract serial numbers from existing patient IDs
+    const usedSerialNumbers = new Set<number>();
+    
+    for (const patient of existingPatients) {
+      if (patient.patients_id?.startsWith(basePattern)) {
+        const serialPart = patient.patients_id.substring(basePattern.length);
+        const serial = parseInt(serialPart, 10);
+        if (!isNaN(serial)) {
+          usedSerialNumbers.add(serial);
+        }
+      }
+    }
+    
+    // Find the first available serial number
+    while (usedSerialNumbers.has(serialNumber)) {
+      serialNumber++;
+    }
+  }
+  
   const serialStr = padNumber(serialNumber, 3);
   
-  return `${hospitalPrefix}${year}${month}${day}${serialStr}`;
+  return `${basePattern}${serialStr}`;
 };

@@ -121,56 +121,80 @@ export const usePatientRegistration = (onClose: () => void) => {
 
     setIsSubmitting(true);
 
-    try {
-      // Generate custom patient ID
-      const customPatientId = await generatePatientId(hospitalConfig.id);
-      console.log('Generated custom patient ID:', customPatientId);
+    const createPatientWithRetry = async (maxRetries = 3): Promise<any> => {
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+          // Generate custom patient ID for each attempt
+          const customPatientId = await generatePatientId(hospitalConfig.id);
+          console.log(`Attempt ${attempt}: Generated custom patient ID:`, customPatientId);
 
-      // Create record in patients table
-      const patientData = {
-        patients_id: customPatientId,
-        name: formData.patientName,
-        insurance_person_no: formData.corporate === 'esic' ? formData.insurancePersonNo : null,
-        corporate: formData.corporate,
-        age: formData.age ? parseInt(formData.age) : null,
-        gender: formData.gender,
-        phone: formData.phone,
-        address: formData.address,
-        emergency_contact_name: formData.emergencyContactName,
-        emergency_contact_mobile: formData.emergencyContactMobile,
-        second_emergency_contact_name: formData.secondEmergencyContactName || null,
-        second_emergency_contact_mobile: formData.secondEmergencyContactMobile || null,
-        date_of_birth: dateOfBirth ? format(dateOfBirth, 'yyyy-MM-dd') : null,
-        aadhar_passport: formData.aadharPassport || null,
-        quarter_plot_no: formData.quarterPlotNo || null,
-        ward: formData.ward || null,
-        panchayat: formData.panchayat || null,
-        relationship_manager: formData.relationshipManager || null,
-        pin_code: formData.pinCode || null,
-        state: formData.state || null,
-        city_town: formData.cityTown || null,
-        blood_group: formData.bloodGroup || null,
-        spouse_name: formData.spouseName || null,
-        allergies: formData.allergies || null,
-        relative_phone_no: formData.relativePhoneNo || null,
-        instructions: formData.instructions || null,
-        identity_type: formData.identityType || null,
-        email: formData.email || null,
-        privilege_card_number: formData.privilegeCardNumber || null,
-        billing_link: formData.billingLink || null,
-        hospital_name: formData.hospitalName
-      };
+          // Create record in patients table
+          const patientData = {
+            patients_id: customPatientId,
+            name: formData.patientName,
+            insurance_person_no: formData.corporate === 'esic' ? formData.insurancePersonNo : null,
+            corporate: formData.corporate,
+            age: formData.age ? parseInt(formData.age) : null,
+            gender: formData.gender,
+            phone: formData.phone,
+            address: formData.address,
+            emergency_contact_name: formData.emergencyContactName,
+            emergency_contact_mobile: formData.emergencyContactMobile,
+            second_emergency_contact_name: formData.secondEmergencyContactName || null,
+            second_emergency_contact_mobile: formData.secondEmergencyContactMobile || null,
+            date_of_birth: dateOfBirth ? format(dateOfBirth, 'yyyy-MM-dd') : null,
+            aadhar_passport: formData.aadharPassport || null,
+            quarter_plot_no: formData.quarterPlotNo || null,
+            ward: formData.ward || null,
+            panchayat: formData.panchayat || null,
+            relationship_manager: formData.relationshipManager || null,
+            pin_code: formData.pinCode || null,
+            state: formData.state || null,
+            city_town: formData.cityTown || null,
+            blood_group: formData.bloodGroup || null,
+            spouse_name: formData.spouseName || null,
+            allergies: formData.allergies || null,
+            relative_phone_no: formData.relativePhoneNo || null,
+            instructions: formData.instructions || null,
+            identity_type: formData.identityType || null,
+            email: formData.email || null,
+            privilege_card_number: formData.privilegeCardNumber || null,
+            billing_link: formData.billingLink || null,
+            hospital_name: formData.hospitalName
+          };
 
-      const { data: newPatient, error } = await supabase
-        .from('patients')
-        .insert(patientData)
-        .select()
-        .single();
+          const { data: newPatient, error } = await supabase
+            .from('patients')
+            .insert(patientData)
+            .select()
+            .single();
 
-      if (error) {
-        console.error('Error creating patient:', error);
-        throw error;
+          if (error) {
+            // Check if it's a duplicate key error
+            if (error.code === '23505' && error.message.includes('patients_patients_id_key')) {
+              console.warn(`Attempt ${attempt}: Duplicate patient ID ${customPatientId}, retrying...`);
+              if (attempt === maxRetries) {
+                throw new Error(`Failed to generate unique patient ID after ${maxRetries} attempts. Please try again.`);
+              }
+              // Wait a brief moment before retrying
+              await new Promise(resolve => setTimeout(resolve, 100));
+              continue;
+            }
+            console.error('Error creating patient:', error);
+            throw error;
+          }
+
+          return { newPatient, customPatientId };
+        } catch (error) {
+          if (attempt === maxRetries) {
+            throw error;
+          }
+        }
       }
+    };
+
+    try {
+      const { newPatient, customPatientId } = await createPatientWithRetry();
 
       console.log('Patient registered successfully in patients table:', newPatient);
 
