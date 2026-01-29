@@ -47,14 +47,18 @@ import { DateRangePicker } from '@/components/ui/date-range-picker';
 import { DateRange } from 'react-day-picker';
 import '@/styles/print.css';
 import { RefereeDoaPaymentModal } from '@/components/ipd/RefereeDoaPaymentModal';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { calculateReferralAmount, formatIndianCurrency } from '@/utils/referralCalculator';
 
-// Referee DOA Amount Cell with Payment Modal
+// Referee DOA Amount Cell with Payment Modal and Referral Tooltip
 const IpdRefereeAmountCell = ({
   visit,
-  onUpdate
+  onUpdate,
+  billTotal = 0
 }: {
   visit: any;
   onUpdate?: () => void;
+  billTotal?: number;
 }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
 
@@ -76,26 +80,145 @@ const IpdRefereeAmountCell = ({
     staleTime: 30000
   });
 
-  // Calculate total
-  const totalAmount = payments.reduce((sum: number, p: any) => sum + Number(p.amount), 0);
+  // Fetch category-wise amounts from financial_summary table
+  const { data: billItems = [] } = useQuery({
+    queryKey: ['financial-summary-referral', visit.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('financial_summary')
+        .select(`
+          total_amount_implant,
+          total_amount_surgery,
+          total_amount_mandatory_services,
+          total_amount_consultation,
+          total_amount_accommodation_charges,
+          total_amount_laboratory_services,
+          total_amount_radiology,
+          total_amount_pharmacy
+        `)
+        .eq('visit_id', visit.id)
+        .single();
+
+      if (error || !data) {
+        return [];
+      }
+
+      // Convert to bill items format for calculator
+      return [
+        { description: 'Implant', amount: Number(data.total_amount_implant) || 0 },
+        { description: 'Surgery', amount: Number(data.total_amount_surgery) || 0 },
+        { description: 'Anesthetist', amount: Number(data.total_amount_mandatory_services) || 0 },
+        { description: 'Consultation', amount: Number(data.total_amount_consultation) || 0 },
+        { description: 'Room', amount: Number(data.total_amount_accommodation_charges) || 0 },
+        { description: 'Laboratory', amount: Number(data.total_amount_laboratory_services) || 0 },
+        { description: 'Radiology', amount: Number(data.total_amount_radiology) || 0 },
+        { description: 'Medicine', amount: Number(data.total_amount_pharmacy) || 0 },
+      ].filter(item => item.amount > 0);
+    },
+    staleTime: 60000
+  });
+
+  // Calculate totals
+  const totalPaid = payments.reduce((sum: number, p: any) => sum + Number(p.amount), 0);
+
+  // Calculate total from financial_summary items
+  const financialTotal = billItems.reduce((sum: number, item: any) => sum + (item.amount || 0), 0);
+
+  // Determine patient type (Private or Yojna)
+  const corporate = visit.patients?.corporate?.toLowerCase() || '';
+  const isPrivate = !corporate || corporate === 'private' || corporate.trim() === '';
+  const patientType = isPrivate ? 'Private' : 'Yojna';
+
+  // Calculate referral (use financialTotal or fallback to billTotal)
+  const referralBreakdown = calculateReferralAmount(billItems, patientType as 'Private' | 'Yojna', financialTotal || billTotal);
+  const remaining = Math.max(0, referralBreakdown.finalAmount - totalPaid);
 
   return (
     <>
-      <Button
-        variant={totalAmount > 0 ? "default" : "outline"}
-        size="sm"
-        className={`h-6 px-2 text-xs ${totalAmount > 0 ? 'bg-green-600 hover:bg-green-700' : ''}`}
-        onClick={() => setIsModalOpen(true)}
-        disabled={isLoading}
-      >
-        {isLoading ? (
-          <Loader2 className="h-3 w-3 animate-spin" />
-        ) : totalAmount > 0 ? (
-          `₹${totalAmount.toLocaleString()}`
-        ) : (
-          'Pay'
-        )}
-      </Button>
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant={totalPaid > 0 ? "default" : "outline"}
+              size="sm"
+              className={`h-6 px-2 text-xs ${totalPaid > 0 ? 'bg-green-600 hover:bg-green-700' : ''}`}
+              onClick={() => setIsModalOpen(true)}
+              disabled={isLoading}
+            >
+              {isLoading ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : totalPaid > 0 ? (
+                `₹${totalPaid.toLocaleString()}`
+              ) : (
+                'Pay'
+              )}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="left" className="w-72 p-3 bg-white border shadow-lg">
+            <div className="space-y-2 text-sm">
+              {/* Total Bill Amount - from Financial Summary */}
+              <div className="flex justify-between bg-blue-50 p-2 rounded font-bold text-blue-800">
+                <span>Total Bill:</span>
+                <span>{formatIndianCurrency(financialTotal || billTotal)}</span>
+              </div>
+
+              <div className="font-semibold text-gray-800 border-b pb-1">
+                Referral Calculation ({patientType})
+              </div>
+
+              <div className="flex justify-between">
+                <span className="text-gray-600">Gross Amount:</span>
+                <span className="font-medium">{formatIndianCurrency(referralBreakdown.grossAmount)}</span>
+              </div>
+
+              {Object.keys(referralBreakdown.deductions).length > 0 && (
+                <div className="text-xs text-gray-500 pl-2 border-l-2 border-gray-200">
+                  {Object.entries(referralBreakdown.deductions).map(([cat, amt]) => (
+                    <div key={cat} className="flex justify-between">
+                      <span>{cat}:</span>
+                      <span>-{formatIndianCurrency(amt as number)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="flex justify-between">
+                <span className="text-gray-600">Total Deductions:</span>
+                <span className="font-medium text-red-600">-{formatIndianCurrency(referralBreakdown.totalDeductions)}</span>
+              </div>
+
+              <div className="flex justify-between">
+                <span className="text-gray-600">Net Amount:</span>
+                <span className="font-medium">{formatIndianCurrency(referralBreakdown.netAmount)}</span>
+              </div>
+
+              <div className="flex justify-between font-bold text-green-700 border-t pt-1">
+                <span>Referral ({referralBreakdown.referralPercentage}%):</span>
+                <span>{formatIndianCurrency(referralBreakdown.finalAmount)}</span>
+              </div>
+
+              {referralBreakdown.capApplied !== 'none' && (
+                <div className="text-xs text-orange-600">
+                  Cap applied: {referralBreakdown.capApplied.replace('_', ' ')}
+                </div>
+              )}
+
+              <div className="border-t pt-2 mt-2">
+                <div className="flex justify-between text-blue-600">
+                  <span>Paid:</span>
+                  <span>{formatIndianCurrency(totalPaid)}</span>
+                </div>
+                <div className="flex justify-between font-bold">
+                  <span>Remaining:</span>
+                  <span className={remaining > 0 ? 'text-red-600' : 'text-green-600'}>
+                    {formatIndianCurrency(remaining)}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
 
       <RefereeDoaPaymentModal
         isOpen={isModalOpen}
@@ -3137,7 +3260,7 @@ const TodaysIpdDashboard = () => {
                   {/* Only show referral-related cells for marketing managers */}
                   {isMarketingManager && (
                     <TableCell>
-                      <IpdRefereeAmountCell visit={visit} onUpdate={refetch} />
+                      <IpdRefereeAmountCell visit={visit} onUpdate={refetch} billTotal={billTotals[visit.visit_id] || 0} />
                     </TableCell>
                   )}
                   {isMarketingManager && (
