@@ -81,12 +81,13 @@ const IpdRefereeAmountCell = ({
   });
 
   // Fetch category-wise amounts from financial_summary table
-  const { data: billItems = [] } = useQuery({
+  const { data: financialSummaryData } = useQuery({
     queryKey: ['financial-summary-referral', visit.id],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('financial_summary')
         .select(`
+          total_amount_total,
           total_amount_implant,
           total_amount_surgery,
           total_amount_mandatory_services,
@@ -100,29 +101,31 @@ const IpdRefereeAmountCell = ({
         .single();
 
       if (error || !data) {
-        return [];
+        return null;
       }
 
-      // Convert to bill items format for calculator
-      return [
-        { description: 'Implant', amount: Number(data.total_amount_implant) || 0 },
-        { description: 'Surgery', amount: Number(data.total_amount_surgery) || 0 },
-        { description: 'Anesthetist', amount: Number(data.total_amount_mandatory_services) || 0 },
-        { description: 'Consultation', amount: Number(data.total_amount_consultation) || 0 },
-        { description: 'Room', amount: Number(data.total_amount_accommodation_charges) || 0 },
-        { description: 'Laboratory', amount: Number(data.total_amount_laboratory_services) || 0 },
-        { description: 'Radiology', amount: Number(data.total_amount_radiology) || 0 },
-        { description: 'Medicine', amount: Number(data.total_amount_pharmacy) || 0 },
-      ].filter(item => item.amount > 0);
+      return data;
     },
     staleTime: 60000
   });
 
+  // Convert to bill items format for calculator
+  const billItems = financialSummaryData ? [
+    { description: 'Implant', amount: Number(financialSummaryData.total_amount_implant) || 0 },
+    { description: 'Surgery', amount: Number(financialSummaryData.total_amount_surgery) || 0 },
+    { description: 'Anesthetist', amount: Number(financialSummaryData.total_amount_mandatory_services) || 0 },
+    { description: 'Consultation', amount: Number(financialSummaryData.total_amount_consultation) || 0 },
+    { description: 'Room', amount: Number(financialSummaryData.total_amount_accommodation_charges) || 0 },
+    { description: 'Laboratory', amount: Number(financialSummaryData.total_amount_laboratory_services) || 0 },
+    { description: 'Radiology', amount: Number(financialSummaryData.total_amount_radiology) || 0 },
+    { description: 'Medicine', amount: Number(financialSummaryData.total_amount_pharmacy) || 0 },
+  ].filter(item => item.amount > 0) : [];
+
   // Calculate totals
   const totalPaid = payments.reduce((sum: number, p: any) => sum + Number(p.amount), 0);
 
-  // Calculate total from financial_summary items
-  const financialTotal = billItems.reduce((sum: number, item: any) => sum + (item.amount || 0), 0);
+  // Use total_amount_total from financial_summary (the "Total" column in Financial Summary UI)
+  const financialTotal = Number(financialSummaryData?.total_amount_total) || 0;
 
   // Determine patient type (Private or Yojna)
   const corporate = visit.patients?.corporate?.toLowerCase() || '';
