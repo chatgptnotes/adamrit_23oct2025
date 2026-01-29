@@ -76,6 +76,7 @@ interface LabTestRow {
   patient_id?: string; // Add patient_id field
   test_type?: string; // Test type from lab_test_config (Numeric or Text)
   corporate?: string; // Patient's corporate type
+  printed_at?: string; // Timestamp when test was printed
 }
 
 interface PatientWithVisit {
@@ -704,6 +705,9 @@ const LabOrders = () => {
 
   // Track tests that have actual saved results in lab_results table
   const [testsWithSavedResults, setTestsWithSavedResults] = useState<string[]>([]);
+
+  // Track printed tests separately (won't be overwritten by DB fetch)
+  const [printedTestIds, setPrintedTestIds] = useState<string[]>([]);
 
   // NEW: State for previous test values (for hover tooltip)
   const [previousTestValues, setPreviousTestValues] = useState<Record<string, any[]>>({});
@@ -2080,6 +2084,7 @@ const LabOrders = () => {
           visit_id,
           lab_id,
           status,
+          printed_at,
           ordered_date,
           collected_date,
           completed_date,
@@ -2212,7 +2217,8 @@ const LabOrders = () => {
         visit_uuid: entry.visit_id, // Actual UUID FK to visits table
         lab_uuid: entry.lab_id, // Actual UUID FK to lab table
         patient_id: entry.visits?.patient_id, // Add patient_id from visits table
-        corporate: entry.visits?.patients?.corporate || 'OPD' // Patient's corporate type from patients table
+        corporate: entry.visits?.patients?.corporate || 'OPD', // Patient's corporate type from patients table
+        printed_at: entry.printed_at // Add printed_at for checkmark persistence
       })) || [];
 
       return testRows;
@@ -2306,7 +2312,7 @@ const LabOrders = () => {
             }
           }
 
-          // Track tests that have actual saved results in lab_results table
+          // Track tests that have actual saved results in lab_results table OR have been printed
           const savedResultIds: string[] = [];
           if (allLabResults && allLabResults.length > 0) {
             for (const testRow of labTestRows) {
@@ -2320,8 +2326,16 @@ const LabOrders = () => {
               }
             }
           }
+
+          // Also include tests that have been printed (from visit_labs.printed_at)
+          for (const testRow of labTestRows) {
+            if (testRow.printed_at && !savedResultIds.includes(testRow.id)) {
+              savedResultIds.push(testRow.id);
+            }
+          }
+
           setTestsWithSavedResults(savedResultIds);
-          console.log('✅ Tests with saved results:', savedResultIds.length);
+          console.log('✅ Tests with saved results or printed:', savedResultIds.length);
 
           setTestSampleStatus(statusMap);
           setIncludedTests([]); // Don't auto-include - user must select manually from one patient
@@ -3259,6 +3273,18 @@ const LabOrders = () => {
         printWindow.document.close();
         // Just focus the window, don't auto-print - user will click Print button
         printWindow.focus();
+
+        // Mark ALL printed tests with red checkmark (using separate state that won't be overwritten)
+        const newPrintedIds = testsForPrint.map(test => test.id);
+        setPrintedTestIds(prev => [...new Set([...prev, ...newPrintedIds])]);
+        console.log('✓ Marked printed tests with checkmark:', newPrintedIds);
+
+        // Save printed_at timestamp to database for persistence after refresh
+        await supabase
+          .from('visit_labs')
+          .update({ printed_at: new Date().toISOString() })
+          .in('id', newPrintedIds);
+        console.log('💾 Saved printed_at to database for:', newPrintedIds);
 
         toast({
           title: "Preview Ready",
@@ -4773,7 +4799,7 @@ const LabOrders = () => {
                                 console.log('✅ Updated "Incl" status locally (no database save)');
                               }}
                             />
-                            {testsWithSavedResults.includes(testRow.id) && (
+                            {(testsWithSavedResults.includes(testRow.id) || printedTestIds.includes(testRow.id)) && (
                               <span className="text-red-600 font-bold text-lg">✓</span>
                             )}
                           </div>
