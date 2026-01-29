@@ -80,6 +80,24 @@ const IpdRefereeAmountCell = ({
     staleTime: 30000
   });
 
+  // Fetch bill_amount from bill_preparation table
+  const { data: billPrepData } = useQuery({
+    queryKey: ['bill-preparation-amount', visit.visit_id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('bill_preparation')
+        .select('bill_amount')
+        .eq('visit_id', visit.visit_id)
+        .single();
+
+      if (error || !data) {
+        return null;
+      }
+      return data;
+    },
+    staleTime: 60000
+  });
+
   // Fetch category-wise amounts from financial_summary table
   const { data: financialSummaryData } = useQuery({
     queryKey: ['financial-summary-referral', visit.id],
@@ -124,6 +142,9 @@ const IpdRefereeAmountCell = ({
   // Calculate totals
   const totalPaid = payments.reduce((sum: number, p: any) => sum + Number(p.amount), 0);
 
+  // Get bill_amount from bill_preparation table
+  const billPrepAmount = Number(billPrepData?.bill_amount) || 0;
+
   // Use total_amount_total from financial_summary (the "Total" column in Financial Summary UI)
   const financialTotal = Number(financialSummaryData?.total_amount_total) || 0;
 
@@ -159,10 +180,10 @@ const IpdRefereeAmountCell = ({
           </TooltipTrigger>
           <TooltipContent side="left" className="w-72 p-3 bg-white border shadow-lg">
             <div className="space-y-2 text-sm">
-              {/* Total Bill Amount - from bills table */}
+              {/* Total Bill Amount - from bill_preparation.bill_amount */}
               <div className="flex justify-between bg-blue-50 p-2 rounded font-bold text-blue-800">
                 <span>Total Bill:</span>
-                <span>{formatIndianCurrency(billTotal)}</span>
+                <span>{formatIndianCurrency(billPrepAmount || billTotal)}</span>
               </div>
 
               <div className="font-semibold text-gray-800 border-b pb-1">
