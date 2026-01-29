@@ -159,10 +159,10 @@ const IpdRefereeAmountCell = ({
           </TooltipTrigger>
           <TooltipContent side="left" className="w-72 p-3 bg-white border shadow-lg">
             <div className="space-y-2 text-sm">
-              {/* Total Bill Amount - from Financial Summary */}
+              {/* Total Bill Amount - from bills table */}
               <div className="flex justify-between bg-blue-50 p-2 rounded font-bold text-blue-800">
                 <span>Total Bill:</span>
-                <span>{formatIndianCurrency(financialTotal || billTotal)}</span>
+                <span>{formatIndianCurrency(billTotal)}</span>
               </div>
 
               <div className="font-semibold text-gray-800 border-b pb-1">
