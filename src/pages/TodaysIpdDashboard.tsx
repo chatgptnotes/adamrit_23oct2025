@@ -47,14 +47,18 @@ import { DateRangePicker } from '@/components/ui/date-range-picker';
 import { DateRange } from 'react-day-picker';
 import '@/styles/print.css';
 import { RefereeDoaPaymentModal } from '@/components/ipd/RefereeDoaPaymentModal';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { calculateReferralAmount, formatIndianCurrency } from '@/utils/referralCalculator';
 
-// Referee DOA Amount Cell with Payment Modal
+// Referee DOA Amount Cell with Payment Modal and Referral Tooltip
 const IpdRefereeAmountCell = ({
   visit,
-  onUpdate
+  onUpdate,
+  billTotal = 0
 }: {
   visit: any;
   onUpdate?: () => void;
+  billTotal?: number;
 }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
 
@@ -76,26 +80,159 @@ const IpdRefereeAmountCell = ({
     staleTime: 30000
   });
 
-  // Calculate total
-  const totalAmount = payments.reduce((sum: number, p: any) => sum + Number(p.amount), 0);
+  // Calculate Total Bill from multiple tables (same as Financial Summary UI)
+  const { data: calculatedTotal } = useQuery({
+    queryKey: ['calculated-total-bill', visit.id],
+    queryFn: async () => {
+      let total = 0;
+
+      // 1. Lab tests from visit_labs
+      const { data: labsData } = await supabase
+        .from('visit_labs')
+        .select('cost')
+        .eq('visit_id', visit.id);
+
+      if (labsData) {
+        const labTotal = labsData.reduce((sum, lab) => sum + (Number(lab.cost) || 0), 0);
+        total += labTotal;
+        console.log('🧪 Lab tests total:', labTotal);
+      }
+
+      // 2. Clinical services
+      const { data: clinicalData } = await supabase
+        .from('visit_clinical_services')
+        .select('amount')
+        .eq('visit_id', visit.id);
+
+      if (clinicalData) {
+        const clinicalTotal = clinicalData.reduce((sum, s) => sum + (Number(s.amount) || 0), 0);
+        total += clinicalTotal;
+        console.log('🏥 Clinical services total:', clinicalTotal);
+      }
+
+      // 3. Mandatory services
+      const { data: mandatoryData } = await supabase
+        .from('visit_mandatory_services')
+        .select('amount')
+        .eq('visit_id', visit.id);
+
+      if (mandatoryData) {
+        const mandatoryTotal = mandatoryData.reduce((sum, s) => sum + (Number(s.amount) || 0), 0);
+        total += mandatoryTotal;
+        console.log('📋 Mandatory services total:', mandatoryTotal);
+      }
+
+      console.log('💰 Total Bill calculated for visit:', visit.visit_id, '=', total);
+      return total;
+    },
+    enabled: !!visit.id,
+    staleTime: 60000
+  });
+
+  // Calculate totals
+  const totalPaid = payments.reduce((sum: number, p: any) => sum + Number(p.amount), 0);
+
+  // Total Bill = calculated from multiple tables
+  const totalBillAmount = calculatedTotal || 0;
+
+  // Empty bill items (no financial_summary needed)
+  const billItems: Array<{ description: string; amount: number }> = [];
+
+  // Determine patient type (Private or Yojna)
+  const corporate = visit.patients?.corporate?.toLowerCase() || '';
+  const isPrivate = !corporate || corporate === 'private' || corporate.trim() === '';
+  const patientType = isPrivate ? 'Private' : 'Yojna';
+
+  // Calculate referral using totalBillAmount from bill_preparation
+  const referralBreakdown = calculateReferralAmount(billItems, patientType as 'Private' | 'Yojna', totalBillAmount);
+  const remaining = Math.max(0, referralBreakdown.finalAmount - totalPaid);
 
   return (
     <>
-      <Button
-        variant={totalAmount > 0 ? "default" : "outline"}
-        size="sm"
-        className={`h-6 px-2 text-xs ${totalAmount > 0 ? 'bg-green-600 hover:bg-green-700' : ''}`}
-        onClick={() => setIsModalOpen(true)}
-        disabled={isLoading}
-      >
-        {isLoading ? (
-          <Loader2 className="h-3 w-3 animate-spin" />
-        ) : totalAmount > 0 ? (
-          `₹${totalAmount.toLocaleString()}`
-        ) : (
-          'Pay'
-        )}
-      </Button>
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant={totalPaid > 0 ? "default" : "outline"}
+              size="sm"
+              className={`h-6 px-2 text-xs ${totalPaid > 0 ? 'bg-green-600 hover:bg-green-700' : ''}`}
+              onClick={() => setIsModalOpen(true)}
+              disabled={isLoading}
+            >
+              {isLoading ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : totalPaid > 0 ? (
+                `₹${totalPaid.toLocaleString()}`
+              ) : (
+                'Pay'
+              )}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="left" className="w-72 p-3 bg-white border shadow-lg">
+            <div className="space-y-2 text-sm">
+              {/* Total Bill Amount from bill_preparation.bill_amount */}
+              <div className="flex justify-between bg-blue-50 p-2 rounded font-bold text-blue-800">
+                <span>Total Bill:</span>
+                <span>{formatIndianCurrency(totalBillAmount)}</span>
+              </div>
+
+              <div className="font-semibold text-gray-800 border-b pb-1">
+                Referral Calculation ({patientType})
+              </div>
+
+              <div className="flex justify-between">
+                <span className="text-gray-600">Gross Amount:</span>
+                <span className="font-medium">{formatIndianCurrency(referralBreakdown.grossAmount)}</span>
+              </div>
+
+              {Object.keys(referralBreakdown.deductions).length > 0 && (
+                <div className="text-xs text-gray-500 pl-2 border-l-2 border-gray-200">
+                  {Object.entries(referralBreakdown.deductions).map(([cat, amt]) => (
+                    <div key={cat} className="flex justify-between">
+                      <span>{cat}:</span>
+                      <span>-{formatIndianCurrency(amt as number)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="flex justify-between">
+                <span className="text-gray-600">Total Deductions:</span>
+                <span className="font-medium text-red-600">-{formatIndianCurrency(referralBreakdown.totalDeductions)}</span>
+              </div>
+
+              <div className="flex justify-between">
+                <span className="text-gray-600">Net Amount:</span>
+                <span className="font-medium">{formatIndianCurrency(referralBreakdown.netAmount)}</span>
+              </div>
+
+              <div className="flex justify-between font-bold text-green-700 border-t pt-1">
+                <span>Referral ({referralBreakdown.referralPercentage}%):</span>
+                <span>{formatIndianCurrency(referralBreakdown.finalAmount)}</span>
+              </div>
+
+              {referralBreakdown.capApplied !== 'none' && (
+                <div className="text-xs text-orange-600">
+                  Cap applied: {referralBreakdown.capApplied.replace('_', ' ')}
+                </div>
+              )}
+
+              <div className="border-t pt-2 mt-2">
+                <div className="flex justify-between text-blue-600">
+                  <span>Paid:</span>
+                  <span>{formatIndianCurrency(totalPaid)}</span>
+                </div>
+                <div className="flex justify-between font-bold">
+                  <span>Remaining:</span>
+                  <span className={remaining > 0 ? 'text-red-600' : 'text-green-600'}>
+                    {formatIndianCurrency(remaining)}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
 
       <RefereeDoaPaymentModal
         isOpen={isModalOpen}
@@ -3137,7 +3274,7 @@ const TodaysIpdDashboard = () => {
                   {/* Only show referral-related cells for marketing managers */}
                   {isMarketingManager && (
                     <TableCell>
-                      <IpdRefereeAmountCell visit={visit} onUpdate={refetch} />
+                      <IpdRefereeAmountCell visit={visit} onUpdate={refetch} billTotal={billTotals[visit.visit_id] || 0} />
                     </TableCell>
                   )}
                   {isMarketingManager && (

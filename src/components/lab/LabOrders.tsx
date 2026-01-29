@@ -475,8 +475,14 @@ const LabOrders = () => {
   // Handler for entry form close
   const handleEntryFormClose = (open: boolean) => {
     setIsEntryModeOpen(open);
-    // Note: We don't clear selectedPatientForSampling here so user can still work with the same patient
-    // Patient selection will be cleared when samples are saved or filters are reset
+    if (!open) {
+      // Clear form state when dialog closes to prevent old values from appearing
+      setLabResultsForm({});
+      setSavedLabResults({});
+      setAuthenticatedResult(false);
+      setUploadedFiles([]);
+      console.log('🧹 Form state cleared on dialog close');
+    }
   };
 
   // DEBUG: Function to check if data is actually in lab_results table
@@ -1203,13 +1209,10 @@ const LabOrders = () => {
         });
       });
 
-      // Update labResultsForm with initial values
+      // Update labResultsForm with initial values (replace, not merge)
       if (Object.keys(initialFormData).length > 0) {
-        setLabResultsForm(prev => ({
-          ...prev,
-          ...initialFormData
-        }));
-        console.log('📋 Updated labResultsForm with text values:', initialFormData);
+        setLabResultsForm(initialFormData);
+        console.log('📋 Set labResultsForm with text values (replaced):', initialFormData);
       }
     }
   }, [testSubTests, selectedTestsForEntry]);
@@ -1501,10 +1504,11 @@ const LabOrders = () => {
             }
 
             if (Object.keys(loadedFormData).length > 0) {
-              setLabResultsForm(prev => ({ ...prev, ...loadedFormData }));
-              setSavedLabResults(prev => ({ ...prev, ...loadedFormData }));
+              // FIXED: Replace state instead of merge to prevent old values from persisting
+              setLabResultsForm(loadedFormData);
+              setSavedLabResults(loadedFormData);
               setIsFormSaved(true);
-              console.log('✅ Successfully loaded existing lab results into form');
+              console.log('✅ Successfully loaded existing lab results into form (replaced, not merged)');
               toast({
                 title: "Loaded Existing Results",
                 description: `Found and loaded ${Object.keys(loadedFormData).length} existing test results.`,

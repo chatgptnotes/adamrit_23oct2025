@@ -1839,7 +1839,7 @@ const LabPanelManager: React.FC = () => {
           </DialogHeader>
           {editingPanel && (
             <EditPanelForm
-              key={`${editingPanel.id}-${Date.now()}`}
+              key={editingPanel.id}
               panel={editingPanel}
               onSubmit={handleEditPanel}
             />
@@ -2533,9 +2533,9 @@ const AddPanelForm: React.FC<AddPanelFormProps> = ({ onSubmit }) => {
       {/* Test Configuration Section */}
       <TestConfigurationSection
         testName={formData.testName}
-        onTestNameChange={(testName) => setFormData({...formData, testName})}
+        onTestNameChange={(testName) => setFormData(prev => ({...prev, testName}))}
         subTests={formData.subTests}
-        onSubTestsChange={(subTests) => setFormData({...formData, subTests})}
+        onSubTestsChange={(subTests) => setFormData(prev => ({...prev, subTests}))}
       />
 
       <div>
@@ -2582,6 +2582,7 @@ const EditPanelForm: React.FC<EditPanelFormProps> = ({ panel, onSubmit }) => {
 
   const [formData, setFormData] = useState(panel);
   const [isLoadingSubTests, setIsLoadingSubTests] = useState(false);
+  const [initialLoadDone, setInitialLoadDone] = useState(false);
   const [currentAttribute, setCurrentAttribute] = useState<TestAttribute>({
     name: '',
     type: 'Numeric',
@@ -2647,11 +2648,17 @@ const EditPanelForm: React.FC<EditPanelFormProps> = ({ panel, onSubmit }) => {
 
       console.log('✅ Found', data.length, 'sub-test records');
 
-      // Load formulas from lab_test_formulas table
-      const { data: formulasData } = await supabase
+      // Load formulas from lab_test_formulas table (with lab_id filter if available)
+      let formulaQuery = supabase
         .from('lab_test_formulas')
         .select('*')
         .eq('test_name', testName);
+
+      if (labId) {
+        formulaQuery = formulaQuery.eq('lab_id', labId);
+      }
+
+      const { data: formulasData } = await formulaQuery;
 
       // Create a map of formulas by sub_test_name
       const formulasMap = new Map<string, any>();
@@ -2829,10 +2836,10 @@ const EditPanelForm: React.FC<EditPanelFormProps> = ({ panel, onSubmit }) => {
     }
   };
 
-  // Load existing sub-tests when component mounts
+  // Load existing sub-tests when component mounts (only once)
   useEffect(() => {
     const loadExistingSubTests = async () => {
-      if (panel.testName) {
+      if (panel.testName && !initialLoadDone) {
         setIsLoadingSubTests(true);
         try {
           console.log('📥 Loading sub-tests for panel:', panel.testName, 'id:', panel.id);
@@ -2842,6 +2849,7 @@ const EditPanelForm: React.FC<EditPanelFormProps> = ({ panel, onSubmit }) => {
             ...prev,
             subTests: existingSubTests
           }));
+          setInitialLoadDone(true);
         } catch (error) {
           console.error('Error loading existing sub-tests:', error);
         } finally {
@@ -2851,7 +2859,7 @@ const EditPanelForm: React.FC<EditPanelFormProps> = ({ panel, onSubmit }) => {
     };
 
     loadExistingSubTests();
-  }, [panel.testName, panel.id]);
+  }, [panel.testName, panel.id, initialLoadDone]);
 
   // State for managing multiple attribute forms in EditPanelForm
   const [attributeForms, setAttributeForms] = useState<Array<{id: string, attribute: TestAttribute, isEditing: boolean}>>([]);
@@ -3408,9 +3416,9 @@ const EditPanelForm: React.FC<EditPanelFormProps> = ({ panel, onSubmit }) => {
       {/* Test Configuration Section */}
       <TestConfigurationSection
         testName={formData.testName}
-        onTestNameChange={(testName) => setFormData({...formData, testName})}
+        onTestNameChange={(testName) => setFormData(prev => ({...prev, testName}))}
         subTests={formData.subTests}
-        onSubTestsChange={(subTests) => setFormData({...formData, subTests})}
+        onSubTestsChange={(subTests) => setFormData(prev => ({...prev, subTests}))}
         isLoading={isLoadingSubTests}
         labId={formData.id}
       />
