@@ -80,81 +80,71 @@ const IpdRefereeAmountCell = ({
     staleTime: 30000
   });
 
-  // Fetch bill_amount from bill_preparation table
-  const { data: billPrepData } = useQuery({
-    queryKey: ['bill-preparation-amount', visit.visit_id],
+  // Calculate Total Bill from multiple tables (same as Financial Summary UI)
+  const { data: calculatedTotal } = useQuery({
+    queryKey: ['calculated-total-bill', visit.id],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('bill_preparation')
-        .select('bill_amount')
-        .eq('visit_id', visit.visit_id)
-        .single();
+      let total = 0;
 
-      if (error || !data) {
-        return null;
-      }
-      return data;
-    },
-    staleTime: 60000
-  });
+      // 1. Lab tests from visit_labs
+      const { data: labsData } = await supabase
+        .from('visit_labs')
+        .select('cost')
+        .eq('visit_id', visit.id);
 
-  // Fetch category-wise amounts from financial_summary table
-  const { data: financialSummaryData } = useQuery({
-    queryKey: ['financial-summary-referral', visit.id],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('financial_summary')
-        .select(`
-          total_amount_total,
-          total_amount_implant,
-          total_amount_surgery,
-          total_amount_mandatory_services,
-          total_amount_consultation,
-          total_amount_accommodation_charges,
-          total_amount_laboratory_services,
-          total_amount_radiology,
-          total_amount_pharmacy
-        `)
-        .eq('visit_id', visit.id)
-        .single();
-
-      if (error || !data) {
-        return null;
+      if (labsData) {
+        const labTotal = labsData.reduce((sum, lab) => sum + (Number(lab.cost) || 0), 0);
+        total += labTotal;
+        console.log('🧪 Lab tests total:', labTotal);
       }
 
-      return data;
+      // 2. Clinical services
+      const { data: clinicalData } = await supabase
+        .from('visit_clinical_services')
+        .select('amount')
+        .eq('visit_id', visit.id);
+
+      if (clinicalData) {
+        const clinicalTotal = clinicalData.reduce((sum, s) => sum + (Number(s.amount) || 0), 0);
+        total += clinicalTotal;
+        console.log('🏥 Clinical services total:', clinicalTotal);
+      }
+
+      // 3. Mandatory services
+      const { data: mandatoryData } = await supabase
+        .from('visit_mandatory_services')
+        .select('amount')
+        .eq('visit_id', visit.id);
+
+      if (mandatoryData) {
+        const mandatoryTotal = mandatoryData.reduce((sum, s) => sum + (Number(s.amount) || 0), 0);
+        total += mandatoryTotal;
+        console.log('📋 Mandatory services total:', mandatoryTotal);
+      }
+
+      console.log('💰 Total Bill calculated for visit:', visit.visit_id, '=', total);
+      return total;
     },
+    enabled: !!visit.id,
     staleTime: 60000
   });
-
-  // Convert to bill items format for calculator
-  const billItems = financialSummaryData ? [
-    { description: 'Implant', amount: Number(financialSummaryData.total_amount_implant) || 0 },
-    { description: 'Surgery', amount: Number(financialSummaryData.total_amount_surgery) || 0 },
-    { description: 'Anesthetist', amount: Number(financialSummaryData.total_amount_mandatory_services) || 0 },
-    { description: 'Consultation', amount: Number(financialSummaryData.total_amount_consultation) || 0 },
-    { description: 'Room', amount: Number(financialSummaryData.total_amount_accommodation_charges) || 0 },
-    { description: 'Laboratory', amount: Number(financialSummaryData.total_amount_laboratory_services) || 0 },
-    { description: 'Radiology', amount: Number(financialSummaryData.total_amount_radiology) || 0 },
-    { description: 'Medicine', amount: Number(financialSummaryData.total_amount_pharmacy) || 0 },
-  ].filter(item => item.amount > 0) : [];
 
   // Calculate totals
   const totalPaid = payments.reduce((sum: number, p: any) => sum + Number(p.amount), 0);
 
-  // Get bill_amount from bill_preparation table
-  const billPrepAmount = Number(billPrepData?.bill_amount) || 0;
+  // Total Bill = calculated from multiple tables
+  const totalBillAmount = calculatedTotal || 0;
 
-  // Use total_amount_total from financial_summary (the "Total" column in Financial Summary UI)
-  const financialTotal = Number(financialSummaryData?.total_amount_total) || 0;
+  // Empty bill items (no financial_summary needed)
+  const billItems: Array<{ description: string; amount: number }> = [];
 
   // Determine patient type (Private or Yojna)
   const corporate = visit.patients?.corporate?.toLowerCase() || '';
   const isPrivate = !corporate || corporate === 'private' || corporate.trim() === '';
   const patientType = isPrivate ? 'Private' : 'Yojna';
 
-  // Calculate referral (use financialTotal or fallback to billTotal)
-  const referralBreakdown = calculateReferralAmount(billItems, patientType as 'Private' | 'Yojna', financialTotal || billTotal);
+  // Calculate referral using totalBillAmount from bill_preparation
+  const referralBreakdown = calculateReferralAmount(billItems, patientType as 'Private' | 'Yojna', totalBillAmount);
   const remaining = Math.max(0, referralBreakdown.finalAmount - totalPaid);
 
   return (
@@ -180,10 +170,10 @@ const IpdRefereeAmountCell = ({
           </TooltipTrigger>
           <TooltipContent side="left" className="w-72 p-3 bg-white border shadow-lg">
             <div className="space-y-2 text-sm">
-              {/* Total Bill Amount - from bill_preparation.bill_amount */}
+              {/* Total Bill Amount from bill_preparation.bill_amount */}
               <div className="flex justify-between bg-blue-50 p-2 rounded font-bold text-blue-800">
                 <span>Total Bill:</span>
-                <span>{formatIndianCurrency(billPrepAmount || billTotal)}</span>
+                <span>{formatIndianCurrency(totalBillAmount)}</span>
               </div>
 
               <div className="font-semibold text-gray-800 border-b pb-1">
