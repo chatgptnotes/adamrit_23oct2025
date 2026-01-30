@@ -1322,26 +1322,11 @@ const LabOrders = () => {
             console.log('✅ Deduplicated primary query results:', existingResults.length, 'unique tests');
           }
 
-          // Fallback: patient_name ONLY (ignores main_test_name which may be corrupted, no date filter)
+          // DISABLED: Fallback query was loading results from OTHER tests of same patient
+          // Only load results that match the specific visit_lab_id (primary query)
+          // If no results found, form should be empty for new test entry
           if ((!existingResults || existingResults.length === 0) && !error) {
-            console.log('🔄 Trying fallback: patient_name only (ignoring corrupted main_test_name)');
-            const { data: fallbackResults, error: fallbackError } = await supabase
-              .from('lab_results')
-              .select('*')
-              .eq('patient_name', patientName)
-              .order('created_at', { ascending: false });
-
-            if (!fallbackError && fallbackResults && fallbackResults.length > 0) {
-              // Deduplicate by test_name (keep most recent) - ignore main_test_name
-              const uniqueResults: Record<string, any> = {};
-              fallbackResults.forEach(r => {
-                if (!uniqueResults[r.test_name]) {
-                  uniqueResults[r.test_name] = r;
-                }
-              });
-              existingResults = Object.values(uniqueResults);
-              console.log('✅ Fallback query found results:', existingResults.length, 'unique test results');
-            }
+            console.log('ℹ️ No results found for this specific test (visit_lab_id) - form will be empty for new entry');
           }
 
           console.log('🔍 DEBUGGING: Query by visit_id result:', {
@@ -1581,8 +1566,9 @@ const LabOrders = () => {
 
       // Update visit_labs records to mark samples as taken (collected)
       const updatePromises = testIds.map(async (testId) => {
-        // Use the time when checkbox was ticked, not the save button click time
-        const collectedTime = sampleTakenTimes[testId] || new Date().toISOString();
+        // Use the test's order_date as collected_date (Sample Received should match order date)
+        const testRow = filteredTestRows.find(t => t.id === testId);
+        const collectedTime = testRow?.order_date || sampleTakenTimes[testId] || new Date().toISOString();
         const { error } = await supabase
           .from('visit_labs')
           .update({
@@ -3340,14 +3326,15 @@ const LabOrders = () => {
     if (testsForPrint.length === 0) return '';
 
     const patientInfo = testsForPrint[0];
-    // Use order date instead of current date for Report Date
+    // Use order date for DATE, but current time for TIME (when printing)
     const orderDate = patientInfo.order_date ? new Date(patientInfo.order_date) : new Date();
+    const currentTime = new Date(); // Current time for printing
     const reportDate = orderDate.toLocaleDateString('en-GB', {
       day: '2-digit',
       month: '2-digit',
       year: 'numeric'
     });
-    const reportTime = orderDate.toLocaleTimeString('en-GB', {
+    const reportTime = currentTime.toLocaleTimeString('en-GB', {
       hour: '2-digit',
       minute: '2-digit',
       second: '2-digit'
@@ -3457,10 +3444,11 @@ const LabOrders = () => {
           sampleReceivedDate = sampleDate.toLocaleDateString('en-GB', {
             day: '2-digit', month: '2-digit', year: 'numeric'
           });
+          // Use stored collected_date time (when sample was taken)
           sampleReceivedTime = sampleDate.toLocaleTimeString('en-GB', {
             hour: '2-digit', minute: '2-digit', second: '2-digit'
           });
-          console.log('✅ Got sample time from visit_labs.collected_date:', sampleReceivedDate, sampleReceivedTime);
+          console.log('✅ Got sample date/time from visit_labs.collected_date:', sampleReceivedDate, sampleReceivedTime);
         }
       } catch (err) {
         console.error('❌ Error fetching sample time from visit_labs:', err);
@@ -3494,10 +3482,11 @@ const LabOrders = () => {
             sampleReceivedDate = sampleDate.toLocaleDateString('en-GB', {
               day: '2-digit', month: '2-digit', year: 'numeric'
             });
+            // Use stored sample collection time
             sampleReceivedTime = sampleDate.toLocaleTimeString('en-GB', {
               hour: '2-digit', minute: '2-digit', second: '2-digit'
             });
-            console.log('✅ Got sample time from lab_orders (fallback):', sampleReceivedDate, sampleReceivedTime);
+            console.log('✅ Got sample date/time from lab_orders (fallback):', sampleReceivedDate, sampleReceivedTime);
           }
         }
       } catch (err) {
