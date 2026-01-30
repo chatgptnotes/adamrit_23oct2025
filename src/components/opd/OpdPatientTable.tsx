@@ -13,6 +13,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { printSticker } from '@/utils/stickerPrinter';
 import { useQuery } from '@tanstack/react-query';
 import { RefereeDoaPaymentModal } from '@/components/ipd/RefereeDoaPaymentModal';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { calculateReferralAmount, formatIndianCurrency } from '@/utils/referralCalculator';
 
 interface Patient {
   id: string;
@@ -52,7 +54,7 @@ interface OpdPatientTableProps {
   isMarketingManager?: boolean;
 }
 
-// Referee DOA Amount Cell with Payment Modal
+// Referee DOA Amount Cell with Payment Modal and Referral Tooltip
 const RefereeAmountCell = ({
   patient,
   onUpdate
@@ -80,8 +82,41 @@ const RefereeAmountCell = ({
     staleTime: 30000
   });
 
-  // Calculate total
-  const totalAmount = payments.reduce((sum: number, p: any) => sum + Number(p.amount), 0);
+  // Fetch Amount Paid Total from advance_payment table
+  const { data: advancePayments } = useQuery({
+    queryKey: ['advance-payment-total-opd', patient.visit_id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('advance_payment')
+        .select('advance_amount')
+        .eq('visit_id', patient.visit_id)
+        .eq('status', 'ACTIVE')
+        .eq('is_refund', false);
+
+      if (error) {
+        console.error('Error fetching advance payments:', error);
+        return [];
+      }
+      return data || [];
+    },
+    enabled: !!patient.visit_id,
+    staleTime: 60000
+  });
+
+  // Calculate totals
+  const totalPaid = payments.reduce((sum: number, p: any) => sum + Number(p.amount), 0);
+
+  // Total Bill = Sum of advance payments
+  const totalBillAmount = advancePayments?.reduce((sum: number, p: any) =>
+    sum + (parseFloat(p.advance_amount?.toString() || '0') || 0), 0) || 0;
+
+  // Referral calculation
+  const billItems: Array<{ description: string; amount: number }> = [];
+  const corporate = patient.patients?.corporate?.toLowerCase() || '';
+  const isPrivate = !corporate || corporate === 'private' || corporate.trim() === '';
+  const patientType = isPrivate ? 'Private' : 'Yojna';
+  const referralBreakdown = calculateReferralAmount(billItems, patientType as 'Private' | 'Yojna', totalBillAmount);
+  const remaining = Math.max(0, referralBreakdown.finalAmount - totalPaid);
 
   // Create visit object for modal (needs visit_id and patients)
   const visitForModal = {
@@ -92,21 +127,90 @@ const RefereeAmountCell = ({
 
   return (
     <>
-      <Button
-        variant={totalAmount > 0 ? "default" : "outline"}
-        size="sm"
-        className={`h-6 px-2 text-xs ${totalAmount > 0 ? 'bg-green-600 hover:bg-green-700' : ''}`}
-        onClick={() => setIsModalOpen(true)}
-        disabled={isLoading}
-      >
-        {isLoading ? (
-          <Loader2 className="h-3 w-3 animate-spin" />
-        ) : totalAmount > 0 ? (
-          `₹${totalAmount.toLocaleString()}`
-        ) : (
-          'Pay'
-        )}
-      </Button>
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant={totalPaid > 0 ? "default" : "outline"}
+              size="sm"
+              className={`h-6 px-2 text-xs ${totalPaid > 0 ? 'bg-green-600 hover:bg-green-700' : ''}`}
+              onClick={() => setIsModalOpen(true)}
+              disabled={isLoading}
+            >
+              {isLoading ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : totalPaid > 0 ? (
+                `₹${totalPaid.toLocaleString()}`
+              ) : (
+                'Pay'
+              )}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="left" className="w-72 p-3 bg-white border shadow-lg">
+            <div className="space-y-2 text-sm">
+              {/* Total Bill Amount from advance_payment */}
+              <div className="flex justify-between bg-blue-50 p-2 rounded font-bold text-blue-800">
+                <span>Total Bill:</span>
+                <span>{formatIndianCurrency(totalBillAmount)}</span>
+              </div>
+
+              <div className="font-semibold text-gray-800 border-b pb-1">
+                Referral Calculation ({patientType})
+              </div>
+
+              <div className="flex justify-between">
+                <span className="text-gray-600">Gross Amount:</span>
+                <span className="font-medium">{formatIndianCurrency(referralBreakdown.grossAmount)}</span>
+              </div>
+
+              {Object.keys(referralBreakdown.deductions).length > 0 && (
+                <div className="text-xs text-gray-500 pl-2 border-l-2 border-gray-200">
+                  {Object.entries(referralBreakdown.deductions).map(([cat, amt]) => (
+                    <div key={cat} className="flex justify-between">
+                      <span>{cat}:</span>
+                      <span>-{formatIndianCurrency(amt as number)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="flex justify-between">
+                <span className="text-gray-600">Total Deductions:</span>
+                <span className="font-medium text-red-600">-{formatIndianCurrency(referralBreakdown.totalDeductions)}</span>
+              </div>
+
+              <div className="flex justify-between">
+                <span className="text-gray-600">Net Amount:</span>
+                <span className="font-medium">{formatIndianCurrency(referralBreakdown.netAmount)}</span>
+              </div>
+
+              <div className="flex justify-between font-bold text-green-700 border-t pt-1">
+                <span>Referral ({referralBreakdown.referralPercentage}%):</span>
+                <span>{formatIndianCurrency(referralBreakdown.finalAmount)}</span>
+              </div>
+
+              {referralBreakdown.capApplied !== 'none' && (
+                <div className="text-xs text-orange-600">
+                  Cap applied: {referralBreakdown.capApplied.replace('_', ' ')}
+                </div>
+              )}
+
+              <div className="border-t pt-2 mt-2">
+                <div className="flex justify-between text-blue-600">
+                  <span>Paid:</span>
+                  <span>{formatIndianCurrency(totalPaid)}</span>
+                </div>
+                <div className="flex justify-between font-bold">
+                  <span>Remaining:</span>
+                  <span className={remaining > 0 ? 'text-red-600' : 'text-green-600'}>
+                    {formatIndianCurrency(remaining)}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
 
       <RefereeDoaPaymentModal
         isOpen={isModalOpen}
