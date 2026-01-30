@@ -80,60 +80,34 @@ const IpdRefereeAmountCell = ({
     staleTime: 30000
   });
 
-  // Calculate Total Bill from multiple tables (same as Financial Summary UI)
-  const { data: calculatedTotal } = useQuery({
-    queryKey: ['calculated-total-bill', visit.id],
+  // Fetch Amount Paid Total from advance_payment table
+  const { data: advancePayments } = useQuery({
+    queryKey: ['advance-payment-total', visit.visit_id],
     queryFn: async () => {
-      let total = 0;
+      const { data, error } = await supabase
+        .from('advance_payment')
+        .select('advance_amount')
+        .eq('visit_id', visit.visit_id)
+        .eq('status', 'ACTIVE')
+        .eq('is_refund', false);
 
-      // 1. Lab tests from visit_labs
-      const { data: labsData } = await supabase
-        .from('visit_labs')
-        .select('cost')
-        .eq('visit_id', visit.id);
-
-      if (labsData) {
-        const labTotal = labsData.reduce((sum, lab) => sum + (Number(lab.cost) || 0), 0);
-        total += labTotal;
-        console.log('🧪 Lab tests total:', labTotal);
+      if (error) {
+        console.error('Error fetching advance payments:', error);
+        return [];
       }
-
-      // 2. Clinical services
-      const { data: clinicalData } = await supabase
-        .from('visit_clinical_services')
-        .select('amount')
-        .eq('visit_id', visit.id);
-
-      if (clinicalData) {
-        const clinicalTotal = clinicalData.reduce((sum, s) => sum + (Number(s.amount) || 0), 0);
-        total += clinicalTotal;
-        console.log('🏥 Clinical services total:', clinicalTotal);
-      }
-
-      // 3. Mandatory services
-      const { data: mandatoryData } = await supabase
-        .from('visit_mandatory_services')
-        .select('amount')
-        .eq('visit_id', visit.id);
-
-      if (mandatoryData) {
-        const mandatoryTotal = mandatoryData.reduce((sum, s) => sum + (Number(s.amount) || 0), 0);
-        total += mandatoryTotal;
-        console.log('📋 Mandatory services total:', mandatoryTotal);
-      }
-
-      console.log('💰 Total Bill calculated for visit:', visit.visit_id, '=', total);
-      return total;
+      console.log('💰 Advance payments for visit:', visit.visit_id, '=', data);
+      return data || [];
     },
-    enabled: !!visit.id,
+    enabled: !!visit.visit_id,
     staleTime: 60000
   });
 
   // Calculate totals
   const totalPaid = payments.reduce((sum: number, p: any) => sum + Number(p.amount), 0);
 
-  // Total Bill = calculated from multiple tables
-  const totalBillAmount = calculatedTotal || 0;
+  // Total Bill = Sum of advance payments
+  const totalBillAmount = advancePayments?.reduce((sum: number, p: any) =>
+    sum + (parseFloat(p.advance_amount?.toString() || '0') || 0), 0) || 0;
 
   // Empty bill items (no financial_summary needed)
   const billItems: Array<{ description: string; amount: number }> = [];
