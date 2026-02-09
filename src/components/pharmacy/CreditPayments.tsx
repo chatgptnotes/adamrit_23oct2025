@@ -45,6 +45,7 @@ export const CreditPayments: React.FC = () => {
   const [paymentReference, setPaymentReference] = useState('');
   const [paymentRemarks, setPaymentRemarks] = useState('');
   const [pharmacyExecutive, setPharmacyExecutive] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // History modal state
   const [showHistory, setShowHistory] = useState(false);
@@ -329,6 +330,7 @@ export const CreditPayments: React.FC = () => {
 
   // Handle receive payment
   const handleReceivePayment = async () => {
+    if (isSubmitting) return; // Prevent double-click
     if (!selectedPatient || !paymentAmount || parseFloat(paymentAmount) <= 0) {
       toast.error('Please enter a valid amount');
       return;
@@ -346,55 +348,61 @@ export const CreditPayments: React.FC = () => {
       return;
     }
 
-    // Get patient UUID
-    const { data: patientData } = await supabase
-      .from('patients')
-      .select('id')
-      .eq('patients_id', selectedPatient.patient_id)
-      .eq('hospital_name', hospitalConfig.name)
-      .single();
+    setIsSubmitting(true);
 
-    const { error } = await supabase
-      .from('pharmacy_credit_payments')
-      .insert({
-        patient_id: selectedPatient.patient_id,
-        patient_uuid: patientData?.id || null,
-        patient_name: selectedPatient.patient_name,
-        visit_id: selectedPatient.visit_id,  // Store visit_id for visit-level tracking
-        amount: amount,
-        payment_method: paymentMethod,
-        payment_reference: paymentReference,
-        remarks: paymentRemarks,
-        pharmacy_executive: pharmacyExecutive || '',
-        received_by: user?.name || 'Unknown',
-        hospital_name: hospitalConfig?.name
-      });
+    try {
+      // Get patient UUID
+      const { data: patientData } = await supabase
+        .from('patients')
+        .select('id')
+        .eq('patients_id', selectedPatient.patient_id)
+        .eq('hospital_name', hospitalConfig.name)
+        .single();
 
-    if (error) {
-      console.error('Error saving payment:', error);
-      toast.error(`Failed to save payment: ${error.message}`);
-      return;
+      const { error } = await supabase
+        .from('pharmacy_credit_payments')
+        .insert({
+          patient_id: selectedPatient.patient_id,
+          patient_uuid: patientData?.id || null,
+          patient_name: selectedPatient.patient_name,
+          visit_id: selectedPatient.visit_id,  // Store visit_id for visit-level tracking
+          amount: amount,
+          payment_method: paymentMethod,
+          payment_reference: paymentReference,
+          remarks: paymentRemarks,
+          pharmacy_executive: pharmacyExecutive || '',
+          received_by: user?.name || 'Unknown',
+          hospital_name: hospitalConfig?.name
+        });
+
+      if (error) {
+        console.error('Error saving payment:', error);
+        toast.error(`Failed to save payment: ${error.message}`);
+        return;
+      }
+
+      toast.success(`Payment of ₹${amount.toFixed(2)} received successfully!`);
+
+      // Reset form
+      setPaymentAmount('');
+      setPaymentReference('');
+      setPaymentRemarks('');
+      setPharmacyExecutive('');
+      setShowPaymentModal(false);
+
+      // Refresh data
+      fetchCreditPatients();
+      fetchPatientPayments(selectedPatient.patient_id, selectedPatient.visit_id);
+
+      // Update selected patient balance
+      setSelectedPatient(prev => prev ? {
+        ...prev,
+        total_paid: prev.total_paid + amount,
+        balance: prev.balance - amount
+      } : null);
+    } finally {
+      setIsSubmitting(false);
     }
-
-    toast.success(`Payment of ₹${amount.toFixed(2)} received successfully!`);
-
-    // Reset form
-    setPaymentAmount('');
-    setPaymentReference('');
-    setPaymentRemarks('');
-    setPharmacyExecutive('');
-    setShowPaymentModal(false);
-
-    // Refresh data
-    fetchCreditPatients();
-    fetchPatientPayments(selectedPatient.patient_id, selectedPatient.visit_id);
-
-    // Update selected patient balance
-    setSelectedPatient(prev => prev ? {
-      ...prev,
-      total_paid: prev.total_paid + amount,
-      balance: prev.balance - amount
-    } : null);
   };
 
   useEffect(() => {
@@ -854,10 +862,10 @@ export const CreditPayments: React.FC = () => {
               <Button
                 className="w-full bg-green-600 hover:bg-green-700"
                 onClick={handleReceivePayment}
-                disabled={!paymentAmount || parseFloat(paymentAmount) <= 0}
+                disabled={isSubmitting || !paymentAmount || parseFloat(paymentAmount) <= 0}
               >
                 <Wallet className="h-4 w-4 mr-2" />
-                Receive ₹{paymentAmount || '0'}
+                {isSubmitting ? 'Processing...' : `Receive ₹${paymentAmount || '0'}`}
               </Button>
             </div>
           )}
