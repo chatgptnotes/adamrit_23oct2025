@@ -35,7 +35,8 @@ import {
   Download,
   Upload,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Printer
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -165,6 +166,53 @@ const MedicineItems: React.FC = () => {
     setCurrentPage(1);
   }, [searchTerm]);
 
+  const printMedicineList = () => {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+
+    const rows = filteredMedicines.map((medicine, index) => `
+      <tr>
+        <td style="border: 1px solid #ddd; padding: 6px 10px; text-align: center;">${index + 1}</td>
+        <td style="border: 1px solid #ddd; padding: 6px 10px;">${medicine.generic_name || 'N/A'}</td>
+        <td style="border: 1px solid #ddd; padding: 6px 10px;">${medicine.manufacturer?.name || 'N/A'}</td>
+      </tr>
+    `).join('');
+
+    const html = `
+      <html>
+        <head>
+          <title>Medicine List</title>
+          <style>
+            body { font-family: Arial, sans-serif; padding: 20px; }
+            h2 { text-align: center; margin-bottom: 20px; }
+            table { width: 100%; border-collapse: collapse; }
+            th { border: 1px solid #ddd; padding: 8px 10px; background-color: #f2f2f2; text-align: left; }
+            @media print { body { padding: 0; } }
+          </style>
+        </head>
+        <body>
+          <h2>Medicine List</h2>
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 50px; text-align: center;">S.No</th>
+                <th>Generic Name</th>
+                <th>Brand Name (Manufacturer)</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rows}
+            </tbody>
+          </table>
+          <script>window.onload = function() { window.print(); }</script>
+        </body>
+      </html>
+    `;
+
+    printWindow.document.write(html);
+    printWindow.document.close();
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -179,6 +227,10 @@ const MedicineItems: React.FC = () => {
           </div>
         </div>
         <div className="flex gap-2">
+          <Button variant="outline" onClick={printMedicineList}>
+            <Printer className="h-4 w-4 mr-2" />
+            Print
+          </Button>
           <Button variant="outline">
             <Upload className="h-4 w-4 mr-2" />
             Import

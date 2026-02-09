@@ -16,6 +16,8 @@ export interface MedicineMaster {
   manufacturer?: ManufacturerCompany;
   supplier?: Supplier;
 
+  strength?: string | null;
+
   // Deprecated fields - kept for backward compatibility during migration
   // These will be removed after database migration
   tablets_pieces?: number;
