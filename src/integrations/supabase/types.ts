@@ -6489,6 +6489,7 @@ export type Database = {
           uploaded_file_path: string | null
           uploaded_file_size: number | null
           visit_id: string
+          xray_started_at: string | null
         }
         Insert: {
           additional_notes?: string | null
@@ -6518,6 +6519,7 @@ export type Database = {
           uploaded_file_path?: string | null
           uploaded_file_size?: number | null
           visit_id: string
+          xray_started_at?: string | null
         }
         Update: {
           additional_notes?: string | null
@@ -6547,6 +6549,7 @@ export type Database = {
           uploaded_file_path?: string | null
           uploaded_file_size?: number | null
           visit_id?: string
+          xray_started_at?: string | null
         }
         Relationships: [
           {

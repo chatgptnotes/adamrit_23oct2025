@@ -35,6 +35,7 @@ interface XRayRecord {
   id: string;
   visit_id: string;
   radiology_id: string;
+  xray_started_at: string | null;
   ordered_date: string | null;
   completed_date: string | null;
   report_given_date: string | null; // stored in scheduled_date column
@@ -112,6 +113,7 @@ const XRayTracking: React.FC = () => {
           id: r.id,
           visit_id: r.visit_id,
           radiology_id: r.radiology_id,
+          xray_started_at: r.xray_started_at,
           ordered_date: r.ordered_date,
           completed_date: r.completed_date,
           report_given_date: r.scheduled_date,
@@ -212,14 +214,12 @@ const XRayTracking: React.FC = () => {
         return;
       }
 
-      // Always create a fresh X-Ray entry (explicitly set timestamps to null so DB defaults don't auto-fill)
+      // Always create a fresh X-Ray entry
       const { data: newRecord, error: insertError } = await supabase
         .from('visit_radiology')
         .insert({
           visit_id: latestVisitId,
-          radiology_id: radiologyId,
-          ordered_date: null as any,
-          completed_date: null as any
+          radiology_id: radiologyId
         })
         .select()
         .single();
@@ -239,6 +239,7 @@ const XRayTracking: React.FC = () => {
         id: newRecord.id,
         visit_id: newRecord.visit_id,
         radiology_id: newRecord.radiology_id,
+        xray_started_at: newRecord.xray_started_at,
         ordered_date: newRecord.ordered_date,
         completed_date: newRecord.completed_date,
         report_given_date: newRecord.scheduled_date,
@@ -266,6 +267,7 @@ const XRayTracking: React.FC = () => {
     if (data) {
       setXrayRecord(prev => prev ? {
         ...prev,
+        xray_started_at: data.xray_started_at,
         ordered_date: data.ordered_date,
         completed_date: data.completed_date,
         report_given_date: data.scheduled_date,
@@ -279,7 +281,7 @@ const XRayTracking: React.FC = () => {
     const now = new Date().toISOString();
     const { error } = await supabase
       .from('visit_radiology')
-      .update({ ordered_date: now })
+      .update({ xray_started_at: now })
       .eq('id', recordId);
 
     if (error) {
@@ -343,7 +345,7 @@ const XRayTracking: React.FC = () => {
   const getStatusBadge = (record: XRayRecord) => {
     if (record.report_given_date) return <Badge className="bg-green-100 text-green-800 border-green-300">Report Given</Badge>;
     if (record.completed_date) return <Badge className="bg-blue-100 text-blue-800 border-blue-300">Scan Completed</Badge>;
-    if (record.ordered_date) return <Badge className="bg-yellow-100 text-yellow-800 border-yellow-300">X-Ray Started</Badge>;
+    if (record.xray_started_at) return <Badge className="bg-yellow-100 text-yellow-800 border-yellow-300">X-Ray Started</Badge>;
     return <Badge className="bg-gray-100 text-gray-800 border-gray-300">Pending</Badge>;
   };
 
@@ -428,16 +430,16 @@ const XRayTracking: React.FC = () => {
               {/* Time 1: X-Ray Started */}
               <div className="text-center border rounded-xl p-6 space-y-3">
                 <div className={`w-14 h-14 rounded-full flex items-center justify-center mx-auto ${
-                  xrayRecord.ordered_date ? 'bg-yellow-100' : 'bg-gray-100'
+                  xrayRecord.xray_started_at ? 'bg-yellow-100' : 'bg-gray-100'
                 }`}>
-                  <Play className={`h-7 w-7 ${xrayRecord.ordered_date ? 'text-yellow-700' : 'text-gray-400'}`} />
+                  <Play className={`h-7 w-7 ${xrayRecord.xray_started_at ? 'text-yellow-700' : 'text-gray-400'}`} />
                 </div>
                 <h3 className="font-semibold text-sm">X-Ray Started</h3>
                 <p className="text-xs text-muted-foreground">Patient arrives & X-Ray begins</p>
-                {xrayRecord.ordered_date ? (
+                {xrayRecord.xray_started_at ? (
                   <div>
-                    <p className="text-xl font-bold text-yellow-700">{formatTime(xrayRecord.ordered_date)}</p>
-                    <p className="text-xs text-muted-foreground">{formatDate(xrayRecord.ordered_date)}</p>
+                    <p className="text-xl font-bold text-yellow-700">{formatTime(xrayRecord.xray_started_at)}</p>
+                    <p className="text-xs text-muted-foreground">{formatDate(xrayRecord.xray_started_at)}</p>
                   </div>
                 ) : (
                   <Button
@@ -464,7 +466,7 @@ const XRayTracking: React.FC = () => {
                     <p className="text-xl font-bold text-blue-700">{formatTime(xrayRecord.completed_date)}</p>
                     <p className="text-xs text-muted-foreground">{formatDate(xrayRecord.completed_date)}</p>
                   </div>
-                ) : xrayRecord.ordered_date ? (
+                ) : xrayRecord.xray_started_at ? (
                   <Button
                     onClick={() => markXRayCompleted(xrayRecord.id)}
                     className="bg-blue-500 hover:bg-blue-600 text-white w-full"
@@ -567,10 +569,10 @@ const XRayTracking: React.FC = () => {
                       </td>
                       <td className="px-4 py-3 text-sm">{getStatusBadge(record)}</td>
                       <td className="px-4 py-3 text-center text-sm">
-                        {formatTime(record.ordered_date) ? (
+                        {formatTime(record.xray_started_at) ? (
                           <div>
-                            <p className="font-medium text-yellow-700">{formatTime(record.ordered_date)}</p>
-                            <p className="text-xs text-muted-foreground">{formatDate(record.ordered_date)}</p>
+                            <p className="font-medium text-yellow-700">{formatTime(record.xray_started_at)}</p>
+                            <p className="text-xs text-muted-foreground">{formatDate(record.xray_started_at)}</p>
                           </div>
                         ) : <span className="text-gray-400">--</span>}
                       </td>
