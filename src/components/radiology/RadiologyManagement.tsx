@@ -36,6 +36,7 @@ import {
 } from 'lucide-react';
 import RadiologyDashboard from './RadiologyDashboard';
 import RadiologySubSpecialityForm from './RadiologySubSpecialityForm';
+import XRayTracking from './XRayTracking';
 
 interface StatCardProps {
   title: string;
@@ -169,7 +170,7 @@ interface RadiologyTest {
 const RadiologyManagement: React.FC = () => {
   const { hospitalConfig } = useAuth();
   const { canEditMasters } = usePermissions();
-  const [activeView, setActiveView] = useState('orders');
+  const [activeView, setActiveView] = useState<string>('orders');
   const [radiologyTests, setRadiologyTests] = useState<RadiologyTest[]>([]);
   const [loading, setLoading] = useState(false);
   const [editingTest, setEditingTest] = useState<RadiologyTest | null>(null);
@@ -1076,6 +1077,14 @@ const RadiologyManagement: React.FC = () => {
             >
               Rad Management
             </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className={activeView === 'xrayTracking' ? 'bg-white shadow-sm text-black border border-black' : ''}
+              onClick={() => setActiveView('xrayTracking')}
+            >
+              X-Ray Tracking
+            </Button>
           </div>
 
           {/* Search Bar */}
@@ -1281,6 +1290,51 @@ const RadiologyManagement: React.FC = () => {
     );
   }
 
+  if (activeView === 'xrayTracking') {
+    return (
+      <div className="min-h-screen bg-background">
+        <div className="p-6">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h1 className="text-3xl font-bold text-primary">Radiology Management - X-Ray Tracking</h1>
+              <p className="text-muted-foreground">Track X-Ray progress: Start, Scan Complete, Report Given</p>
+            </div>
+          </div>
+
+          {/* Navigation Tabs */}
+          <div className="flex space-x-1 mb-6 bg-gray-100 p-1 rounded-lg w-fit">
+            <Button
+              variant="ghost"
+              size="sm"
+              className={activeView === 'orders' ? 'bg-white shadow-sm text-black border border-black' : ''}
+              onClick={() => setActiveView('orders')}
+            >
+              Orders
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className={activeView === 'addTest' ? 'bg-white shadow-sm text-black border border-black' : ''}
+              onClick={() => setActiveView('addTest')}
+            >
+              Rad Management
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className={activeView === 'xrayTracking' ? 'bg-white shadow-sm text-black border border-black' : ''}
+              onClick={() => setActiveView('xrayTracking')}
+            >
+              X-Ray Tracking
+            </Button>
+          </div>
+
+          <XRayTracking />
+        </div>
+      </div>
+    );
+  }
+
   if (activeView === 'orders' || activeView === 'addTest') {
     return (
       <div className="min-h-screen bg-background">
@@ -1309,6 +1363,14 @@ const RadiologyManagement: React.FC = () => {
               onClick={() => setActiveView('addTest')}
             >
               Rad Management
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className={activeView === 'xrayTracking' ? 'bg-white shadow-sm text-black border border-black' : ''}
+              onClick={() => setActiveView('xrayTracking')}
+            >
+              X-Ray Tracking
             </Button>
           </div>
 
