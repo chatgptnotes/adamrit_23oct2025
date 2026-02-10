@@ -17,7 +17,8 @@ import {
   Play,
   ScanLine,
   FileCheck,
-  RefreshCw
+  RefreshCw,
+  Printer
 } from 'lucide-react';
 
 interface Patient {
@@ -312,7 +313,7 @@ const XRayTracking: React.FC = () => {
     loadAllRecords();
   };
 
-  // Mark Report Given (using scheduled_date since result_date doesn't exist in DB)
+  // Mark Report Generated (using scheduled_date since result_date doesn't exist in DB)
   const markReportGiven = async (recordId: string) => {
     const now = new Date().toISOString();
 
@@ -327,7 +328,7 @@ const XRayTracking: React.FC = () => {
       return;
     }
 
-    toast.success('Report Given - time recorded');
+    toast.success('Report Generated - time recorded');
     await refreshRecord();
     loadAllRecords();
   };
@@ -343,10 +344,81 @@ const XRayTracking: React.FC = () => {
   };
 
   const getStatusBadge = (record: XRayRecord) => {
-    if (record.report_given_date) return <Badge className="bg-green-100 text-green-800 border-green-300">Report Given</Badge>;
+    if (record.report_given_date) return <Badge className="bg-green-100 text-green-800 border-green-300">Report Generated</Badge>;
     if (record.completed_date) return <Badge className="bg-blue-100 text-blue-800 border-blue-300">Scan Completed</Badge>;
     if (record.xray_started_at) return <Badge className="bg-yellow-100 text-yellow-800 border-yellow-300">X-Ray Started</Badge>;
     return <Badge className="bg-gray-100 text-gray-800 border-gray-300">Pending</Badge>;
+  };
+
+  const printXRayReport = (record?: XRayRecord) => {
+    const rec = record || xrayRecord;
+    if (!rec) return;
+
+    const patientName = rec.patient_name || selectedPatient?.name || 'N/A';
+    const patientId = rec.patients_id || selectedPatient?.patients_id || 'N/A';
+
+    const startedTime = rec.xray_started_at ? `${formatTime(rec.xray_started_at)} — ${formatDate(rec.xray_started_at)}` : 'Not recorded';
+    const completedTime = rec.completed_date ? `${formatTime(rec.completed_date)} — ${formatDate(rec.completed_date)}` : 'Not recorded';
+    const reportTime = rec.report_given_date ? `${formatTime(rec.report_given_date)} — ${formatDate(rec.report_given_date)}` : 'Not recorded';
+    const printDate = format(new Date(), 'dd/MM/yyyy hh:mm a');
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      toast.error('Please allow popups to print the report');
+      return;
+    }
+
+    printWindow.document.write(`
+      <html>
+      <head>
+        <title>X-Ray Timing Report — ${patientName}</title>
+        <style>
+          body { font-family: Arial, sans-serif; padding: 40px; color: #333; }
+          .header { text-align: center; border-bottom: 2px solid #333; padding-bottom: 16px; margin-bottom: 30px; }
+          .header h1 { font-size: 22px; margin: 0 0 4px 0; }
+          .header p { font-size: 13px; color: #666; margin: 2px 0; }
+          .patient-info { margin-bottom: 30px; }
+          .patient-info h2 { font-size: 18px; margin: 0 0 8px 0; }
+          .patient-info p { font-size: 14px; color: #555; margin: 2px 0; }
+          table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+          th, td { border: 1px solid #ccc; padding: 12px 16px; text-align: left; font-size: 14px; }
+          th { background-color: #f5f5f5; font-weight: 600; width: 40%; }
+          td { font-size: 15px; font-weight: 500; }
+          .footer { margin-top: 40px; text-align: center; font-size: 12px; color: #999; border-top: 1px solid #ddd; padding-top: 12px; }
+          @media print { body { padding: 20px; } }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1>X-Ray Timing Report</h1>
+          <p>Generated on: ${printDate}</p>
+        </div>
+        <div class="patient-info">
+          <h2>${patientName}</h2>
+          <p>Patient ID: ${patientId}</p>
+        </div>
+        <table>
+          <tr>
+            <th>X-Ray Started</th>
+            <td>${startedTime}</td>
+          </tr>
+          <tr>
+            <th>Scan Completed</th>
+            <td>${completedTime}</td>
+          </tr>
+          <tr>
+            <th>Report Generated</th>
+            <td>${reportTime}</td>
+          </tr>
+        </table>
+        <div class="footer">
+          <p>This is a system-generated report.</p>
+        </div>
+      </body>
+      </html>
+    `);
+    printWindow.document.close();
+    printWindow.print();
   };
 
   return (
@@ -479,15 +551,15 @@ const XRayTracking: React.FC = () => {
                 )}
               </div>
 
-              {/* Time 3: Report Given */}
+              {/* Time 3: Report Generated */}
               <div className="text-center border rounded-xl p-6 space-y-3">
                 <div className={`w-14 h-14 rounded-full flex items-center justify-center mx-auto ${
                   xrayRecord.report_given_date ? 'bg-green-100' : 'bg-gray-100'
                 }`}>
                   <FileCheck className={`h-7 w-7 ${xrayRecord.report_given_date ? 'text-green-700' : 'text-gray-400'}`} />
                 </div>
-                <h3 className="font-semibold text-sm">Report Given</h3>
-                <p className="text-xs text-muted-foreground">Report generated or given</p>
+                <h3 className="font-semibold text-sm">Report Generated</h3>
+                <p className="text-xs text-muted-foreground">Report is generated</p>
                 {xrayRecord.report_given_date ? (
                   <div>
                     <p className="text-xl font-bold text-green-700">{formatTime(xrayRecord.report_given_date)}</p>
@@ -499,12 +571,24 @@ const XRayTracking: React.FC = () => {
                     className="bg-green-500 hover:bg-green-600 text-white w-full"
                   >
                     <FileCheck className="h-4 w-4 mr-2" />
-                    Mark Report Given
+                    Mark Report Generated
                   </Button>
                 ) : (
                   <p className="text-xs text-gray-400 italic">Complete scan first</p>
                 )}
               </div>
+            </div>
+
+            {/* Print Report Button */}
+            <div className="flex justify-end mt-4">
+              <Button
+                onClick={printXRayReport}
+                variant="outline"
+                className="border-gray-300 hover:bg-gray-50"
+              >
+                <Printer className="h-4 w-4 mr-2" />
+                Print Report
+              </Button>
             </div>
           </CardContent>
         </Card>
@@ -556,7 +640,8 @@ const XRayTracking: React.FC = () => {
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
                     <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">X-Ray Started</th>
                     <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Scan Completed</th>
-                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Report Given</th>
+                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Report Generated</th>
+                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
@@ -591,6 +676,16 @@ const XRayTracking: React.FC = () => {
                             <p className="text-xs text-muted-foreground">{formatDate(record.report_given_date)}</p>
                           </div>
                         ) : <span className="text-gray-400">--</span>}
+                      </td>
+                      <td className="px-4 py-3 text-center text-sm">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => printXRayReport(record)}
+                          title="Print Report"
+                        >
+                          <Printer className="h-4 w-4" />
+                        </Button>
                       </td>
                     </tr>
                   ))}
