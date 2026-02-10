@@ -72,45 +72,45 @@ const XRayTracking: React.FC = () => {
         .order('created_at', { ascending: false })
         .limit(50);
 
-      if (error || !data) {
+      if (error || !data || data.length === 0) {
         setAllRecords([]);
         return;
       }
 
-      const records: XRayRecord[] = [];
-      for (const r of data) {
-        let patient_name = '';
-        let patients_id = '';
-        let radiology_name = '';
+      // Batch fetch visits for all records
+      const visitIds = [...new Set(data.map(r => r.visit_id))];
+      const { data: visitsData } = await supabase
+        .from('visits')
+        .select('id, patient_id')
+        .in('id', visitIds);
 
-        // Get patient info via visit
-        const { data: visitData } = await supabase
-          .from('visits')
-          .select('patient_id')
-          .eq('id', r.visit_id)
-          .single();
+      const visitMap = new Map<string, string>();
+      (visitsData || []).forEach(v => visitMap.set(v.id, v.patient_id));
 
-        if (visitData?.patient_id) {
-          const { data: patientData } = await supabase
-            .from('patients')
-            .select('name, patients_id')
-            .eq('id', visitData.patient_id)
-            .single();
-          if (patientData) {
-            patient_name = patientData.name;
-            patients_id = patientData.patients_id || '';
-          }
-        }
+      // Batch fetch patients
+      const patientIds = [...new Set(Array.from(visitMap.values()).filter(Boolean))];
+      const { data: patientsData } = patientIds.length > 0
+        ? await supabase.from('patients').select('id, name, patients_id').in('id', patientIds)
+        : { data: [] };
 
-        // Get radiology name
-        const { data: radData } = await supabase
-          .from('radiology')
-          .select('name')
-          .eq('id', r.radiology_id)
-          .single();
-        if (radData) radiology_name = radData.name;
+      const patientMap = new Map<string, { name: string; patients_id: string }>();
+      (patientsData || []).forEach(p => patientMap.set(p.id, { name: p.name, patients_id: p.patients_id || '' }));
 
-        records.push({
+      // Batch fetch radiology names
+      const radIds = [...new Set(data.map(r => r.radiology_id))];
+      const { data: radData } = await supabase
+        .from('radiology')
+        .select('id, name')
+        .in('id', radIds);
+
+      const radMap = new Map<string, string>();
+      (radData || []).forEach(r => radMap.set(r.id, r.name));
+
+      // Build records using lookup maps
+      const records: XRayRecord[] = data.map(r => {
+        const patientId = visitMap.get(r.visit_id) || '';
+        const patient = patientMap.get(patientId);
+        return {
           id: r.id,
           visit_id: r.visit_id,
           radiology_id: r.radiology_id,
@@ -119,11 +119,11 @@ const XRayTracking: React.FC = () => {
           completed_date: r.completed_date,
           report_given_date: r.scheduled_date,
           status: r.status,
-          patient_name,
-          patients_id,
-          radiology_name
-        });
-      }
+          patient_name: patient?.name || '',
+          patients_id: patient?.patients_id || '',
+          radiology_name: radMap.get(r.radiology_id) || ''
+        };
+      });
 
       setAllRecords(records);
     } catch (err) {
