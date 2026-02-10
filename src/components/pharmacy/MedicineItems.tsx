@@ -333,10 +333,9 @@ const MedicineItems: React.FC = () => {
                 ) : (
                   paginatedMedicines.map((medicine) => {
                     const stockInfo = batchStockMap[medicine.id] || { totalStock: 0, piecesPerPack: 1 };
-                    const stockTablets = stockInfo.totalStock;
-                    const stockStrips = stockInfo.piecesPerPack > 0
-                      ? Math.floor(stockInfo.totalStock / stockInfo.piecesPerPack)
-                      : 0;
+                    const stockStrips = stockInfo.totalStock;
+                    const effectivePiecesPerPack = medicine.tablets_pieces || stockInfo.piecesPerPack || 1;
+                    const stockTablets = stockStrips * effectivePiecesPerPack;
 
                     return (
                       <TableRow key={medicine.id}>
