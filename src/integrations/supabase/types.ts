@@ -6712,6 +6712,7 @@ export type Database = {
           delay_waiver_intimation: string | null
           diagnosis_id: string | null
           discharge_date: string | null
+          discharge_intimation_at: string | null
           discharge_mode: string | null
           discharge_notes: string | null
           discharge_summary_signed: boolean | null
@@ -6763,6 +6764,7 @@ export type Database = {
           delay_waiver_intimation?: string | null
           diagnosis_id?: string | null
           discharge_date?: string | null
+          discharge_intimation_at?: string | null
           discharge_mode?: string | null
           discharge_notes?: string | null
           discharge_summary_signed?: boolean | null
@@ -6814,6 +6816,7 @@ export type Database = {
           delay_waiver_intimation?: string | null
           diagnosis_id?: string | null
           discharge_date?: string | null
+          discharge_intimation_at?: string | null
           discharge_mode?: string | null
           discharge_notes?: string | null
           discharge_summary_signed?: boolean | null
