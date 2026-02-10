@@ -15,6 +15,8 @@ import { useQuery } from '@tanstack/react-query';
 import { RefereeDoaPaymentModal } from '@/components/ipd/RefereeDoaPaymentModal';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { calculateReferralAmount, formatIndianCurrency } from '@/utils/referralCalculator';
+import { Checkbox } from '@/components/ui/checkbox';
+import { format } from 'date-fns';
 
 interface Patient {
   id: string;
@@ -46,6 +48,7 @@ interface Patient {
   discharge_summary?: string;
   is_discharged?: boolean;
   discharge_date?: string;
+  discharge_intimation_at?: string | null;
 }
 
 interface OpdPatientTableProps {
@@ -1389,6 +1392,7 @@ Verified by: [To be verified by doctor]`;
             {isMarketingManager && <TableHead className="font-medium print:hidden">Referee DOA_Amt Paid</TableHead>}
             {isMarketingManager && <TableHead className="font-medium print:hidden">Referral Payment</TableHead>}
             <TableHead className="text-center font-medium print:hidden">Physiotherapy Bill</TableHead>
+            <TableHead className="text-center font-medium print:hidden">Discharge Intimation</TableHead>
             <TableHead className="text-center font-medium print:hidden">Stickers</TableHead>
             <TableHead className="text-center font-medium print:hidden">OPD Summary</TableHead>
             <TableHead className="text-center font-medium print:hidden">Actions</TableHead>
@@ -1545,6 +1549,37 @@ Verified by: [To be verified by doctor]`;
                 >
                   <Activity className="h-4 w-4 text-teal-600" />
                 </Button>
+              </TableCell>
+              {/* Screen-only: Discharge Intimation */}
+              <TableCell className="text-center print:hidden">
+                {patient.discharge_intimation_at ? (
+                  <div className="flex flex-col items-center gap-1">
+                    <Checkbox checked={true} disabled className="data-[state=checked]:bg-green-600" />
+                    <span className="text-xs text-muted-foreground">
+                      {format(new Date(patient.discharge_intimation_at), 'MMM dd, HH:mm')}
+                    </span>
+                  </div>
+                ) : (
+                  <Checkbox
+                    checked={false}
+                    onCheckedChange={async () => {
+                      const now = new Date().toISOString();
+                      try {
+                        const { error } = await supabase
+                          .from('visits')
+                          .update({ discharge_intimation_at: now })
+                          .eq('visit_id', patient.visit_id);
+                        if (error) {
+                          console.error('Error updating discharge intimation:', error);
+                          return;
+                        }
+                        if (refetch) refetch();
+                      } catch (error) {
+                        console.error('Error:', error);
+                      }
+                    }}
+                  />
+                )}
               </TableCell>
               {/* Screen-only: Stickers */}
               <TableCell className="text-center print:hidden">

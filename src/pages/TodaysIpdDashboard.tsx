@@ -2909,6 +2909,7 @@ const TodaysIpdDashboard = () => {
                 {isMarketingManager && <TableHead className="font-semibold">Referee DOA_Amt Paid</TableHead>}
                 {isMarketingManager && <TableHead className="font-semibold">Referral Payment</TableHead>}
                 <TableHead className="font-semibold">Discharge Date</TableHead>
+                <TableHead className="font-semibold">Discharge Intimation</TableHead>
                 <TableHead className="font-semibold">Summaries and Certificates</TableHead>
                 <TableHead className="font-semibold">Getpass Notification</TableHead>
                 {(isAdmin || isMarketingManager) && <TableHead className="font-semibold">Actions</TableHead>}
@@ -2962,6 +2963,7 @@ const TodaysIpdDashboard = () => {
                 <TableHead></TableHead>
                 <TableHead></TableHead>
                 {canSeeReferralColumn && <TableHead></TableHead>}
+                <TableHead></TableHead>
                 <TableHead></TableHead>
                 <TableHead></TableHead>
                 <TableHead></TableHead>
@@ -3270,6 +3272,36 @@ const TodaysIpdDashboard = () => {
                         }
                       })()
                     ) : '—'}
+                  </TableCell>
+                  <TableCell className="text-center">
+                    {visit.discharge_intimation_at ? (
+                      <div className="flex flex-col items-center gap-1">
+                        <Checkbox checked={true} disabled className="data-[state=checked]:bg-green-600" />
+                        <span className="text-xs text-muted-foreground">
+                          {format(new Date(visit.discharge_intimation_at), 'MMM dd, HH:mm')}
+                        </span>
+                      </div>
+                    ) : (
+                      <Checkbox
+                        checked={false}
+                        onCheckedChange={async () => {
+                          const now = new Date().toISOString();
+                          try {
+                            const { error } = await supabase
+                              .from('visits')
+                              .update({ discharge_intimation_at: now })
+                              .eq('visit_id', visit.visit_id);
+                            if (error) {
+                              console.error('Error updating discharge intimation:', error);
+                              return;
+                            }
+                            refetch();
+                          } catch (error) {
+                            console.error('Error:', error);
+                          }
+                        }}
+                      />
+                    )}
                   </TableCell>
                   <TableCell>
                     <Select onValueChange={(value) => {

@@ -18,7 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuCheckboxItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
-import { Loader2, Search, Users, Calendar, Clock, UserCheck, Shield, AlertTriangle, Filter, RotateCcw, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, FileText, Printer, Upload } from "lucide-react";
+import { Loader2, Search, Users, Calendar, Clock, UserCheck, Shield, AlertTriangle, Filter, RotateCcw, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, FileText, Printer, Upload, Download } from "lucide-react";
 import * as XLSX from 'xlsx';
 import * as pdfjsLib from 'pdfjs-dist';
 // @ts-ignore
@@ -62,6 +62,7 @@ interface Visit {
   discharge_summary_status: string | null;
   referral_payment_status: string | null;
   referee_discharge_amt_paid: number | null;
+  discharge_intimation_at: string | null;
   referees: {
     name: string;
   } | null;
@@ -360,6 +361,9 @@ const DischargedPatients = () => {
 
   // State for unpaid referral report modal
   const [isUnpaidReportOpen, setIsUnpaidReportOpen] = useState(false);
+
+  // State for XLSX preview dialog
+  const [showXlsxPreview, setShowXlsxPreview] = useState(false);
 
   // State for DOA payments (individual payments with dates)
   const [doaPayments, setDoaPayments] = useState<Record<string, Array<{
@@ -1461,6 +1465,15 @@ const DischargedPatients = () => {
             <Printer className="h-4 w-4" />
             Print
           </Button>
+          <Button
+            onClick={() => setShowXlsxPreview(true)}
+            variant="outline"
+            size="sm"
+            className="flex items-center gap-2"
+          >
+            <Download className="h-4 w-4" />
+            Download XLSX
+          </Button>
           {/* Only show referral-related buttons for marketing managers */}
           {isMarketingManager && (
             <>
@@ -2157,6 +2170,73 @@ const DischargedPatients = () => {
                 Print Report
               </Button>
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* XLSX Preview & Download Dialog */}
+      <Dialog open={showXlsxPreview} onOpenChange={setShowXlsxPreview}>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Download XLSX Preview</DialogTitle>
+          </DialogHeader>
+
+          <div className="flex justify-between items-center pb-4 border-b">
+            <span className="text-sm text-muted-foreground">
+              Total: {filteredVisits?.length || 0} records
+            </span>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setShowXlsxPreview(false)}>
+                Cancel
+              </Button>
+              <Button
+                onClick={() => {
+                  const data = filteredVisits.map((visit) => ({
+                    'Patient Name': visit.patients?.name || 'N/A',
+                    'Patient ID': visit.patients?.patients_id || 'N/A',
+                    'Visit ID': visit.visit_id,
+                    'Discharge Intimation Date & Time': formatDateTime(visit.discharge_intimation_at),
+                    'Discharge Date & Time': formatDateTime(visit.discharge_date),
+                  }));
+                  const ws = XLSX.utils.json_to_sheet(data);
+                  const wb = XLSX.utils.book_new();
+                  XLSX.utils.book_append_sheet(wb, ws, 'Discharged Patients');
+                  XLSX.writeFile(wb, `Discharged_Patients_${format(new Date(), 'dd-MMM-yyyy')}.xlsx`);
+                  setShowXlsxPreview(false);
+                }}
+                className="bg-green-600 hover:bg-green-700"
+              >
+                <Download className="mr-2 h-4 w-4" />
+                Download
+              </Button>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>#</TableHead>
+                  <TableHead>Patient Name</TableHead>
+                  <TableHead>Patient ID</TableHead>
+                  <TableHead>Visit ID</TableHead>
+                  <TableHead>Discharge Intimation Date &amp; Time</TableHead>
+                  <TableHead>Discharge Date &amp; Time</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredVisits?.map((visit, index) => (
+                  <TableRow key={visit.id}>
+                    <TableCell>{index + 1}</TableCell>
+                    <TableCell>{visit.patients?.name || 'N/A'}</TableCell>
+                    <TableCell>{visit.patients?.patients_id || 'N/A'}</TableCell>
+                    <TableCell>{visit.visit_id}</TableCell>
+                    <TableCell>{formatDateTime(visit.discharge_intimation_at)}</TableCell>
+                    <TableCell>{formatDateTime(visit.discharge_date)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           </div>
         </DialogContent>
       </Dialog>

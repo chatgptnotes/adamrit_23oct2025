@@ -241,6 +241,15 @@ export const IPD_PRINT_COLUMNS: ReportColumn[] = [
     align: 'center',
     format: (value) => value ? format(new Date(value), 'HH:mm') : '—'
   },
+  {
+    id: 'discharge_intimation',
+    label: 'Discharge Intimation',
+    accessorKey: 'discharge_intimation_at',
+    printable: true,
+    widthPx: 130,
+    align: 'center',
+    format: (value) => value ? format(new Date(value), 'MMM dd, yyyy HH:mm') : '—'
+  },
   // Additional fields that might be useful for detailed reports
   {
     id: 'patient_age',
