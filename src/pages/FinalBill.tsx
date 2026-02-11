@@ -147,7 +147,7 @@ const initialPatientData: PatientData = {
   diagnosis: "",
   dateOfAdmission: "",
   dateOfDischarge: "",
-  billDate: new Date().toISOString().split('T')[0],
+  billDate: new Date().toISOString(),
 }
 
 const initialInvoiceItems: InvoiceItem[] = [
@@ -558,7 +558,7 @@ const FinalBill = () => {
   const [isSavingFinalPayment, setIsSavingFinalPayment] = useState(false);
   const [isPatientDischarged, setIsPatientDischarged] = useState(false);
   const [finalPaymentSelectedBank, setFinalPaymentSelectedBank] = useState('');
-  const [finalPaymentDischargeDate, setFinalPaymentDischargeDate] = useState(new Date().toISOString().split('T')[0]);
+  const [finalPaymentDischargeDate, setFinalPaymentDischargeDate] = useState(new Date().toISOString());
   const [bankAccounts, setBankAccounts] = useState<Array<{ id: string; account_name: string }>>([]);
   const [pendingPharmacyAmount, setPendingPharmacyAmount] = useState(0);
   const [pharmacyAmountAcknowledged, setPharmacyAmountAcknowledged] = useState(false);
@@ -659,7 +659,7 @@ const FinalBill = () => {
           setFinalPaymentMode(data.mode_of_payment || '');
           setFinalPaymentReason(data.reason_of_discharge || '');
           setFinalPaymentRemark(data.payment_remark || '');
-          setFinalPaymentDischargeDate(new Date().toISOString().split('T')[0]);
+          setFinalPaymentDischargeDate(new Date().toISOString());
           setIsPatientDischarged(false);
           toast.info('Previous payment found. Patient re-admitted - You can make a new final payment');
         } else {
@@ -669,7 +669,7 @@ const FinalBill = () => {
           setFinalPaymentMode('');
           setFinalPaymentReason('');
           setFinalPaymentRemark('');
-          setFinalPaymentDischargeDate(new Date().toISOString().split('T')[0]);
+          setFinalPaymentDischargeDate(new Date().toISOString());
           setIsPatientDischarged(false);
         }
       } catch (error) {
@@ -1447,7 +1447,7 @@ const FinalBill = () => {
             patient_id: visitData.patients.id,
             bill_no: `BL-${visitId}`,
             claim_id: validateClaimId(visitData.claim_id || visitId || 'TEMP-CLAIM'),
-            date: new Date().toISOString().split('T')[0],
+            date: new Date().toISOString(),
             category: 'GENERAL',
             total_amount: 0,
             status: 'DRAFT'
@@ -3418,7 +3418,7 @@ const FinalBill = () => {
           mode_of_payment: finalPaymentMode,
           reason_of_discharge: finalPaymentReason || 'N/A',
           payment_remark: finalPaymentRemark || `Being cash received towards from pt. ${patientData?.name || billData?.name || 'Patient'} against R. No.:`,
-          payment_date: new Date().toISOString().split('T')[0], // Add payment_date as today's date
+          payment_date: new Date().toISOString(), // Add payment_date as today's date
           bank_account_id: finalPaymentSelectedBank || null,
           bank_account_name: bankAccounts.find(b => b.id === finalPaymentSelectedBank)?.account_name || null
         }, {
@@ -3542,7 +3542,7 @@ const FinalBill = () => {
       setFinalPaymentReason('');
       setFinalPaymentRemark('');
       setFinalPaymentSelectedBank('');
-      setFinalPaymentDischargeDate(new Date().toISOString().split('T')[0]);
+      setFinalPaymentDischargeDate(new Date().toISOString());
       setIsFinalPaymentModalOpen(false);
 
       // Invalidate queries to refresh data without full page reload
@@ -7563,7 +7563,7 @@ INSTRUCTIONS:
       const newVisitData = {
         visit_id: targetVisitId,
         patient_id: patientUuid,
-        visit_date: patientData.dateOfAdmission || new Date().toISOString().split('T')[0],
+        visit_date: patientData.dateOfAdmission || new Date().toISOString(),
         visit_type: 'IPD', // Default to IPD (In-Patient Department)
         appointment_with: patientData.beneficiaryName || patientData.name || 'Unknown',
         status: 'scheduled',
@@ -8684,7 +8684,7 @@ INSTRUCTIONS:
       }
 
       // Use default values - user will edit dates in the table
-      const today = new Date().toISOString().split('T')[0];
+      const today = new Date().toISOString();
 
       // Check for ICICI Lombard - always use private rate
       const corporate = (patientInfo?.corporate || '').toLowerCase().trim();
@@ -9254,7 +9254,7 @@ INSTRUCTIONS:
 
     const newItem: SurgeryTreatmentItem = {
       id: Date.now().toString(),
-      date: new Date().toISOString().split('T')[0],
+      date: new Date().toISOString(),
       surgery: currentSurgery ? {
         id: currentSurgery.id,
         name: currentSurgery.name,
@@ -15141,7 +15141,7 @@ Dr. Murali B K
       }
       
       // Save the PDF
-      doc.save(`ESIC_Approval_Letter_${new Date().toISOString().split('T')[0]}.pdf`);
+      doc.save(`ESIC_Approval_Letter_${new Date().toISOString()}.pdf`);
       
       toast.success("PDF generated and downloaded successfully!");
       
@@ -21254,7 +21254,7 @@ Dr. Murali B K
                   </button>
                   <button
                     onClick={() => {
-                      setFinalPaymentDischargeDate(new Date().toISOString().split('T')[0]);
+                      setFinalPaymentDischargeDate(new Date().toISOString());
                       setIsFinalPaymentModalOpen(true);
                     }}
                     className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
