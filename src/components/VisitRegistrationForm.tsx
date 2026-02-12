@@ -229,7 +229,7 @@ export const VisitRegistrationForm: React.FC<VisitRegistrationFormProps> = ({
 
         // Only set admission_date if it's IPD/Emergency and not already set
         const admissionDate = isIPDOrEmergency && !existingVisit.admission_date
-          ? format(visitDate, 'yyyy-MM-dd')
+          ? new Date().toISOString()
           : existingVisit.admission_date;
 
         console.log('Updating visit with ID:', existingVisit.visit_id);
@@ -334,7 +334,7 @@ export const VisitRegistrationForm: React.FC<VisitRegistrationFormProps> = ({
             claim_id: formData.claimId,
             ward_allotted: formData.wardAllotted || null,
             room_allotted: formData.roomAllotted || null,
-            admission_date: isIPDOrEmergency ? format(visitDate, 'yyyy-MM-dd') : null
+            admission_date: isIPDOrEmergency ? new Date().toISOString() : null
           })
           .select('id, visit_id')
           .single();

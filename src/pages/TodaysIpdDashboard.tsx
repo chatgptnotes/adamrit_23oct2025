@@ -3265,7 +3265,7 @@ const TodaysIpdDashboard = () => {
                       (() => {
                         try {
                           console.log('🗓️ Discharge date for', visit.patients?.name, ':', visit.discharge_date, 'Type:', typeof visit.discharge_date);
-                          return format(new Date(visit.discharge_date), 'MMM dd, yyyy HH:mm');
+                          return format(new Date(visit.discharge_date), 'MMM dd, yyyy');
                         } catch (error) {
                           console.error('❌ Date format error for', visit.patients?.name, ':', error, 'Value:', visit.discharge_date);
                           return String(visit.discharge_date); // Show raw value if format fails
