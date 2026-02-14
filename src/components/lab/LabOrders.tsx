@@ -3326,15 +3326,14 @@ const LabOrders = () => {
     if (testsForPrint.length === 0) return '';
 
     const patientInfo = testsForPrint[0];
-    // Use order date for DATE, but current time for TIME (when printing)
+    // Use order date for both Report Date and Sample Received
     const orderDate = patientInfo.order_date ? new Date(patientInfo.order_date) : new Date();
-    const currentTime = new Date(); // Current time for printing
     const reportDate = orderDate.toLocaleDateString('en-GB', {
       day: '2-digit',
       month: '2-digit',
       year: 'numeric'
     });
-    const reportTime = currentTime.toLocaleTimeString('en-GB', {
+    const reportTime = new Date().toLocaleTimeString('en-GB', {
       hour: '2-digit',
       minute: '2-digit',
       second: '2-digit'
@@ -3426,73 +3425,12 @@ const LabOrders = () => {
       console.log('✅ Got visit_id from saved results:', actualVisitId);
     }
 
-    // Fetch sample collection time from visit_labs table (where collected_date is stored)
-    let sampleReceivedDate = reportDate;
-    let sampleReceivedTime = reportTime;
-
-    // First try to get collected_date from visit_labs (correct source)
-    if (firstTestId) {
-      try {
-        const { data: visitLabData, error: visitLabError } = await supabase
-          .from('visit_labs')
-          .select('collected_date')
-          .eq('id', firstTestId)
-          .single();
-
-        if (!visitLabError && visitLabData?.collected_date) {
-          const sampleDate = new Date(visitLabData.collected_date);
-          sampleReceivedDate = sampleDate.toLocaleDateString('en-GB', {
-            day: '2-digit', month: '2-digit', year: 'numeric'
-          });
-          // Use stored collected_date time (when sample was taken)
-          sampleReceivedTime = sampleDate.toLocaleTimeString('en-GB', {
-            hour: '2-digit', minute: '2-digit', second: '2-digit'
-          });
-          console.log('✅ Got sample date/time from visit_labs.collected_date:', sampleReceivedDate, sampleReceivedTime);
-        }
-      } catch (err) {
-        console.error('❌ Error fetching sample time from visit_labs:', err);
-      }
-    }
-
-    // Fallback to lab_orders if visit_labs doesn't have the date
-    if (sampleReceivedDate === reportDate && patientInfo?.order_number) {
-      try {
-        const { data: orderData, error: orderError } = await supabase
-          .from('lab_orders')
-          .select('sample_collection_datetime, sample_received_datetime, collection_date, collection_time, order_date, order_time, created_at')
-          .eq('order_number', patientInfo.order_number)
-          .single();
-
-        if (!orderError && orderData) {
-          let sampleDateTime = orderData.sample_received_datetime ||
-                               orderData.sample_collection_datetime;
-
-          if (!sampleDateTime && orderData.order_date) {
-            const orderTimeStr = orderData.order_time || '00:00:00';
-            sampleDateTime = `${orderData.order_date}T${orderTimeStr}`;
-          }
-
-          if (!sampleDateTime) {
-            sampleDateTime = orderData.created_at;
-          }
-
-          if (sampleDateTime) {
-            const sampleDate = new Date(sampleDateTime);
-            sampleReceivedDate = sampleDate.toLocaleDateString('en-GB', {
-              day: '2-digit', month: '2-digit', year: 'numeric'
-            });
-            // Use stored sample collection time
-            sampleReceivedTime = sampleDate.toLocaleTimeString('en-GB', {
-              hour: '2-digit', minute: '2-digit', second: '2-digit'
-            });
-            console.log('✅ Got sample date/time from lab_orders (fallback):', sampleReceivedDate, sampleReceivedTime);
-          }
-        }
-      } catch (err) {
-        console.error('❌ Error fetching sample time from lab_orders:', err);
-      }
-    }
+    // Sample received date = order date, time = current time - 1 hour (sample taken before report)
+    const sampleReceivedDate = reportDate;
+    const sampleReceivedDateTime = new Date(new Date().getTime() - 60 * 60 * 1000);
+    const sampleReceivedTime = sampleReceivedDateTime.toLocaleTimeString('en-GB', {
+      hour: '2-digit', minute: '2-digit', second: '2-digit'
+    });
 
     console.log('📋 FINAL VALUES FOR PRINT:', { actualPatientId, actualVisitId });
 
