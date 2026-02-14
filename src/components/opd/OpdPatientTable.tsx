@@ -17,6 +17,8 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { calculateReferralAmount, formatIndianCurrency } from '@/utils/referralCalculator';
 import { Checkbox } from '@/components/ui/checkbox';
 import { format } from 'date-fns';
+import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from '@/components/ui/pagination';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 interface Patient {
   id: string;
@@ -276,6 +278,32 @@ export const OpdPatientTable = ({ patients, refetch, isMarketingManager = false 
   const [originalComments, setOriginalComments] = useState<Record<string, string>>({});
   const [savingComments, setSavingComments] = useState<Record<string, boolean>>({});
   const [savedComments, setSavedComments] = useState<Record<string, boolean>>({});
+
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
+  const visiblePatients = patients.filter(patient => !hiddenPatients.has(patient.visit_id || ''));
+  const totalPages = Math.ceil(visiblePatients.length / pageSize);
+  const startIndex = (currentPage - 1) * pageSize;
+  const endIndex = startIndex + pageSize;
+  const paginatedPatients = visiblePatients.slice(startIndex, endIndex);
+
+  const goToPreviousPage = () => setCurrentPage(Math.max(1, currentPage - 1));
+  const goToNextPage = () => setCurrentPage(Math.min(totalPages, currentPage + 1));
+
+  const getPageNumbers = () => {
+    const maxVisiblePages = 5;
+    let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
+    const endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+    if (endPage - startPage + 1 < maxVisiblePages) {
+      startPage = Math.max(1, endPage - maxVisiblePages + 1);
+    }
+    return Array.from({ length: endPage - startPage + 1 }, (_, i) => startPage + i);
+  };
+
+  // Reset page when patients change
+  useEffect(() => { setCurrentPage(1); }, [patients]);
 
   // Advance payment status tracking
   const [advancePayments, setAdvancePayments] = useState<Record<string, number>>({});
@@ -1399,13 +1427,11 @@ Verified by: [To be verified by doctor]`;
           </TableRow>
         </TableHeader>
         <TableBody>
-          {patients
-            .filter(patient => !hiddenPatients.has(patient.visit_id || ''))
-            .map((patient, index) => (
+          {paginatedPatients.map((patient, index) => (
             <TableRow key={patient.id}>
               {/* Print-only: Sr No. */}
               <TableCell className="hidden print:table-cell text-center">
-                {index + 1}
+                {startIndex + index + 1}
               </TableCell>
               {/* Print-only: Date */}
               <TableCell className="hidden print:table-cell">
@@ -1659,6 +1685,55 @@ Verified by: [To be verified by doctor]`;
           ))}
         </TableBody>
       </Table>
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between px-2 py-4">
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground">
+              Showing {startIndex + 1} to {Math.min(endIndex, visiblePatients.length)} of {visiblePatients.length} patients
+            </span>
+            <Select value={pageSize.toString()} onValueChange={(value) => { setPageSize(Number(value)); setCurrentPage(1); }}>
+              <SelectTrigger className="w-20 h-8 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="10">10</SelectItem>
+                <SelectItem value="25">25</SelectItem>
+                <SelectItem value="50">50</SelectItem>
+                <SelectItem value="100">100</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <Pagination>
+            <PaginationContent>
+              <PaginationItem>
+                <PaginationPrevious
+                  onClick={goToPreviousPage}
+                  className={currentPage === 1 ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                />
+              </PaginationItem>
+              {getPageNumbers().map((pageNumber) => (
+                <PaginationItem key={pageNumber}>
+                  <PaginationLink
+                    onClick={() => setCurrentPage(pageNumber)}
+                    isActive={currentPage === pageNumber}
+                    className="cursor-pointer"
+                  >
+                    {pageNumber}
+                  </PaginationLink>
+                </PaginationItem>
+              ))}
+              <PaginationItem>
+                <PaginationNext
+                  onClick={goToNextPage}
+                  className={currentPage === totalPages ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                />
+              </PaginationItem>
+            </PaginationContent>
+          </Pagination>
+        </div>
+      )}
 
       {/* View Visit Dialog - Shows visit registration information in read-only format */}
       {selectedPatientForView && (

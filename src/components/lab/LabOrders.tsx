@@ -267,6 +267,8 @@ const LabOrders = () => {
   const [selectedPatientForSampling, setSelectedPatientForSampling] = useState<string | null>(null); // Track which patient is selected for sampling
   const [isEntryModeOpen, setIsEntryModeOpen] = useState(false);
   const [selectedTestsForEntry, setSelectedTestsForEntry] = useState<LabTestRow[]>([]);
+  const [entryFormDate, setEntryFormDate] = useState<Date | undefined>(undefined);
+  const [sampleFormDate, setSampleFormDate] = useState<Date | undefined>(undefined);
   const [isCheckingSampleStatus, setIsCheckingSampleStatus] = useState(false); // Track sample status checking
   const [testSubTests, setTestSubTests] = useState<Record<string, any[]>>({});
   const [subTestsLoadingComplete, setSubTestsLoadingComplete] = useState(false); // Track when sub-tests loading is complete
@@ -1213,10 +1215,19 @@ const LabOrders = () => {
         });
       });
 
-      // Update labResultsForm with initial values (replace, not merge)
+      // Merge text pre-population with existing form data (don't overwrite loaded results)
       if (Object.keys(initialFormData).length > 0) {
-        setLabResultsForm(initialFormData);
-        console.log('📋 Set labResultsForm with text values (replaced):', initialFormData);
+        setLabResultsForm(prev => {
+          // Only add keys that don't already have values in prev
+          const merged = { ...prev };
+          Object.entries(initialFormData).forEach(([key, value]) => {
+            if (!merged[key]?.result_value) {
+              merged[key] = value;
+            }
+          });
+          return merged;
+        });
+        console.log('📋 Merged text values into labResultsForm:', initialFormData);
       }
     }
   }, [testSubTests, selectedTestsForEntry]);
@@ -1322,11 +1333,32 @@ const LabOrders = () => {
             console.log('✅ Deduplicated primary query results:', existingResults.length, 'unique tests');
           }
 
-          // DISABLED: Fallback query was loading results from OTHER tests of same patient
-          // Only load results that match the specific visit_lab_id (primary query)
-          // If no results found, form should be empty for new test entry
+          // Fallback query: search by patient_name + main_test_name + date range
+          // This handles old records where visit_lab_id may be NULL
           if ((!existingResults || existingResults.length === 0) && !error) {
-            console.log('ℹ️ No results found for this specific test (visit_lab_id) - form will be empty for new entry');
+            console.log('ℹ️ No results found by visit_lab_id, trying fallback query by patient + test name + date...');
+            const { data: fallbackResults, error: fallbackError } = await supabase
+              .from('lab_results')
+              .select('*')
+              .eq('patient_name', patientName)
+              .in('main_test_name', testNames)
+              .gte('created_at', startOfDay)
+              .lte('created_at', endOfDay)
+              .order('created_at', { ascending: false });
+
+            if (!fallbackError && fallbackResults && fallbackResults.length > 0) {
+              // Deduplicate - keep only the most recent per test_name
+              const uniqueResults: Record<string, any> = {};
+              fallbackResults.forEach(r => {
+                if (!uniqueResults[r.test_name]) {
+                  uniqueResults[r.test_name] = r;
+                }
+              });
+              existingResults = Object.values(uniqueResults);
+              console.log('✅ Fallback query found', existingResults.length, 'unique results');
+            } else {
+              console.log('ℹ️ Fallback query also returned no results - form will be empty for new entry');
+            }
           }
 
           console.log('🔍 DEBUGGING: Query by visit_id result:', {
@@ -1711,7 +1743,7 @@ const LabOrders = () => {
             patient_gender: originalTestRow.patient_gender || 'Unknown',
 
             // Foreign keys for proper data linking (use UUID fields)
-            visit_lab_id: originalTestRow.id,  // Unique ID from visit_labs - links result to specific test entry
+            visit_lab_id: result.visit_lab_id || originalTestRow.id,  // Direct visit_labs ID from resultsData, fallback to originalTestRow
             visit_id: originalTestRow.visit_uuid || originalTestRow.order_id || null,
             lab_id: originalTestRow.lab_uuid || originalTestRow.test_id || null
           };
@@ -1758,7 +1790,7 @@ const LabOrders = () => {
               patient_age: originalTestRow.patient_age || null,
               patient_gender: originalTestRow.patient_gender || 'Unknown',
               // Foreign keys for proper data linking (use UUID fields)
-              visit_lab_id: originalTestRow.id,  // Unique ID from visit_labs
+              visit_lab_id: result.visit_lab_id || originalTestRow.id,  // Direct visit_labs ID
               visit_id: originalTestRow.visit_uuid || originalTestRow.order_id || null,
               lab_id: originalTestRow.lab_uuid || originalTestRow.test_id || null
             };
@@ -3040,6 +3072,7 @@ const LabOrders = () => {
         resultsData.push({
           order_id: testRow.order_id || testRow.id,
           test_id: testRow.test_id || testRow.id,
+          visit_lab_id: testRow.id,  // Direct visit_labs ID for correct linking
           test_name: testRow.test_name,
           test_category: testRow.test_category || 'GENERAL',
           result_value: foundFormData.result_value || '',
@@ -3067,6 +3100,7 @@ const LabOrders = () => {
           resultsData.push({
             order_id: testRow.order_id || testRow.id,
             test_id: testRow.test_id || testRow.id,
+            visit_lab_id: testRow.id,  // Direct visit_labs ID for correct linking
             test_name: subTest.name,
             test_category: testRow.test_category || 'GENERAL',
             result_value: subTestFormData.result_value || '',
@@ -3326,14 +3360,14 @@ const LabOrders = () => {
     if (testsForPrint.length === 0) return '';
 
     const patientInfo = testsForPrint[0];
-    // Use order date for both Report Date and Sample Received
-    const orderDate = patientInfo.order_date ? new Date(patientInfo.order_date) : new Date();
+    // Use entry form date if set (from date picker), otherwise fall back to order_date
+    const orderDate = entryFormDate || (patientInfo.order_date ? new Date(patientInfo.order_date) : new Date());
     const reportDate = orderDate.toLocaleDateString('en-GB', {
       day: '2-digit',
       month: '2-digit',
       year: 'numeric'
     });
-    const reportTime = new Date().toLocaleTimeString('en-GB', {
+    const reportTime = orderDate.toLocaleTimeString('en-GB', {
       hour: '2-digit',
       minute: '2-digit',
       second: '2-digit'
@@ -3425,10 +3459,12 @@ const LabOrders = () => {
       console.log('✅ Got visit_id from saved results:', actualVisitId);
     }
 
-    // Sample received date = order date, time = current time - 1 hour (sample taken before report)
-    const sampleReceivedDate = reportDate;
-    const sampleReceivedDateTime = new Date(new Date().getTime() - 60 * 60 * 1000);
-    const sampleReceivedTime = sampleReceivedDateTime.toLocaleTimeString('en-GB', {
+    // Use sample form date if set (from date picker), otherwise fall back to orderDate
+    const sampleDate = sampleFormDate || orderDate;
+    const sampleReceivedDate = sampleDate.toLocaleDateString('en-GB', {
+      day: '2-digit', month: '2-digit', year: 'numeric'
+    });
+    const sampleReceivedTime = sampleDate.toLocaleTimeString('en-GB', {
       hour: '2-digit', minute: '2-digit', second: '2-digit'
     });
 
@@ -3829,10 +3865,7 @@ const LabOrders = () => {
 
                       const displayValue = subTestFormData?.result_value || subTest.text_value || '';
 
-                      // Skip text sub-tests without values - don't show "Not Available"
-                      if (!displayValue) {
-                        return '';
-                      }
+                      // Show text sub-tests even without values
 
                       return `
                       <div style="margin: 15px 0; position: relative;">
@@ -3848,10 +3881,7 @@ const LabOrders = () => {
                     `;
                     }).filter(row => row !== '').join('');
 
-                    // Hide entire text test section if no sub-tests have values
-                    if (!textTestRows || textTestRows.trim() === '') {
-                      return '';
-                    }
+                    // Show test section even if no sub-tests have values
 
                     return `
                     <div class="main-test-section" style="margin: 20px 0;">
@@ -3997,10 +4027,7 @@ const LabOrders = () => {
                       // Use bold style for parent sub-tests
                       const finalNameStyle = subTest.isParent ? 'font-weight: bold;' : nameStyle;
 
-                      // Skip sub-tests without values - EXCEPT parent sub-tests which should show as headers
-                      if (!subTestFormData.result_value && !subTest.isParent) {
-                        return '';
-                      }
+                      // Show sub-tests even without values
 
                       // Parent sub-tests show as header only (no values)
                       if (subTest.isParent) {
@@ -4022,10 +4049,7 @@ const LabOrders = () => {
                     `;
                     }).filter(row => row !== '').join('');
 
-                    // Hide entire test section if no sub-tests have values
-                    if (!subTestRows || subTestRows.trim() === '') {
-                      return '';
-                    }
+                    // Show test section even if no sub-tests have values
 
                     return `
                     <div class="main-test-section">
@@ -4115,10 +4139,7 @@ const LabOrders = () => {
                     };
                   }
 
-                  // Skip single tests without values - don't show "Not Available"
-                  if (!formData.result_value) {
-                    return '';
-                  }
+                  // Show single tests even without values
 
                   const displayValue = `${formData.result_value} ${formData.result_unit || ''}`.trim();
 
@@ -4929,6 +4950,25 @@ const LabOrders = () => {
                     }));
 
                     setSelectedTestsForEntry(testsWithType);
+                    setEntryFormDate(testsWithType[0]?.order_date ? new Date(testsWithType[0].order_date) : new Date());
+
+                    // Fetch collected_date from visit_labs for sample date
+                    const firstTestId = testsWithType[0]?.id;
+                    if (firstTestId) {
+                      const { data: vlData } = await supabase
+                        .from('visit_labs')
+                        .select('collected_date')
+                        .eq('id', firstTestId)
+                        .single();
+                      if (vlData?.collected_date) {
+                        setSampleFormDate(new Date(vlData.collected_date));
+                      } else {
+                        setSampleFormDate(testsWithType[0]?.order_date ? new Date(testsWithType[0].order_date) : new Date());
+                      }
+                    } else {
+                      setSampleFormDate(testsWithType[0]?.order_date ? new Date(testsWithType[0].order_date) : new Date());
+                    }
+
                     setIsEntryModeOpen(true);
                   }
                 }}
@@ -5249,14 +5289,97 @@ const LabOrders = () => {
             return (
             <div className="space-y-4">
               {/* Header Info Section */}
-              <div className="bg-blue-50 p-4 rounded-lg">
-                <div className="grid grid-cols-6 gap-4 text-sm">
+              <div className="bg-blue-50 p-4 rounded-lg space-y-3">
+                <div className="grid grid-cols-5 gap-4 text-sm">
                   <div><strong>Patient Name:</strong> {selectedTestsForEntry[0]?.patient_name}</div>
                   <div><strong>Age/Sex:</strong> {selectedTestsForEntry[0]?.patient_age} / {selectedTestsForEntry[0]?.patient_gender}</div>
                   <div><strong>Type:</strong> {selectedTestsForEntry[0]?.corporate || 'OPD'}</div>
                   <div><strong>Ref By:</strong> {selectedTestsForEntry[0]?.ordering_doctor}</div>
                   <div><strong>Visit ID:</strong> {selectedTestsForEntry[0]?.visit_id || selectedTestsForEntry[0]?.order_number}</div>
-                  <div><strong>Date:</strong> {formatDate(selectedTestsForEntry[0]?.order_date || '')}</div>
+                </div>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div className="flex items-center gap-1">
+                    <strong>Report Date:</strong>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" className="h-7 text-xs px-2">
+                          <CalendarIcon className="mr-1 h-3 w-3" />
+                          {entryFormDate ? format(entryFormDate, 'dd/MM/yyyy HH:mm:ss') : formatDate(selectedTestsForEntry[0]?.order_date || '')}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0">
+                        <CalendarComponent
+                          mode="single"
+                          selected={entryFormDate}
+                          onSelect={(date) => {
+                            if (date && entryFormDate) {
+                              date.setHours(entryFormDate.getHours(), entryFormDate.getMinutes(), entryFormDate.getSeconds());
+                            }
+                            date && setEntryFormDate(date);
+                          }}
+                          initialFocus
+                        />
+                        <div className="flex items-center gap-1 p-3 border-t">
+                          <Clock className="h-4 w-4" />
+                          <input type="number" min={0} max={23} className="w-12 border rounded px-1 text-center text-sm"
+                            value={entryFormDate?.getHours() ?? 0}
+                            onChange={(e) => { const d = new Date(entryFormDate!); d.setHours(parseInt(e.target.value) || 0); setEntryFormDate(d); }}
+                          />
+                          <span>:</span>
+                          <input type="number" min={0} max={59} className="w-12 border rounded px-1 text-center text-sm"
+                            value={entryFormDate?.getMinutes() ?? 0}
+                            onChange={(e) => { const d = new Date(entryFormDate!); d.setMinutes(parseInt(e.target.value) || 0); setEntryFormDate(d); }}
+                          />
+                          <span>:</span>
+                          <input type="number" min={0} max={59} className="w-12 border rounded px-1 text-center text-sm"
+                            value={entryFormDate?.getSeconds() ?? 0}
+                            onChange={(e) => { const d = new Date(entryFormDate!); d.setSeconds(parseInt(e.target.value) || 0); setEntryFormDate(d); }}
+                          />
+                        </div>
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <strong>Sample Date:</strong>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" className="h-7 text-xs px-2">
+                          <CalendarIcon className="mr-1 h-3 w-3" />
+                          {sampleFormDate ? format(sampleFormDate, 'dd/MM/yyyy HH:mm:ss') : formatDate(selectedTestsForEntry[0]?.order_date || '')}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0">
+                        <CalendarComponent
+                          mode="single"
+                          selected={sampleFormDate}
+                          onSelect={(date) => {
+                            if (date && sampleFormDate) {
+                              date.setHours(sampleFormDate.getHours(), sampleFormDate.getMinutes(), sampleFormDate.getSeconds());
+                            }
+                            date && setSampleFormDate(date);
+                          }}
+                          initialFocus
+                        />
+                        <div className="flex items-center gap-1 p-3 border-t">
+                          <Clock className="h-4 w-4" />
+                          <input type="number" min={0} max={23} className="w-12 border rounded px-1 text-center text-sm"
+                            value={sampleFormDate?.getHours() ?? 0}
+                            onChange={(e) => { const d = new Date(sampleFormDate!); d.setHours(parseInt(e.target.value) || 0); setSampleFormDate(d); }}
+                          />
+                          <span>:</span>
+                          <input type="number" min={0} max={59} className="w-12 border rounded px-1 text-center text-sm"
+                            value={sampleFormDate?.getMinutes() ?? 0}
+                            onChange={(e) => { const d = new Date(sampleFormDate!); d.setMinutes(parseInt(e.target.value) || 0); setSampleFormDate(d); }}
+                          />
+                          <span>:</span>
+                          <input type="number" min={0} max={59} className="w-12 border rounded px-1 text-center text-sm"
+                            value={sampleFormDate?.getSeconds() ?? 0}
+                            onChange={(e) => { const d = new Date(sampleFormDate!); d.setSeconds(parseInt(e.target.value) || 0); setSampleFormDate(d); }}
+                          />
+                        </div>
+                      </PopoverContent>
+                    </Popover>
+                  </div>
                 </div>
               </div>
 
@@ -5264,9 +5387,7 @@ const LabOrders = () => {
               <div className="flex items-center gap-4 p-3 bg-gray-50 rounded">
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-medium">
-                    {selectedTestsForEntry[0]?.order_date
-                      ? new Date(selectedTestsForEntry[0].order_date).toLocaleString()
-                      : new Date().toLocaleString()}
+                    {entryFormDate ? entryFormDate.toLocaleString() : new Date().toLocaleString()}
                   </span>
                   <Badge variant="secondary">Lab Results</Badge>
                   {isFormSaved && (
