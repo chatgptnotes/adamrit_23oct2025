@@ -7,7 +7,7 @@ import { usePermissions } from '@/hooks/usePermissions';
 import { isFeatureEnabled } from '@/types/hospital';
 
 export const useMenuItems = (props: AppSidebarProps): MenuItem[] => {
-  const { hospitalType } = useAuth();
+  const { hospitalType, user } = useAuth();
   const { canManageUsers } = usePermissions();
   const {
     diagnosesCount = 0,
@@ -33,6 +33,14 @@ export const useMenuItems = (props: AppSidebarProps): MenuItem[] => {
         // Hide Users tab for non-admins
         if (item.title === "Users" && !canManageUsers) {
           return false;
+        }
+
+        // Hide Corporate Receipts for non-authorized roles (superadmin & marketing_manager only)
+        if (item.title === "Corporate Receipts") {
+          const role = user?.role;
+          if (role !== 'superadmin' && role !== 'marketing_manager') {
+            return false;
+          }
         }
 
         if (!hospitalType) return true; // Show all items if no hospital type
@@ -87,7 +95,7 @@ export const useMenuItems = (props: AppSidebarProps): MenuItem[] => {
                item.title === "Ayushman Consultants" ? ayushmanConsultantsCount :
                item.title === "Ayushman Anaesthetists" ? ayushmanAnaesthetistsCount : 0
       })), [
-        hospitalType, canManageUsers, diagnosesCount, patientsCount, usersCount, complicationsCount,
+        hospitalType, user, canManageUsers, diagnosesCount, patientsCount, usersCount, complicationsCount,
         cghsSurgeryCount, labCount, radiologyCount, medicationCount,
         refereesCount, hopeSurgeonsCount, hopeConsultantsCount, hopeAnaesthetistsCount,
         ayushmanSurgeonsCount, ayushmanConsultantsCount, ayushmanAnaesthetistsCount

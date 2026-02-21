@@ -1,4 +1,5 @@
 import React from 'react';
+import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -30,6 +31,9 @@ const PatientAllocationTable: React.FC<PatientAllocationTableProps> = ({
       patients_id: '',
       visit_id: '',
       amount: '',
+      bill_amount: '',
+      deduction_amount: '',
+      tds_amount: '',
       remarks: '',
     };
     onAllocationsChange([...allocations, newRow]);
@@ -47,10 +51,41 @@ const PatientAllocationTable: React.FC<PatientAllocationTableProps> = ({
     );
   };
 
-  const handlePatientSelect = (
+  const handlePatientSelect = async (
     temp_id: string,
     patient: { id: string; name: string; patients_id: string | null }
   ) => {
+    // Fetch latest visit_id
+    let latestVisitId = '';
+    let billAmount = '';
+    let receivedAmount = '';
+    let deductionAmount = '';
+
+    const { data: visitData } = await supabase
+      .from('visits')
+      .select('visit_id')
+      .eq('patient_id', patient.id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single();
+
+    if (visitData?.visit_id) {
+      latestVisitId = visitData.visit_id;
+
+      // Fetch bill data from bill_preparation using visit_id
+      const { data: billData } = await supabase
+        .from('bill_preparation' as any)
+        .select('bill_amount, received_amount, deduction_amount')
+        .eq('visit_id', latestVisitId)
+        .single();
+
+      if (billData) {
+        billAmount = String((billData as any).bill_amount || '');
+        receivedAmount = String((billData as any).received_amount || '');
+        deductionAmount = String((billData as any).deduction_amount || '');
+      }
+    }
+
     onAllocationsChange(
       allocations.map((a) =>
         a.temp_id === temp_id
@@ -59,6 +94,10 @@ const PatientAllocationTable: React.FC<PatientAllocationTableProps> = ({
               patient_id: patient.id,
               patient_name: patient.name,
               patients_id: patient.patients_id || '',
+              visit_id: latestVisitId,
+              bill_amount: billAmount,
+              amount: receivedAmount,
+              deduction_amount: deductionAmount,
             }
           : a
       )
@@ -101,9 +140,13 @@ const PatientAllocationTable: React.FC<PatientAllocationTableProps> = ({
               <TableRow>
                 <TableHead className="w-10">#</TableHead>
                 <TableHead className="min-w-[200px]">Patient Name</TableHead>
-                <TableHead className="w-[130px]">Patient ID</TableHead>
-                <TableHead className="w-[130px]">Amount (Rs.)</TableHead>
-                <TableHead className="min-w-[150px]">Remarks</TableHead>
+                <TableHead className="min-w-[130px]">Patient ID</TableHead>
+                <TableHead className="min-w-[130px]">Visit ID</TableHead>
+                <TableHead className="min-w-[130px]">Bill Amount</TableHead>
+                <TableHead className="min-w-[130px]">Received Amt</TableHead>
+                <TableHead className="min-w-[130px]">Deduction</TableHead>
+                <TableHead className="min-w-[120px]">TDS</TableHead>
+                <TableHead className="min-w-[160px]">Remarks</TableHead>
                 <TableHead className="w-10"></TableHead>
               </TableRow>
             </TableHeader>
@@ -140,6 +183,29 @@ const PatientAllocationTable: React.FC<PatientAllocationTableProps> = ({
                   </TableCell>
                   <TableCell>
                     <Input
+                      placeholder="Visit ID"
+                      value={row.visit_id}
+                      onChange={(e) =>
+                        updateRow(row.temp_id, 'visit_id', e.target.value)
+                      }
+                      className="h-8 text-sm"
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      placeholder="0.00"
+                      value={row.bill_amount}
+                      onChange={(e) =>
+                        updateRow(row.temp_id, 'bill_amount', e.target.value)
+                      }
+                      className="h-8 text-sm"
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Input
                       type="number"
                       min="0"
                       step="0.01"
@@ -153,7 +219,33 @@ const PatientAllocationTable: React.FC<PatientAllocationTableProps> = ({
                   </TableCell>
                   <TableCell>
                     <Input
-                      placeholder="Optional remarks"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      placeholder="0.00"
+                      value={row.deduction_amount}
+                      onChange={(e) =>
+                        updateRow(row.temp_id, 'deduction_amount', e.target.value)
+                      }
+                      className="h-8 text-sm"
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      placeholder="0.00"
+                      value={row.tds_amount}
+                      onChange={(e) =>
+                        updateRow(row.temp_id, 'tds_amount', e.target.value)
+                      }
+                      className="h-8 text-sm"
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Input
+                      placeholder="Remarks"
                       value={row.remarks}
                       onChange={(e) =>
                         updateRow(row.temp_id, 'remarks', e.target.value)

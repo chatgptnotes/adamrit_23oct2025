@@ -26,7 +26,9 @@ const InlinePatientSearch: React.FC<InlinePatientSearchProps> = ({
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isOpen, setIsOpen] = useState(false);
+  const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({});
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const { hospitalConfig } = useAuth();
 
   const { data: patients = [], isLoading } = useQuery({
@@ -51,6 +53,20 @@ const InlinePatientSearch: React.FC<InlinePatientSearchProps> = ({
     enabled: searchTerm.length >= 2,
   });
 
+  // Calculate fixed position for dropdown
+  useEffect(() => {
+    if (isOpen && inputRef.current) {
+      const rect = inputRef.current.getBoundingClientRect();
+      setDropdownStyle({
+        position: 'fixed' as const,
+        top: rect.bottom + 4,
+        left: rect.left,
+        width: Math.max(rect.width, 320),
+        zIndex: 9999,
+      });
+    }
+  }, [isOpen, searchTerm]);
+
   // Close dropdown on outside click
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -74,6 +90,7 @@ const InlinePatientSearch: React.FC<InlinePatientSearchProps> = ({
         <div className="text-sm font-medium truncate py-1">{selectedName}</div>
       ) : (
         <Input
+          ref={inputRef}
           placeholder={placeholder}
           value={searchTerm}
           onChange={(e) => {
@@ -85,7 +102,10 @@ const InlinePatientSearch: React.FC<InlinePatientSearchProps> = ({
       )}
 
       {isOpen && searchTerm.length >= 2 && (
-        <div className="absolute z-50 top-full left-0 w-72 mt-1 bg-white border rounded-md shadow-lg max-h-48 overflow-y-auto">
+        <div
+          className="bg-white border rounded-md shadow-lg max-h-52 overflow-y-auto"
+          style={dropdownStyle}
+        >
           {isLoading ? (
             <div className="p-3 text-sm text-gray-500 text-center">Searching...</div>
           ) : patients.length === 0 ? (
@@ -95,6 +115,7 @@ const InlinePatientSearch: React.FC<InlinePatientSearchProps> = ({
               <div
                 key={patient.id}
                 className="px-3 py-2 hover:bg-gray-100 cursor-pointer border-b last:border-b-0"
+                onMouseDown={(e) => e.preventDefault()}
                 onClick={() => handleSelect(patient)}
               >
                 <div className="font-medium text-sm">{patient.name}</div>

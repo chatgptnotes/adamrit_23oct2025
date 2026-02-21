@@ -19,7 +19,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { SearchableSelect } from '@/components/ui/searchable-select';
-import { Building2, Plus, ChevronDown, ChevronRight, Trash2, IndianRupee } from 'lucide-react';
+import { Building2, Plus, ChevronDown, ChevronRight, Trash2, Pencil, IndianRupee } from 'lucide-react';
 import { toast } from 'sonner';
 import { useCorporateData } from '@/hooks/useCorporateData';
 import {
@@ -41,6 +41,7 @@ const CorporateBulkPayments: React.FC = () => {
 
   // Dialog
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const [editingPayment, setEditingPayment] = useState<CorporateBulkPayment | null>(null);
 
   // Expanded rows
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
@@ -112,7 +113,7 @@ const CorporateBulkPayments: React.FC = () => {
           <Building2 className="h-6 w-6 text-primary" />
           <h1 className="text-2xl font-bold">Corporate Bulk Payment Receipts</h1>
         </div>
-        <Button onClick={() => setIsFormOpen(true)}>
+        <Button onClick={() => { setEditingPayment(null); setIsFormOpen(true); }}>
           <Plus className="h-4 w-4 mr-2" />
           Add Receipt
         </Button>
@@ -215,9 +216,11 @@ const CorporateBulkPayments: React.FC = () => {
                     <TableHead>Corporate</TableHead>
                     <TableHead>Mode</TableHead>
                     <TableHead>Reference</TableHead>
+                    <TableHead>Bank Name</TableHead>
+                    <TableHead className="text-right">Claim Amount</TableHead>
                     <TableHead className="text-right">Total Amount</TableHead>
                     <TableHead className="text-right">Patients</TableHead>
-                    <TableHead className="w-10"></TableHead>
+                    <TableHead>Action</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -242,6 +245,10 @@ const CorporateBulkPayments: React.FC = () => {
                         <TableCell>{payment.corporate_name}</TableCell>
                         <TableCell>{payment.payment_mode}</TableCell>
                         <TableCell>{payment.reference_number || '-'}</TableCell>
+                        <TableCell>{payment.bank_name || '-'}</TableCell>
+                        <TableCell className="text-right">
+                          {payment.claim_amount ? `Rs. ${Number(payment.claim_amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '-'}
+                        </TableCell>
                         <TableCell className="text-right font-medium">
                           Rs. {Number(payment.total_amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                         </TableCell>
@@ -249,24 +256,38 @@ const CorporateBulkPayments: React.FC = () => {
                           {payment.allocations?.length || 0}
                         </TableCell>
                         <TableCell>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 w-7 p-0 text-red-500 hover:text-red-700"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDelete(payment.id, payment.receipt_number);
-                            }}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                          <div className="flex gap-1">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 w-7 p-0 text-blue-500 hover:text-blue-700"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEditingPayment(payment);
+                                setIsFormOpen(true);
+                              }}
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 w-7 p-0 text-red-500 hover:text-red-700"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDelete(payment.id, payment.receipt_number);
+                              }}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
 
                       {/* Expanded Allocation Rows */}
                       {expandedRows.has(payment.id) && (
                         <TableRow>
-                          <TableCell colSpan={9} className="bg-gray-50 p-0">
+                          <TableCell colSpan={11} className="bg-gray-50 p-0">
                             <div className="p-4">
                               {payment.narration && (
                                 <p className="text-sm text-gray-600 mb-3">
@@ -281,7 +302,11 @@ const CorporateBulkPayments: React.FC = () => {
                                       <TableHead className="w-10">#</TableHead>
                                       <TableHead>Patient Name</TableHead>
                                       <TableHead>Patient ID</TableHead>
-                                      <TableHead className="text-right">Amount</TableHead>
+                                      <TableHead>Visit ID</TableHead>
+                                      <TableHead className="text-right">Bill Amount</TableHead>
+                                      <TableHead className="text-right">Received Amt</TableHead>
+                                      <TableHead className="text-right">Deduction</TableHead>
+                                      <TableHead className="text-right">TDS</TableHead>
                                       <TableHead>Remarks</TableHead>
                                     </TableRow>
                                   </TableHeader>
@@ -297,8 +322,20 @@ const CorporateBulkPayments: React.FC = () => {
                                         <TableCell>
                                           {alloc.patients_id || '-'}
                                         </TableCell>
+                                        <TableCell>
+                                          {alloc.visit_id || '-'}
+                                        </TableCell>
+                                        <TableCell className="text-right">
+                                          {alloc.bill_amount ? `Rs. ${Number(alloc.bill_amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '-'}
+                                        </TableCell>
                                         <TableCell className="text-right">
                                           Rs. {Number(alloc.amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                        </TableCell>
+                                        <TableCell className="text-right">
+                                          {alloc.deduction_amount ? `Rs. ${Number(alloc.deduction_amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '-'}
+                                        </TableCell>
+                                        <TableCell className="text-right">
+                                          {alloc.tds_amount ? `Rs. ${Number(alloc.tds_amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '-'}
                                         </TableCell>
                                         <TableCell>
                                           {alloc.remarks || '-'}
@@ -325,15 +362,28 @@ const CorporateBulkPayments: React.FC = () => {
         </CardContent>
       </Card>
 
-      {/* Add Receipt Dialog */}
-      <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
+      {/* Add/Edit Receipt Dialog */}
+      <Dialog open={isFormOpen} onOpenChange={(open) => {
+        setIsFormOpen(open);
+        if (!open) setEditingPayment(null);
+      }}>
         <DialogContent className="max-w-4xl">
           <DialogHeader>
-            <DialogTitle>New Corporate Bulk Payment Receipt</DialogTitle>
+            <DialogTitle>
+              {editingPayment ? 'Edit Corporate Bulk Payment Receipt' : 'New Corporate Bulk Payment Receipt'}
+            </DialogTitle>
           </DialogHeader>
           <BulkPaymentReceiptForm
-            onSuccess={() => setIsFormOpen(false)}
-            onCancel={() => setIsFormOpen(false)}
+            key={editingPayment?.id || 'new'}
+            editData={editingPayment}
+            onSuccess={() => {
+              setIsFormOpen(false);
+              setEditingPayment(null);
+            }}
+            onCancel={() => {
+              setIsFormOpen(false);
+              setEditingPayment(null);
+            }}
           />
         </DialogContent>
       </Dialog>
