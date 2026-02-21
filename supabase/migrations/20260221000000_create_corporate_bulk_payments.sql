@@ -25,7 +25,7 @@ CREATE TABLE corporate_bulk_payments (
 CREATE TABLE corporate_bulk_payment_allocations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     bulk_payment_id UUID NOT NULL REFERENCES corporate_bulk_payments(id) ON DELETE CASCADE,
-    patient_id UUID,
+    patient_id UUID REFERENCES patients(id),
     patient_name TEXT NOT NULL,
     patients_id TEXT,
     visit_id TEXT,

@@ -55,21 +55,12 @@ const PatientAllocationTable: React.FC<PatientAllocationTableProps> = ({
     temp_id: string,
     patient: { id: string; name: string; patients_id: string | null }
   ) => {
-    // Set patient info immediately
-    onAllocationsChange(
-      allocations.map((a) =>
-        a.temp_id === temp_id
-          ? {
-              ...a,
-              patient_id: patient.id,
-              patient_name: patient.name,
-              patients_id: patient.patients_id || '',
-            }
-          : a
-      )
-    );
+    // Fetch latest visit_id
+    let latestVisitId = '';
+    let billAmount = '';
+    let receivedAmount = '';
+    let deductionAmount = '';
 
-    // Fetch latest visit_id for this patient
     const { data: visitData } = await supabase
       .from('visits')
       .select('visit_id')
@@ -79,20 +70,38 @@ const PatientAllocationTable: React.FC<PatientAllocationTableProps> = ({
       .single();
 
     if (visitData?.visit_id) {
-      onAllocationsChange(
-        allocations.map((a) =>
-          a.temp_id === temp_id
-            ? {
-                ...a,
-                patient_id: patient.id,
-                patient_name: patient.name,
-                patients_id: patient.patients_id || '',
-                visit_id: visitData.visit_id,
-              }
-            : a
-        )
-      );
+      latestVisitId = visitData.visit_id;
+
+      // Fetch bill data from bill_preparation using visit_id
+      const { data: billData } = await supabase
+        .from('bill_preparation' as any)
+        .select('bill_amount, received_amount, deduction_amount')
+        .eq('visit_id', latestVisitId)
+        .single();
+
+      if (billData) {
+        billAmount = String((billData as any).bill_amount || '');
+        receivedAmount = String((billData as any).received_amount || '');
+        deductionAmount = String((billData as any).deduction_amount || '');
+      }
     }
+
+    onAllocationsChange(
+      allocations.map((a) =>
+        a.temp_id === temp_id
+          ? {
+              ...a,
+              patient_id: patient.id,
+              patient_name: patient.name,
+              patients_id: patient.patients_id || '',
+              visit_id: latestVisitId,
+              bill_amount: billAmount,
+              amount: receivedAmount,
+              deduction_amount: deductionAmount,
+            }
+          : a
+      )
+    );
   };
 
   const clearPatient = (temp_id: string) => {

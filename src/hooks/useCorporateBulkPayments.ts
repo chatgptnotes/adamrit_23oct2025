@@ -17,7 +17,7 @@ export const useCorporateBulkPayments = (filters?: BulkPaymentFilters) => {
         .from('corporate_bulk_payments')
         .select(`
           *,
-          corporate_bulk_payment_allocations (*)
+          corporate_bulk_payment_allocations (*, patients:patient_id (patients_id))
         `)
         .order('payment_date', { ascending: false });
 
@@ -39,7 +39,10 @@ export const useCorporateBulkPayments = (filters?: BulkPaymentFilters) => {
 
       return (data || []).map((item: any) => ({
         ...item,
-        allocations: item.corporate_bulk_payment_allocations || [],
+        allocations: (item.corporate_bulk_payment_allocations || []).map((alloc: any) => ({
+          ...alloc,
+          patients_id: alloc.patients_id || alloc.patients?.patients_id || null,
+        })),
       })) as CorporateBulkPayment[];
     },
     staleTime: 30000,
@@ -97,10 +100,25 @@ export const useCreateCorporateBulkPayment = () => {
 
       if (allocError) throw allocError;
 
+      // 3. Sync to bill_preparation for Bill Submission module
+      for (const alloc of payload.allocations) {
+        if (alloc.visit_id) {
+          await supabase
+            .from('bill_preparation' as any)
+            .upsert({
+              visit_id: alloc.visit_id,
+              bill_amount: alloc.bill_amount || 0,
+              received_amount: alloc.amount || 0,
+              deduction_amount: alloc.deduction_amount || 0,
+            }, { onConflict: 'visit_id' });
+        }
+      }
+
       return headerData;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['corporate-bulk-payments'] });
+      queryClient.invalidateQueries({ queryKey: ['bill-submissions'] });
     },
   });
 };
@@ -163,10 +181,25 @@ export const useUpdateCorporateBulkPayment = () => {
         if (allocError) throw allocError;
       }
 
+      // 4. Sync to bill_preparation for Bill Submission module
+      for (const alloc of payload.allocations) {
+        if (alloc.visit_id) {
+          await supabase
+            .from('bill_preparation' as any)
+            .upsert({
+              visit_id: alloc.visit_id,
+              bill_amount: alloc.bill_amount || 0,
+              received_amount: alloc.amount || 0,
+              deduction_amount: alloc.deduction_amount || 0,
+            }, { onConflict: 'visit_id' });
+        }
+      }
+
       return payload.id;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['corporate-bulk-payments'] });
+      queryClient.invalidateQueries({ queryKey: ['bill-submissions'] });
     },
   });
 };
