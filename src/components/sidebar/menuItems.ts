@@ -168,6 +168,11 @@ export const menuItems = [
     icon: Building2,
   },
   {
+    title: "Corporate Receipts",
+    url: "/corporate-bulk-payments",
+    icon: Receipt,
+  },
+  {
     title: "Bill Submission",
     url: "/bill-submission",
     icon: Receipt,
