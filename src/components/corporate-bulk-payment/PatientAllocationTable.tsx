@@ -60,6 +60,7 @@ const PatientAllocationTable: React.FC<PatientAllocationTableProps> = ({
     let billAmount = '';
     let receivedAmount = '';
     let deductionAmount = '';
+    let tdsAmount = '';
 
     const { data: visitData } = await supabase
       .from('visits')
@@ -75,7 +76,7 @@ const PatientAllocationTable: React.FC<PatientAllocationTableProps> = ({
       // Fetch bill data from bill_preparation using visit_id
       const { data: billData } = await supabase
         .from('bill_preparation' as any)
-        .select('bill_amount, received_amount, deduction_amount')
+        .select('bill_amount, received_amount, deduction_amount, tds_amount')
         .eq('visit_id', latestVisitId)
         .single();
 
@@ -83,6 +84,7 @@ const PatientAllocationTable: React.FC<PatientAllocationTableProps> = ({
         billAmount = String((billData as any).bill_amount || '');
         receivedAmount = String((billData as any).received_amount || '');
         deductionAmount = String((billData as any).deduction_amount || '');
+        tdsAmount = String((billData as any).tds_amount || '');
       }
     }
 
@@ -98,6 +100,7 @@ const PatientAllocationTable: React.FC<PatientAllocationTableProps> = ({
               bill_amount: billAmount,
               amount: receivedAmount,
               deduction_amount: deductionAmount,
+              tds_amount: tdsAmount,
             }
           : a
       )
