@@ -157,6 +157,7 @@ const BillSubmissionPage: React.FC = () => {
       'Expected Payment Date': s.expected_payment_date || '-',
       'Received Amount': s.received_amount || 0,
       'Deduction Amount': s.deduction_amount || 0,
+      'TDS Amount': s.tds_amount || 0,
       'Amount Received On': s.received_date || '-',
     }));
 
@@ -175,6 +176,7 @@ const BillSubmissionPage: React.FC = () => {
       'Bill Amount': s.bill_amount || 0,
       'Received Amount': s.received_amount || 0,
       'Deduction Amount': s.deduction_amount || 0,
+      'TDS Amount': s.tds_amount || 0,
       'Received Amount On Date': s.received_date || '-',
     }));
 
@@ -321,16 +323,17 @@ const BillSubmissionPage: React.FC = () => {
     // Map database fields to form fields
     setEditData({
       id: submission.id,
-      visitId: submission.visit_id,
-      patientName: submission.patient_name,
-      corporate: submission.corporate || '',
-      billAmount: submission.bill_amount || 0,
+      visitId: submission.visit_id || '',
+      patientName: submission.patient_name || '',
+      corporate: submission.corporate || submission.patient_corporate || '',
+      billAmount: Number(submission.bill_amount) || 0,
       submittedBy: submission.executive_who_submitted || '',
-      submissionDate: submission.date_of_submission || '',
-      expectedPaymentDate: submission.expected_payment_date || '',
-      receivedAmount: submission.received_amount || 0,
-      deductionAmount: submission.deduction_amount || 0,
-      receivedDate: submission.received_date || '',
+      submissionDate: submission.date_of_submission ? String(submission.date_of_submission).split('T')[0] : '',
+      expectedPaymentDate: submission.expected_payment_date ? String(submission.expected_payment_date).split('T')[0] : '',
+      receivedAmount: Number(submission.received_amount) || 0,
+      deductionAmount: Number(submission.deduction_amount) || 0,
+      tdsAmount: Number(submission.tds_amount) || 0,
+      receivedDate: submission.received_date ? String(submission.received_date).split('T')[0] : '',
     });
     setIsFormOpen(true);
   };
@@ -352,6 +355,7 @@ const BillSubmissionPage: React.FC = () => {
       expected_payment_date: data.expectedPaymentDate,
       received_amount: data.receivedAmount,
       deduction_amount: data.deductionAmount,
+      tds_amount: data.tdsAmount,
       received_date: data.receivedDate,
     };
 
@@ -594,6 +598,7 @@ const BillSubmissionPage: React.FC = () => {
                           <th className="px-3 py-2 text-left">Expected Payment</th>
                           <th className="px-3 py-2 text-left">Received Amount</th>
                           <th className="px-3 py-2 text-left">Deduction</th>
+                          <th className="px-3 py-2 text-left">TDS</th>
                           <th className="px-3 py-2 text-left">Received On</th>
                           <th className="px-3 py-2 text-center">Actions</th>
                         </tr>
@@ -607,6 +612,7 @@ const BillSubmissionPage: React.FC = () => {
                             <td className="px-3 py-2">{formatDate(bill.expected_payment_date)}</td>
                             <td className="px-3 py-2">{formatAmount(bill.received_amount)}</td>
                             <td className="px-3 py-2">{formatAmount(bill.deduction_amount)}</td>
+                            <td className="px-3 py-2">{formatAmount(bill.tds_amount)}</td>
                             <td className="px-3 py-2">{formatDate(bill.received_date)}</td>
                             <td className="px-3 py-2 text-center">
                               <Button
@@ -647,6 +653,7 @@ const BillSubmissionPage: React.FC = () => {
                   <TableHead>Expect to Receive Payment</TableHead>
                   <TableHead className="text-right">Received Amount</TableHead>
                   <TableHead className="text-right">Deduction Amount</TableHead>
+                  <TableHead className="text-right">TDS</TableHead>
                   <TableHead>Amount Received On</TableHead>
                   <TableHead className="text-center">Actions</TableHead>
                 </TableRow>
@@ -654,13 +661,13 @@ const BillSubmissionPage: React.FC = () => {
               <TableBody>
                 {isLoading ? (
                   <TableRow>
-                    <TableCell colSpan={13} className="text-center py-8">
+                    <TableCell colSpan={14} className="text-center py-8">
                       <Loader2 className="h-6 w-6 animate-spin mx-auto" />
                     </TableCell>
                   </TableRow>
                 ) : filteredSubmissions.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={13} className="text-center py-8 text-gray-500">
+                    <TableCell colSpan={14} className="text-center py-8 text-gray-500">
                       {submissions.length === 0
                         ? 'No bill submissions yet. Search for a patient above to create one.'
                         : 'No records match the selected filters.'}
@@ -680,6 +687,7 @@ const BillSubmissionPage: React.FC = () => {
                       <TableCell>{formatDate(submission.expected_payment_date)}</TableCell>
                       <TableCell className="text-right">{formatAmount(submission.received_amount)}</TableCell>
                       <TableCell className="text-right">{formatAmount(submission.deduction_amount)}</TableCell>
+                      <TableCell className="text-right">{formatAmount(submission.tds_amount)}</TableCell>
                       <TableCell>{formatDate(submission.received_date)}</TableCell>
                       <TableCell>
                         <div className="flex justify-center gap-2">

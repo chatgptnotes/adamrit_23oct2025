@@ -11,6 +11,7 @@ export interface BillSubmissionInput {
   expected_payment_date?: string;
   received_amount?: number;
   deduction_amount?: number;
+  tds_amount?: number;
   received_date?: string;
 }
 
@@ -31,6 +32,7 @@ export const useBillSubmissions = (hospitalName?: string) => {
           expected_payment_date,
           received_amount,
           deduction_amount,
+          tds_amount,
           received_date,
           created_at,
           visits!inner!visit_id(
@@ -79,6 +81,7 @@ export const useCreateBillSubmission = () => {
           expected_payment_date: data.expected_payment_date || null,
           received_amount: data.received_amount || null,
           deduction_amount: data.deduction_amount || null,
+          tds_amount: data.tds_amount || null,
           received_date: data.received_date || null,
         }, {
           onConflict: 'visit_id'
@@ -116,6 +119,7 @@ export const useUpdateBillSubmission = () => {
           expected_payment_date: data.expected_payment_date || null,
           received_amount: data.received_amount || null,
           deduction_amount: data.deduction_amount || null,
+          tds_amount: data.tds_amount || null,
           received_date: data.received_date || null,
         })
         .eq('id', id)

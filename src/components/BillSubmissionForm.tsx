@@ -20,6 +20,7 @@ export interface BillSubmission {
   expectedPaymentDate: string;
   receivedAmount: number;
   deductionAmount: number;
+  tdsAmount: number;
   receivedDate: string;
 }
 
@@ -54,6 +55,7 @@ const BillSubmissionForm: React.FC<BillSubmissionFormProps> = ({
     expectedPaymentDate: '',
     receivedAmount: 0,
     deductionAmount: 0,
+    tdsAmount: 0,
     receivedDate: '',
   });
 
@@ -71,6 +73,7 @@ const BillSubmissionForm: React.FC<BillSubmissionFormProps> = ({
         expectedPaymentDate: editData.expectedPaymentDate,
         receivedAmount: editData.receivedAmount || 0,
         deductionAmount: editData.deductionAmount || 0,
+        tdsAmount: editData.tdsAmount || 0,
         receivedDate: editData.receivedDate || '',
       });
     } else if (prefilledPatient) {
@@ -84,6 +87,7 @@ const BillSubmissionForm: React.FC<BillSubmissionFormProps> = ({
         expectedPaymentDate: '',
         receivedAmount: 0,
         deductionAmount: 0,
+        tdsAmount: 0,
         receivedDate: '',
       });
     } else {
@@ -97,6 +101,7 @@ const BillSubmissionForm: React.FC<BillSubmissionFormProps> = ({
         expectedPaymentDate: '',
         receivedAmount: 0,
         deductionAmount: 0,
+        tdsAmount: 0,
         receivedDate: '',
       });
     }
@@ -184,7 +189,6 @@ const BillSubmissionForm: React.FC<BillSubmissionFormProps> = ({
               id="submittedBy"
               value={formData.submittedBy}
               onChange={(e) => handleChange('submittedBy', e.target.value)}
-              required
             />
           </div>
 
@@ -211,7 +215,7 @@ const BillSubmissionForm: React.FC<BillSubmissionFormProps> = ({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-3 gap-4">
             <div className="space-y-2">
               <Label htmlFor="receivedAmount">Received Amount</Label>
               <Input
@@ -228,6 +232,15 @@ const BillSubmissionForm: React.FC<BillSubmissionFormProps> = ({
                 type="number"
                 value={formData.deductionAmount}
                 onChange={(e) => handleChange('deductionAmount', parseFloat(e.target.value) || 0)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="tdsAmount">TDS Amount</Label>
+              <Input
+                id="tdsAmount"
+                type="number"
+                value={formData.tdsAmount}
+                onChange={(e) => handleChange('tdsAmount', parseFloat(e.target.value) || 0)}
               />
             </div>
           </div>

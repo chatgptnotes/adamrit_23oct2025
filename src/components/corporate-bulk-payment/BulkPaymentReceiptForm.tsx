@@ -121,7 +121,6 @@ const BulkPaymentReceiptForm: React.FC<BulkPaymentReceiptFormProps> = ({
     const allocationPayload = validAllocations.map((a) => ({
       patient_id: a.patient_id || null,
       patient_name: a.patient_name,
-      patients_id: a.patients_id || null,
       visit_id: a.visit_id || null,
       amount: parseFloat(a.amount) || 0,
       bill_amount: parseFloat(a.bill_amount) || null,

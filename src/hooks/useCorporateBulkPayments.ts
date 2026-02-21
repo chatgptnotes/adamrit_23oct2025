@@ -70,7 +70,6 @@ export const useCreateCorporateBulkPayment = () => {
       allocations: Array<{
         patient_id: string | null;
         patient_name: string;
-        patients_id: string | null;
         visit_id: string | null;
         amount: number;
         bill_amount: number | null;
@@ -110,6 +109,7 @@ export const useCreateCorporateBulkPayment = () => {
               bill_amount: alloc.bill_amount || 0,
               received_amount: alloc.amount || 0,
               deduction_amount: alloc.deduction_amount || 0,
+              tds_amount: alloc.tds_amount || 0,
             }, { onConflict: 'visit_id' });
         }
       }
@@ -142,7 +142,6 @@ export const useUpdateCorporateBulkPayment = () => {
       allocations: Array<{
         patient_id: string | null;
         patient_name: string;
-        patients_id: string | null;
         visit_id: string | null;
         amount: number;
         bill_amount: number | null;
@@ -191,6 +190,7 @@ export const useUpdateCorporateBulkPayment = () => {
               bill_amount: alloc.bill_amount || 0,
               received_amount: alloc.amount || 0,
               deduction_amount: alloc.deduction_amount || 0,
+              tds_amount: alloc.tds_amount || 0,
             }, { onConflict: 'visit_id' });
         }
       }
