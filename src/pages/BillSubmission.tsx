@@ -595,6 +595,7 @@ const BillSubmissionPage: React.FC = () => {
                           <th className="px-3 py-2 text-left">Received Amount</th>
                           <th className="px-3 py-2 text-left">Deduction</th>
                           <th className="px-3 py-2 text-left">Received On</th>
+                          <th className="px-3 py-2 text-center">Actions</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -607,6 +608,20 @@ const BillSubmissionPage: React.FC = () => {
                             <td className="px-3 py-2">{formatAmount(bill.received_amount)}</td>
                             <td className="px-3 py-2">{formatAmount(bill.deduction_amount)}</td>
                             <td className="px-3 py-2">{formatDate(bill.received_date)}</td>
+                            <td className="px-3 py-2 text-center">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleEdit({
+                                  ...bill,
+                                  patient_name: selectedPatientForLookup.patient_name,
+                                  corporate: selectedPatientForLookup.corporate,
+                                })}
+                                title="Edit"
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                            </td>
                           </tr>
                         ))}
                       </tbody>
