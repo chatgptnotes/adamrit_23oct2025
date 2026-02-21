@@ -12,6 +12,7 @@ interface CorporateRecord {
 
 interface UseCorporateDataReturn {
   corporateOptions: SearchableSelectOption[];
+  corporateIdMap: Record<string, string>;
   loading: boolean;
   error: string | null;
   refetch: () => Promise<void>;
@@ -19,6 +20,7 @@ interface UseCorporateDataReturn {
 
 export const useCorporateData = (): UseCorporateDataReturn => {
   const [corporateOptions, setCorporateOptions] = useState<SearchableSelectOption[]>([]);
+  const [corporateIdMap, setCorporateIdMap] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -53,6 +55,13 @@ export const useCorporateData = (): UseCorporateDataReturn => {
           value: corp.name, // Use name as value for consistency with form handling
           label: corp.name
         }));
+
+        // Build name → id map for quick UUID lookup
+        const idMap: Record<string, string> = {};
+        data.forEach((corp: CorporateRecord) => {
+          idMap[corp.name] = corp.id;
+        });
+        setCorporateIdMap(idMap);
 
         setCorporateOptions(corporateOptions);
         console.log('✅ Loaded ALL corporate options from database:', corporateOptions.length, 'total');
@@ -108,6 +117,7 @@ export const useCorporateData = (): UseCorporateDataReturn => {
 
   return {
     corporateOptions,
+    corporateIdMap,
     loading,
     error,
     refetch: fetchCorporateData

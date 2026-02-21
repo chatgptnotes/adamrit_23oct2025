@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import ReactDOM from 'react-dom';
 import { Input } from '@/components/ui/input';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -26,7 +27,9 @@ const InlinePatientSearch: React.FC<InlinePatientSearchProps> = ({
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isOpen, setIsOpen] = useState(false);
+  const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 0, width: 0 });
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const { hospitalConfig } = useAuth();
 
   const { data: patients = [], isLoading } = useQuery({
@@ -51,10 +54,26 @@ const InlinePatientSearch: React.FC<InlinePatientSearchProps> = ({
     enabled: searchTerm.length >= 2,
   });
 
+  // Update dropdown position when open
+  useEffect(() => {
+    if (isOpen && inputRef.current) {
+      const rect = inputRef.current.getBoundingClientRect();
+      setDropdownPos({
+        top: rect.bottom + 4,
+        left: rect.left,
+        width: Math.max(rect.width, 320),
+      });
+    }
+  }, [isOpen, searchTerm]);
+
   // Close dropdown on outside click
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (wrapperRef.current && !wrapperRef.current.contains(event.target as Node)) {
+      if (
+        wrapperRef.current &&
+        !wrapperRef.current.contains(event.target as Node) &&
+        !(event.target as Element)?.closest?.('.inline-patient-dropdown')
+      ) {
         setIsOpen(false);
       }
     };
@@ -68,12 +87,51 @@ const InlinePatientSearch: React.FC<InlinePatientSearchProps> = ({
     setIsOpen(false);
   };
 
+  const dropdown =
+    isOpen && searchTerm.length >= 2
+      ? ReactDOM.createPortal(
+          <div
+            className="inline-patient-dropdown fixed bg-white border rounded-md shadow-lg max-h-52 overflow-y-auto"
+            style={{
+              top: dropdownPos.top,
+              left: dropdownPos.left,
+              width: dropdownPos.width,
+              zIndex: 9999,
+            }}
+          >
+            {isLoading ? (
+              <div className="p-3 text-sm text-gray-500 text-center">Searching...</div>
+            ) : patients.length === 0 ? (
+              <div className="p-3 text-sm text-gray-500 text-center">No patients found</div>
+            ) : (
+              patients.map((patient) => (
+                <div
+                  key={patient.id}
+                  className="px-3 py-2 hover:bg-gray-100 cursor-pointer border-b last:border-b-0"
+                  onClick={() => handleSelect(patient)}
+                >
+                  <div className="font-medium text-sm">{patient.name}</div>
+                  <div className="text-xs text-gray-500">
+                    {patient.patients_id && `ID: ${patient.patients_id}`}
+                    {patient.age && ` | ${patient.age}y`}
+                    {patient.gender && ` | ${patient.gender}`}
+                    {patient.phone && ` | ${patient.phone}`}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>,
+          document.body
+        )
+      : null;
+
   return (
     <div ref={wrapperRef} className="relative">
       {selectedName ? (
         <div className="text-sm font-medium truncate py-1">{selectedName}</div>
       ) : (
         <Input
+          ref={inputRef}
           placeholder={placeholder}
           value={searchTerm}
           onChange={(e) => {
@@ -83,32 +141,7 @@ const InlinePatientSearch: React.FC<InlinePatientSearchProps> = ({
           className="h-8 text-sm"
         />
       )}
-
-      {isOpen && searchTerm.length >= 2 && (
-        <div className="absolute z-50 top-full left-0 w-72 mt-1 bg-white border rounded-md shadow-lg max-h-48 overflow-y-auto">
-          {isLoading ? (
-            <div className="p-3 text-sm text-gray-500 text-center">Searching...</div>
-          ) : patients.length === 0 ? (
-            <div className="p-3 text-sm text-gray-500 text-center">No patients found</div>
-          ) : (
-            patients.map((patient) => (
-              <div
-                key={patient.id}
-                className="px-3 py-2 hover:bg-gray-100 cursor-pointer border-b last:border-b-0"
-                onClick={() => handleSelect(patient)}
-              >
-                <div className="font-medium text-sm">{patient.name}</div>
-                <div className="text-xs text-gray-500">
-                  {patient.patients_id && `ID: ${patient.patients_id}`}
-                  {patient.age && ` | ${patient.age}y`}
-                  {patient.gender && ` | ${patient.gender}`}
-                  {patient.phone && ` | ${patient.phone}`}
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      )}
+      {dropdown}
     </div>
   );
 };

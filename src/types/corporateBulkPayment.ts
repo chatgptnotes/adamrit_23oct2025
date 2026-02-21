@@ -8,6 +8,7 @@ export interface CorporateBulkPayment {
   reference_number: string | null;
   bank_name: string | null;
   total_amount: number;
+  claim_amount: number | null;
   narration: string | null;
   hospital_name: string | null;
   created_by: string | null;
@@ -24,6 +25,9 @@ export interface CorporateBulkPaymentAllocation {
   patients_id: string | null;
   visit_id: string | null;
   amount: number;
+  bill_amount: number | null;
+  deduction_amount: number | null;
+  tds_amount: number | null;
   remarks: string | null;
   created_at: string;
 }
@@ -35,16 +39,17 @@ export interface AllocationRow {
   patients_id: string;
   visit_id: string;
   amount: string;
+  bill_amount: string;
+  deduction_amount: string;
+  tds_amount: string;
   remarks: string;
 }
 
 export const CORPORATE_PAYMENT_MODES = [
-  { value: 'NEFT', label: 'NEFT' },
-  { value: 'RTGS', label: 'RTGS' },
+  { value: 'ONLINE', label: 'Online Transfer' },
   { value: 'CHEQUE', label: 'Cheque' },
   { value: 'DD', label: 'Demand Draft' },
   { value: 'UPI', label: 'UPI' },
-  { value: 'ONLINE', label: 'Online Transfer' },
   { value: 'CASH', label: 'Cash' },
   { value: 'CARD', label: 'Card' },
 ];
