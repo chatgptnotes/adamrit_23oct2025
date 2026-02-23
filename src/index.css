@@ -167,7 +167,8 @@
   scrollbar-color: #94a3b8 #f1f5f9;
 }
 
-/* Ensure smooth scrolling */
+/* Ensure smooth scrolling and override cmdk inline overflow:hidden */
 [cmdk-list] {
   scroll-behavior: smooth;
+  overflow-y: auto !important;
 }
