@@ -35,7 +35,7 @@ export const PrintContainer: React.FC<PrintContainerProps> = ({
     styleElement.textContent = `
       .print-container {
         font-family: 'Arial', sans-serif;
-        font-size: 7px;
+        font-size: 14px;
         line-height: 1.1;
         color: #000;
         background: #fff;
@@ -140,7 +140,7 @@ export const PrintContainer: React.FC<PrintContainerProps> = ({
         margin-top: 0 !important;
         margin-left: 0 !important;
         margin-right: auto !important;
-        font-size: 7px !important;
+        font-size: 14px !important;
         display: table !important;
         table-layout: fixed !important;
       }
@@ -170,9 +170,9 @@ export const PrintContainer: React.FC<PrintContainerProps> = ({
       .print-th {
         background-color: #f0f0f0;
         border: 1px solid #000;
-        padding: 2px 1px;
+        padding: 6px 5px;
         font-weight: bold;
-        font-size: 8px;
+        font-size: 15px;
         vertical-align: middle;
         page-break-inside: avoid;
         text-align: left;
@@ -195,9 +195,9 @@ export const PrintContainer: React.FC<PrintContainerProps> = ({
 
       .print-td {
         border: 1px solid #000;
-        padding: 1px 1px;
+        padding: 5px 4px;
         vertical-align: top;
-        font-size: 7px;
+        font-size: 14px;
         page-break-inside: avoid;
         text-align: left;
         line-height: 1.1;
@@ -432,15 +432,15 @@ export const PrintContainer: React.FC<PrintContainerProps> = ({
 
       ${settings.orientation === 'landscape' ? `
         .print-table {
-          font-size: 7px;
+          font-size: 13px;
         }
         .print-th {
-          padding: 2px 1px;
-          font-size: 7px;
+          padding: 5px 4px;
+          font-size: 14px;
         }
         .print-td {
-          padding: 1px 1px;
-          font-size: 6px;
+          padding: 4px 3px;
+          font-size: 13px;
         }
       ` : ''}
 

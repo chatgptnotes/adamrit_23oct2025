@@ -3938,7 +3938,7 @@ const TodaysIpdDashboard = () => {
 
           /* Ensure proper text sizing */
           .text-sm, .text-xs {
-            font-size: 9px !important;
+            font-size: 14px !important;
           }
 
           .font-mono {
