@@ -72,16 +72,23 @@ const BulkPaymentReceiptForm: React.FC<BulkPaymentReceiptFormProps> = ({
       const { data } = await supabase
         .from('chart_of_accounts')
         .select('account_name, account_code')
-        .in('account_code', ['1121', '1122', '1123'])
+        .in('account_code', ['1121', '1122', '1123', '1124', '1125'])
         .eq('is_active', true)
         .order('account_name');
       if (data && data.length > 0) {
-        setBankOptions(data.map((b: any) => ({ value: b.account_name, label: b.account_name })));
+        const dbBanks = data.map((b: any) => ({ value: b.account_name, label: b.account_name }));
+        setBankOptions([
+          ...dbBanks,
+          { value: 'Canara Bank (Itwari)', label: 'Canara Bank (Itwari)' },
+          { value: 'Shikshak Sahakari Bank', label: 'Shikshak Sahakari Bank' },
+        ]);
       } else {
         setBankOptions([
           { value: 'Canara Bank [A/C120023677813)JARIPATHKA ]', label: 'Canara Bank [A/C120023677813)JARIPATHKA ]' },
           { value: 'SARASWAT BANK', label: 'SARASWAT BANK' },
           { value: 'STATE BANK OF INDIA (DRM)', label: 'STATE BANK OF INDIA (DRM)' },
+          { value: 'Canara Bank (Itwari)', label: 'Canara Bank (Itwari)' },
+          { value: 'Shikshak Sahakari Bank', label: 'Shikshak Sahakari Bank' },
         ]);
       }
     };
@@ -107,7 +114,7 @@ const BulkPaymentReceiptForm: React.FC<BulkPaymentReceiptFormProps> = ({
       toast.error('Please select a payment mode');
       return;
     }
-    if (!receivedAmount || parseFloat(receivedAmount) <= 0) {
+    if (!receivedAmount || parseFloat(receivedAmount) < 0) {
       toast.error('Please enter the received bulk amount');
       return;
     }
@@ -231,7 +238,10 @@ const BulkPaymentReceiptForm: React.FC<BulkPaymentReceiptFormProps> = ({
             step="0.01"
             placeholder="Enter total claim amount..."
             value={claimAmount}
-            onChange={(e) => setClaimAmount(e.target.value)}
+            onChange={(e) => {
+              const val = e.target.value;
+              setClaimAmount(val.replace(/^0+(?=\d)/, '') || val);
+            }}
           />
         </div>
 
@@ -243,7 +253,10 @@ const BulkPaymentReceiptForm: React.FC<BulkPaymentReceiptFormProps> = ({
             step="0.01"
             placeholder="Enter total amount received..."
             value={receivedAmount}
-            onChange={(e) => setReceivedAmount(e.target.value)}
+            onChange={(e) => {
+              const val = e.target.value;
+              setReceivedAmount(val.replace(/^0+(?=\d)/, '') || val);
+            }}
             className="text-lg font-semibold"
           />
         </div>
