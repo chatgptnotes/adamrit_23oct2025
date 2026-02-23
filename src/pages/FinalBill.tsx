@@ -15304,7 +15304,7 @@ Dr. Murali B K
             <Button onClick={() => navigate(-1)} variant="outline">
               Go Back
             </Button>
-            <Button onClick={() => navigate('/')} variant="default">
+            <Button onClick={() => navigate('/dashboard')} variant="default">
               Go to Dashboard
             </Button>
           </div>

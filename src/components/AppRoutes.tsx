@@ -2,6 +2,7 @@ import { Routes, Route } from "react-router-dom";
 import { lazy, Suspense } from "react";
 
 // Import critical pages synchronously
+import LandingPage from "../pages/LandingPage";
 import Index from "../pages/Index";
 import NotFound from "../pages/NotFound";
 import PatientDashboard from "../pages/PatientDashboard";
@@ -105,7 +106,8 @@ export const AppRoutes = () => {
   return (
     <Suspense fallback={<PageLoader />}>
       <Routes>
-        <Route path="/" element={<Index />} />
+        <Route path="/" element={<LandingPage />} />
+        <Route path="/dashboard" element={<Index />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<SignupPage />} />
         <Route path="/signup-simple" element={<SimpleSignup />} />

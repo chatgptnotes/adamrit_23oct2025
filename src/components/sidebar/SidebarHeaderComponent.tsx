@@ -16,7 +16,7 @@ export const SidebarHeaderComponent = () => {
   return (
     <SidebarHeader className="p-4">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2 cursor-pointer" onClick={() => navigate('/')}>
+        <div className="flex items-center gap-2 cursor-pointer" onClick={() => navigate('/dashboard')}>
           <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-bold flex-shrink-0"
                style={{ backgroundColor: hospitalConfig.primaryColor }}>
             {hospitalConfig.name.charAt(0)}

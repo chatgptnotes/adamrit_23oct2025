@@ -12,7 +12,7 @@ export const NavigationTabs = ({ activeTab }: NavigationTabsProps) => {
     console.log('Tab clicked:', tabName); // Debug log
     switch (tabName) {
       case 'Dashboard':
-        navigate('/');
+        navigate('/dashboard');
         break;
       case 'IPD':
         navigate('/todays-ipd');
