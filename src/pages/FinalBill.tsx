@@ -1434,6 +1434,51 @@ const FinalBill = () => {
     }
   }, [visitData?.patients?.name, visitData?.patients?.patients_id, visitData?.admission_date, visitData?.visit_date, billData?.bill_no]);
 
+  // Corporate short name mapping for bill number prefix
+  const getCorporateBillPrefix = (corporateName: string | null | undefined): string => {
+    if (!corporateName || corporateName.trim() === '' || corporateName.toLowerCase() === 'private') {
+      return 'PVT';
+    }
+    const shortNameMap: Record<string, string> = {
+      'Mahatma Jyotirao Phule jan Arogya Yojana (MJPJAY)': 'MJPJAY',
+      'Ayushman Bharat - Pradhan Mantri Jan Arogya Yojna (PM-JAY)': 'PM-JAY',
+      'Rashtriya Bal Swasthya Karyakram (RBSK)': 'RBSK',
+      'Central Government Health Scheme (CGHS)': 'CGHS',
+      'Ex Serviceman Contributory Health Scheme (ECHS)': 'ECHS',
+      'Maharashtra Police Kutumb Arogya Yojana (MPKAY)': 'MPKAY',
+      'MIKSSKAY - Maharashtra Karagruh Va Sudhar Sevabal Kutumb Arogya Yojana': 'MIKSSKAY',
+      'Maharashtra Dharmadaya Karmachari Kutumbe Seashya Yojana (MDKKSY)': 'MDKKSY',
+      'Coal India Limited (CIL)': 'CIL',
+      'Central Railways (C.Rly)': 'CR',
+      'South Eastern Central Railway (SECR)': 'SECR',
+      'Western Coalfield Limited (WCL)': 'WCL',
+    };
+    return shortNameMap[corporateName] || corporateName.toUpperCase().replace(/\s+/g, '-');
+  };
+
+  // Generate corporate-based bill number (e.g., PM-JAY-001, CGHS-002, PVT-001)
+  const generateCorporateBillNumber = async (corporateName: string | null | undefined): Promise<string> => {
+    const prefix = getCorporateBillPrefix(corporateName);
+    try {
+      const { data: lastBill } = await supabase
+        .from('bills')
+        .select('bill_no')
+        .like('bill_no', `${prefix}-%`)
+        .order('bill_no', { ascending: false })
+        .limit(1);
+
+      if (lastBill && lastBill.length > 0) {
+        const parts = lastBill[0].bill_no.split('-');
+        const lastNumber = parseInt(parts[parts.length - 1]) || 0;
+        return `${prefix}-${String(lastNumber + 1).padStart(3, '0')}`;
+      }
+      return `${prefix}-001`;
+    } catch (error) {
+      console.error('Error generating bill number:', error);
+      return `${prefix}-001`;
+    }
+  };
+
   // Auto-create bill when visit data is available
   useEffect(() => {
     const createBillIfNeeded = async () => {
@@ -1441,11 +1486,16 @@ const FinalBill = () => {
 
       console.log('Creating new bill for visit:', visitId);
       try {
+        // Generate corporate-based bill number
+        const corporateName = visitData.patients?.corporate;
+        const billNo = await generateCorporateBillNumber(corporateName);
+        console.log('Generated bill number:', billNo, 'for corporate:', corporateName || 'PRIVATE');
+
         const { data: newBill, error: billError } = await supabase
           .from('bills')
           .insert({
             patient_id: visitData.patients.id,
-            bill_no: `BL-${visitId}`,
+            bill_no: billNo,
             claim_id: validateClaimId(visitData.claim_id || visitId || 'TEMP-CLAIM'),
             date: new Date().toISOString(),
             category: 'GENERAL',
@@ -1460,7 +1510,7 @@ const FinalBill = () => {
           return;
         }
 
-        console.log('Created new bill with ID:', newBill.id);
+        console.log('Created new bill with ID:', newBill.id, 'Bill No:', billNo);
         // Invalidate the query cache to refresh billData
         queryClient.invalidateQueries({ queryKey: ['final-bill', visitId] });
       } catch (error) {

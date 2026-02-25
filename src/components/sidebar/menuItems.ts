@@ -183,6 +183,11 @@ export const menuItems = [
     icon: Clock,
   },
   {
+    title: "IT Transaction Register",
+    url: "/it-transaction-register",
+    icon: ScrollText,
+  },
+  {
     title: "Pharmacy",
     url: "/pharmacy",
     icon: Pill,
