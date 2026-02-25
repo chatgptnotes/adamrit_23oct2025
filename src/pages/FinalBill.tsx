@@ -1456,26 +1456,29 @@ const FinalBill = () => {
     return shortNameMap[corporateName] || corporateName.toUpperCase().replace(/\s+/g, '-');
   };
 
-  // Generate corporate-based bill number (e.g., PM-JAY-001, CGHS-002, PVT-001)
+  // Generate corporate-based bill number (e.g., PM-JAY-FEB-001, CGHS-MAR-002, PVT-JAN-001)
   const generateCorporateBillNumber = async (corporateName: string | null | undefined): Promise<string> => {
     const prefix = getCorporateBillPrefix(corporateName);
+    const monthNames = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+    const currentMonth = monthNames[new Date().getMonth()];
+    const billPrefix = `${prefix}-${currentMonth}`;
     try {
       const { data: lastBill } = await supabase
         .from('bills')
         .select('bill_no')
-        .like('bill_no', `${prefix}-%`)
+        .like('bill_no', `${billPrefix}-%`)
         .order('bill_no', { ascending: false })
         .limit(1);
 
       if (lastBill && lastBill.length > 0) {
         const parts = lastBill[0].bill_no.split('-');
         const lastNumber = parseInt(parts[parts.length - 1]) || 0;
-        return `${prefix}-${String(lastNumber + 1).padStart(3, '0')}`;
+        return `${billPrefix}-${String(lastNumber + 1).padStart(3, '0')}`;
       }
-      return `${prefix}-001`;
+      return `${billPrefix}-001`;
     } catch (error) {
       console.error('Error generating bill number:', error);
-      return `${prefix}-001`;
+      return `${billPrefix}-001`;
     }
   };
 
@@ -1495,6 +1498,7 @@ const FinalBill = () => {
           .from('bills')
           .insert({
             patient_id: visitData.patients.id,
+            visit_id: visitId,
             bill_no: billNo,
             claim_id: validateClaimId(visitData.claim_id || visitId || 'TEMP-CLAIM'),
             date: new Date().toISOString(),
@@ -15252,6 +15256,8 @@ Dr. Murali B K
       console.log('🔢 Using current totalAmount state:', totalAmount);
       
       const billDataToSave = {
+        id: billData?.id, // Pass existing bill ID to update instead of creating new
+        visit_id: visitId, // Link bill to this visit
         patient_id: visitData.patient_id,
         bill_no: patientData.billNo,
         claim_id: validateClaimId(patientData.claimId),
