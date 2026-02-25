@@ -21945,7 +21945,7 @@ Dr. Murali B K
                                   min="0"
                                   step="1"
                                   value={subItem.qty}
-                                  readOnly={item.description === 'Pathology Charges'} // Days are auto-calculated for pathology
+                                  readOnly={false}
                                   onChange={(e) => {
                                     const newQty = parseInt(e.target.value, 10) || 0;
                                     handleItemChange(item.id, subItem.id, 'qty', newQty);
