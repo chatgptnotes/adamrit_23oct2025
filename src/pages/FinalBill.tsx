@@ -5515,9 +5515,15 @@ INSTRUCTIONS:
         console.log('Loaded invoice items:', loadedItems);
 
         if (!billDataLoadedRef.current) {
-          console.log('🔄 Loading saved bill data into invoice items');
-          setInvoiceItems(loadedItems);
-          billDataLoadedRef.current = true;
+          if (loadedItems.length > 0) {
+            console.log('🔄 Loading saved bill data into invoice items');
+            setInvoiceItems(loadedItems);
+            billDataLoadedRef.current = true;
+          } else {
+            console.log('🆕 Old bill with empty sections - loading initial items');
+            setInvoiceItems(initialInvoiceItems);
+            // Don't set billDataLoadedRef so medicine/pathology/surgery can still populate
+          }
         } else {
           console.log('⚠️ Skipping - already loaded from DB');
         }
@@ -5526,6 +5532,7 @@ INSTRUCTIONS:
         if (!billDataLoadedRef.current) {
           console.log('🆕 Loading initial sections - no saved data');
           setInvoiceItems(initialInvoiceItems);
+          // Don't set billDataLoadedRef so medicine/pathology/surgery can still populate
         }
       }
     }
