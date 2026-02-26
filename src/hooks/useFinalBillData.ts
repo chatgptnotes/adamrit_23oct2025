@@ -38,6 +38,7 @@ export interface BillData {
   category: string;
   total_amount: number;
   status: string;
+  visit_id?: string;
   admission_date?: string;
   discharge_date?: string;
   visit_date?: string;
@@ -55,29 +56,19 @@ export const useFinalBillData = (visitId: string) => {
       try {
         console.log('🔍 Fetching bill data for visit ID:', visitId);
 
-        // First get patient ID and visit dates from visit
+        // Get visit dates
         const { data: visitData, error: visitError } = await supabase
           .from('visits')
           .select('patient_id, admission_date, discharge_date, created_at, visit_date')
           .eq('visit_id', visitId)
-          .single();
+          .single() as { data: any; error: any };
 
         if (visitError) {
           console.error('❌ Error fetching visit:', visitError);
-          console.error('Visit ID searched:', visitId);
-
-          // Check if it's a "not found" error vs other database error
           if (visitError.code === 'PGRST116') {
             console.warn(`⚠️ No visit found with visit_id: ${visitId}`);
             return null;
           }
-
-          // For other errors, still return null instead of throwing
-          console.error('Database error details:', {
-            code: visitError.code,
-            message: visitError.message,
-            details: visitError.details
-          });
           return null;
         }
 
@@ -99,11 +90,10 @@ export const useFinalBillData = (visitId: string) => {
           .eq('visit_id', visitId)
           .order('created_at', { ascending: false })
           .limit(1)
-          .maybeSingle();
+          .maybeSingle() as { data: any };
 
+        // Use bill found by visit_id, or fallback to patient_id lookup
         let billsData = billByVisit;
-
-        // Fallback: find by patient_id if no bill found by visit_id
         if (!billsData) {
           const { data: billByPatient, error: billsError } = await supabase
             .from('bills')
@@ -111,7 +101,7 @@ export const useFinalBillData = (visitId: string) => {
             .eq('patient_id', visitData.patient_id)
             .order('created_at', { ascending: false })
             .limit(1)
-            .maybeSingle();
+            .maybeSingle() as { data: any; error: any };
 
           if (billsError) {
             console.error('❌ Error fetching bill:', billsError);
@@ -132,11 +122,10 @@ export const useFinalBillData = (visitId: string) => {
           .from('bill_sections')
           .select('*')
           .eq('bill_id', billsData.id)
-          .order('section_order');
+          .order('section_order') as { data: any; error: any };
 
         if (sectionsError) {
           console.error('❌ Error fetching sections:', sectionsError);
-          // Don't fail completely, just use empty sections
         }
 
         // Get line items
@@ -144,11 +133,10 @@ export const useFinalBillData = (visitId: string) => {
           .from('bill_line_items')
           .select('*')
           .eq('bill_id', billsData.id)
-          .order('item_order');
+          .order('item_order') as { data: any; error: any };
 
         if (lineItemsError) {
           console.error('❌ Error fetching line items:', lineItemsError);
-          // Don't fail completely, just use empty line items
         }
 
         const result = {
@@ -165,12 +153,11 @@ export const useFinalBillData = (visitId: string) => {
         return result;
       } catch (err) {
         console.error('❌ Unexpected error in useFinalBillData:', err);
-        // Return null instead of throwing to prevent app crash
         return null;
       }
     },
     enabled: !!visitId,
-    retry: false, // Don't retry on error to avoid multiple failed requests
+    retry: false,
   });
 
   const saveBillMutation = useMutation({
@@ -200,7 +187,7 @@ export const useFinalBillData = (visitId: string) => {
           .eq('visit_id', billData.visit_id || visitId)
           .order('created_at', { ascending: false })
           .limit(1)
-          .maybeSingle();
+          .maybeSingle() as { data: any };
         if (existingBill) {
           existingBillId = existingBill.id;
           console.log('📌 Found existing bill by visit_id:', existingBillId);
@@ -214,7 +201,7 @@ export const useFinalBillData = (visitId: string) => {
           .eq('patient_id', billData.patient_id)
           .order('created_at', { ascending: false })
           .limit(1)
-          .maybeSingle();
+          .maybeSingle() as { data: any };
         if (existingBill) {
           existingBillId = existingBill.id;
           console.log('📌 Found existing bill by patient_id:', existingBillId);
@@ -225,7 +212,7 @@ export const useFinalBillData = (visitId: string) => {
       let billError: any = null;
 
       if (existingBillId) {
-        // UPDATE existing bill
+        // UPDATE existing bill - only edit, no new row
         console.log('📝 Updating existing bill:', existingBillId);
         const result = await supabase
           .from('bills')
@@ -273,13 +260,13 @@ export const useFinalBillData = (visitId: string) => {
         throw billError;
       }
 
-      // Delete existing sections and line items
+      // Delete existing sections and line items (then re-insert fresh)
       await supabase.from('bill_sections').delete().eq('bill_id', bill.id);
       await supabase.from('bill_line_items').delete().eq('bill_id', bill.id);
 
       // Save sections
       if (billData.sections.length > 0) {
-        const sectionsToInsert = billData.sections.map((section, index) => ({
+        const sectionsToInsert = billData.sections.map((section: any, index: number) => ({
           bill_id: bill.id,
           section_title: section.title,
           date_from: section.dates?.from ? new Date(section.dates.from).toISOString().split('T')[0] : null,
@@ -293,7 +280,7 @@ export const useFinalBillData = (visitId: string) => {
 
         const { error: sectionsError } = await supabase
           .from('bill_sections')
-          .insert(sectionsToInsert);
+          .insert(sectionsToInsert as any);
 
         if (sectionsError) {
           console.error('Error saving sections:', sectionsError);
@@ -303,9 +290,9 @@ export const useFinalBillData = (visitId: string) => {
 
       // Save line items
       if (billData.line_items.length > 0) {
-        const lineItemsToInsert = billData.line_items.map((item, index) => ({
+        const lineItemsToInsert = billData.line_items.map((item: any, index: number) => ({
           bill_id: bill.id,
-          bill_section_id: null, // We'll need to map this properly if needed
+          bill_section_id: null,
           sr_no: item.srNo || `${index + 1}`,
           item_description: item.description || '',
           cghs_nabh_code: item.code || null,
@@ -322,7 +309,7 @@ export const useFinalBillData = (visitId: string) => {
 
         const { error: lineItemsError } = await supabase
           .from('bill_line_items')
-          .insert(lineItemsToInsert);
+          .insert(lineItemsToInsert as any);
 
         if (lineItemsError) {
           console.error('Error saving line items:', lineItemsError);
@@ -332,7 +319,7 @@ export const useFinalBillData = (visitId: string) => {
 
       console.log('✅ Bill saved successfully with ID:', bill.id);
       console.log('✅ Saved total_amount:', bill.total_amount);
-      
+
       return bill;
     },
     onSuccess: () => {

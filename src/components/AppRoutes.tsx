@@ -94,6 +94,7 @@ const BillAgingStatement = lazy(() => import("../pages/BillAgingStatement"));
 const ExpectedPaymentDateReport = lazy(() => import("../pages/ExpectedPaymentDateReport"));
 const Marketing = lazy(() => import("../pages/Marketing"));
 const RelationshipManager = lazy(() => import("../pages/RelationshipManager"));
+const ITTransactionRegister = lazy(() => import("../pages/ITTransactionRegister"));
 
 // Loading component
 const PageLoader = () => (
@@ -192,6 +193,7 @@ export const AppRoutes = () => {
         <Route path="/bill-aging-statement" element={<Suspense fallback={<PageLoader />}><BillAgingStatement /></Suspense>} />
         <Route path="/expected-payment-date-report" element={<Suspense fallback={<PageLoader />}><ExpectedPaymentDateReport /></Suspense>} />
         <Route path="/marketing" element={<Suspense fallback={<PageLoader />}><Marketing /></Suspense>} />
+        <Route path="/it-transaction-register" element={<Suspense fallback={<PageLoader />}><ITTransactionRegister /></Suspense>} />
         {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
         <Route path="*" element={<NotFound />} />
       </Routes>
