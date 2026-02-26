@@ -92,18 +92,32 @@ export const useFinalBillData = (visitId: string) => {
           visit_date: visitData.visit_date
         });
 
-        // Then get the most recent bill for this patient
-        const { data: billsData, error: billsError } = await supabase
+        // First try to find bill by visit_id (exact match)
+        const { data: billByVisit } = await supabase
           .from('bills')
           .select('*')
-          .eq('patient_id', visitData.patient_id)
+          .eq('visit_id', visitId)
           .order('created_at', { ascending: false })
           .limit(1)
           .maybeSingle();
 
-        if (billsError) {
-          console.error('❌ Error fetching bill:', billsError);
-          return null;
+        let billsData = billByVisit;
+
+        // Fallback: find by patient_id if no bill found by visit_id
+        if (!billsData) {
+          const { data: billByPatient, error: billsError } = await supabase
+            .from('bills')
+            .select('*')
+            .eq('patient_id', visitData.patient_id)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          if (billsError) {
+            console.error('❌ Error fetching bill:', billsError);
+            return null;
+          }
+          billsData = billByPatient;
         }
 
         if (!billsData) {
@@ -161,7 +175,9 @@ export const useFinalBillData = (visitId: string) => {
 
   const saveBillMutation = useMutation({
     mutationFn: async (billData: {
+      id?: string;
       patient_id: string;
+      visit_id?: string;
       bill_no: string;
       claim_id: string;
       date: string;
@@ -169,24 +185,88 @@ export const useFinalBillData = (visitId: string) => {
       total_amount: number;
       sections: any[];
       line_items: any[];
+      bill_patient_data?: any;
+      bill_items_json?: any;
     }) => {
       console.log('💾 Starting bill save with total_amount:', billData.total_amount);
-      console.log('📊 Full bill data:', billData);
-      
-      // First, create or update the main bill
-      const { data: bill, error: billError } = await supabase
-        .from('bills')
-        .upsert({
-          patient_id: billData.patient_id,
-          bill_no: billData.bill_no,
-          claim_id: billData.claim_id,
-          date: billData.date,
-          category: billData.category,
-          total_amount: billData.total_amount,
-          status: 'DRAFT'
-        })
-        .select()
-        .single();
+
+      // Find existing bill: first by id, then by visit_id, then by patient_id
+      let existingBillId = billData.id;
+
+      if (!existingBillId && (billData.visit_id || visitId)) {
+        const { data: existingBill } = await supabase
+          .from('bills')
+          .select('id')
+          .eq('visit_id', billData.visit_id || visitId)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (existingBill) {
+          existingBillId = existingBill.id;
+          console.log('📌 Found existing bill by visit_id:', existingBillId);
+        }
+      }
+
+      if (!existingBillId) {
+        const { data: existingBill } = await supabase
+          .from('bills')
+          .select('id')
+          .eq('patient_id', billData.patient_id)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (existingBill) {
+          existingBillId = existingBill.id;
+          console.log('📌 Found existing bill by patient_id:', existingBillId);
+        }
+      }
+
+      let bill: any = null;
+      let billError: any = null;
+
+      if (existingBillId) {
+        // UPDATE existing bill
+        console.log('📝 Updating existing bill:', existingBillId);
+        const result = await supabase
+          .from('bills')
+          .update({
+            bill_no: billData.bill_no,
+            claim_id: billData.claim_id,
+            date: billData.date,
+            category: billData.category,
+            total_amount: billData.total_amount,
+            visit_id: billData.visit_id || visitId,
+            bill_patient_data: billData.bill_patient_data || {},
+            bill_items_json: billData.bill_items_json || null,
+            status: 'DRAFT'
+          } as any)
+          .eq('id', existingBillId)
+          .select()
+          .single();
+        bill = result.data;
+        billError = result.error;
+      } else {
+        // INSERT new bill only if no existing bill found
+        console.log('🆕 Creating new bill (first time for this visit)');
+        const result = await supabase
+          .from('bills')
+          .insert({
+            patient_id: billData.patient_id,
+            visit_id: billData.visit_id || visitId,
+            bill_no: billData.bill_no,
+            claim_id: billData.claim_id,
+            date: billData.date,
+            category: billData.category,
+            total_amount: billData.total_amount,
+            bill_patient_data: billData.bill_patient_data || {},
+            bill_items_json: billData.bill_items_json || null,
+            status: 'DRAFT'
+          } as any)
+          .select()
+          .single();
+        bill = result.data;
+        billError = result.error;
+      }
 
       if (billError) {
         console.error('Error saving bill:', billError);

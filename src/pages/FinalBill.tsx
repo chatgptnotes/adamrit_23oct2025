@@ -66,6 +66,7 @@ import { AdvancePaymentModal } from "@/components/AdvancePaymentModal"
 interface PatientData {
   billNo: string;
   claimId: string;
+  claimLabel: string;
   registrationNo: string;
   name: string;
   age: string;
@@ -132,6 +133,7 @@ type InvoiceItem = SectionItem | MainItem;
 const initialPatientData: PatientData = {
   billNo: "",
   claimId: "",
+  claimLabel: "CLAIM ID -",
   registrationNo: "",
   name: "",
   age: "",
@@ -534,6 +536,7 @@ const FinalBill = () => {
   const [anaesthetists, setAnaesthetists] = useState<{ id: string; name: string }[]>([]);
   const [implantsList, setImplantsList] = useState<{ id: string; name: string }[]>([]);
   const [pathologyNote, setPathologyNote] = useState("");
+  const [hiddenFields, setHiddenFields] = useState<string[]>([]);
   const [cghsSurgeries, setCghsSurgeries] = useState<{ id: string; name: string; NABH_NABL_Rate: string; code: string }[]>([]);
   const [vitalSigns] = useState<VitalSigns>({
     bp: '120/80',
@@ -1437,7 +1440,10 @@ const FinalBill = () => {
   // Auto-create bill when visit data is available
   useEffect(() => {
     const createBillIfNeeded = async () => {
-      if (!visitData || !visitId || billData?.id) return;
+      // Wait for bill query to finish before deciding to create
+      if (!visitData || !visitId || isBillLoading) return;
+      // If bill already exists, don't create
+      if (billData?.id) return;
 
       console.log('Creating new bill for visit:', visitId);
       try {
@@ -1445,13 +1451,14 @@ const FinalBill = () => {
           .from('bills')
           .insert({
             patient_id: visitData.patients.id,
+            visit_id: visitId,
             bill_no: `BL-${visitId}`,
             claim_id: validateClaimId(visitData.claim_id || visitId || 'TEMP-CLAIM'),
             date: new Date().toISOString(),
             category: 'GENERAL',
             total_amount: 0,
             status: 'DRAFT'
-          })
+          } as any)
           .select()
           .single();
 
@@ -1469,7 +1476,7 @@ const FinalBill = () => {
     };
 
     createBillIfNeeded();
-  }, [visitData, visitId, billData?.id, queryClient]);
+  }, [visitData, visitId, billData?.id, isBillLoading, queryClient]);
 
   // Function to fetch bill preparation data
   const fetchBillPreparationData = async (visitId: string) => {
@@ -1582,6 +1589,7 @@ const FinalBill = () => {
 
   // Track if draft was loaded from localStorage (using ref for synchronous updates)
   const draftLoadedRef = useRef(false);
+  const billDataLoadedRef = useRef(false);
 
   // Draft: load from localStorage on mount/visit change
   useEffect(() => {
@@ -1796,7 +1804,7 @@ const FinalBill = () => {
 
   // Initialize surgery rows from saved surgeries
   useEffect(() => {
-    if (savedSurgeries.length > 0) {
+    if (savedSurgeries.length > 0 && !billDataLoadedRef.current) {
       const initialRows = savedSurgeries.map((surgery, index) => ({
         id: surgery.id || `surgery-${index}`,
         name: surgery.name,
@@ -5324,15 +5332,74 @@ INSTRUCTIONS:
   // Load bill data when available
   useEffect(() => {
     if (billData && !isSavingBill && !draftLoadedRef.current) { // Don't reload during save process, or if draft loaded
+      const savedPD = (billData as any).bill_patient_data || {};
       setPatientData(prev => ({
         ...prev,
         billNo: billData.bill_no,
+        claimId: billData.claim_id || savedPD.claimId || prev.claimId,
+        claimLabel: savedPD.claimLabel || prev.claimLabel,
         category: billData.category,
         billDate: billData.date,
+        diagnosis: savedPD.diagnosis || prev.diagnosis,
+        ipNo: savedPD.ipNo || prev.ipNo,
+        serviceNo: savedPD.serviceNo || prev.serviceNo,
+        beneficiaryName: savedPD.beneficiaryName || prev.beneficiaryName,
+        relation: savedPD.relation || prev.relation,
+        contactNo: savedPD.contactNo || prev.contactNo,
+        address: savedPD.address || prev.address,
       }));
+      if (savedPD.hiddenFields) setHiddenFields(savedPD.hiddenFields);
 
-      // Load sections and line items into invoiceItems (merge with existing)
-      if (billData.sections && billData.line_items) {
+      // HIGHEST PRIORITY: Load from bill_items_json if available
+      const rawItemsJson = (billData as any).bill_items_json;
+      // Support both formats: new { invoiceItems, surgeryRows } and old array format
+      const savedItemsJson = rawItemsJson
+        ? (Array.isArray(rawItemsJson) ? rawItemsJson : rawItemsJson.invoiceItems)
+        : null;
+      const savedSurgeryRows = rawItemsJson && !Array.isArray(rawItemsJson) ? rawItemsJson.surgeryRows : null;
+
+      if (savedItemsJson && Array.isArray(savedItemsJson) && savedItemsJson.length > 0) {
+        if (!billDataLoadedRef.current) {
+          console.log('📦 Loading bill from bill_items_json:', savedItemsJson.length, 'items');
+          const restoredItems = savedItemsJson.map((item: any) => {
+            if (item.dates && item.dates.from) {
+              item.dates = { from: new Date(item.dates.from), to: item.dates.to ? new Date(item.dates.to) : undefined };
+            }
+            if (item.additionalDateRanges) {
+              item.additionalDateRanges = item.additionalDateRanges.map((r: any) => ({
+                from: new Date(r.from), to: r.to ? new Date(r.to) : undefined
+              }));
+            }
+            if (item.subItems) {
+              item.subItems = item.subItems.map((sub: any) => {
+                if (sub.dates && sub.dates.from) {
+                  sub.dates = { from: new Date(sub.dates.from), to: sub.dates.to ? new Date(sub.dates.to) : undefined };
+                }
+                if (sub.additionalDateRanges) {
+                  sub.additionalDateRanges = sub.additionalDateRanges.map((r: any) => ({
+                    from: new Date(r.from), to: r.to ? new Date(r.to) : undefined
+                  }));
+                }
+                return sub;
+              });
+            }
+            return item;
+          });
+          setInvoiceItems(restoredItems as InvoiceItem[]);
+          // Restore surgery rows if available
+          if (savedSurgeryRows && Array.isArray(savedSurgeryRows) && savedSurgeryRows.length > 0) {
+            console.log('🔪 Restoring surgery rows:', savedSurgeryRows.length);
+            setSurgeryRows(savedSurgeryRows);
+          }
+          // Restore notes if available
+          if (rawItemsJson && !Array.isArray(rawItemsJson)) {
+            if (rawItemsJson.pathologyNote) setPathologyNote(rawItemsJson.pathologyNote);
+            if (rawItemsJson.medicineNote) setMedicineNote(rawItemsJson.medicineNote);
+          }
+          billDataLoadedRef.current = true;
+          console.log('✅ Bill items restored from bill_items_json');
+        }
+      } else if (billData.sections && billData.line_items) {
         console.log('Loading saved bill data:', billData);
 
         const loadedItems: InvoiceItem[] = [];
@@ -5394,34 +5461,28 @@ INSTRUCTIONS:
 
         console.log('Loaded invoice items:', loadedItems);
 
-        // Check if we already have data loaded to prevent duplication
-        const hasExistingData = invoiceItems.some(item =>
-          item.type === 'main' && item.subItems && item.subItems.length > 0
-        );
-
-        if (!hasExistingData) {
+        if (!billDataLoadedRef.current) {
           console.log('🔄 Loading saved bill data into invoice items');
-          // Only use loaded data, don't merge with initial sections to avoid duplication
           setInvoiceItems(loadedItems);
+          billDataLoadedRef.current = true;
         } else {
-          console.log('⚠️ Skipping bill data load - data already exists to prevent duplication');
+          console.log('⚠️ Skipping - already loaded from DB');
         }
       } else {
-        // No saved data, use initial sections only if no data exists
-        const hasExistingData = invoiceItems.some(item =>
-          item.type === 'main' && item.subItems && item.subItems.length > 0
-        );
-
-        if (!hasExistingData) {
+        // No saved data, use initial sections only if not already loaded
+        if (!billDataLoadedRef.current) {
           console.log('🆕 Loading initial sections - no saved data');
           setInvoiceItems(initialInvoiceItems);
         }
       }
     }
-  }, [billData, isSavingBill, invoiceItems]);
+  }, [billData, isSavingBill]);
 
   // Update Pathology Charges with saved pathology date ranges
   useEffect(() => {
+    // Skip if data was already restored from bill_items_json
+    if (billDataLoadedRef.current) return;
+
     console.log('🔬 Pathology Charges Debug:', {
       savedPathologyCharges,
       savedPathologyChargesLength: savedPathologyCharges?.length || 0,
@@ -5486,7 +5547,10 @@ INSTRUCTIONS:
 
   // Update Medicine Charges with saved medication data
   useEffect(() => {
-    console.log('💊 Medicine Charges Debug:', { 
+    // Skip if data was already restored from bill_items_json
+    if (billDataLoadedRef.current) return;
+
+    console.log('💊 Medicine Charges Debug:', {
       savedMedicationData, 
       savedMedicationDataLength: savedMedicationData?.length || 0,
       visitId 
@@ -5642,20 +5706,22 @@ INSTRUCTIONS:
           dateOfDischarge: surgicalEnd ? format(surgicalEnd, 'yyyy-MM-dd') : prev.dateOfDischarge
         }));
 
+        // Only auto-sync dates for NEW bills; skip if data was restored from bill_items_json
+        if (!billDataLoadedRef.current) {
         setInvoiceItems(prev => prev.map(item => {
           if (item.type === 'section') {
             if (item.title === 'Conservative Treatment') {
               // Calculate Post-Surgical Conservative Treatment period
-              const postSurgicalStart = packageDates.end_date ? 
-                new Date(new Date(packageDates.end_date).getTime() + 24 * 60 * 60 * 1000) : 
+              const postSurgicalStart = packageDates.end_date ?
+                new Date(new Date(packageDates.end_date).getTime() + 24 * 60 * 60 * 1000) :
                 null;
               const postSurgicalEnd = dischargeDate;
-              
+
               return {
                 ...item,
                 dates: { from: conservativeStart, to: conservativeEnd },
-                additionalDateRanges: postSurgicalStart && postSurgicalEnd ? 
-                  [{ from: postSurgicalStart, to: postSurgicalEnd }] : 
+                additionalDateRanges: postSurgicalStart && postSurgicalEnd ?
+                  [{ from: postSurgicalStart, to: postSurgicalEnd }] :
                   []
               };
             }
@@ -5669,38 +5735,38 @@ INSTRUCTIONS:
           if (item.type === 'main') {
             if (item.description === 'Consultation for Inpatients') {
               // Calculate Post-Surgical Conservative Treatment period for consultation
-              const postSurgicalStart = packageDates.end_date ? 
-                new Date(new Date(packageDates.end_date).getTime() + 24 * 60 * 60 * 1000) : 
+              const postSurgicalStart = packageDates.end_date ?
+                new Date(new Date(packageDates.end_date).getTime() + 24 * 60 * 60 * 1000) :
                 null;
               const postSurgicalEnd = dischargeDate;
-              
+
               return {
                 ...item,
                 dates: { from: conservativeStart, to: conservativeEnd },
                 subItems: item.subItems.map(subItem => ({
                   ...subItem,
                   dates: { from: conservativeStart, to: conservativeEnd },
-                  additionalDateRanges: postSurgicalStart && postSurgicalEnd ? 
-                    [{ from: postSurgicalStart, to: postSurgicalEnd }] : 
+                  additionalDateRanges: postSurgicalStart && postSurgicalEnd ?
+                    [{ from: postSurgicalStart, to: postSurgicalEnd }] :
                     []
                 }))
               };
             }
             if (item.description === 'Accommodation Charges') {
               // Calculate Post-Surgical Conservative Treatment period for accommodation
-              const postSurgicalStart = packageDates.end_date ? 
-                new Date(new Date(packageDates.end_date).getTime() + 24 * 60 * 60 * 1000) : 
+              const postSurgicalStart = packageDates.end_date ?
+                new Date(new Date(packageDates.end_date).getTime() + 24 * 60 * 60 * 1000) :
                 null;
               const postSurgicalEnd = dischargeDate;
-              
+
               return {
                 ...item,
                 dates: { from: conservativeStart, to: conservativeEnd },
                 subItems: item.subItems.map(subItem => ({
                   ...subItem,
                   dates: { from: conservativeStart, to: conservativeEnd },
-                  additionalDateRanges: postSurgicalStart && postSurgicalEnd ? 
-                    [{ from: postSurgicalStart, to: postSurgicalEnd }] : 
+                  additionalDateRanges: postSurgicalStart && postSurgicalEnd ?
+                    [{ from: postSurgicalStart, to: postSurgicalEnd }] :
                     []
                 }))
               };
@@ -5708,6 +5774,7 @@ INSTRUCTIONS:
           }
           return item;
         }));
+        }
       }
     }
   }, [visitData, billData, getDiagnosisText])
@@ -15202,14 +15269,41 @@ Dr. Murali B K
       console.log('🔢 Using current totalAmount state:', totalAmount);
       
       const billDataToSave = {
+        id: billData?.id,
         patient_id: visitData.patient_id,
+        visit_id: visitId,
         bill_no: patientData.billNo,
         claim_id: validateClaimId(patientData.claimId),
         date: patientData.billDate,
         category: patientData.category,
-        total_amount: totalAmount, // Use current totalAmount state
+        total_amount: Math.round(totalAmount), // Round to match UI display
         sections,
         line_items: lineItems,
+        bill_patient_data: {
+          claimId: patientData.claimId,
+          claimLabel: patientData.claimLabel,
+          diagnosis: patientData.diagnosis,
+          ipNo: patientData.ipNo || patientData.rank,
+          serviceNo: patientData.serviceNo,
+          beneficiaryName: patientData.beneficiaryName,
+          relation: patientData.relation,
+          contactNo: patientData.contactNo,
+          address: patientData.address,
+          hiddenFields,
+        },
+        bill_items_json: {
+          invoiceItems,
+          surgeryRows: surgeryRows.map(row => {
+            const baseAmount = row.rate * row.quantity;
+            const firstDiscount = baseAmount * (row.adjustmentPercent / 100);
+            const afterFirst = baseAmount - firstDiscount;
+            const secondDiscount = afterFirst * ((row.secondAdjustmentPercent || 0) / 100);
+            const finalAmount = afterFirst - secondDiscount;
+            return { ...row, finalAmount };
+          }),
+          pathologyNote,
+          medicineNote,
+        },
         // Add new sections data
         bill_preparation: billPreparation,
         nmi_tracking: nmiTracking,
@@ -21278,10 +21372,20 @@ Dr. Murali B K
                 <div className="border-2 border-black p-2 mb-2">
                   <h2 className="text-xl font-bold tracking-wider print:text-xl">{patientInfo?.corporate ? patientInfo.corporate.toUpperCase() : 'PRIVATE'}</h2>
                 </div>
-                <div className="border-2 border-black p-2">
-                  <h3 className="text-lg font-semibold tracking-wide print:text-xl print:font-bold">
-                    CLAIM ID -
-                    <span className="screen-only ml-2">
+                {!hiddenFields.includes('claimId') && (
+                <div className="border-2 border-black p-2 relative">
+                  <button className="screen-only absolute top-1 right-1 text-red-400 hover:text-red-600 text-xs px-1" onClick={() => setHiddenFields(prev => [...prev, 'claimId'])} title="Hide this field">✕</button>
+                  <h3 className="text-lg font-semibold tracking-wide print:text-xl print:font-bold flex items-center justify-center">
+                    <span className="screen-only">
+                      <Input
+                        type="text"
+                        className="inline-block w-36 h-8 text-center font-bold"
+                        value={patientData.claimLabel}
+                        onChange={(e) => handlePatientDataChange('claimLabel', e.target.value)}
+                      />
+                    </span>
+                    <span className="print-only font-bold">{patientData.claimLabel || 'CLAIM ID -'}</span>
+                    <span className="screen-only ml-1">
                       <Input
                         type="text"
                         className="inline-block w-48 h-8 text-center font-bold"
@@ -21292,6 +21396,7 @@ Dr. Murali B K
                     <span className="print-only ml-2 font-bold">{patientData.claimId || ''}</span>
                   </h3>
                 </div>
+                )}
               </div>
 
               {/* Patient Info */}
@@ -21345,13 +21450,16 @@ Dr. Murali B K
                   </span>
                   <span className="print-only flex-1 break-words">{patientData.name || ''}</span>
                 </div>
-                <div className="flex items-start">
+                {!hiddenFields.includes('ipNo') && (
+                <div className="flex items-start relative">
                   <span className="font-semibold w-48 shrink-0">IP NO.:</span>
                   <span className="screen-only flex-1">
                     <Input className="h-7 w-full" value={patientData.ipNo || ''} onChange={(e) => handlePatientDataChange('ipNo', e.target.value)} />
                   </span>
                   <span className="print-only flex-1 break-words">{patientData.ipNo || ''}</span>
+                  <button className="screen-only ml-1 text-red-400 hover:text-red-600 text-xs px-1" onClick={() => setHiddenFields(prev => [...prev, 'ipNo'])} title="Hide this field">✕</button>
                 </div>
+                )}
 
                 {/* Row 4: AGE | SERVICE NO */}
                 <div className="flex items-start">
@@ -21403,19 +21511,22 @@ Dr. Murali B K
 
                 {/* Row 7: NAME OF ESIC BENEFICIARY | RELATION WITH IP */}
                 <div className="flex items-start">
-                  <span className="font-semibold w-48 shrink-0">NAME OF ESIC BENEFICIARY:</span>
+                  <span className="font-semibold w-48 shrink-0">NAME OF {patientInfo?.corporate ? patientInfo.corporate.toUpperCase() : 'PRIVATE'} BENEFICIARY:</span>
                   <span className="screen-only flex-1">
                     <Input className="h-7 w-full" value={patientData.beneficiaryName} onChange={(e) => handlePatientDataChange('beneficiaryName', e.target.value)} />
                   </span>
                   <span className="print-only flex-1 break-words">{patientData.beneficiaryName || ''}</span>
                 </div>
-                <div className="flex items-start">
+                {!hiddenFields.includes('relation') && (
+                <div className="flex items-start relative">
                   <span className="font-semibold w-48 shrink-0">RELATION WITH IP:</span>
                   <span className="screen-only flex-1">
                     <Input className="h-7 w-full" value={patientData.relation} onChange={(e) => handlePatientDataChange('relation', e.target.value)} />
                   </span>
                   <span className="print-only flex-1 break-words">{patientData.relation || ''}</span>
+                  <button className="screen-only ml-1 text-red-400 hover:text-red-600 text-xs px-1" onClick={() => setHiddenFields(prev => [...prev, 'relation'])} title="Hide this field">✕</button>
                 </div>
+                )}
               </div>
 
 
