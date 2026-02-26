@@ -56,15 +56,6 @@ export const useFinalBillData = (visitId: string) => {
       try {
         console.log('🔍 Fetching bill data for visit ID:', visitId);
 
-        // First try to find bill by visit_id directly
-        const { data: billByVisit } = await supabase
-          .from('bills')
-          .select('*')
-          .eq('visit_id', visitId)
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle() as { data: any };
-
         // Get visit dates
         const { data: visitData, error: visitError } = await supabase
           .from('visits')
@@ -91,6 +82,15 @@ export const useFinalBillData = (visitId: string) => {
           admission_date: visitData.admission_date,
           visit_date: visitData.visit_date
         });
+
+        // First try to find bill by visit_id (exact match)
+        const { data: billByVisit } = await supabase
+          .from('bills')
+          .select('*')
+          .eq('visit_id', visitId)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle() as { data: any };
 
         // Use bill found by visit_id, or fallback to patient_id lookup
         let billsData = billByVisit;
@@ -163,8 +163,8 @@ export const useFinalBillData = (visitId: string) => {
   const saveBillMutation = useMutation({
     mutationFn: async (billData: {
       id?: string;
-      visit_id?: string;
       patient_id: string;
+      visit_id?: string;
       bill_no: string;
       claim_id: string;
       date: string;
@@ -173,21 +173,21 @@ export const useFinalBillData = (visitId: string) => {
       sections: any[];
       line_items: any[];
       bill_patient_data?: any;
+      bill_items_json?: any;
     }) => {
       console.log('💾 Starting bill save with total_amount:', billData.total_amount);
 
       // Find existing bill: first by id, then by visit_id, then by patient_id
       let existingBillId = billData.id;
 
-      if (!existingBillId && billData.visit_id) {
+      if (!existingBillId && (billData.visit_id || visitId)) {
         const { data: existingBill } = await supabase
           .from('bills')
           .select('id')
-          .eq('visit_id', billData.visit_id)
+          .eq('visit_id', billData.visit_id || visitId)
           .order('created_at', { ascending: false })
           .limit(1)
           .maybeSingle() as { data: any };
-
         if (existingBill) {
           existingBillId = existingBill.id;
           console.log('📌 Found existing bill by visit_id:', existingBillId);
@@ -202,7 +202,6 @@ export const useFinalBillData = (visitId: string) => {
           .order('created_at', { ascending: false })
           .limit(1)
           .maybeSingle() as { data: any };
-
         if (existingBill) {
           existingBillId = existingBill.id;
           console.log('📌 Found existing bill by patient_id:', existingBillId);
@@ -225,6 +224,7 @@ export const useFinalBillData = (visitId: string) => {
             total_amount: billData.total_amount,
             visit_id: billData.visit_id || visitId,
             bill_patient_data: billData.bill_patient_data || {},
+            bill_items_json: billData.bill_items_json || null,
             status: 'DRAFT'
           } as any)
           .eq('id', existingBillId)
@@ -239,13 +239,14 @@ export const useFinalBillData = (visitId: string) => {
           .from('bills')
           .insert({
             patient_id: billData.patient_id,
+            visit_id: billData.visit_id || visitId,
             bill_no: billData.bill_no,
             claim_id: billData.claim_id,
             date: billData.date,
             category: billData.category,
             total_amount: billData.total_amount,
-            visit_id: billData.visit_id || visitId,
             bill_patient_data: billData.bill_patient_data || {},
+            bill_items_json: billData.bill_items_json || null,
             status: 'DRAFT'
           } as any)
           .select()
