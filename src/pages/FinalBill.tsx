@@ -19100,9 +19100,9 @@ Dr. Murali B K
                                         </td>
                                         <td className="border border-gray-300 px-4 py-2 text-sm text-gray-600">
                                           <input
-                                            type="date"
-                                            value={lab.ordered_date ? new Date(lab.ordered_date).toISOString().split('T')[0] : ''}
-                                            onChange={(e) => updateLabField(lab.id, 'ordered_date', e.target.value)}
+                                            type="datetime-local"
+                                            value={lab.ordered_date ? (() => { const d = new Date(lab.ordered_date); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}T${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`; })() : ''}
+                                            onChange={(e) => updateLabField(lab.id, 'ordered_date', e.target.value ? new Date(e.target.value).toISOString() : '')}
                                             className="w-full px-2 py-1 text-xs border border-gray-200 rounded focus:outline-none focus:border-blue-500"
                                           />
                                         </td>
