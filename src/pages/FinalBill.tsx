@@ -22416,16 +22416,6 @@ Dr. Murali B K
               </div>
 
               <div className="mt-8 flex justify-end space-x-4 no-print">
-                <Button onClick={saveDraft} variant="outline" size="lg" className="px-6 py-2">💾 Save Draft</Button>
-                <Button onClick={clearDraft} variant="outline" size="lg" className="px-6 py-2">🧹 Clear Draft</Button>
-                <Button
-                  onClick={() => navigate(`/edit-final-bill/${visitId}`)}
-                  className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2"
-                  size="lg"
-                >
-                  <PenTool className="h-4 w-4 mr-2" />
-                  Edit Bill
-                </Button>
                 <Button
                   onClick={handleSaveBill}
                   disabled={isSaving}
