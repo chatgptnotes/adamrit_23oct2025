@@ -18,7 +18,9 @@ import {
   ScanLine,
   FileCheck,
   RefreshCw,
-  Printer
+  Printer,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 
 interface Patient {
@@ -56,11 +58,18 @@ const XRayTracking: React.FC = () => {
   const [allRecords, setAllRecords] = useState<XRayRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchLoading, setSearchLoading] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
 
   // Load all records on mount
   useEffect(() => {
     loadAllRecords();
   }, [selectedDate]);
+
+  // Reset page when records or page size change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [allRecords, pageSize]);
 
   const loadAllRecords = async () => {
     try {
@@ -421,6 +430,12 @@ const XRayTracking: React.FC = () => {
     printWindow.print();
   };
 
+  const totalPages = Math.ceil(allRecords.length / pageSize);
+  const paginatedRecords = allRecords.slice(
+    (currentPage - 1) * pageSize,
+    currentPage * pageSize
+  );
+
   return (
     <div className="space-y-6">
       {/* Step 1: Search & Select Patient */}
@@ -645,9 +660,9 @@ const XRayTracking: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
-                  {allRecords.map((record, index) => (
+                  {paginatedRecords.map((record, index) => (
                     <tr key={record.id} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                      <td className="px-4 py-3 text-sm">{index + 1}</td>
+                      <td className="px-4 py-3 text-sm">{(currentPage - 1) * pageSize + index + 1}</td>
                       <td className="px-4 py-3 text-sm">
                         <p className="font-medium">{record.patient_name || 'N/A'}</p>
                         <p className="text-xs text-muted-foreground">{record.patients_id || ''}</p>
@@ -691,6 +706,47 @@ const XRayTracking: React.FC = () => {
                   ))}
                 </tbody>
               </table>
+            </div>
+          )}
+
+          {/* Pagination Controls */}
+          {allRecords.length > 0 && (
+            <div className="flex items-center justify-between mt-4 px-2">
+              <div className="flex items-center gap-3 text-sm text-gray-600">
+                <span>Showing {((currentPage - 1) * pageSize) + 1} to {Math.min(currentPage * pageSize, allRecords.length)} of {allRecords.length} entries</span>
+                <select
+                  value={pageSize}
+                  onChange={(e) => setPageSize(Number(e.target.value))}
+                  className="border rounded px-2 py-1 text-sm"
+                >
+                  <option value={10}>10</option>
+                  <option value={20}>20</option>
+                  <option value={50}>50</option>
+                </select>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                  disabled={currentPage === 1}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                  Previous
+                </Button>
+                <span className="px-3 py-1 bg-gray-100 rounded text-sm">
+                  Page {currentPage} of {totalPages || 1}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                  disabled={currentPage >= totalPages}
+                >
+                  Next
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
           )}
         </CardContent>

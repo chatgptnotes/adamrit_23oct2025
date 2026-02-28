@@ -1,6 +1,6 @@
 // @ts-nocheck
 // Enhanced Radiology Orders Component - Dashboard Style
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,14 +21,16 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { 
-  FileText, 
-  Search, 
+  FileText,
+  Search,
   Download,
   Edit,
   Eye,
   User,
   RefreshCw,
-  CalendarIcon
+  CalendarIcon,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -54,6 +56,10 @@ const EnhancedRadiologyOrders: React.FC<EnhancedRadiologyOrdersProps> = ({ onBac
   });
   const [selectedStatus, setSelectedStatus] = useState('all');
   
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+
   // Dialog states
   const [resultDialogOpen, setResultDialogOpen] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<any>(null);
@@ -83,6 +89,7 @@ const EnhancedRadiologyOrders: React.FC<EnhancedRadiologyOrdersProps> = ({ onBac
           ),
           visits:visit_id (
             patient_id,
+            patient_type,
             patients:patient_id (
               name,
               age,
@@ -135,6 +142,7 @@ const EnhancedRadiologyOrders: React.FC<EnhancedRadiologyOrdersProps> = ({ onBac
           groupedByVisit[visitKey] = {
             patient: patient,
             visitId: item.visit_id,
+            patientType: item.visits?.patient_type || 'OPD',
             orders: []
           };
         }
@@ -160,7 +168,7 @@ const EnhancedRadiologyOrders: React.FC<EnhancedRadiologyOrdersProps> = ({ onBac
             srNo: isFirstOrderForVisit ? serialNumber : '',
             sex: isFirstOrderForVisit ? (patient?.gender || 'Unknown') : '',
             patientName: isFirstOrderForVisit ? (patient?.name || 'Unknown Patient') : '',
-            patientId: isFirstOrderForVisit ? (visitId || 'Unknown Visit ID') : '',
+            patientId: isFirstOrderForVisit ? (patient?.patients_id || visitId || '-') : '',
             service: radiologyInfo?.name || 'Unknown Service',
             primaryCareProvider: '', // Can be added later from visit data
             status: item.status || 'ordered',
@@ -171,7 +179,8 @@ const EnhancedRadiologyOrders: React.FC<EnhancedRadiologyOrdersProps> = ({ onBac
             impression: item.impression,
             notes: item.notes,
             isFirstInGroup: isFirstOrderForVisit,
-            visitKey: visitKey
+            visitKey: visitKey,
+            patientType: visitGroup.patientType
           });
           
           // Only increment serial number for first order of each visit
@@ -179,6 +188,25 @@ const EnhancedRadiologyOrders: React.FC<EnhancedRadiologyOrdersProps> = ({ onBac
             serialNumber++;
           }
         });
+      });
+
+      // Sort IPD (admitted) patients to the top
+      const visitKeys = [...new Set(transformedData.map(d => d.visitKey))];
+      const visitKeyOrder = visitKeys.sort((a, b) => {
+        const aIsIPD = groupedByVisit[a]?.patientType === 'IPD' ? 0 : 1;
+        const bIsIPD = groupedByVisit[b]?.patientType === 'IPD' ? 0 : 1;
+        return aIsIPD - bIsIPD;
+      });
+      transformedData.sort((a, b) => {
+        return visitKeyOrder.indexOf(a.visitKey) - visitKeyOrder.indexOf(b.visitKey);
+      });
+
+      // Re-assign serial numbers after sorting
+      let newSerial = 1;
+      transformedData.forEach(item => {
+        if (item.isFirstInGroup) {
+          item.srNo = newSerial++;
+        }
       });
 
       // Apply search filter after transformation
@@ -208,7 +236,17 @@ const EnhancedRadiologyOrders: React.FC<EnhancedRadiologyOrdersProps> = ({ onBac
     total: radiologyOrders.length
   };
 
+  // Reset to page 1 when filters or page size change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, selectedStatus, fromDate, toDate, pageSize]);
+
   const filteredOrders = radiologyOrders;
+  const totalPages = Math.ceil(filteredOrders.length / pageSize);
+  const paginatedOrders = filteredOrders.slice(
+    (currentPage - 1) * pageSize,
+    currentPage * pageSize
+  );
 
   const handleExportExcel = () => {
     console.log('Exporting to Excel...');
@@ -241,19 +279,91 @@ const EnhancedRadiologyOrders: React.FC<EnhancedRadiologyOrdersProps> = ({ onBac
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold">Radiology Dashboard</h2>
-          <p className="text-sm text-muted-foreground">
-            Enterprise-level radiology operations and imaging management
-          </p>
+      {/* Header + Filters Compact Layout */}
+      <div className="space-y-3">
+        {/* Row 1: Title left, Quick buttons right */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-2xl font-bold">Radiology Dashboard</h2>
+            <p className="text-sm text-muted-foreground">
+              Enterprise-level radiology operations and imaging management
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={resetToCurrentMonth} className="text-xs">
+              📅 This Month
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => { const today = new Date(); setFromDate(today); setToDate(today); }}
+              className="text-xs"
+            >
+              📆 Today
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => { setFromDate(undefined); setToDate(undefined); }}
+              className="text-xs text-red-600 border-red-300 hover:bg-red-50"
+            >
+              ✕ Clear Dates
+            </Button>
+            {onBack && (
+              <Button variant="outline" size="sm" onClick={onBack}>Back</Button>
+            )}
+          </div>
         </div>
-        {onBack && (
-          <Button variant="outline" onClick={onBack}>
-            Back
+
+        {/* Row 2: All filters in one row */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <Input
+            placeholder="Patient Name"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-[180px]"
+          />
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" className="w-[150px] justify-start text-left font-normal">
+                <CalendarIcon className="mr-2 h-4 w-4" />
+                {fromDate ? format(fromDate, "dd/MM/yyyy") : "From Date"}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <Calendar mode="single" selected={fromDate} onSelect={setFromDate} initialFocus defaultMonth={fromDate || new Date()} today={new Date()} />
+            </PopoverContent>
+          </Popover>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" className="w-[150px] justify-start text-left font-normal">
+                <CalendarIcon className="mr-2 h-4 w-4" />
+                {toDate ? format(toDate, "dd/MM/yyyy") : "To Date"}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <Calendar mode="single" selected={toDate} onSelect={setToDate} initialFocus defaultMonth={toDate || new Date()} today={new Date()} />
+            </PopoverContent>
+          </Popover>
+          <Select value={selectedStatus} onValueChange={setSelectedStatus}>
+            <SelectTrigger className="w-[140px]">
+              <SelectValue placeholder="All Status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Status</SelectItem>
+              <SelectItem value="pending">Pending</SelectItem>
+              <SelectItem value="completed">Completed</SelectItem>
+              <SelectItem value="in-progress">In Progress</SelectItem>
+            </SelectContent>
+          </Select>
+          <Button onClick={() => refetch()}>
+            <Search className="h-4 w-4 mr-2" />
+            Search
           </Button>
-        )}
+          <Button variant="outline" onClick={handlePACS}>
+            PACS
+          </Button>
+        </div>
       </div>
 
       {/* Loading State */}
@@ -269,125 +379,6 @@ const EnhancedRadiologyOrders: React.FC<EnhancedRadiologyOrdersProps> = ({ onBac
           Error loading radiology orders: {error.message}
         </div>
       )}
-
-      {/* Enhanced Search and Filters Section */}
-      <Card>
-        <CardContent className="pt-6">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
-            {/* Quick Reset Button */}
-            <div className="md:col-span-4 flex gap-2 mb-2">
-              <Button 
-                variant="outline" 
-                size="sm" 
-                onClick={resetToCurrentMonth}
-                className="text-xs"
-              >
-                📅 This Month
-              </Button>
-              <Button 
-                variant="outline" 
-                size="sm" 
-                onClick={() => {
-                  const today = new Date();
-                  setFromDate(today);
-                  setToDate(today);
-                }}
-                className="text-xs"
-              >
-                📆 Today
-              </Button>
-            </div>
-          </div>
-          
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
-            {/* Patient Name Search */}
-            <div className="relative">
-              <Input
-                placeholder="Patient Name"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full"
-              />
-            </div>
-            
-            {/* From Date */}
-            <div>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className="w-full justify-start text-left font-normal"
-                  >
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {fromDate ? format(fromDate, "dd/MM/yyyy") : "From Date"}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar
-                    mode="single"
-                    selected={fromDate}
-                    onSelect={setFromDate}
-                    initialFocus
-                    defaultMonth={fromDate || new Date()}
-                    today={new Date()}
-                  />
-                </PopoverContent>
-              </Popover>
-            </div>
-            
-            {/* To Date */}
-            <div>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className="w-full justify-start text-left font-normal"
-                  >
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {toDate ? format(toDate, "dd/MM/yyyy") : "To Date"}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar
-                    mode="single"
-                    selected={toDate}
-                    onSelect={setToDate}
-                    initialFocus
-                    defaultMonth={toDate || new Date()}
-                    today={new Date()}
-                  />
-                </PopoverContent>
-              </Popover>
-            </div>
-            
-            {/* Status Filter */}
-            <div>
-              <Select value={selectedStatus} onValueChange={setSelectedStatus}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Please Select" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Status</SelectItem>
-                  <SelectItem value="pending">Pending</SelectItem>
-                  <SelectItem value="completed">Completed</SelectItem>
-                  <SelectItem value="in-progress">In Progress</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          
-          {/* Action Buttons */}
-          <div className="flex gap-2">
-            <Button onClick={() => refetch()}>
-              <Search className="h-4 w-4 mr-2" />
-              Search
-            </Button>
-            <Button variant="outline" onClick={handlePACS}>
-              PACS
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
 
       {/* Stats Bar */}
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
@@ -432,11 +423,11 @@ const EnhancedRadiologyOrders: React.FC<EnhancedRadiologyOrdersProps> = ({ onBac
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredOrders.map((order, index) => {
+                {paginatedOrders.map((order, index) => {
                   // Check if this is the first row for a new patient group
                   const isNewPatientGroup = order.isFirstInGroup;
-                  const isLastOrderForPatient = index === filteredOrders.length - 1 || 
-                    (index < filteredOrders.length - 1 && filteredOrders[index + 1].isFirstInGroup);
+                  const isLastOrderForPatient = index === paginatedOrders.length - 1 ||
+                    (index < paginatedOrders.length - 1 && paginatedOrders[index + 1].isFirstInGroup);
                   
                   return (
                     <TableRow 
@@ -496,6 +487,47 @@ const EnhancedRadiologyOrders: React.FC<EnhancedRadiologyOrdersProps> = ({ onBac
           </div>
         </CardContent>
       </Card>
+
+      {/* Pagination Controls */}
+      {filteredOrders.length > 0 && (
+        <div className="flex items-center justify-between px-2">
+          <div className="flex items-center gap-3 text-sm text-gray-600">
+            <span>Showing {((currentPage - 1) * pageSize) + 1} to {Math.min(currentPage * pageSize, filteredOrders.length)} of {filteredOrders.length} entries</span>
+            <select
+              value={pageSize}
+              onChange={(e) => setPageSize(Number(e.target.value))}
+              className="border rounded px-2 py-1 text-sm"
+            >
+              <option value={10}>10</option>
+              <option value={20}>20</option>
+              <option value={50}>50</option>
+            </select>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+              disabled={currentPage === 1}
+            >
+              <ChevronLeft className="h-4 w-4" />
+              Previous
+            </Button>
+            <span className="px-3 py-1 bg-gray-100 rounded text-sm">
+              Page {currentPage} of {totalPages || 1}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+              disabled={currentPage >= totalPages}
+            >
+              Next
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* No Results Message */}
       {filteredOrders.length === 0 && (

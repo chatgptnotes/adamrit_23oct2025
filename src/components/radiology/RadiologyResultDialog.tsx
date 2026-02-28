@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -17,6 +17,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { SearchableSelect, SearchableSelectOption } from '@/components/ui/searchable-select';
 import { Search, Upload, Calendar, Clock } from 'lucide-react';
 import { format } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
@@ -61,29 +62,21 @@ export const RadiologyResultDialog: React.FC<RadiologyResultDialogProps> = ({
     'Lumbar Spondylosis'
   ];
 
-  // Real doctors list
-  const doctors = [
-    'Please Select',
-    'Dr.Murli BK',
-    'Dr.Mitesh Baheti',
-    'Dr.Neerja Tiwari',
-    'Dr.Vilas Panchabhau',
-    'Dr.Nilima Patil',
-    'Dr.Naved Sheikh',
-    'Dr.Sumedh Ramteke',
-    'Dr.Badal Bankar',
-    'Dr.Pradeep Kachhap',
-    'Dr.Yasin Akbani',
-    'Dr.Anil Bajaj',
-    'Dr.Subhas Tiple',
-    'Dr.Atul Rajkondawar',
-    'Dr.Shubham Ingle',
-    'Dr.Ashwin Chinchkhede',
-    'Dr.Vijay Bansod',
-    'Dr.Chirag Patil',
-    'Dr.Vishal Nandagawli',
-    'Dr.Pankaj Anantwar'
-  ];
+  // Fetch doctors from hope_consultants master
+  const [doctors, setDoctors] = useState<SearchableSelectOption[]>([]);
+
+  useEffect(() => {
+    const fetchDoctors = async () => {
+      const { data } = await supabase
+        .from('hope_consultants')
+        .select('name')
+        .order('name');
+      if (data) {
+        setDoctors(data.map(d => ({ value: d.name, label: d.name })));
+      }
+    };
+    fetchDoctors();
+  }, []);
 
   const handleTemplateClick = (template: string) => {
     setFormData(prev => ({
@@ -155,8 +148,39 @@ export const RadiologyResultDialog: React.FC<RadiologyResultDialogProps> = ({
       }
 
       console.log('✅ Save successful! Updated record:', data[0]);
-              console.log('✅ SUCCESS! Radiology result saved!');
-        alert('Radiology result saved successfully!');
+
+      // Upload file to storage bucket if selected
+      if (formData.uploadedFile) {
+        const file = formData.uploadedFile;
+        const fileName = `${Date.now()}_${file.name}`;
+        const filePath = `radiology-files/${orderData.visitId}/${fileName}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from('patient-documents')
+          .upload(filePath, file, { cacheControl: '3600', upsert: false });
+
+        if (uploadError) {
+          console.error('File upload error:', uploadError);
+          alert('Result saved but file upload failed: ' + uploadError.message);
+        } else {
+          const { data: urlData } = supabase.storage
+            .from('patient-documents')
+            .getPublicUrl(filePath);
+
+          await supabase.from('visit_radiology').update({
+            file_name: file.name,
+            file_path: filePath,
+            file_url: urlData.publicUrl,
+            file_size: file.size,
+            file_type: file.type
+          }).eq('id', orderData.id);
+
+          console.log('✅ File uploaded:', urlData.publicUrl);
+        }
+      }
+
+      console.log('✅ SUCCESS! Radiology result saved!');
+      alert('Radiology result saved successfully!');
       onClose();
       
       // Trigger a refresh
@@ -274,25 +298,14 @@ export const RadiologyResultDialog: React.FC<RadiologyResultDialogProps> = ({
                 {/* Select Doctor */}
                 <div>
                   <Label className="text-sm">Select Doctor</Label>
-                  <Select 
-                    value={formData.selectedDoctor} 
+                  <SearchableSelect
+                    options={doctors}
+                    value={formData.selectedDoctor}
                     onValueChange={(value) => setFormData(prev => ({ ...prev, selectedDoctor: value }))}
-                  >
-                    <SelectTrigger className="text-sm">
-                      <SelectValue placeholder="Please Select" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {doctors.map((doctor, index) => (
-                        <SelectItem 
-                          key={index} 
-                          value={doctor}
-                          disabled={doctor === 'Please Select'}
-                        >
-                          {doctor}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    placeholder="Please Select"
+                    searchPlaceholder="Search doctor..."
+                    emptyText="No doctor found."
+                  />
                 </div>
               </div>
 
@@ -316,7 +329,7 @@ export const RadiologyResultDialog: React.FC<RadiologyResultDialogProps> = ({
                 />
               </div>
 
-              {/* Upload File - Temporarily disabled */}
+              {/* Upload File */}
               <div>
                 <Label className="text-sm">Upload file/record</Label>
                 <div className="mt-1">
@@ -325,14 +338,11 @@ export const RadiologyResultDialog: React.FC<RadiologyResultDialogProps> = ({
                     onChange={handleFileUpload}
                     accept="image/*,.pdf,.doc,.docx"
                     className="text-sm"
-                    disabled
                   />
-                  <p className="text-xs text-orange-600 mt-1">
-                    (File upload temporarily disabled - will be enabled after database update)
-                  </p>
+                  <p className="text-xs text-gray-500 mt-1">Max 2MB. Accepts images, PDF, DOC files.</p>
                   {formData.uploadedFile && (
                     <p className="text-xs text-green-600 mt-1">
-                      ✓ {formData.uploadedFile.name} uploaded
+                      ✓ {formData.uploadedFile.name} selected
                     </p>
                   )}
                 </div>
