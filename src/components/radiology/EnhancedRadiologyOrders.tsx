@@ -58,7 +58,7 @@ const EnhancedRadiologyOrders: React.FC<EnhancedRadiologyOrdersProps> = ({ onBac
   
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
-  const pageSize = 20;
+  const [pageSize, setPageSize] = useState(20);
 
   // Dialog states
   const [resultDialogOpen, setResultDialogOpen] = useState(false);
@@ -168,7 +168,7 @@ const EnhancedRadiologyOrders: React.FC<EnhancedRadiologyOrdersProps> = ({ onBac
             srNo: isFirstOrderForVisit ? serialNumber : '',
             sex: isFirstOrderForVisit ? (patient?.gender || 'Unknown') : '',
             patientName: isFirstOrderForVisit ? (patient?.name || 'Unknown Patient') : '',
-            patientId: isFirstOrderForVisit ? (visitId || 'Unknown Visit ID') : '',
+            patientId: isFirstOrderForVisit ? (patient?.patients_id || visitId || '-') : '',
             service: radiologyInfo?.name || 'Unknown Service',
             primaryCareProvider: '', // Can be added later from visit data
             status: item.status || 'ordered',
@@ -236,10 +236,10 @@ const EnhancedRadiologyOrders: React.FC<EnhancedRadiologyOrdersProps> = ({ onBac
     total: radiologyOrders.length
   };
 
-  // Reset to page 1 when filters change
+  // Reset to page 1 when filters or page size change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, selectedStatus, fromDate, toDate]);
+  }, [searchTerm, selectedStatus, fromDate, toDate, pageSize]);
 
   const filteredOrders = radiologyOrders;
   const totalPages = Math.ceil(filteredOrders.length / pageSize);
@@ -491,8 +491,17 @@ const EnhancedRadiologyOrders: React.FC<EnhancedRadiologyOrdersProps> = ({ onBac
       {/* Pagination Controls */}
       {filteredOrders.length > 0 && (
         <div className="flex items-center justify-between px-2">
-          <div className="text-sm text-gray-600">
-            Showing {((currentPage - 1) * pageSize) + 1} to {Math.min(currentPage * pageSize, filteredOrders.length)} of {filteredOrders.length} entries
+          <div className="flex items-center gap-3 text-sm text-gray-600">
+            <span>Showing {((currentPage - 1) * pageSize) + 1} to {Math.min(currentPage * pageSize, filteredOrders.length)} of {filteredOrders.length} entries</span>
+            <select
+              value={pageSize}
+              onChange={(e) => setPageSize(Number(e.target.value))}
+              className="border rounded px-2 py-1 text-sm"
+            >
+              <option value={10}>10</option>
+              <option value={20}>20</option>
+              <option value={50}>50</option>
+            </select>
           </div>
           <div className="flex items-center gap-2">
             <Button

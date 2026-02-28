@@ -77,6 +77,8 @@ interface PatientData {
   relation: string;
   rank: string; // IP No. (kept for backward compatibility)
   ipNo?: string; // explicit IP No. field
+  ipNoLabel?: string; // editable label for IP No. field
+  relationLabel?: string; // editable label for Relation field
   serviceNo: string;
   category: string;
   diagnosis: string;
@@ -144,6 +146,8 @@ const initialPatientData: PatientData = {
   relation: "SELF",
   rank: "",
   ipNo: "",
+  ipNoLabel: "IP NO.",
+  relationLabel: "RELATION WITH IP",
   serviceNo: "",
   category: "GENERAL",
   diagnosis: "",
@@ -5398,6 +5402,8 @@ INSTRUCTIONS:
         serviceNo: savedPD.serviceNo || prev.serviceNo,
         beneficiaryName: savedPD.beneficiaryName || prev.beneficiaryName,
         relation: savedPD.relation || prev.relation,
+        ipNoLabel: savedPD.ipNoLabel || prev.ipNoLabel,
+        relationLabel: savedPD.relationLabel || prev.relationLabel,
         contactNo: savedPD.contactNo || prev.contactNo,
         address: savedPD.address || prev.address,
       }));
@@ -15347,6 +15353,8 @@ Dr. Murali B K
           serviceNo: patientData.serviceNo,
           beneficiaryName: patientData.beneficiaryName,
           relation: patientData.relation,
+          ipNoLabel: patientData.ipNoLabel,
+          relationLabel: patientData.relationLabel,
           contactNo: patientData.contactNo,
           address: patientData.address,
           hiddenFields,
@@ -21512,7 +21520,10 @@ Dr. Murali B K
                 </div>
                 {!hiddenFields.includes('ipNo') && (
                 <div className="flex items-start relative">
-                  <span className="font-semibold w-48 shrink-0">IP NO.:</span>
+                  <span className="screen-only font-semibold w-48 shrink-0">
+                    <Textarea rows={1} className="w-full font-semibold resize min-h-0 text-base" value={patientData.ipNoLabel || 'IP NO.'} onChange={(e) => handlePatientDataChange('ipNoLabel', e.target.value)} />
+                  </span>
+                  <span className="print-only font-semibold w-48 shrink-0">{patientData.ipNoLabel || 'IP NO.'}:</span>
                   <span className="screen-only flex-1">
                     <Input className="h-7 w-full" value={patientData.ipNo || ''} onChange={(e) => handlePatientDataChange('ipNo', e.target.value)} />
                   </span>
@@ -21579,7 +21590,10 @@ Dr. Murali B K
                 </div>
                 {!hiddenFields.includes('relation') && (
                 <div className="flex items-start relative">
-                  <span className="font-semibold w-48 shrink-0">RELATION WITH IP:</span>
+                  <span className="screen-only font-semibold w-48 shrink-0">
+                    <Textarea rows={1} className="w-full font-semibold resize min-h-0 text-base" value={patientData.relationLabel || 'RELATION WITH IP'} onChange={(e) => handlePatientDataChange('relationLabel', e.target.value)} />
+                  </span>
+                  <span className="print-only font-semibold w-48 shrink-0">{patientData.relationLabel || 'RELATION WITH IP'}:</span>
                   <span className="screen-only flex-1">
                     <Input className="h-7 w-full" value={patientData.relation} onChange={(e) => handlePatientDataChange('relation', e.target.value)} />
                   </span>

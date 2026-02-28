@@ -148,8 +148,39 @@ export const RadiologyResultDialog: React.FC<RadiologyResultDialogProps> = ({
       }
 
       console.log('✅ Save successful! Updated record:', data[0]);
-              console.log('✅ SUCCESS! Radiology result saved!');
-        alert('Radiology result saved successfully!');
+
+      // Upload file to storage bucket if selected
+      if (formData.uploadedFile) {
+        const file = formData.uploadedFile;
+        const fileName = `${Date.now()}_${file.name}`;
+        const filePath = `radiology-files/${orderData.visitId}/${fileName}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from('patient-documents')
+          .upload(filePath, file, { cacheControl: '3600', upsert: false });
+
+        if (uploadError) {
+          console.error('File upload error:', uploadError);
+          alert('Result saved but file upload failed: ' + uploadError.message);
+        } else {
+          const { data: urlData } = supabase.storage
+            .from('patient-documents')
+            .getPublicUrl(filePath);
+
+          await supabase.from('visit_radiology').update({
+            file_name: file.name,
+            file_path: filePath,
+            file_url: urlData.publicUrl,
+            file_size: file.size,
+            file_type: file.type
+          }).eq('id', orderData.id);
+
+          console.log('✅ File uploaded:', urlData.publicUrl);
+        }
+      }
+
+      console.log('✅ SUCCESS! Radiology result saved!');
+      alert('Radiology result saved successfully!');
       onClose();
       
       // Trigger a refresh
@@ -298,7 +329,7 @@ export const RadiologyResultDialog: React.FC<RadiologyResultDialogProps> = ({
                 />
               </div>
 
-              {/* Upload File - Temporarily disabled */}
+              {/* Upload File */}
               <div>
                 <Label className="text-sm">Upload file/record</Label>
                 <div className="mt-1">
@@ -307,14 +338,11 @@ export const RadiologyResultDialog: React.FC<RadiologyResultDialogProps> = ({
                     onChange={handleFileUpload}
                     accept="image/*,.pdf,.doc,.docx"
                     className="text-sm"
-                    disabled
                   />
-                  <p className="text-xs text-orange-600 mt-1">
-                    (File upload temporarily disabled - will be enabled after database update)
-                  </p>
+                  <p className="text-xs text-gray-500 mt-1">Max 2MB. Accepts images, PDF, DOC files.</p>
                   {formData.uploadedFile && (
                     <p className="text-xs text-green-600 mt-1">
-                      ✓ {formData.uploadedFile.name} uploaded
+                      ✓ {formData.uploadedFile.name} selected
                     </p>
                   )}
                 </div>
