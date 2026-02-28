@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -17,6 +17,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { SearchableSelect, SearchableSelectOption } from '@/components/ui/searchable-select';
 import { Search, Upload, Calendar, Clock } from 'lucide-react';
 import { format } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
@@ -61,29 +62,21 @@ export const RadiologyResultDialog: React.FC<RadiologyResultDialogProps> = ({
     'Lumbar Spondylosis'
   ];
 
-  // Real doctors list
-  const doctors = [
-    'Please Select',
-    'Dr.Murli BK',
-    'Dr.Mitesh Baheti',
-    'Dr.Neerja Tiwari',
-    'Dr.Vilas Panchabhau',
-    'Dr.Nilima Patil',
-    'Dr.Naved Sheikh',
-    'Dr.Sumedh Ramteke',
-    'Dr.Badal Bankar',
-    'Dr.Pradeep Kachhap',
-    'Dr.Yasin Akbani',
-    'Dr.Anil Bajaj',
-    'Dr.Subhas Tiple',
-    'Dr.Atul Rajkondawar',
-    'Dr.Shubham Ingle',
-    'Dr.Ashwin Chinchkhede',
-    'Dr.Vijay Bansod',
-    'Dr.Chirag Patil',
-    'Dr.Vishal Nandagawli',
-    'Dr.Pankaj Anantwar'
-  ];
+  // Fetch doctors from hope_consultants master
+  const [doctors, setDoctors] = useState<SearchableSelectOption[]>([]);
+
+  useEffect(() => {
+    const fetchDoctors = async () => {
+      const { data } = await supabase
+        .from('hope_consultants')
+        .select('name')
+        .order('name');
+      if (data) {
+        setDoctors(data.map(d => ({ value: d.name, label: d.name })));
+      }
+    };
+    fetchDoctors();
+  }, []);
 
   const handleTemplateClick = (template: string) => {
     setFormData(prev => ({
@@ -274,25 +267,14 @@ export const RadiologyResultDialog: React.FC<RadiologyResultDialogProps> = ({
                 {/* Select Doctor */}
                 <div>
                   <Label className="text-sm">Select Doctor</Label>
-                  <Select 
-                    value={formData.selectedDoctor} 
+                  <SearchableSelect
+                    options={doctors}
+                    value={formData.selectedDoctor}
                     onValueChange={(value) => setFormData(prev => ({ ...prev, selectedDoctor: value }))}
-                  >
-                    <SelectTrigger className="text-sm">
-                      <SelectValue placeholder="Please Select" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {doctors.map((doctor, index) => (
-                        <SelectItem 
-                          key={index} 
-                          value={doctor}
-                          disabled={doctor === 'Please Select'}
-                        >
-                          {doctor}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    placeholder="Please Select"
+                    searchPlaceholder="Search doctor..."
+                    emptyText="No doctor found."
+                  />
                 </div>
               </div>
 
