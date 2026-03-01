@@ -96,6 +96,9 @@ const Marketing = lazy(() => import("../pages/Marketing"));
 const RelationshipManager = lazy(() => import("../pages/RelationshipManager"));
 const ITTransactionRegister = lazy(() => import("../pages/ITTransactionRegister"));
 const TallyIntegration = lazy(() => import("../pages/TallyIntegration"));
+const OperationTheatre = lazy(() => import("../pages/OperationTheatre"));
+const CathLab = lazy(() => import("../pages/CathLab"));
+const NursingStation = lazy(() => import("../pages/NursingStation"));
 
 // Loading component
 const PageLoader = () => (
@@ -196,6 +199,9 @@ export const AppRoutes = () => {
         <Route path="/marketing" element={<Suspense fallback={<PageLoader />}><Marketing /></Suspense>} />
         <Route path="/it-transaction-register" element={<Suspense fallback={<PageLoader />}><ITTransactionRegister /></Suspense>} />
         <Route path="/tally" element={<Suspense fallback={<PageLoader />}><TallyIntegration /></Suspense>} />
+        <Route path="/ot" element={<Suspense fallback={<PageLoader />}><OperationTheatre /></Suspense>} />
+        <Route path="/cath-lab" element={<Suspense fallback={<PageLoader />}><CathLab /></Suspense>} />
+        <Route path="/nursing" element={<Suspense fallback={<PageLoader />}><NursingStation /></Suspense>} />
         {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
         <Route path="*" element={<NotFound />} />
       </Routes>
