@@ -801,14 +801,13 @@ const NursingStation: React.FC = () => {
 
     const markAsGiven = async (med: MedicationAdmin) => {
       try {
-        const updateData: any = {
-          status: "given",
-          administered_at: new Date().toISOString(),
-          administered_by: "Nurse",
-        };
-        const { error } = await supabase
-          .from("medication_administration")
-          .update(updateData)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error } = await (supabase.from("medication_administration") as any)
+          .update({
+            status: "given",
+            administered_at: new Date().toISOString(),
+            administered_by: "Nurse",
+          })
           .eq("id", med.id);
         if (error) throw error;
         toast({ title: "Success", description: `${med.medication_name} marked as given` });
@@ -822,13 +821,12 @@ const NursingStation: React.FC = () => {
     const markAsMissed = async () => {
       if (!missedDialog) return;
       try {
-        const updateData: any = {
-          status: "missed",
-          missed_reason: missedReason,
-        };
-        const { error } = await supabase
-          .from("medication_administration")
-          .update(updateData)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error } = await (supabase.from("medication_administration") as any)
+          .update({
+            status: "missed",
+            missed_reason: missedReason,
+          })
           .eq("id", missedDialog.id);
         if (error) throw error;
         toast({ title: "Updated", description: `${missedDialog.medication_name} marked as missed` });
