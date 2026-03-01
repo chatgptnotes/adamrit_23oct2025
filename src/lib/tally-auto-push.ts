@@ -101,6 +101,31 @@ async function logPush(syncType: string, success: boolean, errors?: any, ref?: s
   }
 }
 
+// Enqueue failed push for retry
+async function enqueueForRetry(
+  pushType: string,
+  pushAction: string,
+  payload: any,
+  error: string,
+  referenceId?: string
+) {
+  try {
+    await supabase.from("tally_push_queue").insert({
+      push_type: pushType,
+      push_action: pushAction,
+      payload,
+      reference_id: referenceId || null,
+      status: "pending",
+      retry_count: 0,
+      max_retries: 5,
+      last_error: error,
+      next_retry_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+    });
+  } catch {
+    // Queue insertion failure should not propagate
+  }
+}
+
 // Push a bill to Tally as Sales Voucher
 export async function pushBillToTally(bill: {
   billNumber: string;
@@ -138,10 +163,20 @@ export async function pushBillToTally(bill: {
     });
     const result = await response.json();
     await logPush("auto_push_bill", !!result.success, result.errors, bill.billNumber);
+    if (!result.success) {
+      await enqueueForRetry("bill", "create-sales-voucher", {
+        billNumber: bill.billNumber, patientName: bill.patientName,
+        date: bill.date, totalAmount: bill.totalAmount, items: tallyItems,
+      }, result.errors?.join("; ") || result.message || "Push failed", bill.billNumber);
+    }
     return result;
-  } catch (err) {
+  } catch (err: any) {
     console.error("Tally auto-push bill failed:", err);
     await logPush("auto_push_bill", false, String(err), bill.billNumber);
+    await enqueueForRetry("bill", "create-sales-voucher", {
+      billNumber: bill.billNumber, patientName: bill.patientName,
+      date: bill.date, totalAmount: bill.totalAmount, items: tallyItems,
+    }, err.message || String(err), bill.billNumber);
   }
 }
 
@@ -182,10 +217,20 @@ export async function pushPaymentToTally(payment: {
     });
     const result = await response.json();
     await logPush("auto_push_payment", !!result.success, result.errors, payment.receiptNumber);
+    if (!result.success) {
+      await enqueueForRetry("payment", "create-receipt-voucher", {
+        receiptNumber: payment.receiptNumber, patientName: payment.patientName,
+        date: payment.date, amount: payment.amount, paymentMode: payment.paymentMode, bankLedger,
+      }, result.errors?.join("; ") || result.message || "Push failed", payment.receiptNumber);
+    }
     return result;
-  } catch (err) {
+  } catch (err: any) {
     console.error("Tally payment push failed:", err);
     await logPush("auto_push_payment", false, String(err), payment.receiptNumber);
+    await enqueueForRetry("payment", "create-receipt-voucher", {
+      receiptNumber: payment.receiptNumber, patientName: payment.patientName,
+      date: payment.date, amount: payment.amount, paymentMode: payment.paymentMode, bankLedger,
+    }, err.message || String(err), payment.receiptNumber);
   }
 }
 
@@ -258,10 +303,28 @@ export async function pushESICBillToTally(bill: {
     });
     const result = await response.json();
     await logPush("auto_push_esic_bill", !!result.success, result.errors, bill.billNumber);
+    if (!result.success) {
+      await enqueueForRetry("esic_bill", "create-voucher", {
+        voucherType: "Sales", date: bill.date, narration,
+        partyLedger: esicReceivablesLedger,
+        ledgerEntries: [
+          { ledgerName: esicReceivablesLedger, amount: bill.totalAmount, isDeemedPositive: true },
+          ...bill.items.map((item) => ({ ledgerName: esicIncomeLedger, amount: item.amount, isDeemedPositive: false })),
+        ],
+      }, result.errors?.join("; ") || result.message || "Push failed", bill.billNumber);
+    }
     return result;
-  } catch (err) {
+  } catch (err: any) {
     console.error("Tally ESIC push failed:", err);
     await logPush("auto_push_esic_bill", false, String(err), bill.billNumber);
+    await enqueueForRetry("esic_bill", "create-voucher", {
+      voucherType: "Sales", date: bill.date, narration,
+      partyLedger: esicReceivablesLedger,
+      ledgerEntries: [
+        { ledgerName: esicReceivablesLedger, amount: bill.totalAmount, isDeemedPositive: true },
+        ...bill.items.map((item) => ({ ledgerName: esicIncomeLedger, amount: item.amount, isDeemedPositive: false })),
+      ],
+    }, err.message || String(err), bill.billNumber);
   }
 }
 
@@ -343,10 +406,18 @@ export async function pushInsuranceBillToTally(bill: {
     });
     const result = await response.json();
     await logPush("auto_push_insurance_bill", !!result.success, result.errors, bill.billNumber);
+    if (!result.success) {
+      await enqueueForRetry("insurance_bill", "create-voucher", {
+        voucherType: "Sales", date: bill.date, narration, partyLedger: insuranceLedger, ledgerEntries,
+      }, result.errors?.join("; ") || result.message || "Push failed", bill.billNumber);
+    }
     return result;
-  } catch (err) {
+  } catch (err: any) {
     console.error("Tally insurance push failed:", err);
     await logPush("auto_push_insurance_bill", false, String(err), bill.billNumber);
+    await enqueueForRetry("insurance_bill", "create-voucher", {
+      voucherType: "Sales", date: bill.date, narration, partyLedger: insuranceLedger, ledgerEntries,
+    }, err.message || String(err), bill.billNumber);
   }
 }
 
@@ -424,10 +495,18 @@ export async function pushInsurancePaymentToTally(payment: {
     });
     const result = await response.json();
     await logPush("auto_push_insurance_payment", !!result.success, result.errors, payment.receiptNumber);
+    if (!result.success) {
+      await enqueueForRetry("insurance_payment", "create-voucher", {
+        voucherType: "Receipt", date: payment.date, narration, partyLedger: insuranceLedger, ledgerEntries,
+      }, result.errors?.join("; ") || result.message || "Push failed", payment.receiptNumber);
+    }
     return result;
-  } catch (err) {
+  } catch (err: any) {
     console.error("Tally insurance payment push failed:", err);
     await logPush("auto_push_insurance_payment", false, String(err), payment.receiptNumber);
+    await enqueueForRetry("insurance_payment", "create-voucher", {
+      voucherType: "Receipt", date: payment.date, narration, partyLedger: insuranceLedger, ledgerEntries,
+    }, err.message || String(err), payment.receiptNumber);
   }
 }
 
@@ -467,9 +546,25 @@ export async function pushPharmacySaleToTally(sale: {
     });
     const result = await response.json();
     await logPush("auto_push_pharmacy", !!result.success, result.errors, sale.invoiceNumber);
+    if (!result.success) {
+      await enqueueForRetry("pharmacy", "create-sales-voucher", {
+        billNumber: sale.invoiceNumber, patientName: sale.patientName,
+        date: sale.date, totalAmount: sale.totalAmount,
+        items: sale.items.map((item) => ({
+          ledgerName: mapping.pharmacySalesLedger || "Pharmacy Sales", amount: item.amount,
+        })),
+      }, result.errors?.join("; ") || result.message || "Push failed", sale.invoiceNumber);
+    }
     return result;
-  } catch (err) {
+  } catch (err: any) {
     console.error("Tally pharmacy push failed:", err);
     await logPush("auto_push_pharmacy", false, String(err), sale.invoiceNumber);
+    await enqueueForRetry("pharmacy", "create-sales-voucher", {
+      billNumber: sale.invoiceNumber, patientName: sale.patientName,
+      date: sale.date, totalAmount: sale.totalAmount,
+      items: sale.items.map((item) => ({
+        ledgerName: mapping.pharmacySalesLedger || "Pharmacy Sales", amount: item.amount,
+      })),
+    }, err.message || String(err), sale.invoiceNumber);
   }
 }

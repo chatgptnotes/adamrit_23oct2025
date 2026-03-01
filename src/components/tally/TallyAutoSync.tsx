@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { supabase } from '@/integrations/supabase/client'
 import { toast } from 'sonner'
 import { tallySync } from '@/lib/tally-proxy'
+import { reverseSync } from '@/lib/tally-reverse-sync'
 import {
   Clock, Play, Pause, RefreshCw, Loader2,
   CheckCircle, XCircle, Settings
@@ -22,6 +23,7 @@ const SYNC_ITEM_OPTIONS = [
   { key: 'vouchers', label: 'Vouchers' },
   { key: 'reports', label: 'Reports' },
   { key: 'gst-r1', label: 'GST' },
+  { key: 'reverse-sync', label: 'Reverse Sync' },
 ]
 
 const INTERVAL_OPTIONS = [
@@ -110,12 +112,21 @@ export default function TallyAutoSync({ serverUrl, companyName, configId }: Prop
     for (let i = 0; i < items.length; i++) {
       setSyncProgress({ current: items[i], completed: i, total: items.length })
       try {
-        const result = await tallySync(items[i], serverUrl, companyName)
-        results.push({
-          item: items[i],
-          success: result.success !== false,
-          records: result.recordsSynced || 0,
-        })
+        if (items[i] === 'reverse-sync') {
+          const rsResult = await reverseSync(serverUrl, companyName)
+          results.push({
+            item: items[i],
+            success: true,
+            records: rsResult.matched + rsResult.newLedgers,
+          })
+        } else {
+          const result = await tallySync(items[i], serverUrl, companyName)
+          results.push({
+            item: items[i],
+            success: result.success !== false,
+            records: result.recordsSynced || 0,
+          })
+        }
       } catch {
         results.push({ item: items[i], success: false, records: 0 })
       }
