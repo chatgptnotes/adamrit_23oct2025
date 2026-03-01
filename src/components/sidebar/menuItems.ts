@@ -188,6 +188,11 @@ export const menuItems = [
     icon: ScrollText,
   },
   {
+    title: "Tally Integration",
+    url: "/tally",
+    icon: BookOpen,
+  },
+  {
     title: "Pharmacy",
     url: "/pharmacy",
     icon: Pill,
