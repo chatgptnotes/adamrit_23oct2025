@@ -189,6 +189,248 @@ export async function pushPaymentToTally(payment: {
   }
 }
 
+// Push ESIC bill to Tally — uses ESIC-specific ledger mapping
+export async function pushESICBillToTally(bill: {
+  billNumber: string;
+  patientName: string;
+  date: string;
+  totalAmount: number;
+  esicNumber?: string;
+  serviceType?: string; // Consultation, IPD, OPD, Surgery, Lab, Pharmacy
+  items: { description: string; amount: number }[];
+}) {
+  const config = await isTallyActive();
+  if (!config.active) return;
+
+  // Get ESIC-specific ledger mapping
+  let esicReceivablesLedger = "ESIC Receivables";
+  let esicIncomeLedger = "ESIC Income - IPD";
+
+  try {
+    const { data: mappings } = await supabase
+      .from("tally_ledger_mapping")
+      .select("*")
+      .eq("is_active", true)
+      .in("adamrit_entity_type", ["insurance", "esic_income"]);
+
+    if (mappings) {
+      const esicMapping = mappings.find(
+        (m) => m.adamrit_entity_type === "insurance" && m.adamrit_entity_name === "ESIC"
+      );
+      if (esicMapping) esicReceivablesLedger = esicMapping.tally_ledger_name;
+
+      const serviceKey = `ESIC ${bill.serviceType || "IPD"}`;
+      const incomeMapping = mappings.find(
+        (m) => m.adamrit_entity_type === "esic_income" && m.adamrit_entity_name === serviceKey
+      );
+      if (incomeMapping) esicIncomeLedger = incomeMapping.tally_ledger_name;
+    }
+  } catch {
+    // Use defaults
+  }
+
+  const narration = `ESIC Bill #${bill.billNumber}${bill.esicNumber ? ` | ESIC# ${bill.esicNumber}` : ""} - ${bill.patientName}`;
+
+  try {
+    const response = await fetch("/api/tally-proxy", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        endpoint: "push",
+        action: "create-voucher",
+        serverUrl: config.serverUrl,
+        companyName: config.companyName,
+        data: {
+          voucherType: "Sales",
+          date: bill.date,
+          narration,
+          partyLedger: esicReceivablesLedger,
+          ledgerEntries: [
+            { ledgerName: esicReceivablesLedger, amount: bill.totalAmount, isDeemedPositive: true },
+            ...bill.items.map((item) => ({
+              ledgerName: esicIncomeLedger,
+              amount: item.amount,
+              isDeemedPositive: false,
+            })),
+          ],
+        },
+      }),
+    });
+    const result = await response.json();
+    await logPush("auto_push_esic_bill", !!result.success, result.errors, bill.billNumber);
+    return result;
+  } catch (err) {
+    console.error("Tally ESIC push failed:", err);
+    await logPush("auto_push_esic_bill", false, String(err), bill.billNumber);
+  }
+}
+
+// Push Insurance/TPA claim bill to Tally
+export async function pushInsuranceBillToTally(bill: {
+  billNumber: string;
+  patientName: string;
+  date: string;
+  totalAmount: number;
+  claimAmount: number;
+  patientShare: number;
+  insuranceCompany: string; // e.g. "Star Health", "ICICI Lombard"
+  tpaName?: string;
+  policyNumber?: string;
+  items: { description: string; amount: number }[];
+}) {
+  const config = await isTallyActive();
+  if (!config.active) return;
+
+  // Resolve insurance receivables ledger
+  let insuranceLedger = `${bill.insuranceCompany} Insurance Receivables`;
+  const incomeLedger = "Hospital Income";
+
+  try {
+    const { data: mappings } = await supabase
+      .from("tally_ledger_mapping")
+      .select("*")
+      .eq("adamrit_entity_type", "insurance")
+      .eq("adamrit_entity_name", bill.insuranceCompany)
+      .eq("is_active", true)
+      .limit(1)
+      .single();
+
+    if (mappings) insuranceLedger = mappings.tally_ledger_name;
+  } catch {
+    // Use default
+  }
+
+  const mapping = await getLedgerMapping();
+  const narration = `Insurance Bill #${bill.billNumber} | ${bill.insuranceCompany}${bill.policyNumber ? ` | Policy# ${bill.policyNumber}` : ""} - ${bill.patientName}`;
+
+  // Double-entry: Insurance company owes claimAmount, patient owes patientShare
+  const ledgerEntries: { ledgerName: string; amount: number; isDeemedPositive: boolean }[] = [];
+
+  // Debit: Insurance receivables for claim amount
+  if (bill.claimAmount > 0) {
+    ledgerEntries.push({ ledgerName: insuranceLedger, amount: bill.claimAmount, isDeemedPositive: true });
+  }
+  // Debit: Patient for their share (if any)
+  if (bill.patientShare > 0) {
+    ledgerEntries.push({ ledgerName: bill.patientName, amount: bill.patientShare, isDeemedPositive: true });
+  }
+  // Credit: Income ledgers
+  for (const item of bill.items) {
+    ledgerEntries.push({
+      ledgerName: item.description || mapping.defaultIncomeLedger || incomeLedger,
+      amount: item.amount,
+      isDeemedPositive: false,
+    });
+  }
+
+  try {
+    const response = await fetch("/api/tally-proxy", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        endpoint: "push",
+        action: "create-voucher",
+        serverUrl: config.serverUrl,
+        companyName: config.companyName,
+        data: {
+          voucherType: "Sales",
+          date: bill.date,
+          narration,
+          partyLedger: insuranceLedger,
+          ledgerEntries,
+        },
+      }),
+    });
+    const result = await response.json();
+    await logPush("auto_push_insurance_bill", !!result.success, result.errors, bill.billNumber);
+    return result;
+  } catch (err) {
+    console.error("Tally insurance push failed:", err);
+    await logPush("auto_push_insurance_bill", false, String(err), bill.billNumber);
+  }
+}
+
+// Push insurance payment received (settlement from TPA/insurance company)
+export async function pushInsurancePaymentToTally(payment: {
+  receiptNumber: string;
+  insuranceCompany: string;
+  date: string;
+  amount: number;
+  tdsAmount?: number;
+  disallowanceAmount?: number;
+  bankAccount?: string;
+  utrNumber?: string;
+}) {
+  const config = await isTallyActive();
+  if (!config.active) return;
+
+  let insuranceLedger = `${payment.insuranceCompany} Insurance Receivables`;
+
+  try {
+    const { data: mappings } = await supabase
+      .from("tally_ledger_mapping")
+      .select("*")
+      .eq("adamrit_entity_type", "insurance")
+      .eq("adamrit_entity_name", payment.insuranceCompany)
+      .eq("is_active", true)
+      .limit(1)
+      .single();
+
+    if (mappings) insuranceLedger = mappings.tally_ledger_name;
+  } catch {
+    // Use default
+  }
+
+  const bankLedger = payment.bankAccount || "HDFC Bank";
+  const narration = `Insurance Settlement #${payment.receiptNumber} from ${payment.insuranceCompany}${payment.utrNumber ? ` | UTR: ${payment.utrNumber}` : ""}`;
+
+  const ledgerEntries: { ledgerName: string; amount: number; isDeemedPositive: boolean }[] = [
+    // Debit: Bank (money received)
+    { ledgerName: bankLedger, amount: payment.amount, isDeemedPositive: true },
+    // Credit: Insurance receivables (debt reduced)
+    { ledgerName: insuranceLedger, amount: payment.amount, isDeemedPositive: false },
+  ];
+
+  // If there's a TDS deduction
+  if (payment.tdsAmount && payment.tdsAmount > 0) {
+    ledgerEntries.push({ ledgerName: "TDS Receivable", amount: payment.tdsAmount, isDeemedPositive: true });
+    // Increase credit to insurance receivables for the TDS portion
+    ledgerEntries[1].amount += payment.tdsAmount;
+  }
+
+  // If there's a disallowance
+  if (payment.disallowanceAmount && payment.disallowanceAmount > 0) {
+    ledgerEntries.push({ ledgerName: "Insurance Disallowance", amount: payment.disallowanceAmount, isDeemedPositive: true });
+    ledgerEntries[1].amount += payment.disallowanceAmount;
+  }
+
+  try {
+    const response = await fetch("/api/tally-proxy", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        endpoint: "push",
+        action: "create-voucher",
+        serverUrl: config.serverUrl,
+        companyName: config.companyName,
+        data: {
+          voucherType: "Receipt",
+          date: payment.date,
+          narration,
+          partyLedger: insuranceLedger,
+          ledgerEntries,
+        },
+      }),
+    });
+    const result = await response.json();
+    await logPush("auto_push_insurance_payment", !!result.success, result.errors, payment.receiptNumber);
+    return result;
+  } catch (err) {
+    console.error("Tally insurance payment push failed:", err);
+    await logPush("auto_push_insurance_payment", false, String(err), payment.receiptNumber);
+  }
+}
+
 // Push pharmacy sale (direct sale or prescription sale) to Tally as Sales Voucher
 export async function pushPharmacySaleToTally(sale: {
   invoiceNumber: string;

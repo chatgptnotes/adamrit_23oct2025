@@ -6,8 +6,8 @@ import {
   Package, BarChart3, ArrowDownToLine, ArrowUpFromLine,
   CheckCircle, XCircle, Clock, Loader2, Save, Play, Pause
 } from 'lucide-react'
-import { tallyTestConnection } from '@/lib/tally-proxy'
-import { tallySync } from '@/lib/tally-proxy'
+import { tallyTestConnection, tallySync, tallyHealthCheck } from '@/lib/tally-proxy'
+import TallyAutoSync from '@/components/tally/TallyAutoSync'
 
 export default function TallyDashboard() {
   const [serverUrl, setServerUrl] = useState('http://localhost:9000')
@@ -19,6 +19,9 @@ export default function TallyDashboard() {
   const [autoSync, setAutoSync] = useState(false)
   const [syncInterval, setSyncInterval] = useState(30)
   const [configId, setConfigId] = useState(null)
+
+  // Proxy health
+  const [proxyOnline, setProxyOnline] = useState<boolean | null>(null)
 
   // Sync state
   const [syncing, setSyncing] = useState(null) // null or sync type
@@ -48,7 +51,32 @@ export default function TallyDashboard() {
     loadConfig()
     loadStats()
     loadSyncLogs()
+    checkProxyHealth()
   }, [])
+
+  async function checkProxyHealth() {
+    const result = await tallyHealthCheck()
+    setProxyOnline(result?.status === 'ok')
+  }
+
+  // Check if auto-sync is overdue and trigger it
+  useEffect(() => {
+    if (!configId || !serverUrl || !companyName) return
+    async function checkOverdue() {
+      const { data } = await supabase
+        .from('tally_config')
+        .select('metadata')
+        .eq('id', configId)
+        .single()
+      const autoSyncCfg = data?.metadata?.autoSync
+      if (!autoSyncCfg?.enabled || !autoSyncCfg?.nextSyncAt) return
+      if (Date.now() >= new Date(autoSyncCfg.nextSyncAt).getTime()) {
+        toast.info('Auto-sync is overdue — triggering now...')
+        runAutoSync()
+      }
+    }
+    checkOverdue()
+  }, [configId, serverUrl, companyName])
 
   async function loadConfig() {
     const { data } = await supabase
@@ -278,6 +306,17 @@ export default function TallyDashboard() {
             TallyPrime Server Connection
           </h2>
           <div className="flex items-center gap-2">
+            {proxyOnline !== null && (
+              proxyOnline ? (
+                <span className="flex items-center gap-1 text-sm text-green-600 bg-green-50 px-3 py-1 rounded-full">
+                  <CheckCircle className="h-4 w-4" /> Proxy: Online
+                </span>
+              ) : (
+                <span className="flex items-center gap-1 text-sm text-red-500 bg-red-50 px-3 py-1 rounded-full">
+                  <XCircle className="h-4 w-4" /> Proxy: Offline
+                </span>
+              )
+            )}
             {isConnected ? (
               <span className="flex items-center gap-1 text-sm text-green-600 bg-green-50 px-3 py-1 rounded-full">
                 <Wifi className="h-4 w-4" /> Connected
@@ -407,6 +446,9 @@ export default function TallyDashboard() {
           </button>
         </div>
       </div>
+
+      {/* Auto-Sync Schedule */}
+      <TallyAutoSync serverUrl={serverUrl} companyName={companyName} configId={configId} />
 
       {/* Sync Control Panel */}
       <div className="bg-white rounded-xl shadow-sm border p-6">

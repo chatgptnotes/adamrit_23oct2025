@@ -440,11 +440,20 @@ async function handleSync(body: any) {
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*')
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'authorization, x-client-info, apikey, content-type')
 
   if (req.method === 'OPTIONS') {
     return res.status(200).end()
+  }
+
+  // GET = health check
+  if (req.method === 'GET') {
+    return res.status(200).json({
+      status: 'ok',
+      endpoints: ['test-connection', 'sync', 'push', 'proxy'],
+      timestamp: new Date().toISOString(),
+    })
   }
 
   if (req.method !== 'POST') {

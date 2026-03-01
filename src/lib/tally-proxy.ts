@@ -26,3 +26,13 @@ export async function tallyPush(action: string, serverUrl: string, companyName: 
 export async function tallyProxyXml(serverUrl: string, xmlBody: string) {
   return callProxy('proxy', { serverUrl, xmlBody });
 }
+
+export async function tallyHealthCheck(): Promise<{ status: string; endpoints: string[]; timestamp: string } | null> {
+  try {
+    const res = await fetch('/api/tally-proxy', { method: 'GET' });
+    if (!res.ok) return null;
+    return res.json();
+  } catch {
+    return null;
+  }
+}
