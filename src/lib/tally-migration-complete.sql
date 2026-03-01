@@ -159,6 +159,19 @@ CREATE TABLE IF NOT EXISTS tally_gst_data (
   fetched_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Ledger Mapping (Adamrit entities → Tally ledgers for auto-push)
+CREATE TABLE IF NOT EXISTS tally_ledger_mapping (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  adamrit_entity_type TEXT NOT NULL,   -- department, payment_mode, service_category, pharmacy
+  adamrit_entity_name TEXT NOT NULL,   -- e.g., "ICU", "Cash", "Consultation", "Paracetamol"
+  tally_ledger_name TEXT NOT NULL,     -- e.g., "Hospital Income - ICU", "Cash", "Consultation Fees"
+  tally_group TEXT,                     -- e.g., "Direct Incomes", "Bank Accounts"
+  is_active BOOLEAN DEFAULT true,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(adamrit_entity_type, adamrit_entity_name)
+);
+
 -- ============================================================
 -- Enable Row Level Security
 -- ============================================================
@@ -172,6 +185,7 @@ ALTER TABLE tally_sync_log ENABLE ROW LEVEL SECURITY;
 ALTER TABLE tally_reports ENABLE ROW LEVEL SECURITY;
 ALTER TABLE tally_bank_statements ENABLE ROW LEVEL SECURITY;
 ALTER TABLE tally_gst_data ENABLE ROW LEVEL SECURITY;
+ALTER TABLE tally_ledger_mapping ENABLE ROW LEVEL SECURITY;
 
 -- ============================================================
 -- RLS Policies - Allow authenticated access
@@ -186,6 +200,7 @@ CREATE POLICY "Allow all for authenticated" ON tally_sync_log FOR ALL USING (tru
 CREATE POLICY "Allow all for authenticated" ON tally_reports FOR ALL USING (true);
 CREATE POLICY "Allow all on tally_bank_statements" ON tally_bank_statements FOR ALL USING (true);
 CREATE POLICY "Allow all on tally_gst_data" ON tally_gst_data FOR ALL USING (true);
+CREATE POLICY "Allow all on tally_ledger_mapping" ON tally_ledger_mapping FOR ALL USING (true);
 
 -- ============================================================
 -- Indexes
@@ -198,3 +213,39 @@ CREATE INDEX idx_tally_vouchers_sync ON tally_vouchers(sync_status);
 CREATE INDEX idx_tally_sync_log_type ON tally_sync_log(sync_type, status);
 CREATE INDEX idx_bank_stmt_date ON tally_bank_statements(date);
 CREATE INDEX idx_bank_stmt_bank ON tally_bank_statements(bank_ledger);
+CREATE INDEX idx_ledger_mapping_type ON tally_ledger_mapping(adamrit_entity_type);
+
+-- ============================================================
+-- Seed Default Ledger Mappings
+-- ============================================================
+INSERT INTO tally_ledger_mapping (adamrit_entity_type, adamrit_entity_name, tally_ledger_name, tally_group) VALUES
+-- Payment modes
+('payment_mode', 'Cash', 'Cash', 'Cash-in-Hand'),
+('payment_mode', 'CASH', 'Cash', 'Cash-in-Hand'),
+('payment_mode', 'Card', 'HDFC Bank', 'Bank Accounts'),
+('payment_mode', 'CARD', 'HDFC Bank', 'Bank Accounts'),
+('payment_mode', 'UPI', 'HDFC Bank', 'Bank Accounts'),
+('payment_mode', 'NEFT', 'HDFC Bank', 'Bank Accounts'),
+('payment_mode', 'RTGS', 'HDFC Bank', 'Bank Accounts'),
+('payment_mode', 'DD', 'HDFC Bank', 'Bank Accounts'),
+('payment_mode', 'CHEQUE', 'HDFC Bank', 'Bank Accounts'),
+('payment_mode', 'ONLINE', 'HDFC Bank', 'Bank Accounts'),
+('payment_mode', 'Bank Transfer', 'HDFC Bank', 'Bank Accounts'),
+('payment_mode', 'Insurance', 'Insurance Receivables', 'Sundry Debtors'),
+('payment_mode', 'ESIC', 'ESIC Receivables', 'Sundry Debtors'),
+('payment_mode', 'CGHS', 'CGHS Receivables', 'Sundry Debtors'),
+('payment_mode', 'CREDIT', 'Credit', 'Sundry Debtors'),
+-- Service categories
+('service_category', 'Hospital Income', 'Hospital Income', 'Direct Incomes'),
+('service_category', 'Consultation Fees', 'Consultation Fees', 'Direct Incomes'),
+('service_category', 'Room Charges', 'Room Charges', 'Direct Incomes'),
+('service_category', 'OT Charges', 'OT Charges', 'Direct Incomes'),
+('service_category', 'Pathology', 'Pathology Income', 'Direct Incomes'),
+('service_category', 'Radiology', 'Radiology Income', 'Direct Incomes'),
+-- Pharmacy
+('pharmacy', 'Pharmacy Sales', 'Pharmacy Sales', 'Sales Accounts'),
+-- Departments
+('department', 'ICU', 'Hospital Income - ICU', 'Direct Incomes'),
+('department', 'General Ward', 'Hospital Income - General Ward', 'Direct Incomes'),
+('department', 'OPD', 'Hospital Income - OPD', 'Direct Incomes')
+ON CONFLICT (adamrit_entity_type, adamrit_entity_name) DO NOTHING;

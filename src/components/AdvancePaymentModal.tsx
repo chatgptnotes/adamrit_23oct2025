@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
+import { pushPaymentToTally } from '@/lib/tally-auto-push';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -566,6 +567,16 @@ export const AdvancePaymentModal: React.FC<AdvancePaymentModalProps> = ({
       }
 
       console.log('✅ Advance payment saved successfully:', data);
+
+      // Fire-and-forget: push payment to Tally
+      pushPaymentToTally({
+        receiptNumber: data.id ? data.id.slice(-8).toUpperCase() : '',
+        patientName: patientInfo.name || patientData?.name || 'Patient',
+        date: format(formData.paymentDate, 'yyyy-MM-dd'),
+        amount: parseFloat(formData.advanceAmount) || 0,
+        paymentMode: formData.paymentMode || 'CASH',
+      }).catch(console.error);
+
       toast.success('Advance payment saved successfully');
 
       // Reset form

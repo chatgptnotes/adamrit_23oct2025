@@ -1,5 +1,6 @@
 // Pharmacy Billing and Dispensing Component
 import React, { useState, useEffect } from 'react';
+import { pushPharmacySaleToTally } from '@/lib/tally-auto-push';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -717,6 +718,19 @@ const PharmacyBilling: React.FC = () => {
     }
 
     console.log('✅ Sale saved successfully! Sale ID:', response.sale_id);
+
+    // Fire-and-forget: push pharmacy sale to Tally
+    pushPharmacySaleToTally({
+      invoiceNumber: billNumber,
+      patientName: patientInfo?.name || 'Walk-in',
+      date: new Date().toISOString().split('T')[0],
+      totalAmount: totals.totalAmount,
+      items: cart.map(item => ({
+        medicineName: item.medicine_name,
+        quantity: item.quantity,
+        amount: item.total_amount,
+      })),
+    }).catch(console.error);
 
     // Deduct stock from medicine_batch_inventory table (batch-wise stock tracking)
     console.log('=== UPDATING STOCK IN MEDICINE_BATCH_INVENTORY ===');

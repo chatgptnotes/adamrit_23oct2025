@@ -1,5 +1,6 @@
 // Direct Sales Bill Component
 import React, { useState, useEffect, useRef } from 'react';
+import { pushPharmacySaleToTally } from '@/lib/tally-auto-push';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -572,6 +573,19 @@ const DirectSaleBill: React.FC = () => {
         paymentMode: paymentMode,
         medicines: validMedicines
       });
+
+      // Fire-and-forget: push pharmacy sale to Tally
+      pushPharmacySaleToTally({
+        invoiceNumber: billNumber,
+        patientName: patientName || 'Walk-in',
+        date: new Date().toISOString().split('T')[0],
+        totalAmount: total,
+        items: validMedicines.map(med => ({
+          medicineName: med.itemName,
+          quantity: parseFloat(med.quantity) || 0,
+          amount: parseFloat(med.amount) || 0,
+        })),
+      }).catch(console.error);
 
       toast({
         title: "Success",

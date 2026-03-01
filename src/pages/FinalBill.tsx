@@ -20,6 +20,7 @@ import { EnhancedDatePicker } from "@/components/ui/enhanced-date-picker"
 import { ChevronUp, ChevronDown, Trash2, Plus, ChevronLeft, ChevronRight, Edit, X, Copy, PenTool, Loader2 } from "lucide-react"
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from '@/contexts/AuthContext';
+import { pushBillToTally } from '@/lib/tally-auto-push';
 import { ScrollArea } from "@/components/ui/scroll-area"
 import {
   Table,
@@ -15387,6 +15388,15 @@ Dr. Murali B K
       console.log('📑 Sections Count:', sections.length);
 
       await saveBill(billDataToSave);
+
+      // Fire-and-forget: push bill to Tally
+      pushBillToTally({
+        billNumber: patientData.billNo,
+        patientName: patientData.name || visitData?.patients?.name || 'Unknown',
+        date: patientData.billDate || new Date().toISOString().split('T')[0],
+        totalAmount: Math.round(totalAmount),
+        items: lineItems.map(li => ({ description: li.item_description || li.description || '', amount: li.amount || 0 })),
+      }).catch(console.error);
 
       // Success toast
       toast.success(`✅ Bill saved successfully! Total: ₹${totalAmount.toLocaleString('en-IN')}`, {
