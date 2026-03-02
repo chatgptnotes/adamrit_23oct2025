@@ -257,6 +257,7 @@ const ReferralPaymentStatusCell = ({ patient }: { patient: Patient }) => {
 
 export const OpdPatientTable = ({ patients, refetch, isMarketingManager = false }: OpdPatientTableProps) => {
   const navigate = useNavigate();
+  const { toast } = useToast();
   const { isAdmin, user } = useAuth();
 
   // Allowed emails to see Referral Doctor/Relationship Manager column
@@ -1280,14 +1281,53 @@ Verified by: [To be verified by doctor]`;
   };
 
   const handleDeleteClick = async (patient: Patient) => {
-    if (patient.visit_id && window.confirm(`Are you sure you want to remove ${patient.patients?.name} from this view?`)) {
-      // Just hide from current view, don't delete from database
-      setHiddenPatients(prev => {
-        const newSet = new Set(prev);
-        newSet.add(patient.visit_id!);
-        return newSet;
-      });
-      console.log('Patient hidden from view:', patient.visit_id);
+    if (patient.visit_id && window.confirm(`Are you sure you want to delete the visit for ${patient.patients?.name}? This cannot be undone.`)) {
+      try {
+        // Delete related bills for this visit first
+        const { error: billsError } = await supabase
+          .from('bills')
+          .delete()
+          .eq('visit_id', patient.id);
+
+        if (billsError) {
+          console.error('Error deleting visit bills:', billsError);
+        }
+
+        // Delete the visit from the database
+        const { error } = await supabase
+          .from('visits')
+          .delete()
+          .eq('id', patient.id);
+
+        if (error) {
+          console.error('Error deleting visit:', error);
+          toast({
+            title: "Error",
+            description: "Failed to delete visit: " + error.message,
+            variant: "destructive"
+          });
+          return;
+        }
+
+        // Remove from local state after successful DB delete
+        setHiddenPatients(prev => {
+          const newSet = new Set(prev);
+          newSet.add(patient.visit_id!);
+          return newSet;
+        });
+
+        toast({
+          title: "Success",
+          description: `Visit for ${patient.patients?.name} deleted successfully`,
+        });
+      } catch (err) {
+        console.error('Error deleting visit:', err);
+        toast({
+          title: "Error",
+          description: "Failed to delete visit",
+          variant: "destructive"
+        });
+      }
     }
   };
 
