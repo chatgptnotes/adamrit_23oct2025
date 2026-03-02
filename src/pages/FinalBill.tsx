@@ -22069,7 +22069,10 @@ Dr. Murali B K
                                   onChange={(e) => {
                                     const newRate = parseFloat(e.target.value) || 0;
                                     if (item.description === 'Pathology Charges') {
-                                      // For Pathology Charges, update database
+                                      // Update local state immediately for responsive UI
+                                      handleItemChange(item.id, subItem.id, 'rate', newRate);
+                                      handleItemChange(item.id, subItem.id, 'amount', newRate * (subItem.qty || 1));
+                                      // Then persist to database
                                       const pathologyId = subItem.id.replace('pathology_', '');
                                       if (pathologyId && pathologyId !== 'default') {
                                         updatePathologyField(pathologyId, 'rate', newRate);
@@ -22093,20 +22096,26 @@ Dr. Murali B K
                                   readOnly={false}
                                   onChange={(e) => {
                                     const newQty = parseInt(e.target.value, 10) || 0;
-                                    handleItemChange(item.id, subItem.id, 'qty', newQty);
-                                    // Auto-calculate amount
-                                    const rate = (subItem as StandardSubItem).rate || 0;
-                                    const newAmount = rate * newQty;
-                                    handleItemChange(item.id, subItem.id, 'amount', newAmount);
-                                  }}
-                                  onInput={(e) => {
-                                    const target = e.target as HTMLInputElement;
-                                    const newQty = parseInt(target.value, 10) || 0;
-                                    handleItemChange(item.id, subItem.id, 'qty', newQty);
-                                    // Auto-calculate amount
-                                    const rate = (subItem as StandardSubItem).rate || 0;
-                                    const newAmount = rate * newQty;
-                                    handleItemChange(item.id, subItem.id, 'amount', newAmount);
+                                    if (item.description === 'Pathology Charges') {
+                                      // Update local state immediately for responsive UI
+                                      handleItemChange(item.id, subItem.id, 'qty', newQty);
+                                      const rate = (subItem as StandardSubItem).rate || 0;
+                                      handleItemChange(item.id, subItem.id, 'amount', rate * newQty);
+                                      // Then persist to database (update end_date since days is generated)
+                                      const pathologyId = subItem.id.replace('pathology_', '');
+                                      if (pathologyId && pathologyId !== 'default' && subItem.dates?.from) {
+                                        const startDate = new Date(subItem.dates.from);
+                                        const newEndDate = new Date(startDate);
+                                        newEndDate.setDate(startDate.getDate() + Math.max(newQty, 1) - 1);
+                                        const endDateStr = format(newEndDate, 'yyyy-MM-dd');
+                                        updatePathologyField(pathologyId, 'end_date', endDateStr);
+                                      }
+                                    } else {
+                                      handleItemChange(item.id, subItem.id, 'qty', newQty);
+                                      const rate = (subItem as StandardSubItem).rate || 0;
+                                      const newAmount = rate * newQty;
+                                      handleItemChange(item.id, subItem.id, 'amount', newAmount);
+                                    }
                                   }}
                                   className="w-16 h-8 text-center"
                                   placeholder="Days"
