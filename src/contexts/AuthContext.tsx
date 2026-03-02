@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useMemo, useCallback, ReactNode } from 'react';
 import { HospitalType, getHospitalConfig } from '@/types/hospital';
 import { supabase } from '@/integrations/supabase/client';
 import { hashPassword, comparePassword, validateEmail, sanitizeInput, signupRateLimiter } from '@/utils/auth';
@@ -212,13 +212,9 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     setShowHospitalSelection(false);
   };
 
-  // 🚨 DEBUG: Check hospital config creation
-  console.log('🔍 AUTH DEBUG: user =', user);
-  console.log('🔍 AUTH DEBUG: user?.hospitalType =', user?.hospitalType);
-  const hospitalConfig = getHospitalConfig(user?.hospitalType);
-  console.log('🔍 AUTH DEBUG: hospitalConfig =', hospitalConfig);
+  const hospitalConfig = useMemo(() => getHospitalConfig(user?.hospitalType), [user?.hospitalType]);
 
-  const value: AuthContextType = {
+  const value: AuthContextType = useMemo(() => ({
     user,
     login,
     signup,
@@ -232,7 +228,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     setShowLanding,
     showHospitalSelection,
     setShowHospitalSelection
-  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [user, hospitalConfig, showLanding, showHospitalSelection]);
 
   return (
     <AuthContext.Provider value={value}>
