@@ -43,7 +43,7 @@ const getRoleDefaultRoute = (role: string): string => {
     case 'marketing_manager':
       return '/marketing';
     case 'billing':
-      return '/daywise-bills';
+      return '/bill-submission';
     case 'doctor':
     case 'consultant':
       return '/patient-dashboard';
