@@ -212,4 +212,19 @@ export const menuItems = [
     url: "/pharmacy",
     icon: Pill,
   },
+  {
+    title: "Operation Theatre",
+    url: "/ot",
+    icon: Scissors,
+  },
+  {
+    title: "Cath Lab",
+    url: "/cath-lab",
+    icon: Heart,
+  },
+  {
+    title: "Nursing Station",
+    url: "/nursing",
+    icon: Stethoscope,
+  },
 ];
