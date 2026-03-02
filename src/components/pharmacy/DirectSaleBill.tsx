@@ -743,6 +743,12 @@ const DirectSaleBill: React.FC = () => {
             font-size: 14px;
             font-weight: bold;
           }
+          .total-section .net-total {
+            font-size: 16px;
+            border-top: 1px solid #333;
+            padding-top: 5px;
+            margin-top: 5px;
+          }
           .signatures {
             display: flex;
             justify-content: space-between;
@@ -829,7 +835,16 @@ const DirectSaleBill: React.FC = () => {
         </table>
 
         <div class="total-section">
-          Total: Rs ${completedBill.totalAmount.toFixed(2)}
+          ${(() => {
+            const subtotal = completedBill.medicines.reduce((sum, med) => sum + (parseFloat(med.amount) || 0), 0);
+            const discount = subtotal - completedBill.totalAmount;
+            if (discount > 0.01) {
+              return `<div>Subtotal: Rs ${subtotal.toFixed(2)}</div>
+              <div>Discount: Rs ${discount.toFixed(2)}</div>
+              <div class="net-total">Net Amount: Rs ${completedBill.totalAmount.toFixed(2)}</div>`;
+            }
+            return `<div>Total: Rs ${completedBill.totalAmount.toFixed(2)}</div>`;
+          })()}
         </div>
 
         <div class="signatures">

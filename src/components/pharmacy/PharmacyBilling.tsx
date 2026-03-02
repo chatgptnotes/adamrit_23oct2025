@@ -924,6 +924,12 @@ const PharmacyBilling: React.FC = () => {
             font-size: 14px;
             font-weight: bold;
           }
+          .total-section .net-total {
+            font-size: 16px;
+            border-top: 1px solid #333;
+            padding-top: 5px;
+            margin-top: 5px;
+          }
           .signatures {
             display: flex;
             justify-content: space-between;
@@ -1010,7 +1016,16 @@ const PharmacyBilling: React.FC = () => {
         </table>
 
         <div class="total-section">
-          Total: Rs ${completedSale.total_amount.toFixed(2)}
+          ${(() => {
+            const discount = completedSale.discount_amount || 0;
+            const subtotal = completedSale.subtotal || (completedSale.total_amount + discount);
+            if (discount > 0) {
+              return `<div>Subtotal: Rs ${subtotal.toFixed(2)}</div>
+              <div>Discount: Rs ${discount.toFixed(2)}</div>
+              <div class="net-total">Net Amount: Rs ${completedSale.total_amount.toFixed(2)}</div>`;
+            }
+            return `<div>Total: Rs ${completedSale.total_amount.toFixed(2)}</div>`;
+          })()}
         </div>
 
         <div class="signatures">

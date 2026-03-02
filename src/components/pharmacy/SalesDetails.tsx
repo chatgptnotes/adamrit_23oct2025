@@ -561,6 +561,12 @@ export const SalesDetails: React.FC = () => {
             font-size: 14px;
             font-weight: bold;
           }
+          .total-section .net-total {
+            font-size: 16px;
+            border-top: 1px solid #333;
+            padding-top: 5px;
+            margin-top: 5px;
+          }
           .signatures {
             display: flex;
             justify-content: space-between;
@@ -647,7 +653,17 @@ export const SalesDetails: React.FC = () => {
         </table>
 
         <div class="total-section">
-          Total: Rs ${parseFloat(String(sale.total_amount || 0)).toFixed(2)}
+          ${(() => {
+            const total = parseFloat(String(sale.total_amount || 0));
+            const discount = parseFloat(String(sale.discount || 0));
+            const subtotal = discount > 0 ? total + discount : total;
+            if (discount > 0) {
+              return `<div>Subtotal: Rs ${subtotal.toFixed(2)}</div>
+              <div>Discount: Rs ${discount.toFixed(2)}</div>
+              <div class="net-total">Net Amount: Rs ${total.toFixed(2)}</div>`;
+            }
+            return `<div>Total: Rs ${total.toFixed(2)}</div>`;
+          })()}
         </div>
 
         <div class="signatures">
