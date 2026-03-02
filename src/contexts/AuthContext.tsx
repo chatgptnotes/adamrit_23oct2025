@@ -85,7 +85,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       const { data, error } = await supabase
         .from('User')
         .select('*')
-        .eq('email', credentials.email.toLowerCase())
+        .ilike('email', credentials.email.trim())
         .single();
 
       if (error || !data) {

@@ -1,5 +1,5 @@
 
-import React, { Suspense } from "react";
+import React, { Suspense, useEffect, useRef } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -17,6 +17,45 @@ import HospitalSelection from "@/components/HospitalSelection";
 import { FloatingCameraFAB } from "@/components/CameraUpload";
 import { useToast } from "@/hooks/use-toast";
 import { HospitalType, getHospitalConfig } from "@/types/hospital";
+
+// Role-based default landing routes
+const getRoleDefaultRoute = (role: string): string => {
+  switch (role) {
+    case 'pharmacist':
+    case 'pharmacy':
+      return '/pharmacy';
+    case 'lab_technician':
+    case 'lab':
+      return '/lab';
+    case 'radiology_tech':
+    case 'radiology':
+      return '/radiology';
+    case 'ot_tech':
+      return '/ot';
+    case 'cath_lab_tech':
+      return '/cath-lab';
+    case 'nurse':
+      return '/nursing';
+    case 'receptionist':
+    case 'reception':
+      return '/patient-dashboard';
+    case 'marketing':
+    case 'marketing_manager':
+      return '/marketing';
+    case 'billing':
+      return '/daywise-bills';
+    case 'doctor':
+    case 'consultant':
+      return '/patient-dashboard';
+    case 'physiotherapist':
+      return '/patient-dashboard';
+    case 'superadmin':
+    case 'super_admin':
+    case 'admin':
+    default:
+      return '/dashboard';
+  }
+};
 
 // Suppress React Router v7 warnings
 if (typeof window !== 'undefined') {
@@ -78,6 +117,7 @@ class ErrorBoundary extends React.Component<
 const AppContent = () => {
   const {
     isAuthenticated,
+    user,
     login,
     showLanding,
     setShowLanding,
@@ -89,6 +129,23 @@ const AppContent = () => {
   // Always call hooks at the top level; avoid wrapping hooks in try/catch
   const counts = useCounts();
   const [selectedHospitalType, setSelectedHospitalType] = React.useState<HospitalType | null>(null);
+  const wasAuthenticated = useRef(false);
+
+  // Role-based redirect after login
+  useEffect(() => {
+    if (isAuthenticated && user && !wasAuthenticated.current) {
+      wasAuthenticated.current = true;
+      const targetRoute = getRoleDefaultRoute(user.role);
+      // Redirect to role-specific page
+      if (window.location.pathname === '/' || window.location.pathname === '/dashboard' || window.location.pathname === '/login') {
+        window.history.replaceState(null, '', targetRoute);
+        window.location.href = targetRoute;
+      }
+    }
+    if (!isAuthenticated) {
+      wasAuthenticated.current = false;
+    }
+  }, [isAuthenticated, user]);
 
   // Add error boundary / fallback
   if (isAuthenticated === undefined) {
