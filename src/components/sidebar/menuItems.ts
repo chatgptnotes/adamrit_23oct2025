@@ -163,6 +163,11 @@ export const menuItems = [
     icon: Cross,
   },
   {
+    title: "CT / MRI",
+    url: "/ct-mri",
+    icon: Camera,
+  },
+  {
     title: "Accounting",
     url: "/accounting",
     icon: Calculator,

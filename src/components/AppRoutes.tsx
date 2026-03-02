@@ -99,6 +99,7 @@ const TallyIntegration = lazy(() => import("../pages/TallyIntegration"));
 const OperationTheatre = lazy(() => import("../pages/OperationTheatre"));
 const CathLab = lazy(() => import("../pages/CathLab"));
 const NursingStation = lazy(() => import("../pages/NursingStation"));
+const CTMRIModule = lazy(() => import("../pages/CTMRIModule"));
 
 // Loading component
 const PageLoader = () => (
@@ -202,6 +203,7 @@ export const AppRoutes = () => {
         <Route path="/ot" element={<Suspense fallback={<PageLoader />}><OperationTheatre /></Suspense>} />
         <Route path="/cath-lab" element={<Suspense fallback={<PageLoader />}><CathLab /></Suspense>} />
         <Route path="/nursing" element={<Suspense fallback={<PageLoader />}><NursingStation /></Suspense>} />
+        <Route path="/ct-mri" element={<Suspense fallback={<PageLoader />}><CTMRIModule /></Suspense>} />
         {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
         <Route path="*" element={<NotFound />} />
       </Routes>
