@@ -18,6 +18,7 @@ interface AuthContextType {
   signup: (userData: { email: string; password: string; role: string; hospitalType: HospitalType }) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
   isAuthenticated: boolean;
+  isAuthLoading: boolean;
   isSuperAdmin: boolean;
   isAdmin: boolean;
   hospitalType: HospitalType | null;
@@ -44,6 +45,7 @@ interface AuthProviderProps {
 
 export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [user, setUser] = useState<User | null>(null);
+  const [isAuthLoading, setIsAuthLoading] = useState<boolean>(true);
   const [showLanding, setShowLanding] = useState<boolean>(true);
   const [showHospitalSelection, setShowHospitalSelection] = useState<boolean>(false);
 
@@ -75,6 +77,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     if (hasVisitedBefore) {
       setShowLanding(false);
     }
+    setIsAuthLoading(false);
   }, []);
 
   // Database authentication
@@ -220,6 +223,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     signup,
     logout,
     isAuthenticated: !!user,
+    isAuthLoading,
     isSuperAdmin: user?.role === 'superadmin',
     isAdmin: user?.role === 'admin' || user?.role === 'superadmin',
     hospitalType: user?.hospitalType || null,
@@ -229,7 +233,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     showHospitalSelection,
     setShowHospitalSelection
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [user, hospitalConfig, showLanding, showHospitalSelection]);
+  }), [user, isAuthLoading, hospitalConfig, showLanding, showHospitalSelection]);
 
   return (
     <AuthContext.Provider value={value}>

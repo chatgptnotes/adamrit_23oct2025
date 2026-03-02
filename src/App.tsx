@@ -70,6 +70,7 @@ const queryClient = new QueryClient({
     queries: {
       retry: 1,
       refetchOnWindowFocus: false,
+      staleTime: 1000 * 60 * 5, // 5 minutes - prevent rapid refetching
     },
   },
 });
@@ -118,6 +119,7 @@ const AppContent = () => {
   const {
     isAuthenticated,
     user,
+    isAuthLoading,
     login,
     showLanding,
     setShowLanding,
@@ -147,8 +149,8 @@ const AppContent = () => {
     }
   }, [isAuthenticated, user]);
 
-  // Add error boundary / fallback
-  if (isAuthenticated === undefined) {
+  // Show loading while auth state is being restored from localStorage
+  if (isAuthLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
@@ -191,10 +193,9 @@ const AppContent = () => {
   const authRoutes = ['/login', '/signup', '/signup-full'];
   const isAuthRoute = authRoutes.includes(currentPath);
 
-  // Redirect authenticated users away from auth routes
+  // Redirect authenticated users away from auth routes (no full page reload)
   if (isAuthenticated && isAuthRoute) {
-    window.location.href = '/';
-    return null;
+    window.history.replaceState(null, '', '/');
   }
 
   // Allow auth routes to render without authentication
