@@ -2,19 +2,20 @@ import { createContext, useContext, useState, useEffect, ReactNode } from 'react
 import { HospitalType, getHospitalConfig } from '@/types/hospital';
 import { supabase } from '@/integrations/supabase/client';
 import { hashPassword, comparePassword, validateEmail, sanitizeInput, signupRateLimiter } from '@/utils/auth';
+import { logActivity } from '@/lib/activity-logger';
 
 interface User {
   id?: string;
   email: string;
   username: string;
-  role: 'superadmin' | 'admin' | 'doctor' | 'nurse' | 'user' | 'marketing_manager';
+  role: 'superadmin' | 'admin' | 'doctor' | 'nurse' | 'user' | 'marketing_manager' | 'receptionist' | 'lab_technician' | 'pharmacist' | 'radiology_tech' | 'ot_tech' | 'cath_lab_tech' | 'billing' | 'housekeeping' | 'security' | 'driver' | 'physiotherapist';
   hospitalType: HospitalType;
 }
 
 interface AuthContextType {
   user: User | null;
   login: (credentials: { email: string; password: string }) => Promise<boolean>;
-  signup: (userData: { email: string; password: string; role: 'superadmin' | 'admin' | 'doctor' | 'nurse' | 'user' | 'marketing_manager'; hospitalType: HospitalType }) => Promise<{ success: boolean; error?: string }>;
+  signup: (userData: { email: string; password: string; role: string; hospitalType: HospitalType }) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
   isAuthenticated: boolean;
   isSuperAdmin: boolean;
@@ -130,6 +131,13 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
       setUser(user);
       localStorage.setItem('hmis_user', JSON.stringify(user));
+
+      // Update last_login_at
+      (supabase as any).from('User').update({ last_login_at: new Date().toISOString() }).eq('id', data.id).then(() => {});
+
+      // Log activity
+      logActivity('user_login', { email: user.email, role: user.role, hospital: user.hospitalType });
+
       return true;
     } catch (error) {
       console.error('Login failed:', error);
@@ -138,7 +146,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   };
 
   // Signup functionality
-  const signup = async (userData: { email: string; password: string; role: 'superadmin' | 'admin' | 'doctor' | 'nurse' | 'user' | 'marketing_manager'; hospitalType: HospitalType }): Promise<{ success: boolean; error?: string }> => {
+  const signup = async (userData: { email: string; password: string; role: string; hospitalType: HospitalType }): Promise<{ success: boolean; error?: string }> => {
     try {
       // Rate limiting check
       const clientIP = 'default'; // In production, get actual client IP

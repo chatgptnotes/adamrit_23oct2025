@@ -1,4 +1,4 @@
-import { BarChart3, Calendar, Users, UserPlus, Database, Activity, FileText, TestTube, Camera, Pill, MapPin, Stethoscope, UserCog, ScrollText, Calculator, Syringe, Shield, Building2, ClipboardList, ShieldCheck, Receipt, HeartHandshake, ExternalLink, UserCheck, Bed, DoorOpen, LayoutDashboard, BookOpen, Clock, TrendingUp, Scissors, Heart, Cross } from 'lucide-react';
+import { BarChart3, Calendar, Users, UserPlus, Database, Activity, FileText, TestTube, Camera, Pill, MapPin, Stethoscope, UserCog, ScrollText, Calculator, Syringe, Shield, Building2, ClipboardList, ShieldCheck, Receipt, HeartHandshake, ExternalLink, UserCheck, Bed, DoorOpen, LayoutDashboard, BookOpen, Clock, TrendingUp, Scissors, Heart, Cross, ClipboardCheck } from 'lucide-react';
 
 export const menuItems = [
   {
@@ -231,5 +231,15 @@ export const menuItems = [
     title: "Nursing Station",
     url: "/nursing",
     icon: Stethoscope,
+  },
+  {
+    title: "User Management",
+    url: "/user-management",
+    icon: UserCog,
+  },
+  {
+    title: "Activity Log",
+    url: "/activity-log",
+    icon: ClipboardCheck,
   },
 ];

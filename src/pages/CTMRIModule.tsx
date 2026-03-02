@@ -21,8 +21,10 @@ import {
   Calendar, Clock, Search, Plus, Printer, RefreshCw, Activity, CheckCircle2,
   XCircle, AlertTriangle, Stethoscope, ClipboardList, BarChart3, Filter,
   Save, FileText, Wrench, TrendingUp, Camera, Zap, Shield, Heart,
-  Eye, Edit2, Trash2, ChevronRight, AlertCircle, ThermometerSun, Radio
+  Eye, Edit2, Trash2, ChevronRight, AlertCircle, ThermometerSun, Radio, Image
 } from "lucide-react";
+
+import PACSViewer from "@/components/radiology/PACSViewer";
 
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, PieChart, Pie,
@@ -1537,6 +1539,7 @@ const CTMRIModule: React.FC = () => {
           <TabsTrigger value="equipment"><Wrench className="w-4 h-4 mr-1" />Equipment & QA</TabsTrigger>
           <TabsTrigger value="analytics"><TrendingUp className="w-4 h-4 mr-1" />Analytics</TabsTrigger>
           <TabsTrigger value="procedures"><Stethoscope className="w-4 h-4 mr-1" />Procedures</TabsTrigger>
+          <TabsTrigger value="pacs"><Image className="w-4 h-4 mr-1" />PACS</TabsTrigger>
         </TabsList>
 
         <TabsContent value="dashboard">{renderDashboard()}</TabsContent>
@@ -1547,6 +1550,7 @@ const CTMRIModule: React.FC = () => {
         <TabsContent value="equipment">{renderEquipmentQA()}</TabsContent>
         <TabsContent value="analytics">{renderAnalytics()}</TabsContent>
         <TabsContent value="procedures">{renderProcedureMaster()}</TabsContent>
+        <TabsContent value="pacs"><PACSViewer patients={patients} dicomStudies={dicomStudies} /></TabsContent>
       </Tabs>
     </div>
   );
