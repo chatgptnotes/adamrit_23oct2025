@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
-import { ArrowLeft, MapPin, Route, Users, Calendar, DollarSign, Bell, Plus, Trash2, Edit, Save, X, Phone, Mail, Building2 } from 'lucide-react';
+import { ArrowLeft, MapPin, Route, Users, Calendar, DollarSign, Bell, Plus, Trash2, Edit, Save, X, Phone, Mail, Building2, Camera } from 'lucide-react';
 
 const db = supabase as any;
 
@@ -45,7 +45,7 @@ const CorporateAreaDetail: React.FC = () => {
 
   // Contact add
   const [showAddContact, setShowAddContact] = useState(false);
-  const [contactForm, setContactForm] = useState({ name: '', designation: '', phone: '', email: '', is_primary: false, notes: '' });
+  const [contactForm, setContactForm] = useState<any>({ name: '', designation: '', phone: '', email: '', is_primary: false, notes: '', photo_url: '', photos: [] as string[] });
   const [editingContactId, setEditingContactId] = useState<string | null>(null);
 
   // Meeting add
@@ -100,7 +100,7 @@ const CorporateAreaDetail: React.FC = () => {
       await db.from('corporate_area_contacts').insert({ ...contactForm, area_id: areaId });
     }
     toast.success('Contact saved');
-    setContactForm({ name: '', designation: '', phone: '', email: '', is_primary: false, notes: '', dietary_preference: 'vegetarian', drinks_alcohol: 'no', personal_habits: '', gratification_type: '', gratification_details: '', family_details: '', birthday: '', anniversary: '', interests: '' });
+    setContactForm({ name: '', designation: '', phone: '', email: '', is_primary: false, notes: '', dietary_preference: 'vegetarian', drinks_alcohol: 'no', personal_habits: '', gratification_type: '', gratification_details: '', family_details: '', birthday: '', anniversary: '', interests: '', photo_url: '', photos: [] });
     setShowAddContact(false);
     fetchAll();
   };
@@ -112,7 +112,7 @@ const CorporateAreaDetail: React.FC = () => {
   };
 
   const startEditContact = (c: any) => {
-    setContactForm({ name: c.name, designation: c.designation || '', phone: c.phone || '', email: c.email || '', is_primary: c.is_primary, notes: c.notes || '', dietary_preference: c.dietary_preference || 'vegetarian', drinks_alcohol: c.drinks_alcohol || 'no', personal_habits: c.personal_habits || '', gratification_type: c.gratification_type || '', gratification_details: c.gratification_details || '', family_details: c.family_details || '', birthday: c.birthday || '', anniversary: c.anniversary || '', interests: c.interests || '' });
+    setContactForm({ name: c.name, designation: c.designation || '', phone: c.phone || '', email: c.email || '', is_primary: c.is_primary, notes: c.notes || '', dietary_preference: c.dietary_preference || 'vegetarian', drinks_alcohol: c.drinks_alcohol || 'no', personal_habits: c.personal_habits || '', gratification_type: c.gratification_type || '', gratification_details: c.gratification_details || '', family_details: c.family_details || '', birthday: c.birthday || '', anniversary: c.anniversary || '', interests: c.interests || '', photo_url: c.photo_url || '', photos: c.photos || [] });
     setEditingContactId(c.id);
     setShowAddContact(true);
   };
@@ -133,6 +133,33 @@ const CorporateAreaDetail: React.FC = () => {
     fetchAll();
   };
 
+  const handleProfilePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const path = `contacts/profile-${Date.now()}.${file.name.split('.').pop()}`;
+    const { error } = await db.storage.from('corporate-photos').upload(path, file);
+    if (error) { toast.error('Upload failed'); return; }
+    const { data: { publicUrl } } = db.storage.from('corporate-photos').getPublicUrl(path);
+    setContactForm({ ...contactForm, photo_url: publicUrl });
+    toast.success('Photo uploaded!');
+  };
+
+  const handleMultiPhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    const urls: string[] = [...(contactForm.photos || [])];
+    for (const file of files) {
+      const path = `contacts/photos-${Date.now()}-${Math.random().toString(36).slice(2)}.${file.name.split('.').pop()}`;
+      const { error } = await db.storage.from('corporate-photos').upload(path, file);
+      if (!error) {
+        const { data: { publicUrl } } = db.storage.from('corporate-photos').getPublicUrl(path);
+        urls.push(publicUrl);
+      }
+    }
+    setContactForm({ ...contactForm, photos: urls });
+    toast.success(`${files.length} photo(s) uploaded!`);
+  };
+
   if (loading) return <div className="flex items-center justify-center min-h-screen text-gray-500">Loading...</div>;
   if (!area || !corporate) return <div className="flex items-center justify-center min-h-screen text-gray-500">Not found</div>;
 
@@ -142,14 +169,64 @@ const CorporateAreaDetail: React.FC = () => {
   return (
     <div className="min-h-screen bg-gray-50 p-4 md:p-6">
       <div className="max-w-4xl mx-auto">
-        {/* Header */}
-        <div className="flex items-center gap-3 mb-2">
-          <button onClick={() => navigate(`/corporate-master/${corporateId}`)} className="p-2 rounded-lg hover:bg-gray-200"><ArrowLeft className="w-5 h-5 text-gray-600" /></button>
-          <div className="flex-1">
-            <div className="text-xs text-gray-500 mb-1">{corporate.name} &gt; {area.area_name}</div>
-            <h1 className="text-2xl font-bold text-gray-900">{area.area_name}</h1>
+        {/* Hero Banner Section */}
+        <div className="relative mb-6 rounded-xl overflow-hidden">
+          <div className="h-48 md:h-64 bg-gradient-to-r from-blue-600 to-blue-800 relative">
+            {area.banner_photo ? (
+              <img src={area.banner_photo} alt="Banner" className="w-full h-full object-cover" />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center text-white/30 text-lg">📷 Click to add banner photo</div>
+            )}
+            <label className="absolute top-3 right-3 bg-white/90 hover:bg-white text-gray-700 px-3 py-1.5 rounded-lg text-sm cursor-pointer flex items-center gap-1 shadow">
+              📷 Change Banner
+              <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                const path = `areas/${areaId}/banner-${Date.now()}.${file.name.split('.').pop()}`;
+                const { error } = await db.storage.from('corporate-photos').upload(path, file);
+                if (error) { toast.error('Upload failed'); return; }
+                const { data: { publicUrl } } = db.storage.from('corporate-photos').getPublicUrl(path);
+                await db.from('corporate_areas').update({ banner_photo: publicUrl }).eq('id', areaId);
+                toast.success('Banner updated!');
+                fetchAll();
+              }} />
+            </label>
+            {/* Back button overlay */}
+            <button onClick={() => navigate(`/corporate-master/${corporateId}`)} className="absolute top-3 left-3 bg-white/90 hover:bg-white text-gray-700 p-2 rounded-lg shadow"><ArrowLeft className="w-5 h-5" /></button>
+            {/* Delete button overlay */}
+            <button onClick={deleteArea} className="absolute top-3 right-44 bg-white/90 hover:bg-white text-red-500 p-2 rounded-lg shadow"><Trash2 className="w-4 h-4" /></button>
           </div>
-          <button onClick={deleteArea} className="p-2 rounded-lg hover:bg-red-50 text-red-500"><Trash2 className="w-5 h-5" /></button>
+          <div className="absolute -bottom-12 left-6">
+            <div className="relative">
+              <div className="w-24 h-24 md:w-32 md:h-32 rounded-full border-4 border-white bg-gray-200 overflow-hidden shadow-lg">
+                {area.profile_photo ? (
+                  <img src={area.profile_photo} alt="Profile" className="w-full h-full object-cover" />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-gray-400 text-3xl">🏥</div>
+                )}
+              </div>
+              <label className="absolute bottom-0 right-0 bg-blue-600 text-white w-8 h-8 rounded-full flex items-center justify-center cursor-pointer shadow hover:bg-blue-700">
+                📷
+                <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  const path = `areas/${areaId}/profile-${Date.now()}.${file.name.split('.').pop()}`;
+                  const { error } = await db.storage.from('corporate-photos').upload(path, file);
+                  if (error) { toast.error('Upload failed'); return; }
+                  const { data: { publicUrl } } = db.storage.from('corporate-photos').getPublicUrl(path);
+                  await db.from('corporate_areas').update({ profile_photo: publicUrl }).eq('id', areaId);
+                  toast.success('Profile photo updated!');
+                  fetchAll();
+                }} />
+              </label>
+            </div>
+          </div>
+        </div>
+        <div className="h-14 flex items-end pl-36 md:pl-44 pb-1">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">{area.area_name}</h1>
+            <div className="text-xs text-gray-500">{corporate.name} · <span className={`px-2 py-0.5 rounded-full text-xs font-medium capitalize ${STATUS_COLORS[area.status] || ''}`}>{area.status}</span></div>
+          </div>
         </div>
 
         {/* Section 1: Overview */}
@@ -241,7 +318,7 @@ const CorporateAreaDetail: React.FC = () => {
 
         {/* Section 3: Contacts */}
         <Section icon={<Users className="w-5 h-5" />} title="Contacts / Referees" action={
-          <button onClick={() => { setEditingContactId(null); setContactForm({ name: '', designation: '', phone: '', email: '', is_primary: false, notes: '', dietary_preference: 'vegetarian', drinks_alcohol: 'no', personal_habits: '', gratification_type: '', gratification_details: '', family_details: '', birthday: '', anniversary: '', interests: '' }); setShowAddContact(true); }} className="text-sm text-blue-600 hover:underline flex items-center gap-1"><Plus className="w-3 h-3" />Add Contact</button>
+          <button onClick={() => { setEditingContactId(null); setContactForm({ name: '', designation: '', phone: '', email: '', is_primary: false, notes: '', dietary_preference: 'vegetarian', drinks_alcohol: 'no', personal_habits: '', gratification_type: '', gratification_details: '', family_details: '', birthday: '', anniversary: '', interests: '', photo_url: '', photos: [] }); setShowAddContact(true); }} className="text-sm text-blue-600 hover:underline flex items-center gap-1"><Plus className="w-3 h-3" />Add Contact</button>
         }>
           {showAddContact && (
             <div className="border border-blue-200 rounded-lg p-3 mb-4 bg-blue-50/30">
@@ -275,6 +352,41 @@ const CorporateAreaDetail: React.FC = () => {
                 </div>
               </div>
 
+              {/* Photo Upload Section */}
+              <div className="md:col-span-2 border-t border-gray-200 pt-3 mt-1">
+                <p className="text-xs font-semibold text-gray-600 mb-2 uppercase">📸 Photos</p>
+                <div className="flex gap-3">
+                  <label className="px-3 py-2 bg-blue-50 text-blue-700 rounded-lg text-sm cursor-pointer hover:bg-blue-100 border border-blue-200 flex items-center gap-1">
+                    👤 Profile Photo
+                    <input type="file" accept="image/*" className="hidden" onChange={handleProfilePhotoUpload} />
+                  </label>
+                  <label className="px-3 py-2 bg-green-50 text-green-700 rounded-lg text-sm cursor-pointer hover:bg-green-100 border border-green-200 flex items-center gap-1">
+                    📷 Add Photos
+                    <input type="file" accept="image/*" multiple className="hidden" onChange={handleMultiPhotoUpload} />
+                  </label>
+                </div>
+                {contactForm.photo_url && (
+                  <div className="mt-2 flex items-center gap-2">
+                    <img src={contactForm.photo_url} className="w-12 h-12 rounded-full object-cover" />
+                    <button onClick={() => setContactForm({...contactForm, photo_url: ''})} className="text-xs text-red-500">Remove</button>
+                  </div>
+                )}
+                {contactForm.photos && contactForm.photos.length > 0 && (
+                  <div className="flex gap-2 mt-2 flex-wrap">
+                    {contactForm.photos.map((url: string, i: number) => (
+                      <div key={i} className="relative">
+                        <img src={url} className="w-14 h-14 rounded-lg object-cover" />
+                        <button onClick={() => {
+                          const newPhotos = [...contactForm.photos];
+                          newPhotos.splice(i, 1);
+                          setContactForm({...contactForm, photos: newPhotos});
+                        }} className="absolute -top-1 -right-1 bg-red-500 text-white w-4 h-4 rounded-full text-[10px] flex items-center justify-center">×</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               <div className="flex gap-2 mt-3">
                 <button onClick={addContact} className={btn}>{editingContactId ? 'Update' : 'Add'}</button>
                 <button onClick={() => { setShowAddContact(false); setEditingContactId(null); }} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Cancel</button>
@@ -286,12 +398,17 @@ const CorporateAreaDetail: React.FC = () => {
               {contacts.map(c => (
                 <div key={c.id} className="border border-gray-200 rounded-lg p-3 hover:shadow-sm transition-shadow">
                   <div className="flex items-start justify-between">
+                    <div className="flex items-start gap-3">
+                      <div className="w-10 h-10 rounded-full bg-gray-200 overflow-hidden shrink-0">
+                        {c.photo_url ? <img src={c.photo_url} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-gray-400">👤</div>}
+                      </div>
                     <div>
                       <div className="flex items-center gap-2">
                         <span className="font-semibold text-gray-900">{c.name}</span>
                         {c.is_primary && <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded">Primary</span>}
                       </div>
                       {c.designation && <p className="text-sm text-gray-500">{c.designation}</p>}
+                    </div>
                     </div>
                     <div className="flex gap-2">
                       <button onClick={() => startEditContact(c)} className="text-blue-500 hover:text-blue-700"><Edit className="w-4 h-4" /></button>
@@ -316,6 +433,13 @@ const CorporateAreaDetail: React.FC = () => {
                       {c.personal_habits && <p>🧑 <strong>Habits:</strong> {c.personal_habits}</p>}
                       {c.family_details && <p>👨‍👩‍👧 <strong>Family:</strong> {c.family_details}</p>}
                       {c.interests && <p>⭐ <strong>Interests:</strong> {c.interests}</p>}
+                    </div>
+                  )}
+                  {c.photos && c.photos.length > 0 && (
+                    <div className="flex gap-2 mt-2 overflow-x-auto pb-1">
+                      {c.photos.map((url: string, i: number) => (
+                        <img key={i} src={url} className="w-16 h-16 rounded-lg object-cover shrink-0 cursor-pointer hover:ring-2 ring-blue-500" onClick={() => window.open(url, '_blank')} />
+                      ))}
                     </div>
                   )}
                 </div>
@@ -424,6 +548,42 @@ const CorporateAreaDetail: React.FC = () => {
               <div className="bg-gray-50 rounded-lg p-3 text-center"><div className="text-gray-500 text-xs">Amount Pending</div><div className="text-xl font-bold text-gray-900">₹{(area.total_amount_pending || 0).toLocaleString('en-IN')}</div></div>
             </div>
           )}
+        </Section>
+        {/* Section 7: Photo Gallery */}
+        <Section icon={<Camera className="w-5 h-5" />} title="Photo Gallery">
+          <label className="inline-flex items-center gap-1 px-3 py-2 bg-blue-50 text-blue-700 rounded-lg text-sm cursor-pointer hover:bg-blue-100 border border-blue-200 mb-3">
+            📷 Upload Photos
+            <input type="file" accept="image/*" multiple className="hidden" onChange={async (e) => {
+              const files = Array.from(e.target.files || []);
+              const currentGallery = area.gallery || [];
+              const newUrls = [...currentGallery];
+              for (const file of files) {
+                const path = `areas/${areaId}/gallery-${Date.now()}-${Math.random().toString(36).slice(2)}.${file.name.split('.').pop()}`;
+                const { error } = await db.storage.from('corporate-photos').upload(path, file);
+                if (!error) {
+                  const { data: { publicUrl } } = db.storage.from('corporate-photos').getPublicUrl(path);
+                  newUrls.push(publicUrl);
+                }
+              }
+              await db.from('corporate_areas').update({ gallery: newUrls }).eq('id', areaId);
+              toast.success('Photos uploaded!');
+              fetchAll();
+            }} />
+          </label>
+          <div className="grid grid-cols-3 md:grid-cols-5 gap-2">
+            {(area.gallery || []).map((url: string, i: number) => (
+              <div key={i} className="relative group">
+                <img src={url} className="w-full h-24 rounded-lg object-cover cursor-pointer" onClick={() => window.open(url, '_blank')} />
+                <button onClick={async () => {
+                  const newGallery = [...(area.gallery || [])];
+                  newGallery.splice(i, 1);
+                  await db.from('corporate_areas').update({ gallery: newGallery }).eq('id', areaId);
+                  toast.success('Photo removed');
+                  fetchAll();
+                }} className="absolute top-1 right-1 bg-red-500 text-white w-5 h-5 rounded-full text-xs hidden group-hover:flex items-center justify-center">×</button>
+              </div>
+            ))}
+          </div>
         </Section>
       </div>
     </div>
