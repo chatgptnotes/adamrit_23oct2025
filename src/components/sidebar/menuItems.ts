@@ -22,6 +22,11 @@ export const menuItems = [
     icon: TrendingUp,
   },
   {
+    title: "Marketing Dashboard",
+    url: "/marketing-dashboard",
+    icon: BarChart3,
+  },
+  {
     title: "IPD Dashboard",
     url: "/todays-ipd",
     icon: Calendar,
@@ -241,6 +246,11 @@ export const menuItems = [
     title: "Corporate Master",
     url: "/corporate-master",
     icon: Building2,
+  },
+  {
+    title: "Location Master",
+    url: "/location-master",
+    icon: MapPin,
   },
   {
     title: "Activity Log",
