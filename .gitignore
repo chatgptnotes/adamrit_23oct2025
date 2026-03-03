@@ -8,3 +8,8 @@ dist/
 # macOS system files
 .DS_Store
 **/.DS_Store
+
+# Tally export files — contain financial data, never commit
+tally-exports/*.xml
+tally-exports/*.XML
+.env*.local

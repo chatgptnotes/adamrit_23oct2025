@@ -13,7 +13,8 @@
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
     "preview": "vite preview",
-    "generate-types": "ts-node scripts/generate-types.ts"
+    "generate-types": "ts-node scripts/generate-types.ts",
+    "tally:sync": "node scripts/sync-tally-export.js"
   },
   "dependencies": {
     "@ckeditor/ckeditor5-build-classic": "^41.4.2",
@@ -88,6 +89,7 @@
     "@types/node": "^20.19.9",
     "@types/react": "^18.3.23",
     "@types/react-dom": "^18.3.7",
+    "@vercel/node": "^5.6.9",
     "@vitejs/plugin-react": "^5.1.2",
     "@vitejs/plugin-react-swc": "^3.11.0",
     "autoprefixer": "^10.4.20",

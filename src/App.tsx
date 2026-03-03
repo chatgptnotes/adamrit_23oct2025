@@ -138,9 +138,12 @@ const AppContent = () => {
     if (isAuthenticated && user && !wasAuthenticated.current) {
       wasAuthenticated.current = true;
       const targetRoute = getRoleDefaultRoute(user.role);
-      // Redirect to role-specific page
-      if (window.location.pathname === '/' || window.location.pathname === '/dashboard' || window.location.pathname === '/login') {
-        window.history.replaceState(null, '', targetRoute);
+      const currentPath = window.location.pathname;
+      // Only redirect if on a generic landing route AND not already on the target
+      if (
+        (currentPath === '/' || currentPath === '/dashboard' || currentPath === '/login') &&
+        currentPath !== targetRoute
+      ) {
         window.location.href = targetRoute;
       }
     }
