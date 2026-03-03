@@ -103,6 +103,8 @@ const CTMRIModule = lazy(() => import("../pages/CTMRIModule"));
 const UserManagement = lazy(() => import("../pages/UserManagement"));
 const ActivityLog = lazy(() => import("../pages/ActivityLog"));
 const CorporateMaster = lazy(() => import("../pages/CorporateMaster"));
+const CorporateAreas = lazy(() => import("../pages/CorporateAreas"));
+const CorporateAreaDetail = lazy(() => import("../pages/CorporateAreaDetail"));
 
 // Loading component
 const PageLoader = () => (
@@ -210,6 +212,8 @@ export const AppRoutes = () => {
         <Route path="/user-management" element={<Suspense fallback={<PageLoader />}><UserManagement /></Suspense>} />
         <Route path="/activity-log" element={<Suspense fallback={<PageLoader />}><ActivityLog /></Suspense>} />
         <Route path="/corporate-master" element={<Suspense fallback={<PageLoader />}><CorporateMaster /></Suspense>} />
+        <Route path="/corporate-master/:corporateId" element={<Suspense fallback={<PageLoader />}><CorporateAreas /></Suspense>} />
+        <Route path="/corporate-master/:corporateId/area/:areaId" element={<Suspense fallback={<PageLoader />}><CorporateAreaDetail /></Suspense>} />
         {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
         <Route path="*" element={<NotFound />} />
       </Routes>
