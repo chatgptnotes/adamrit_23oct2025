@@ -100,7 +100,7 @@ const CorporateAreaDetail: React.FC = () => {
       await db.from('corporate_area_contacts').insert({ ...contactForm, area_id: areaId });
     }
     toast.success('Contact saved');
-    setContactForm({ name: '', designation: '', phone: '', email: '', is_primary: false, notes: '' });
+    setContactForm({ name: '', designation: '', phone: '', email: '', is_primary: false, notes: '', dietary_preference: 'vegetarian', drinks_alcohol: 'no', personal_habits: '', gratification_type: '', gratification_details: '', family_details: '', birthday: '', anniversary: '', interests: '' });
     setShowAddContact(false);
     fetchAll();
   };
@@ -112,7 +112,7 @@ const CorporateAreaDetail: React.FC = () => {
   };
 
   const startEditContact = (c: any) => {
-    setContactForm({ name: c.name, designation: c.designation || '', phone: c.phone || '', email: c.email || '', is_primary: c.is_primary, notes: c.notes || '' });
+    setContactForm({ name: c.name, designation: c.designation || '', phone: c.phone || '', email: c.email || '', is_primary: c.is_primary, notes: c.notes || '', dietary_preference: c.dietary_preference || 'vegetarian', drinks_alcohol: c.drinks_alcohol || 'no', personal_habits: c.personal_habits || '', gratification_type: c.gratification_type || '', gratification_details: c.gratification_details || '', family_details: c.family_details || '', birthday: c.birthday || '', anniversary: c.anniversary || '', interests: c.interests || '' });
     setEditingContactId(c.id);
     setShowAddContact(true);
   };
@@ -215,7 +215,7 @@ const CorporateAreaDetail: React.FC = () => {
 
         {/* Section 3: Contacts */}
         <Section icon={<Users className="w-5 h-5" />} title="Contacts / Referees" action={
-          <button onClick={() => { setEditingContactId(null); setContactForm({ name: '', designation: '', phone: '', email: '', is_primary: false, notes: '' }); setShowAddContact(true); }} className="text-sm text-blue-600 hover:underline flex items-center gap-1"><Plus className="w-3 h-3" />Add Contact</button>
+          <button onClick={() => { setEditingContactId(null); setContactForm({ name: '', designation: '', phone: '', email: '', is_primary: false, notes: '', dietary_preference: 'vegetarian', drinks_alcohol: 'no', personal_habits: '', gratification_type: '', gratification_details: '', family_details: '', birthday: '', anniversary: '', interests: '' }); setShowAddContact(true); }} className="text-sm text-blue-600 hover:underline flex items-center gap-1"><Plus className="w-3 h-3" />Add Contact</button>
         }>
           {showAddContact && (
             <div className="border border-blue-200 rounded-lg p-3 mb-4 bg-blue-50/30">
@@ -226,6 +226,29 @@ const CorporateAreaDetail: React.FC = () => {
                 <input value={contactForm.email} onChange={e => setContactForm({ ...contactForm, email: e.target.value })} placeholder="Email" className={inp} />
                 <div className="flex items-center gap-2"><input type="checkbox" checked={contactForm.is_primary} onChange={e => setContactForm({ ...contactForm, is_primary: e.target.checked })} /><span className="text-sm text-gray-700">Primary Contact</span></div>
               </div>
+
+              {/* Personal Preferences */}
+              <div className="mt-3 pt-3 border-t border-blue-200">
+                <p className="text-xs font-semibold text-gray-600 mb-2 uppercase tracking-wide">🎯 Personal Preferences & Gratification</p>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div><label className="text-xs text-gray-500">Dietary Preference</label><select value={contactForm.dietary_preference || 'vegetarian'} onChange={e => setContactForm({ ...contactForm, dietary_preference: e.target.value })} className={inp}><option value="vegetarian">🥬 Vegetarian</option><option value="non-vegetarian">🍗 Non-Vegetarian</option><option value="eggetarian">🥚 Eggetarian</option><option value="vegan">🌱 Vegan</option><option value="jain">🙏 Jain</option><option value="unknown">❓ Unknown</option></select></div>
+                  <div><label className="text-xs text-gray-500">Drinks Alcohol</label><select value={contactForm.drinks_alcohol || 'no'} onChange={e => setContactForm({ ...contactForm, drinks_alcohol: e.target.value })} className={inp}><option value="no">🚫 No</option><option value="occasionally">🍷 Occasionally</option><option value="socially">🥂 Socially</option><option value="regularly">🍺 Regularly</option><option value="unknown">❓ Unknown</option></select></div>
+                  <div><label className="text-xs text-gray-500">Gratification Type</label><select value={contactForm.gratification_type || ''} onChange={e => setContactForm({ ...contactForm, gratification_type: e.target.value })} className={inp}><option value="">-- Select --</option><option value="monetary">💰 Monetary</option><option value="gifts_in_kind">🎁 Gifts in Kind</option><option value="family_outing">👨‍👩‍👧‍👦 Family Outing</option><option value="dinner">🍽️ Dinner / Party</option><option value="travel">✈️ Travel / Trip</option><option value="festival_gifts">🎊 Festival Gifts</option><option value="professional_favor">🤝 Professional Favor</option><option value="none">🚫 None / Unknown</option></select></div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+                  <div><label className="text-xs text-gray-500">Gratification Details</label><textarea value={contactForm.gratification_details || ''} onChange={e => setContactForm({ ...contactForm, gratification_details: e.target.value })} placeholder="What specifically do they prefer? E.g. 'Prefers whisky brands, likes family trips to Goa, wants son's school admission help'" className={inp} rows={2} /></div>
+                  <div><label className="text-xs text-gray-500">Personal Habits & Interests</label><textarea value={contactForm.personal_habits || ''} onChange={e => setContactForm({ ...contactForm, personal_habits: e.target.value })} placeholder="E.g. 'Morning walker, temple-goer, cricket fan, plays golf on weekends'" className={inp} rows={2} /></div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+                  <div><label className="text-xs text-gray-500">Family Details</label><textarea value={contactForm.family_details || ''} onChange={e => setContactForm({ ...contactForm, family_details: e.target.value })} placeholder="E.g. 'Wife: Sunita (teacher), Son: 10th class, Daughter: married'" className={inp} rows={2} /></div>
+                  <div><label className="text-xs text-gray-500">Other Interests / Notes</label><textarea value={contactForm.interests || ''} onChange={e => setContactForm({ ...contactForm, interests: e.target.value })} placeholder="E.g. 'Interested in Ayurveda, likes sweets from Haldiram, supports BJP'" className={inp} rows={2} /></div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+                  <div><label className="text-xs text-gray-500">Birthday</label><input type="date" value={contactForm.birthday || ''} onChange={e => setContactForm({ ...contactForm, birthday: e.target.value })} className={inp} /></div>
+                  <div><label className="text-xs text-gray-500">Anniversary</label><input type="date" value={contactForm.anniversary || ''} onChange={e => setContactForm({ ...contactForm, anniversary: e.target.value })} className={inp} /></div>
+                </div>
+              </div>
+
               <div className="flex gap-2 mt-3">
                 <button onClick={addContact} className={btn}>{editingContactId ? 'Update' : 'Add'}</button>
                 <button onClick={() => { setShowAddContact(false); setEditingContactId(null); }} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Cancel</button>
@@ -233,27 +256,44 @@ const CorporateAreaDetail: React.FC = () => {
             </div>
           )}
           {contacts.length === 0 ? <p className="text-sm text-gray-500">No contacts added yet.</p> : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead><tr className="border-b border-gray-200 text-left text-xs text-gray-500">
-                  <th className="py-2 pr-3">Name</th><th className="py-2 pr-3">Designation</th><th className="py-2 pr-3">Phone</th><th className="py-2 pr-3">Email</th><th className="py-2 pr-3">Primary</th><th className="py-2">Actions</th>
-                </tr></thead>
-                <tbody>
-                  {contacts.map(c => (
-                    <tr key={c.id} className="border-b border-gray-100">
-                      <td className="py-2 pr-3 text-gray-900 font-medium">{c.name}</td>
-                      <td className="py-2 pr-3 text-gray-600">{c.designation || '—'}</td>
-                      <td className="py-2 pr-3">{c.phone ? <a href={`tel:${c.phone}`} className="text-blue-600 hover:underline flex items-center gap-1"><Phone className="w-3 h-3" />{c.phone}</a> : '—'}</td>
-                      <td className="py-2 pr-3">{c.email ? <a href={`mailto:${c.email}`} className="text-blue-600 hover:underline flex items-center gap-1"><Mail className="w-3 h-3" />{c.email}</a> : '—'}</td>
-                      <td className="py-2 pr-3">{c.is_primary ? <span className="text-green-600 font-medium">Yes</span> : '—'}</td>
-                      <td className="py-2 flex gap-2">
-                        <button onClick={() => startEditContact(c)} className="text-blue-500 hover:text-blue-700"><Edit className="w-4 h-4" /></button>
-                        <button onClick={() => deleteContact(c.id)} className="text-red-500 hover:text-red-700"><Trash2 className="w-4 h-4" /></button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="space-y-3">
+              {contacts.map(c => (
+                <div key={c.id} className="border border-gray-200 rounded-lg p-3 hover:shadow-sm transition-shadow">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-gray-900">{c.name}</span>
+                        {c.is_primary && <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded">Primary</span>}
+                      </div>
+                      {c.designation && <p className="text-sm text-gray-500">{c.designation}</p>}
+                    </div>
+                    <div className="flex gap-2">
+                      <button onClick={() => startEditContact(c)} className="text-blue-500 hover:text-blue-700"><Edit className="w-4 h-4" /></button>
+                      <button onClick={() => deleteContact(c.id)} className="text-red-500 hover:text-red-700"><Trash2 className="w-4 h-4" /></button>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-3 mt-2 text-sm">
+                    {c.phone && <a href={`tel:${c.phone}`} className="text-blue-600 hover:underline flex items-center gap-1"><Phone className="w-3 h-3" />{c.phone}</a>}
+                    {c.email && <a href={`mailto:${c.email}`} className="text-blue-600 hover:underline flex items-center gap-1"><Mail className="w-3 h-3" />{c.email}</a>}
+                  </div>
+                  {/* Personal Preferences Tags */}
+                  <div className="flex flex-wrap gap-1.5 mt-2">
+                    {c.dietary_preference && c.dietary_preference !== 'unknown' && <span className="text-xs px-2 py-0.5 rounded-full bg-green-50 text-green-700 border border-green-200">{c.dietary_preference === 'vegetarian' ? '🥬 Veg' : c.dietary_preference === 'non-vegetarian' ? '🍗 Non-Veg' : c.dietary_preference === 'eggetarian' ? '🥚 Egg' : c.dietary_preference === 'jain' ? '🙏 Jain' : '🌱 Vegan'}</span>}
+                    {c.drinks_alcohol && c.drinks_alcohol !== 'no' && c.drinks_alcohol !== 'unknown' && <span className="text-xs px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-200">{c.drinks_alcohol === 'occasionally' ? '🍷 Occasional Drinker' : c.drinks_alcohol === 'socially' ? '🥂 Social Drinker' : '🍺 Regular Drinker'}</span>}
+                    {c.gratification_type && c.gratification_type !== 'none' && <span className="text-xs px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">{c.gratification_type === 'monetary' ? '💰 Monetary' : c.gratification_type === 'gifts_in_kind' ? '🎁 Gifts' : c.gratification_type === 'family_outing' ? '👨‍👩‍👧‍👦 Family Outing' : c.gratification_type === 'dinner' ? '🍽️ Dinner/Party' : c.gratification_type === 'travel' ? '✈️ Travel' : c.gratification_type === 'festival_gifts' ? '🎊 Festival Gifts' : '🤝 Professional'}</span>}
+                    {c.birthday && <span className="text-xs px-2 py-0.5 rounded-full bg-pink-50 text-pink-700 border border-pink-200">🎂 {new Date(c.birthday).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</span>}
+                    {c.anniversary && <span className="text-xs px-2 py-0.5 rounded-full bg-red-50 text-red-700 border border-red-200">💍 {new Date(c.anniversary).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</span>}
+                  </div>
+                  {(c.gratification_details || c.personal_habits || c.family_details) && (
+                    <div className="mt-2 text-xs text-gray-600 space-y-1">
+                      {c.gratification_details && <p>🎯 <strong>What they want:</strong> {c.gratification_details}</p>}
+                      {c.personal_habits && <p>🧑 <strong>Habits:</strong> {c.personal_habits}</p>}
+                      {c.family_details && <p>👨‍👩‍👧 <strong>Family:</strong> {c.family_details}</p>}
+                      {c.interests && <p>⭐ <strong>Interests:</strong> {c.interests}</p>}
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
           )}
         </Section>
