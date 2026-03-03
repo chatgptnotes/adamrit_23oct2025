@@ -64,7 +64,7 @@ const CorporateAreaDetail: React.FC = () => {
     setArea(areaData);
     if (areaData) {
       setOverviewForm({ area_name: areaData.area_name, district: areaData.district, state: areaData.state, status: areaData.status, hospitals: areaData.hospitals, hospital_count: areaData.hospital_count, notes: areaData.notes });
-      setRouteForm({ visit_route: areaData.visit_route, distance_km: areaData.distance_km, travel_time: areaData.travel_time, last_visit_date: areaData.last_visit_date });
+      setRouteForm({ visit_route: areaData.visit_route, distance_km: areaData.distance_km, travel_time: areaData.travel_time, last_visit_date: areaData.last_visit_date, google_maps_link: areaData.google_maps_link });
       setFollowupForm({ next_followup_date: areaData.next_followup_date, renewal_date: areaData.renewal_date, followup_frequency: areaData.followup_frequency, liaising_person: areaData.liaising_person, liaising_since: areaData.liaising_since, added_to_openclaw: areaData.added_to_openclaw });
       setFinancialForm({ total_claims_submitted: areaData.total_claims_submitted, total_claims_approved: areaData.total_claims_approved, total_amount_pending: areaData.total_amount_pending });
     }
@@ -196,6 +196,7 @@ const CorporateAreaDetail: React.FC = () => {
               <Field label="Distance (km)"><input type="number" value={routeForm.distance_km || ''} onChange={e => setRouteForm({ ...routeForm, distance_km: e.target.value })} className={inp} /></Field>
               <Field label="Travel Time"><input value={routeForm.travel_time || ''} onChange={e => setRouteForm({ ...routeForm, travel_time: e.target.value })} placeholder="e.g. 3 hours" className={inp} /></Field>
               <Field label="Last Visit Date"><input type="date" value={routeForm.last_visit_date || ''} onChange={e => setRouteForm({ ...routeForm, last_visit_date: e.target.value })} className={inp} /></Field>
+              <div className="md:col-span-2"><Field label="Google Maps Link"><input value={routeForm.google_maps_link || ''} onChange={e => setRouteForm({ ...routeForm, google_maps_link: e.target.value })} placeholder="Paste Google Maps link here" className={inp} /></Field></div>
               <div className="md:col-span-2 flex gap-2">
                 <button onClick={async () => { if (await saveSection(routeForm)) setEditRoute(false); }} className={btn}><Save className="w-4 h-4 inline mr-1" />Save</button>
                 <button onClick={() => setEditRoute(false)} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Cancel</button>
@@ -206,6 +207,7 @@ const CorporateAreaDetail: React.FC = () => {
               <div className="md:col-span-2"><span className="text-gray-500">Route:</span> <span className="text-gray-900">{area.visit_route || '—'}</span></div>
               <div><span className="text-gray-500">Distance:</span> <span className="text-gray-900">{area.distance_km ? `${area.distance_km} km` : '—'}</span></div>
               <div><span className="text-gray-500">Travel Time:</span> <span className="text-gray-900">{area.travel_time || '—'}</span></div>
+              {area.google_maps_link && <div className="md:col-span-2"><span className="text-gray-500">📍 Location:</span> <a href={area.google_maps_link} target="_blank" rel="noopener noreferrer" className="ml-1 text-blue-600 hover:text-blue-800 underline">Open in Google Maps ↗</a></div>}
               <div><span className="text-gray-500">Last Visit:</span> <span className="text-gray-900">{area.last_visit_date || '—'}</span></div>
             </div>
           )}
