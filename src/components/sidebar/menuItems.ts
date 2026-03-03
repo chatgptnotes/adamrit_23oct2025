@@ -238,6 +238,11 @@ export const menuItems = [
     icon: UserCog,
   },
   {
+    title: "Corporate Master",
+    url: "/corporate-master",
+    icon: Building2,
+  },
+  {
     title: "Activity Log",
     url: "/activity-log",
     icon: ClipboardCheck,

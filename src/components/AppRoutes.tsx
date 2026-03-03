@@ -102,6 +102,7 @@ const NursingStation = lazy(() => import("../pages/NursingStation"));
 const CTMRIModule = lazy(() => import("../pages/CTMRIModule"));
 const UserManagement = lazy(() => import("../pages/UserManagement"));
 const ActivityLog = lazy(() => import("../pages/ActivityLog"));
+const CorporateMaster = lazy(() => import("../pages/CorporateMaster"));
 
 // Loading component
 const PageLoader = () => (
@@ -208,6 +209,7 @@ export const AppRoutes = () => {
         <Route path="/ct-mri" element={<Suspense fallback={<PageLoader />}><CTMRIModule /></Suspense>} />
         <Route path="/user-management" element={<Suspense fallback={<PageLoader />}><UserManagement /></Suspense>} />
         <Route path="/activity-log" element={<Suspense fallback={<PageLoader />}><ActivityLog /></Suspense>} />
+        <Route path="/corporate-master" element={<Suspense fallback={<PageLoader />}><CorporateMaster /></Suspense>} />
         {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
         <Route path="*" element={<NotFound />} />
       </Routes>
