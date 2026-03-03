@@ -63,7 +63,7 @@ const CorporateAreaDetail: React.FC = () => {
     setCorporate(corp);
     setArea(areaData);
     if (areaData) {
-      setOverviewForm({ area_name: areaData.area_name, district: areaData.district, state: areaData.state, status: areaData.status, hospitals: areaData.hospitals, hospital_count: areaData.hospital_count, notes: areaData.notes });
+      setOverviewForm({ area_name: areaData.area_name, district: areaData.district, state: areaData.state, status: areaData.status, hospitals: areaData.hospitals, hospital_count: areaData.hospital_count, notes: areaData.notes, dispensaries: areaData.dispensaries, empanelled_hospitals: areaData.empanelled_hospitals, key_mines: areaData.key_mines, csr_programs: areaData.csr_programs, pharmacy_info: areaData.pharmacy_info, tertiary_referrals: areaData.tertiary_referrals, employee_count: areaData.employee_count, dependent_count: areaData.dependent_count, bed_count: areaData.bed_count, specialties_available: areaData.specialties_available, ambulance_available: areaData.ambulance_available, emergency_services: areaData.emergency_services });
       setRouteForm({ visit_route: areaData.visit_route, distance_km: areaData.distance_km, travel_time: areaData.travel_time, last_visit_date: areaData.last_visit_date, google_maps_link: areaData.google_maps_link });
       setFollowupForm({ next_followup_date: areaData.next_followup_date, renewal_date: areaData.renewal_date, followup_frequency: areaData.followup_frequency, liaising_person: areaData.liaising_person, liaising_since: areaData.liaising_since, added_to_openclaw: areaData.added_to_openclaw });
       setFinancialForm({ total_claims_submitted: areaData.total_claims_submitted, total_claims_approved: areaData.total_claims_approved, total_amount_pending: areaData.total_amount_pending });
@@ -168,6 +168,20 @@ const CorporateAreaDetail: React.FC = () => {
               </Field>
               <Field label="Hospitals"><input value={overviewForm.hospitals || ''} onChange={e => setOverviewForm({ ...overviewForm, hospitals: e.target.value })} className={inp} /></Field>
               <Field label="Hospital Count"><input type="number" value={overviewForm.hospital_count || 0} onChange={e => setOverviewForm({ ...overviewForm, hospital_count: parseInt(e.target.value) || 0 })} className={inp} /></Field>
+              <Field label="Bed Count"><input type="number" value={overviewForm.bed_count || 0} onChange={e => setOverviewForm({ ...overviewForm, bed_count: parseInt(e.target.value) || 0 })} className={inp} /></Field>
+              <Field label="Specialties Available"><input value={overviewForm.specialties_available || ''} onChange={e => setOverviewForm({ ...overviewForm, specialties_available: e.target.value })} className={inp} placeholder="e.g. Ortho, General Surgery, Medicine" /></Field>
+              <div className="md:col-span-2"><Field label="Dispensaries"><textarea value={overviewForm.dispensaries || ''} onChange={e => setOverviewForm({ ...overviewForm, dispensaries: e.target.value })} className={inp} rows={2} placeholder="List of dispensaries in this area" /></Field></div>
+              <div className="md:col-span-2"><Field label="Empanelled Super-Specialty Hospitals"><textarea value={overviewForm.empanelled_hospitals || ''} onChange={e => setOverviewForm({ ...overviewForm, empanelled_hospitals: e.target.value })} className={inp} rows={2} placeholder="Hospitals this area refers patients to" /></Field></div>
+              <div className="md:col-span-2"><Field label="Tertiary Care Referrals"><textarea value={overviewForm.tertiary_referrals || ''} onChange={e => setOverviewForm({ ...overviewForm, tertiary_referrals: e.target.value })} className={inp} rows={2} placeholder="Where patients go for specialized treatment" /></Field></div>
+              <div className="md:col-span-2"><Field label="Key Mines / Collieries / Facilities"><textarea value={overviewForm.key_mines || ''} onChange={e => setOverviewForm({ ...overviewForm, key_mines: e.target.value })} className={inp} rows={2} placeholder="Mining operations, factories, units served by this area" /></Field></div>
+              <div className="md:col-span-2"><Field label="Pharmacy / AMRIT Info"><input value={overviewForm.pharmacy_info || ''} onChange={e => setOverviewForm({ ...overviewForm, pharmacy_info: e.target.value })} className={inp} placeholder="AMRIT Pharmacy, Jan Aushadhi, etc." /></Field></div>
+              <div className="md:col-span-2"><Field label="CSR Programs"><input value={overviewForm.csr_programs || ''} onChange={e => setOverviewForm({ ...overviewForm, csr_programs: e.target.value })} className={inp} placeholder="e.g. SUSHRUTA — sickle cell screening" /></Field></div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <Field label="Employee Count"><input type="number" value={overviewForm.employee_count || 0} onChange={e => setOverviewForm({ ...overviewForm, employee_count: parseInt(e.target.value) || 0 })} className={inp} /></Field>
+                <Field label="Dependent Count"><input type="number" value={overviewForm.dependent_count || 0} onChange={e => setOverviewForm({ ...overviewForm, dependent_count: parseInt(e.target.value) || 0 })} className={inp} /></Field>
+                <div className="flex items-center gap-2 pt-5"><input type="checkbox" checked={overviewForm.ambulance_available || false} onChange={e => setOverviewForm({ ...overviewForm, ambulance_available: e.target.checked })} /><span className="text-sm text-gray-700">🚑 Ambulance Available</span></div>
+                <div className="flex items-center gap-2 pt-5"><input type="checkbox" checked={overviewForm.emergency_services || false} onChange={e => setOverviewForm({ ...overviewForm, emergency_services: e.target.checked })} /><span className="text-sm text-gray-700">🆘 Emergency Services</span></div>
+              </div>
               <div className="md:col-span-2"><Field label="Notes"><textarea value={overviewForm.notes || ''} onChange={e => setOverviewForm({ ...overviewForm, notes: e.target.value })} className={inp} rows={3} /></Field></div>
               <div className="md:col-span-2 flex gap-2">
                 <button onClick={async () => { if (await saveSection(overviewForm)) setEditOverview(false); }} className={btn}><Save className="w-4 h-4 inline mr-1" />Save</button>
@@ -180,8 +194,20 @@ const CorporateAreaDetail: React.FC = () => {
               <div><span className="text-gray-500">State:</span> <span className="text-gray-900">{area.state || '—'}</span></div>
               <div><span className="text-gray-500">Status:</span> <span className={`px-2 py-0.5 rounded-full text-xs font-medium capitalize ${STATUS_COLORS[area.status] || ''}`}>{area.status}</span></div>
               <div><span className="text-gray-500">Hospitals:</span> <span className="text-gray-900">{area.hospitals || '—'}</span></div>
-              <div><span className="text-gray-500">Hospital Count:</span> <span className="text-gray-900">{area.hospital_count || 0}</span></div>
-              {area.notes && <div className="md:col-span-2"><span className="text-gray-500">Notes:</span> <span className="text-gray-900">{area.notes}</span></div>}
+              <div><span className="text-gray-500">Hospital Count:</span> <span className="text-gray-900">{area.hospital_count || 0}</span> {area.bed_count > 0 && <span className="text-gray-500 ml-2">| Beds: {area.bed_count}</span>}</div>
+              {area.dispensaries && <div className="md:col-span-2"><span className="text-gray-500">🏥 Dispensaries:</span> <span className="text-gray-900">{area.dispensaries}</span></div>}
+              {area.empanelled_hospitals && <div className="md:col-span-2"><span className="text-gray-500">⭐ Empanelled Super-Specialty:</span> <span className="text-gray-900">{area.empanelled_hospitals}</span></div>}
+              {area.tertiary_referrals && <div className="md:col-span-2"><span className="text-gray-500">🔬 Tertiary Referrals:</span> <span className="text-gray-900">{area.tertiary_referrals}</span></div>}
+              {area.key_mines && <div className="md:col-span-2"><span className="text-gray-500">⛏️ Key Mines/Facilities:</span> <span className="text-gray-900">{area.key_mines}</span></div>}
+              {area.specialties_available && <div className="md:col-span-2"><span className="text-gray-500">🩺 Specialties:</span> <span className="text-gray-900">{area.specialties_available}</span></div>}
+              {area.pharmacy_info && <div className="md:col-span-2"><span className="text-gray-500">💊 Pharmacy:</span> <span className="text-gray-900">{area.pharmacy_info}</span></div>}
+              {area.csr_programs && <div className="md:col-span-2"><span className="text-gray-500">🤝 CSR Programs:</span> <span className="text-gray-900">{area.csr_programs}</span></div>}
+              <div className="flex flex-wrap gap-3">
+                {(area.employee_count > 0 || area.dependent_count > 0) && <div><span className="text-gray-500">👥 Employees:</span> <span className="text-gray-900 font-medium">{area.employee_count || 0}</span> {area.dependent_count > 0 && <span className="text-gray-500">| Dependents: {area.dependent_count}</span>}</div>}
+                {area.ambulance_available && <span className="text-xs px-2 py-1 bg-red-50 text-red-700 rounded-full border border-red-200">🚑 Ambulance</span>}
+                {area.emergency_services && <span className="text-xs px-2 py-1 bg-orange-50 text-orange-700 rounded-full border border-orange-200">🆘 Emergency</span>}
+              </div>
+              {area.notes && <div className="md:col-span-2"><span className="text-gray-500">📝 Notes:</span> <span className="text-gray-900">{area.notes}</span></div>}
             </div>
           )}
         </Section>
