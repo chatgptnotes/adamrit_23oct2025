@@ -366,6 +366,25 @@ export default function MarketingDashboard() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Sales Book Section */}
+      <div className="bg-white border border-gray-200 rounded-xl p-4 mt-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">📖 Hope Hospital Sales Book</h2>
+          <a href="/hope-sales-book.pdf" target="_blank" rel="noopener noreferrer" className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 flex items-center gap-1">
+            📥 Download Full PDF (38 pages)
+          </a>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+          {[1,2,3,4,5].map(i => (
+            <a key={i} href="/hope-sales-book.pdf" target="_blank" rel="noopener noreferrer" className="group">
+              <img src={`/salesbook-page-${i}.png`} alt={`Sales Book Page ${i}`} className="w-full rounded-lg border border-gray-200 shadow-sm group-hover:shadow-md group-hover:ring-2 ring-blue-400 transition" />
+              <p className="text-xs text-gray-500 text-center mt-1">Page {i}</p>
+            </a>
+          ))}
+        </div>
+        <p className="text-xs text-gray-400 mt-3 text-center">Click any page or download button to view the complete 38-page sales book</p>
+      </div>
     </div>
   );
 }
