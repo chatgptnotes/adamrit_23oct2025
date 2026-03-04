@@ -113,7 +113,6 @@ const CorporateBill = () => {
       <div className="print:hidden mb-4 flex gap-3 items-center bg-gray-800 text-white p-3 rounded-lg flex-wrap">
         <button onClick={() => window.print()} className="px-4 py-2 bg-green-500 rounded font-bold hover:bg-green-600">Print</button>
         <button onClick={handleSave} className="px-4 py-2 bg-blue-500 rounded font-bold hover:bg-blue-600">Save to Database</button>
-        <button onClick={addRow} className="px-4 py-2 bg-yellow-500 text-black rounded font-bold hover:bg-yellow-600">+ Add Row</button>
         <button onClick={() => window.history.back()} className="px-4 py-2 bg-red-500 rounded font-bold hover:bg-red-600">Back</button>
         <span className="text-sm text-gray-300 ml-2">All fields are editable</span>
       </div>
@@ -196,9 +195,10 @@ const CorporateBill = () => {
                       className="w-full text-center text-sm outline-none border-none bg-transparent" placeholder="0" />
                   </td>
                   <td className="border border-gray-400 px-2 py-2 text-center font-bold">{row.amount || ''}</td>
-                  <td className="border border-gray-400 px-1 py-1 text-center print:hidden">
+                  <td className="border border-gray-400 px-1 py-1 text-center print:hidden whitespace-nowrap">
+                    <button onClick={addRow} className="text-green-600 hover:text-green-800 font-bold text-sm mr-1" title="Add Row">+</button>
                     {rows.length > 1 && (
-                      <button onClick={() => removeRow(index)} className="text-red-500 hover:text-red-700 font-bold text-xs">X</button>
+                      <button onClick={() => removeRow(index)} className="text-red-500 hover:text-red-700 font-bold text-sm" title="Remove Row">-</button>
                     )}
                   </td>
                 </tr>
@@ -211,10 +211,7 @@ const CorporateBill = () => {
             </tbody>
           </table>
 
-          {/* Add Row button inline */}
-          <div className="print:hidden mt-2">
-            <button onClick={addRow} className="text-sm text-blue-600 hover:text-blue-800 font-semibold">+ Add Row</button>
-          </div>
+
 
           {/* Tax Info */}
           <div className="mt-6 text-sm space-y-1">
