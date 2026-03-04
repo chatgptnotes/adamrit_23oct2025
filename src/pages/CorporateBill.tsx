@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { supabase } from '@/utils/supabase-client';
+import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
 
 interface BillItem {
