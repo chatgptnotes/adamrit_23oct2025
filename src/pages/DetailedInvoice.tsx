@@ -1207,7 +1207,8 @@ const DetailedInvoice = () => {
         primaryConsultant: visit.appointment_with || 'N/A',
         totalAmount: totalAmount,
         amountInWords: convertNumberToWords(totalAmount),
-        tariff: patient?.corporate || 'Private'
+        tariff: patient?.corporate || 'Private',
+        corporateName: patient?.corporate || 'N/A'
       };
 
       console.log('📋 Final processed patient data:', processedData);
@@ -1250,7 +1251,8 @@ const DetailedInvoice = () => {
       item: lab.lab?.name || 'Lab Test',
       dateTime: lab.ordered_date ? format(new Date(lab.ordered_date), 'dd/MM/yyyy HH:mm:ss') : '',
       qty: 1,
-      rate: lab.cost || lab.unit_rate || 100  // Use saved rate from visit_labs
+      cghsRate: lab.lab?.CGHS_code || '',
+      rate: lab.cost || lab.unit_rate || 100
     })) || [],
     radiology: visitData?.radiologyOrders?.map((radio, index) => ({
       item: radio.radiology?.name || 'Radiology Test',
