@@ -11,6 +11,7 @@ const DetailedInvoice = () => {
   const { visitId } = useParams();
   const navigate = useNavigate();
   const { hospitalConfig } = useAuth();
+  const hospitalName = hospitalConfig?.fullName || 'Hope Hospital Nagpur';
   const [patientData, setPatientData] = useState(null);
   const printRef = useRef(null);
 
@@ -423,7 +424,7 @@ const DetailedInvoice = () => {
           </div>
 
           <div class="header">
-            <h1>Hope Hospital Nagpur</h1>
+            <h1>${hospitalName}</h1>
             <h2>${sectionTitles[section]} REPORT</h2>
           </div>
           <table class="patient-table">
@@ -508,7 +509,7 @@ const DetailedInvoice = () => {
                   patient_name: patientName,
                   registration_no: regNo,
                   corporate_name: corporate,
-                  hospital_name: 'Hope Hospital Nagpur',
+                  hospital_name: hospitalName,
                   items: items,
                   total_amount: parseFloat(total) || 0,
                   cghs_total: cghsTotal,
@@ -644,7 +645,7 @@ const DetailedInvoice = () => {
           </div>
 
           <div class="header">
-            <h1>Hope Hospital Nagpur</h1>
+            <h1>${hospitalName}</h1>
             <h2>${sectionTitles[section]} REPORT</h2>
           </div>
           <table class="patient-table">
@@ -729,7 +730,7 @@ const DetailedInvoice = () => {
                   patient_name: patientName,
                   registration_no: regNo,
                   corporate_name: corporate,
-                  hospital_name: 'Hope Hospital Nagpur',
+                  hospital_name: hospitalName,
                   items: items,
                   total_amount: parseFloat(total) || 0,
                   cghs_total: cghsTotal,
@@ -850,7 +851,7 @@ const DetailedInvoice = () => {
           </div>
 
           <div class="header">
-            <h1>Hope Hospital Nagpur</h1>
+            <h1>${hospitalName}</h1>
             <h2>${sectionTitles[section]} SUMMARY</h2>
           </div>
           <table class="patient-table">
@@ -921,7 +922,7 @@ const DetailedInvoice = () => {
                   patient_name: patientName,
                   registration_no: regNo,
                   corporate_name: corporate,
-                  hospital_name: 'Hope Hospital Nagpur',
+                  hospital_name: hospitalName,
                   items: items,
                   total_amount: parseFloat(total) || 0,
                   cghs_total: cghsTotal,

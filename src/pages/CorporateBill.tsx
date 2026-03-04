@@ -1,10 +1,13 @@
 // Yojna Bill v2 - saves to yojna_bills table
 import { useState, useEffect } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
 import { useParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
 
 const CorporateBill = () => {
+  const { hospitalConfig } = useAuth();
+  const hospitalName = hospitalConfig?.fullName || 'Hope Hospital Nagpur';
   const { visitId } = useParams<{ visitId: string }>();
   const [loading, setLoading] = useState(true);
   const [patientInfo, setPatientInfo] = useState<any>({});
@@ -93,7 +96,7 @@ const CorporateBill = () => {
         patient_name: patientInfo.patientName,
         registration_no: patientInfo.registrationNo,
         corporate_name: patientInfo.category,
-        hospital_name: 'Hope Hospital Nagpur',
+        hospital_name: hospitalName,
         invoice_no: patientInfo.invoiceNo,
         diagnosis: diagnosis,
         primary_consultant: patientInfo.primaryConsultant,
@@ -244,7 +247,7 @@ const CorporateBill = () => {
           </div>
 
           <div className="mt-16 text-right text-sm">
-            <p className="font-bold">Hope Hospital</p>
+            <p className="font-bold">{hospitalName}</p>
             <p className="font-semibold">Authorized Signatory</p>
           </div>
         </div>
