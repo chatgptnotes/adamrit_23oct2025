@@ -418,7 +418,7 @@ const DetailedInvoice = () => {
           </div>
 
           <div class="header">
-            <h1>${hospitalConfig?.fullName || 'HOSPITAL'}</h1>
+            <h1>Hope Hospital Nagpur</h1>
             <h2>${sectionTitles[section]} REPORT</h2>
           </div>
           <table class="patient-table">
@@ -431,7 +431,7 @@ const DetailedInvoice = () => {
               <td><strong>Contact:</strong> ${patientData?.contactNo || 'N/A'}</td>
             </tr>
             <tr>
-              <td><strong>Address:</strong> ${patientData?.address || 'N/A'}</td>
+              <td><strong>Corporate:</strong> ${patientData?.corporateName || patientData?.address || 'N/A'}</td>
               <td><strong>Date of Admission:</strong> ${patientData?.dateOfAdmission || 'N/A'}</td>
             </tr>
           </table>
@@ -441,6 +441,7 @@ const DetailedInvoice = () => {
                 <th class="text-center" style="width: 50px;">SR.NO.</th>
                 <th>ITEM</th>
                 <th class="text-center" style="width: 120px;">DATE & TIME</th>
+                <th class="text-center" style="width: 100px;">CGHS NABH RATE</th>
                 <th class="text-center" style="width: 80px;">QTY</th>
                 <th class="text-right" style="width: 100px;">RATE</th>
               </tr>
@@ -451,12 +452,13 @@ const DetailedInvoice = () => {
                   <td class="text-center">${index + 1}</td>
                   <td contenteditable="true">${item.item}</td>
                   <td class="text-center" contenteditable="true">${item.dateTime}</td>
+                  <td class="text-center" contenteditable="true">${item.cghsRate || ''}</td>
                   <td class="text-center" contenteditable="true">${item.qty}</td>
                   <td class="text-right" contenteditable="true">${item.rate}</td>
                 </tr>
               `).join('')}
               <tr class="total-row">
-                <td colspan="4" class="text-right">TOTAL:</td>
+                <td colspan="5" class="text-right">TOTAL:</td>
                 <td class="text-right">${total}</td>
               </tr>
             </tbody>
@@ -538,7 +540,7 @@ const DetailedInvoice = () => {
           </div>
 
           <div class="header">
-            <h1>${hospitalConfig?.fullName || 'HOSPITAL'}</h1>
+            <h1>Hope Hospital Nagpur</h1>
             <h2>${sectionTitles[section]} REPORT</h2>
           </div>
           <table class="patient-table">
@@ -551,7 +553,7 @@ const DetailedInvoice = () => {
               <td><strong>Contact:</strong> ${patientData?.contactNo || 'N/A'}</td>
             </tr>
             <tr>
-              <td><strong>Address:</strong> ${patientData?.address || 'N/A'}</td>
+              <td><strong>Corporate:</strong> ${patientData?.corporateName || patientData?.address || 'N/A'}</td>
               <td><strong>Date of Admission:</strong> ${patientData?.dateOfAdmission || 'N/A'}</td>
             </tr>
           </table>
@@ -561,6 +563,7 @@ const DetailedInvoice = () => {
                 <th class="text-center" style="width: 50px;">SR.NO.</th>
                 <th>ITEM</th>
                 <th class="text-center" style="width: 120px;">DATE & TIME</th>
+                <th class="text-center" style="width: 100px;">CGHS NABH RATE</th>
                 <th class="text-center" style="width: 80px;">QTY</th>
                 <th class="text-right" style="width: 100px;">RATE</th>
               </tr>
@@ -571,12 +574,13 @@ const DetailedInvoice = () => {
                   <td class="text-center">${index + 1}</td>
                   <td contenteditable="true">${item.item}</td>
                   <td class="text-center" contenteditable="true">${item.dateTime}</td>
+                  <td class="text-center" contenteditable="true">${item.cghsRate || ''}</td>
                   <td class="text-center" contenteditable="true">${item.qty}</td>
                   <td class="text-right" contenteditable="true">${item.rate}</td>
                 </tr>
               `).join('')}
               <tr class="total-row">
-                <td colspan="4" class="text-right">TOTAL:</td>
+                <td colspan="5" class="text-right">TOTAL:</td>
                 <td class="text-right">${total}</td>
               </tr>
             </tbody>
@@ -643,7 +647,7 @@ const DetailedInvoice = () => {
           </div>
 
           <div class="header">
-            <h1>${hospitalConfig?.fullName || 'HOSPITAL'}</h1>
+            <h1>Hope Hospital Nagpur</h1>
             <h2>${sectionTitles[section]} SUMMARY</h2>
           </div>
           <table class="patient-table">
@@ -656,7 +660,7 @@ const DetailedInvoice = () => {
               <td><strong>Contact:</strong> ${patientData?.contactNo || 'N/A'}</td>
             </tr>
             <tr>
-              <td><strong>Address:</strong> ${patientData?.address || 'N/A'}</td>
+              <td><strong>Corporate:</strong> ${patientData?.corporateName || patientData?.address || 'N/A'}</td>
               <td><strong>Date of Admission:</strong> ${patientData?.dateOfAdmission || 'N/A'}</td>
             </tr>
           </table>
