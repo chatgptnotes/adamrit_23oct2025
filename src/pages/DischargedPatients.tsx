@@ -22,7 +22,7 @@ import { Loader2, Search, Users, Calendar, Clock, UserCheck, Shield, AlertTriang
 import * as XLSX from 'xlsx';
 import * as pdfjsLib from 'pdfjs-dist';
 // @ts-ignore
-import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.js?url';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
 // Set PDF.js worker from local package
