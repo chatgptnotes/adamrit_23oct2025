@@ -59,6 +59,36 @@ const CorporateBill = () => {
         primaryConsultant: visit.appointment_with || '',
       });
       setDiagnosis(visit.diagnosis || '');
+
+      // Load previously saved Yojna Bill data if exists
+      const { data: savedBill } = await supabase
+        .from('yojna_bills')
+        .select('*')
+        .eq('visit_id', actualVisitId)
+        .order('updated_at', { ascending: false })
+        .limit(1);
+
+      if (savedBill && savedBill.length > 0) {
+        const bill = savedBill[0];
+        if (bill.items && Array.isArray(bill.items) && bill.items.length > 0) {
+          setRows(bill.items.map((item: any) => ({
+            item: item.item || '',
+            procedure: item.procedure || '',
+            rate: item.rate?.toString() || '',
+            qty: item.qty?.toString() || '',
+            amount: item.amount?.toString() || '',
+          })));
+        }
+        if (bill.diagnosis) setDiagnosis(bill.diagnosis);
+        // Update patient info with saved values if they exist
+        if (bill.invoice_no || bill.date_of_invoice) {
+          setPatientInfo(prev => ({
+            ...prev,
+            ...(bill.invoice_no ? { invoiceNo: bill.invoice_no } : {}),
+            ...(bill.date_of_invoice ? { dateOfInvoice: bill.date_of_invoice } : {}),
+          }));
+        }
+      }
     } catch (error) {
       console.error('Error:', error);
     } finally {
