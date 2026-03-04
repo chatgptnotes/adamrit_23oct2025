@@ -32,6 +32,16 @@ const CorporateBill = () => {
       const patient = visit.patients;
       const actualVisitId = visit.visit_id || visitId;
 
+      // Fetch bill number from bills table
+      const { data: billData } = await supabase
+        .from('bills')
+        .select('bill_no')
+        .eq('visit_id', actualVisitId)
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      const billNo = billData?.[0]?.bill_no || `BILL-${actualVisitId}`;
+
       setPatientInfo({
         patientName: patient?.name || '',
         ageSex: `${patient?.age || ''}Y / ${patient?.gender || ''}`,
@@ -39,7 +49,7 @@ const CorporateBill = () => {
         dateOfRegistration: patient?.created_at ? format(new Date(patient.created_at), 'dd-MM-yyyy') : '',
         dateOfDischarge: visit.discharge_date ? format(new Date(visit.discharge_date), 'dd-MM-yyyy') : '',
         dateOfInvoice: format(new Date(), 'dd-MM-yyyy'),
-        invoiceNo: `BILL-${actualVisitId}`,
+        invoiceNo: billNo,
         registrationNo: actualVisitId || '',
         category: patient?.corporate || 'Private',
         primaryConsultant: visit.appointment_with || '',
