@@ -73,19 +73,21 @@ export default function MarketingDashboard() {
     const recognition = new SpeechRecognition();
     recognition.continuous = true;
     recognition.interimResults = true;
-    recognition.lang = 'en-IN';
+    recognition.lang = 'hi-IN';
+
+    let finalTranscript = '';
 
     recognition.onresult = (event: any) => {
-      let transcript = '';
+      let interimTranscript = '';
       for (let i = event.resultIndex; i < event.results.length; i++) {
-        transcript += event.results[i][0].transcript;
+        const text = event.results[i][0].transcript;
+        if (event.results[i].isFinal) {
+          finalTranscript += text + ' ';
+        } else {
+          interimTranscript += text;
+        }
       }
-      setChatInput(prev => {
-        // Replace interim results, keep final
-        const lastFinal = event.results[event.results.length - 1].isFinal;
-        if (lastFinal) return prev + transcript + ' ';
-        return prev.split(' ').slice(0, -1).join(' ') + ' ' + transcript;
-      });
+      setChatInput(finalTranscript + interimTranscript);
     };
 
     recognition.onerror = (event: any) => {
