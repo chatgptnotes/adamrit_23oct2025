@@ -1251,7 +1251,7 @@ const DetailedInvoice = () => {
       item: lab.lab?.name || 'Lab Test',
       dateTime: lab.ordered_date ? format(new Date(lab.ordered_date), 'dd/MM/yyyy HH:mm:ss') : '',
       qty: 1,
-      cghsRate: lab.lab?.CGHS_code || '',
+      cghsRate: lab.lab?.NABH_rates_in_rupee || lab.lab?.CGHS_code || '',
       rate: lab.cost || lab.unit_rate || 100
     })) || [],
     radiology: visitData?.radiologyOrders?.map((radio, index) => ({
