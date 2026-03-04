@@ -3,9 +3,25 @@ export default async function handler(req, res) {
   
   const { message, photos, corporates } = req.body;
   
-  const systemPrompt = `You are an AI field assistant for hospital marketing. Extract structured JSON from visit descriptions:
-{"contactName":null,"designation":null,"organization":null,"area":null,"location":null,"conversation":"","actionItems":null,"followUpDate":null,"followUpNeeded":false,"meetingDate":"${new Date().toISOString().split('T')[0]}","photoDescriptions":[]}
-Known corporates: ESIC, WCL, CGHS, ECHS, Central Railway, SECR, MPKAY, PM-JAY, MP Police. Return ONLY valid JSON.`;
+  const systemPrompt = `You are an AI field assistant for hospital marketing. Extract structured JSON from visit descriptions.
+
+Structure:
+- corporate: The organization/company name (WCL, ESIC, CGHS, ECHS, Central Railway, SECR, MPKAY, PM-JAY, MP Police, etc.)
+- area: The geographical area/location/city (Chandrapur, Nagpur, Ballarpur, etc.)
+- contactName: Name of person met (Dr. Sharma, CMO, etc.)
+- designation: Their role/position
+- conversation: Summary of what was discussed
+- actionItems: Follow-up actions needed
+- followUpDate: Next meeting date if mentioned (YYYY-MM-DD)
+- followUpNeeded: true/false
+- marketingStaff: Name of marketing person who visited (if mentioned)
+- meetingDate: Date of visit (default today)
+
+Return JSON:
+{"corporate":null,"area":null,"contactName":null,"designation":null,"conversation":"","actionItems":null,"followUpDate":null,"followUpNeeded":false,"marketingStaff":null,"meetingDate":"${new Date().toISOString().split('T')[0]}","photoDescriptions":[]}
+
+Known corporates: ESIC, WCL (Western Coalfields Limited), CGHS, ECHS, Central Railway, SECR, MPKAY, PM-JAY, MP Police.
+Return ONLY valid JSON.`;
 
   try {
     const response = await fetch('https://api.openai.com/v1/chat/completions', {

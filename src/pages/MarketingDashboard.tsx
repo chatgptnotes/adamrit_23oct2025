@@ -6,8 +6,10 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { Camera, Send, Save, Edit2, Users, TrendingUp, Building2, Percent, IndianRupee, ClipboardList, CalendarCheck } from 'lucide-react';
+import { Camera, Send, Save, Edit2, Users, TrendingUp, Building2, Percent, IndianRupee, ClipboardList, CalendarCheck, Mic, MicOff, ImagePlus } from 'lucide-react';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/contexts/AuthContext';
 
 const db = supabase as any;
 
@@ -41,6 +43,7 @@ interface ChatMessage {
 
 export default function MarketingDashboard() {
   const { toast } = useToast();
+  const { user } = useAuth();
   const [today, setToday] = useState<DayStats>(emptyStats);
   const [monthRows, setMonthRows] = useState<any[]>([]);
   const [yearRows, setYearRows] = useState<any[]>([]);
@@ -54,8 +57,65 @@ export default function MarketingDashboard() {
   const [chatInput, setChatInput] = useState('');
   const [chatPhotos, setChatPhotos] = useState<File[]>([]);
   const [chatLoading, setChatLoading] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const recognitionRef = useRef<any>(null);
+
+  // Speech recognition setup
+  const startRecording = () => {
+    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+      toast({ title: 'Speech recognition not supported', description: 'Please use Chrome or Edge browser', variant: 'destructive' });
+      return;
+    }
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    const recognition = new SpeechRecognition();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = 'en-IN';
+
+    recognition.onresult = (event: any) => {
+      let transcript = '';
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        transcript += event.results[i][0].transcript;
+      }
+      setChatInput(prev => {
+        // Replace interim results, keep final
+        const lastFinal = event.results[event.results.length - 1].isFinal;
+        if (lastFinal) return prev + transcript + ' ';
+        return prev.split(' ').slice(0, -1).join(' ') + ' ' + transcript;
+      });
+    };
+
+    recognition.onerror = (event: any) => {
+      console.error('Speech error:', event.error);
+      setIsRecording(false);
+    };
+
+    recognition.onend = () => {
+      setIsRecording(false);
+    };
+
+    recognitionRef.current = recognition;
+    recognition.start();
+    setIsRecording(true);
+  };
+
+  const stopRecording = () => {
+    if (recognitionRef.current) {
+      recognitionRef.current.stop();
+    }
+    setIsRecording(false);
+  };
+
+  const toggleRecording = () => {
+    if (isRecording) {
+      stopRecording();
+    } else {
+      startRecording();
+    }
+  };
 
   const todayStr = new Date().toISOString().split('T')[0];
   const now = new Date();
@@ -126,14 +186,69 @@ export default function MarketingDashboard() {
     setChatPhotos([]);
 
     try {
-      const res = await fetch('/api/ai-field-assistant', {
+      const todayDate = new Date().toISOString().split('T')[0];
+      const prompt = `Extract visit info as JSON. Summarize conversation professionally (2-3 sentences max).
+
+Input: "${chatInput}"${photoUrls.length ? ` [${photoUrls.length} photos]` : ''}
+
+Known corporates: WCL, ESIC, CGHS, ECHS, Central Railway, SECR, MPKAY, PM-JAY, MP Police
+
+Return JSON only:
+{
+  "corporate": "organization name or null",
+  "area": "city/area name or null", 
+  "contactName": "person name or null",
+  "designation": "role or null",
+  "conversation": "professional summary of discussion",
+  "actionItems": "action points or null",
+  "followUpDate": "YYYY-MM-DD or null",
+  "followUpNeeded": false,
+  "marketingStaff": "staff name or null",
+  "meetingDate": "${todayDate}"
+}`;
+
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${import.meta.env.VITE_GEMINI_API_KEY}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: chatInput, photos: photoUrls })
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: {
+            temperature: 0.2,
+            responseMimeType: 'application/json'
+          }
+        })
       });
-      const extracted = await res.json();
+      
+      const data = await res.json();
+      console.log('Gemini response:', data);
+      
+      if (data.error) {
+        throw new Error(data.error.message);
+      }
+      
+      let text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      console.log('Raw text:', text);
+      
+      // Clean up JSON if needed
+      text = text.trim();
+      if (text.startsWith('```json')) text = text.slice(7);
+      if (text.startsWith('```')) text = text.slice(3);
+      if (text.endsWith('```')) text = text.slice(0, -3);
+      text = text.trim();
+      
+      let extracted = JSON.parse(text);
+      // Handle if Gemini returns an array instead of object
+      if (Array.isArray(extracted)) {
+        extracted = extracted[0];
+      }
+      // Auto-set marketing staff from logged-in user
+      if (!extracted.marketingStaff && user?.username) {
+        extracted.marketingStaff = user.username;
+      }
+      console.log('Extracted:', extracted);
       setMessages(prev => [...prev, { role: 'assistant', text: '', extracted }]);
-    } catch {
+    } catch (err) {
+      console.error('AI Error:', err);
       setMessages(prev => [...prev, { role: 'assistant', text: 'Failed to process. Try again.' }]);
     }
     setChatLoading(false);
@@ -144,39 +259,110 @@ export default function MarketingDashboard() {
     if (!msg.extracted) return;
     const e = msg.extracted;
 
-    // Upsert contact
-    const { data: existing } = await db.from('corporate_area_contacts')
-      .select('id')
-      .ilike('name', e.contactName || '')
-      .maybeSingle();
+    try {
+      // Step 1: Find or create Corporate (e.g., WCL)
+      let corporateId = null;
+      if (e.corporate) {
+        // Try to find existing corporate with fuzzy match
+        const { data: existingCorps } = await db.from('corporate_master')
+          .select('id, name')
+          .or(`name.ilike.%${e.corporate}%,name.ilike.${e.corporate}%`);
+        
+        if (existingCorps && existingCorps.length > 0) {
+          // Use the first match
+          corporateId = existingCorps[0].id;
+          console.log('Found existing corporate:', existingCorps[0].name);
+        } else {
+          const { data: newCorp } = await db.from('corporate_master')
+            .insert({ name: e.corporate, category: 'government' })
+            .select('id')
+            .single();
+          corporateId = newCorp?.id;
+          console.log('Created new corporate:', e.corporate);
+        }
+      }
 
-    let contactId = existing?.id;
-    if (!contactId && e.contactName) {
-      const { data: newC } = await db.from('corporate_area_contacts').insert({
-        name: e.contactName,
-        designation: e.designation,
-        organization: e.organization,
-        area: e.area,
-        location: e.location,
-      }).select('id').single();
-      contactId = newC?.id;
-    }
+      // Step 2: Find or create Area under Corporate (e.g., Chandrapur under WCL)
+      let areaId = null;
+      if (e.area && corporateId) {
+        // Fuzzy match for area name
+        const { data: existingAreas } = await db.from('corporate_areas')
+          .select('id, area_name')
+          .eq('corporate_id', corporateId)
+          .or(`area_name.ilike.%${e.area}%,area_name.ilike.${e.area}%`);
+        
+        if (existingAreas && existingAreas.length > 0) {
+          areaId = existingAreas[0].id;
+          console.log('Found existing area:', existingAreas[0].area_name);
+        } else {
+          const { data: newArea } = await db.from('corporate_areas')
+            .insert({ 
+              corporate_id: corporateId, 
+              area_name: e.area,
+              status: 'active'
+            })
+            .select('id')
+            .single();
+          areaId = newArea?.id;
+          console.log('Created new area:', e.area);
+        }
+      }
 
-    // Create meeting
-    if (contactId) {
-      await db.from('corporate_area_meetings').insert({
-        contact_id: contactId,
-        meeting_date: e.meetingDate || todayStr,
-        conversation: e.conversation,
-        action_items: e.actionItems,
-        follow_up_date: e.followUpDate,
-        follow_up_needed: e.followUpNeeded,
-        photos: msg.photos || [],
+      // Step 3: Find or create Contact under Area (e.g., Dr. Sharma)
+      let contactId = null;
+      if (e.contactName && areaId) {
+        const { data: existingContact } = await db.from('corporate_area_contacts')
+          .select('id')
+          .eq('area_id', areaId)
+          .ilike('name', e.contactName)
+          .maybeSingle();
+        
+        if (existingContact) {
+          contactId = existingContact.id;
+        } else {
+          const { data: newContact } = await db.from('corporate_area_contacts')
+            .insert({
+              area_id: areaId,
+              name: e.contactName,
+              designation: e.designation || null,
+              photos: msg.photos || [],
+            })
+            .select('id')
+            .single();
+          contactId = newContact?.id;
+        }
+      }
+
+      // Step 4: Create Meeting record under Area
+      if (areaId) {
+        const { error: meetingError } = await db.from('corporate_area_meetings').insert({
+          area_id: areaId,
+          meeting_date: e.meetingDate || todayStr,
+          person_met: e.contactName || null,
+          location: e.area || null,
+          conversation: e.conversation || null,
+          action_requested: e.actionItems || null,
+          follow_up_date: e.followUpDate || null,
+          follow_up_needed: e.followUpNeeded || false,
+          photos: msg.photos || [],
+          marketing_staff: e.marketingStaff || null,
+        });
+        
+        if (meetingError) {
+          console.error('Meeting save error:', meetingError);
+          throw meetingError;
+        }
+      }
+
+      setMessages(prev => prev.map((m, i) => i === idx ? { ...m, saved: true } : m));
+      toast({ 
+        title: 'Saved to Corporate Master!',
+        description: `${e.corporate || 'Unknown'} → ${e.area || 'Unknown'} → ${e.contactName || 'Meeting recorded'}`
       });
+    } catch (error) {
+      console.error('Save error:', error);
+      toast({ title: 'Failed to save', description: 'Please try again', variant: 'destructive' });
     }
-
-    setMessages(prev => prev.map((m, i) => i === idx ? { ...m, saved: true } : m));
-    toast({ title: 'Saved to Corporate Master!' });
   };
 
   const StatCard = ({ icon: Icon, label, value, color = 'blue' }: { icon: any; label: string; value: string | number; color?: string }) => (
@@ -261,14 +447,18 @@ export default function MarketingDashboard() {
                 {msg.extracted && (
                   <div className="mt-2 space-y-2">
                     <div className="bg-blue-50 rounded-lg p-3 text-sm space-y-1">
-                      {msg.extracted.contactName && <p><strong>Contact:</strong> {msg.extracted.contactName}</p>}
-                      {msg.extracted.designation && <p><strong>Designation:</strong> {msg.extracted.designation}</p>}
-                      {msg.extracted.organization && <p><strong>Organization:</strong> {msg.extracted.organization}</p>}
-                      {msg.extracted.area && <p><strong>Area:</strong> {msg.extracted.area}</p>}
-                      {msg.extracted.location && <p><strong>Location:</strong> {msg.extracted.location}</p>}
-                      {msg.extracted.conversation && <p><strong>Notes:</strong> {msg.extracted.conversation}</p>}
-                      {msg.extracted.actionItems && <p><strong>Action Items:</strong> {msg.extracted.actionItems}</p>}
-                      {msg.extracted.followUpDate && <p><strong>Follow-up:</strong> {msg.extracted.followUpDate}</p>}
+                      {/* Hierarchy: Corporate → Area */}
+                      {(msg.extracted.corporate || msg.extracted.area) && (
+                        <p className="text-blue-700 font-medium">
+                          🏢 {msg.extracted.corporate || 'Unknown'} → 📍 {msg.extracted.area || 'Unknown'}
+                        </p>
+                      )}
+                      {msg.extracted.contactName && <p><strong>👤 Contact:</strong> {msg.extracted.contactName}</p>}
+                      {msg.extracted.designation && <p><strong>💼 Designation:</strong> {msg.extracted.designation}</p>}
+                      {msg.extracted.marketingStaff && <p><strong>🧑‍💼 Visited by:</strong> {msg.extracted.marketingStaff}</p>}
+                      {msg.extracted.conversation && <p><strong>💬 Notes:</strong> {msg.extracted.conversation}</p>}
+                      {msg.extracted.actionItems && <p><strong>✅ Action Items:</strong> {msg.extracted.actionItems}</p>}
+                      {msg.extracted.followUpDate && <p><strong>📅 Follow-up:</strong> {msg.extracted.followUpDate}</p>}
                     </div>
                     {!msg.saved ? (
                       <div className="flex gap-2">
@@ -310,10 +500,38 @@ export default function MarketingDashboard() {
             </div>
           )}
           <div className="flex gap-2">
-            <input type="file" accept="image/*" capture="environment" multiple ref={fileInputRef} className="hidden"
+            {/* Hidden file inputs */}
+            <input type="file" accept="image/*" capture="environment" multiple ref={cameraInputRef} className="hidden"
               onChange={e => { if (e.target.files) setChatPhotos(prev => [...prev, ...Array.from(e.target.files!)]); }} />
-            <Button variant="outline" size="icon" onClick={() => fileInputRef.current?.click()}>
-              <Camera className="h-4 w-4" />
+            <input type="file" accept="image/*" multiple ref={fileInputRef} className="hidden"
+              onChange={e => { if (e.target.files) setChatPhotos(prev => [...prev, ...Array.from(e.target.files!)]); }} />
+            
+            {/* Camera/Gallery Dropdown */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="icon">
+                  <Camera className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start">
+                <DropdownMenuItem onClick={() => cameraInputRef.current?.click()}>
+                  <Camera className="h-4 w-4 mr-2" />
+                  Take Photo
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => fileInputRef.current?.click()}>
+                  <ImagePlus className="h-4 w-4 mr-2" />
+                  Choose from Gallery
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            <Button 
+              variant={isRecording ? "destructive" : "outline"} 
+              size="icon" 
+              onClick={toggleRecording}
+              className={isRecording ? "animate-pulse" : ""}
+            >
+              {isRecording ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
             </Button>
             <Input placeholder="Describe your visit..." value={chatInput}
               onChange={e => setChatInput(e.target.value)}
