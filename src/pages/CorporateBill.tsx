@@ -1,3 +1,4 @@
+// Yojna Bill v2 - saves to yojna_bills table
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
