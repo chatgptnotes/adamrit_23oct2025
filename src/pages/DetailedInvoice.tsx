@@ -211,11 +211,7 @@ const DetailedInvoice = () => {
       printWindow.document.close();
 
       // Wait for content to load, then print
-      setTimeout(() => {
-        printWindow.focus();
-        printWindow.print();
-        printWindow.close();
-      }, 500);
+      printWindow.focus();
 
     } catch (error) {
       console.error('❌ Error during print:', error);
@@ -400,10 +396,27 @@ const DetailedInvoice = () => {
             .text-right { text-align: right; }
             .total-row { font-weight: bold; background-color: #f0f0f0; }
             .patient-table { width: 100%; border-collapse: collapse; margin-bottom: 15px; font-size: 12px; }
-            .patient-table td { border: 1px solid #ccc; padding: 5px 8px; width: 50%; }
+            .patient-table td { border: 1px solid #ccc; padding: 5px 8px; width: 50%; cursor: text; }
+            .toolbar { position: fixed; top: 0; left: 0; right: 0; background: #333; color: white; padding: 8px 20px; display: flex; gap: 10px; align-items: center; z-index: 1000; }
+            .toolbar button { padding: 6px 16px; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: bold; }
+            .toolbar .print-btn { background: #4CAF50; color: white; }
+            .toolbar .print-btn:hover { background: #45a049; }
+            .toolbar .close-btn { background: #f44336; color: white; }
+            .toolbar .close-btn:hover { background: #d32f2f; }
+            .toolbar span { font-size: 12px; color: #ccc; margin-left: 10px; }
+            td[contenteditable="true"] { outline: none; background: #fffff0; }
+            td[contenteditable="true"]:focus { background: #fff9c4; border: 1px solid #2196F3; }
+            @media print { .toolbar { display: none !important; } td[contenteditable="true"] { background: white !important; } }
+
           </style>
         </head>
         <body>
+          <div class="toolbar">
+            <button class="print-btn" onclick="window.print()">Print</button>
+            <button class="close-btn" onclick="window.close()">Close</button>
+            <span>Click any cell to edit before printing</span>
+          </div>
+
           <div class="header">
             <h1>${hospitalConfig?.fullName || 'HOSPITAL'}</h1>
             <h2>${sectionTitles[section]} REPORT</h2>
@@ -436,10 +449,10 @@ const DetailedInvoice = () => {
               ${items.map((item, index) => `
                 <tr>
                   <td class="text-center">${index + 1}</td>
-                  <td>${item.item}</td>
-                  <td class="text-center">${item.dateTime}</td>
-                  <td class="text-center">${item.qty}</td>
-                  <td class="text-right">${item.rate}</td>
+                  <td contenteditable="true">${item.item}</td>
+                  <td class="text-center" contenteditable="true">${item.dateTime}</td>
+                  <td class="text-center" contenteditable="true">${item.qty}</td>
+                  <td class="text-right" contenteditable="true">${item.rate}</td>
                 </tr>
               `).join('')}
               <tr class="total-row">
@@ -456,11 +469,7 @@ const DetailedInvoice = () => {
     if (printWindow) {
       printWindow.document.write(printContent);
       printWindow.document.close();
-      setTimeout(() => {
-        printWindow.focus();
-        printWindow.print();
-        printWindow.close();
-      }, 500);
+      printWindow.focus();
     }
   };
 
@@ -507,10 +516,27 @@ const DetailedInvoice = () => {
             .text-right { text-align: right; }
             .total-row { font-weight: bold; background-color: #f0f0f0; }
             .patient-table { width: 100%; border-collapse: collapse; margin-bottom: 15px; font-size: 12px; }
-            .patient-table td { border: 1px solid #ccc; padding: 5px 8px; width: 50%; }
+            .patient-table td { border: 1px solid #ccc; padding: 5px 8px; width: 50%; cursor: text; }
+            .toolbar { position: fixed; top: 0; left: 0; right: 0; background: #333; color: white; padding: 8px 20px; display: flex; gap: 10px; align-items: center; z-index: 1000; }
+            .toolbar button { padding: 6px 16px; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: bold; }
+            .toolbar .print-btn { background: #4CAF50; color: white; }
+            .toolbar .print-btn:hover { background: #45a049; }
+            .toolbar .close-btn { background: #f44336; color: white; }
+            .toolbar .close-btn:hover { background: #d32f2f; }
+            .toolbar span { font-size: 12px; color: #ccc; margin-left: 10px; }
+            td[contenteditable="true"] { outline: none; background: #fffff0; }
+            td[contenteditable="true"]:focus { background: #fff9c4; border: 1px solid #2196F3; }
+            @media print { .toolbar { display: none !important; } td[contenteditable="true"] { background: white !important; } }
+
           </style>
         </head>
         <body>
+          <div class="toolbar">
+            <button class="print-btn" onclick="window.print()">Print</button>
+            <button class="close-btn" onclick="window.close()">Close</button>
+            <span>Click any cell to edit before printing</span>
+          </div>
+
           <div class="header">
             <h1>${hospitalConfig?.fullName || 'HOSPITAL'}</h1>
             <h2>${sectionTitles[section]} REPORT</h2>
@@ -543,10 +569,10 @@ const DetailedInvoice = () => {
               ${items.map((item, index) => `
                 <tr>
                   <td class="text-center">${index + 1}</td>
-                  <td>${item.item}</td>
-                  <td class="text-center">${item.dateTime}</td>
-                  <td class="text-center">${item.qty}</td>
-                  <td class="text-right">${item.rate}</td>
+                  <td contenteditable="true">${item.item}</td>
+                  <td class="text-center" contenteditable="true">${item.dateTime}</td>
+                  <td class="text-center" contenteditable="true">${item.qty}</td>
+                  <td class="text-right" contenteditable="true">${item.rate}</td>
                 </tr>
               `).join('')}
               <tr class="total-row">
@@ -563,11 +589,7 @@ const DetailedInvoice = () => {
     if (printWindow) {
       printWindow.document.write(printContent);
       printWindow.document.close();
-      setTimeout(() => {
-        printWindow.focus();
-        printWindow.print();
-        printWindow.close();
-      }, 500);
+      printWindow.focus();
     }
   };
 
@@ -599,10 +621,27 @@ const DetailedInvoice = () => {
             .summary-row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #ccc; }
             .summary-row:last-child { border-bottom: none; font-weight: bold; font-size: 16px; }
             .patient-table { width: 100%; border-collapse: collapse; margin-bottom: 15px; font-size: 12px; }
-            .patient-table td { border: 1px solid #ccc; padding: 5px 8px; width: 50%; }
+            .patient-table td { border: 1px solid #ccc; padding: 5px 8px; width: 50%; cursor: text; }
+            .toolbar { position: fixed; top: 0; left: 0; right: 0; background: #333; color: white; padding: 8px 20px; display: flex; gap: 10px; align-items: center; z-index: 1000; }
+            .toolbar button { padding: 6px 16px; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: bold; }
+            .toolbar .print-btn { background: #4CAF50; color: white; }
+            .toolbar .print-btn:hover { background: #45a049; }
+            .toolbar .close-btn { background: #f44336; color: white; }
+            .toolbar .close-btn:hover { background: #d32f2f; }
+            .toolbar span { font-size: 12px; color: #ccc; margin-left: 10px; }
+            td[contenteditable="true"] { outline: none; background: #fffff0; }
+            td[contenteditable="true"]:focus { background: #fff9c4; border: 1px solid #2196F3; }
+            @media print { .toolbar { display: none !important; } td[contenteditable="true"] { background: white !important; } }
+
           </style>
         </head>
         <body>
+          <div class="toolbar">
+            <button class="print-btn" onclick="window.print()">Print</button>
+            <button class="close-btn" onclick="window.close()">Close</button>
+            <span>Click any cell to edit before printing</span>
+          </div>
+
           <div class="header">
             <h1>${hospitalConfig?.fullName || 'HOSPITAL'}</h1>
             <h2>${sectionTitles[section]} SUMMARY</h2>
@@ -643,11 +682,7 @@ const DetailedInvoice = () => {
     if (printWindow) {
       printWindow.document.write(printContent);
       printWindow.document.close();
-      setTimeout(() => {
-        printWindow.focus();
-        printWindow.print();
-        printWindow.close();
-      }, 500);
+      printWindow.focus();
     }
   };
 
