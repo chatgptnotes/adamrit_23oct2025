@@ -39,7 +39,7 @@ const CorporateBill = () => {
       <div className="max-w-6xl mx-auto">
         {/* Header */}
         <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
-          <h1 className="text-3xl font-bold text-gray-900 mb-4">Corporate Bill Management</h1>
+          <h1 className="text-3xl font-bold text-gray-900 mb-4">Yojna Bill Management</h1>
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
               <label className="text-sm font-medium">Corporate:</label>
@@ -79,14 +79,14 @@ const CorporateBill = () => {
               </select>
             </div>
             <button className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors text-sm">
-              Generate Corporate Bill
+              Generate Yojna Bill
             </button>
           </div>
         </div>
 
-        {/* Corporate Bill Preview */}
+        {/* Yojna Bill Preview */}
         <div className="bg-white rounded-lg shadow-lg p-6">
-          <h2 className="text-xl font-bold text-gray-900 mb-4">Corporate Bill Preview</h2>
+          <h2 className="text-xl font-bold text-gray-900 mb-4">Yojna Bill Preview</h2>
           
           {/* Bill Header */}
           <div className="border-b border-gray-300 pb-4 mb-6">
@@ -173,7 +173,7 @@ const CorporateBill = () => {
           {/* Action Buttons */}
           <div className="flex justify-center gap-4 mt-6">
             <button className="px-6 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors">
-              Print Corporate Bill
+              Print Yojna Bill
             </button>
             <button className="px-6 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition-colors">
               Download PDF
