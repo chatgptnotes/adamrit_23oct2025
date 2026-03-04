@@ -27,6 +27,9 @@ import {
   Search,
   SwitchCamera,
   StopCircle,
+  Sparkles,
+  Mic,
+  Loader2,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { logActivity } from '@/lib/activity-logger';
@@ -59,6 +62,15 @@ interface FileUploadRecord {
 }
 
 type UploadCategory = 'report' | 'prescription' | 'xray' | 'document' | 'photo' | 'id_proof';
+
+type AiUploadStep = 'idle' | 'ai_input' | 'ai_loading' | 'ai_confirm' | 'manual';
+
+interface AiParseResult {
+  patientName: string | null;
+  patientId: string | null;
+  category: UploadCategory | null;
+  notes: string | null;
+}
 
 const CATEGORY_OPTIONS: { value: UploadCategory; label: string }[] = [
   { value: 'report', label: 'Report' },
@@ -137,6 +149,14 @@ const CameraUpload: React.FC<CameraUploadProps> = ({
   const [category, setCategory] = useState<UploadCategory>('photo');
   const [notes, setNotes] = useState('');
   const [uploading, setUploading] = useState(false);
+
+  // AI Smart Upload state
+  const [aiStep, setAiStep] = useState<AiUploadStep>('idle');
+  const [aiInstruction, setAiInstruction] = useState('');
+  const [aiParsed, setAiParsed] = useState<AiParseResult | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [isListening, setIsListening] = useState(false);
+  const recognitionRef = useRef<any>(null);
 
   // Recent uploads state
   const [recentUploads, setRecentUploads] = useState<FileUploadRecord[]>([]);
@@ -326,6 +346,159 @@ const CameraUpload: React.FC<CameraUploadProps> = ({
   }, [handleFileSelect]);
 
   // -------------------------------------------------------------------------
+  // AI Smart Upload: auto-advance to AI input when file is ready
+  // -------------------------------------------------------------------------
+
+  useEffect(() => {
+    const hasFileReady = !!(capturedBlob || selectedFile);
+    if (hasFileReady && aiStep === 'idle') {
+      const geminiApiKey = import.meta.env.VITE_GEMINI_API_KEY;
+      if (geminiApiKey) {
+        setAiStep('ai_input');
+      } else {
+        setAiStep('manual');
+      }
+    }
+  }, [capturedBlob, selectedFile, aiStep]);
+
+  // -------------------------------------------------------------------------
+  // AI Smart Upload: parse instruction with Gemini
+  // -------------------------------------------------------------------------
+
+  const parseWithAI = useCallback(async (instruction: string): Promise<AiParseResult> => {
+    const geminiApiKey = import.meta.env.VITE_GEMINI_API_KEY;
+    if (!geminiApiKey) throw new Error('No Gemini API key');
+
+    const systemPrompt = `You extract file metadata from a user instruction about a medical document upload.
+Return ONLY valid JSON with these fields:
+{
+  "patientName": string or null,
+  "patientId": string or null,
+  "category": one of "report"|"prescription"|"xray"|"document"|"photo"|"id_proof" or null,
+  "notes": string or null
+}
+
+Category mapping hints:
+- Aadhaar card, PAN card, voter ID, driving license, passport → "id_proof"
+- X-ray, CT scan, MRI → "xray"
+- Blood test, lab report, pathology → "report"
+- Prescription, medication list → "prescription"
+- Discharge summary, referral letter, consent form → "document"
+- Patient photo, wound photo → "photo"
+
+Extract patient name if mentioned. Extract any ID/UHID if mentioned. Put the document type description in "notes".`;
+
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiApiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: systemPrompt + '\n\n' + instruction }] }],
+          generationConfig: { temperature: 0, maxOutputTokens: 200 },
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(`Gemini API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const content = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error('No JSON in AI response');
+    return JSON.parse(jsonMatch[0]) as AiParseResult;
+  }, []);
+
+  // -------------------------------------------------------------------------
+  // AI Smart Upload: orchestrate AI analysis + patient search
+  // -------------------------------------------------------------------------
+
+  const handleAiAnalyze = useCallback(async () => {
+    if (!aiInstruction.trim()) {
+      toast({ title: 'Please describe the file', description: 'e.g., "Aadhaar card of Santlal Patel"', variant: 'destructive' });
+      return;
+    }
+
+    setAiStep('ai_loading');
+    setAiLoading(true);
+
+    try {
+      const parsed = await parseWithAI(aiInstruction);
+      setAiParsed(parsed);
+
+      // Auto-fill category
+      if (parsed.category) setCategory(parsed.category);
+
+      // Auto-fill notes
+      if (parsed.notes) setNotes(parsed.notes);
+
+      // Search for patient in DB
+      const searchTerm = parsed.patientName || parsed.patientId;
+      if (searchTerm) {
+        const { data } = await (supabase as any)
+          .from('patients')
+          .select('id, name')
+          .or(`name.ilike.%${searchTerm}%,patients_id.ilike.%${searchTerm}%`)
+          .limit(5);
+
+        if (data && data.length > 0) {
+          setSelectedPatient(data[0] as PatientResult);
+          setPatientSearch(data[0].name);
+        } else {
+          setSelectedPatient(null);
+          setPatientSearch(searchTerm);
+        }
+      }
+
+      setAiStep('ai_confirm');
+    } catch (err) {
+      console.error('AI parse error:', err);
+      toast({ title: 'AI could not parse', description: 'Falling back to manual form. Your text has been preserved.', variant: 'destructive' });
+      setNotes(aiInstruction);
+      setAiStep('manual');
+    } finally {
+      setAiLoading(false);
+    }
+  }, [aiInstruction, parseWithAI, toast]);
+
+  // -------------------------------------------------------------------------
+  // AI Smart Upload: voice input via Web Speech API
+  // -------------------------------------------------------------------------
+
+  const startListening = useCallback(() => {
+    const SpeechRecognition = (window as any).webkitSpeechRecognition || (window as any).SpeechRecognition;
+    if (!SpeechRecognition) return;
+
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'en-IN';
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+
+    recognition.onresult = (event: any) => {
+      const transcript = event.results[0][0].transcript;
+      setAiInstruction((prev) => (prev ? prev + ' ' + transcript : transcript));
+      setIsListening(false);
+    };
+
+    recognition.onerror = () => setIsListening(false);
+    recognition.onend = () => setIsListening(false);
+
+    recognitionRef.current = recognition;
+    recognition.start();
+    setIsListening(true);
+  }, []);
+
+  const stopListening = useCallback(() => {
+    if (recognitionRef.current) {
+      recognitionRef.current.stop();
+      recognitionRef.current = null;
+    }
+    setIsListening(false);
+  }, []);
+
+  // -------------------------------------------------------------------------
   // Clear / reset state
   // -------------------------------------------------------------------------
 
@@ -339,7 +512,12 @@ const CameraUpload: React.FC<CameraUploadProps> = ({
     setSelectedPatient(null);
     setCategory('photo');
     setNotes('');
-  }, [previewUrl]);
+    setAiStep('idle');
+    setAiInstruction('');
+    setAiParsed(null);
+    setAiLoading(false);
+    stopListening();
+  }, [previewUrl, stopListening]);
 
   // -------------------------------------------------------------------------
   // Patient search
@@ -613,9 +791,182 @@ const CameraUpload: React.FC<CameraUploadProps> = ({
     );
   };
 
+  // -------------------------------------------------------------------------
+  // AI Smart Upload render helpers
+  // -------------------------------------------------------------------------
+
+  const hasSpeechApi = typeof window !== 'undefined' && !!((window as any).webkitSpeechRecognition || (window as any).SpeechRecognition);
+
+  /** AI Smart Input — text box + mic + Analyze button */
+  const renderAiSmartInput = () => {
+    if (!hasFile || aiStep !== 'ai_input') return null;
+
+    return (
+      <div className="space-y-3 pt-2">
+        <div className="flex items-center gap-2">
+          <Sparkles className="h-4 w-4 text-purple-500" />
+          <span className="text-sm font-medium text-purple-700">AI Smart Upload</span>
+        </div>
+        <p className="text-xs text-gray-500">
+          Describe the file — e.g., "Aadhaar card of Santlal Patel"
+        </p>
+        <div className="flex gap-2">
+          <Input
+            placeholder="What is this file?"
+            value={aiInstruction}
+            onChange={(e) => setAiInstruction(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') handleAiAnalyze(); }}
+            className="flex-1"
+          />
+          {hasSpeechApi && (
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={isListening ? stopListening : startListening}
+              className={isListening ? 'border-red-400 text-red-500 animate-pulse' : ''}
+            >
+              <Mic className="h-4 w-4" />
+            </Button>
+          )}
+        </div>
+        <div className="flex gap-2">
+          <Button
+            className="flex-1 bg-purple-600 hover:bg-purple-700"
+            onClick={handleAiAnalyze}
+            disabled={!aiInstruction.trim()}
+          >
+            <Sparkles className="h-4 w-4 mr-2" />
+            Analyze with AI
+          </Button>
+          <Button
+            variant="outline"
+            className="text-gray-600"
+            onClick={() => setAiStep('manual')}
+          >
+            Fill manually
+          </Button>
+        </div>
+      </div>
+    );
+  };
+
+  /** AI Loading spinner */
+  const renderAiLoading = () => {
+    if (!hasFile || aiStep !== 'ai_loading') return null;
+
+    return (
+      <div className="flex flex-col items-center justify-center py-8 space-y-3">
+        <Loader2 className="h-8 w-8 text-purple-500 animate-spin" />
+        <p className="text-sm text-gray-600">AI is analyzing your instruction...</p>
+      </div>
+    );
+  };
+
+  /** AI Confirmation panel — shows auto-detected values with edit controls */
+  const renderAiConfirm = () => {
+    if (!hasFile || aiStep !== 'ai_confirm') return null;
+
+    return (
+      <div className="space-y-4 pt-2">
+        <div className="flex items-center gap-2">
+          <Sparkles className="h-4 w-4 text-green-500" />
+          <span className="text-sm font-medium text-green-700">AI Results</span>
+        </div>
+
+        {/* Patient */}
+        <div className="space-y-1.5">
+          <Label className="text-sm font-medium">Patient</Label>
+          {selectedPatient ? (
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-green-700 font-medium">{selectedPatient.name}</span>
+              <Badge variant="secondary" className="text-[10px]">Matched</Badge>
+              <button
+                className="text-xs text-blue-500 hover:underline ml-auto"
+                onClick={() => {
+                  setSelectedPatient(null);
+                  setAiStep('manual');
+                }}
+              >
+                Change
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-orange-600">
+                {aiParsed?.patientName
+                  ? `"${aiParsed.patientName}" — no match found`
+                  : 'No patient detected'}
+              </span>
+              <button
+                className="text-xs text-blue-500 hover:underline ml-auto"
+                onClick={() => setAiStep('manual')}
+              >
+                Search manually
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Category */}
+        <div className="space-y-1.5">
+          <Label className="text-sm font-medium">Category</Label>
+          <Select value={category} onValueChange={(v) => setCategory(v as UploadCategory)}>
+            <SelectTrigger>
+              <SelectValue placeholder="Select category" />
+            </SelectTrigger>
+            <SelectContent>
+              {CATEGORY_OPTIONS.map((opt) => (
+                <SelectItem key={opt.value} value={opt.value}>
+                  {opt.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Notes */}
+        <div className="space-y-1.5">
+          <Label className="text-sm font-medium">Notes</Label>
+          <Input
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder="Optional notes..."
+          />
+        </div>
+
+        {/* Action buttons */}
+        <div className="flex gap-2">
+          <Button
+            className="flex-1 bg-blue-600 hover:bg-blue-700"
+            onClick={handleUpload}
+            disabled={uploading}
+          >
+            {uploading ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Uploading...
+              </>
+            ) : (
+              <>
+                <Upload className="h-4 w-4 mr-2" />
+                Upload
+              </>
+            )}
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => setAiStep('manual')}
+          >
+            Edit all
+          </Button>
+        </div>
+      </div>
+    );
+  };
+
   /** Metadata form shown after capture / file selection */
   const renderMetadataForm = () => {
-    if (!hasFile) return null;
+    if (!hasFile || aiStep !== 'manual') return null;
 
     return (
       <div className="space-y-4 pt-2">
@@ -758,6 +1109,9 @@ const CameraUpload: React.FC<CameraUploadProps> = ({
       {renderCamera()}
       {renderDropZone()}
       {renderPreview()}
+      {renderAiSmartInput()}
+      {renderAiLoading()}
+      {renderAiConfirm()}
       {renderMetadataForm()}
       {renderRecentUploads()}
     </div>
