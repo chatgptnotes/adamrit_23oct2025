@@ -382,6 +382,9 @@ const DetailedInvoice = () => {
       <!DOCTYPE html>
       <html>
         <head>
+          <meta name="supabase-url" content="${import.meta.env.VITE_SUPABASE_URL || ''}" />
+          <meta name="supabase-key" content="${import.meta.env.VITE_SUPABASE_ANON_KEY || ''}" />
+          <meta name="visit-id" content="${visitId}" />
           <title>${sectionTitles[section]} Report</title>
           <style>
             @page { size: A4; margin: 0; }
@@ -415,6 +418,8 @@ const DetailedInvoice = () => {
             <button class="print-btn" onclick="window.print()">Print</button>
             <button class="close-btn" onclick="window.close()">Close</button>
             <span>Click any cell to edit before printing</span>
+            <button class="print-btn" style="background:#2196F3" onclick="saveBreakup()">Save to Database</button>
+            <span id="save-status" style="color:#4CAF50;font-weight:bold"></span>
           </div>
 
           <div class="header">
@@ -463,6 +468,78 @@ const DetailedInvoice = () => {
               </tr>
             </tbody>
           </table>
+        
+          <script>
+            window._supabaseUrl = document.querySelector('meta[name="supabase-url"]')?.content || '';
+            window._supabaseKey = document.querySelector('meta[name="supabase-key"]')?.content || '';
+            window._visitId = document.querySelector('meta[name="visit-id"]')?.content || '';
+
+            async function saveBreakup() {
+              const statusEl = document.getElementById('save-status');
+              statusEl.textContent = 'Saving...';
+              try {
+                const rows = document.querySelectorAll('table:last-of-type tbody tr:not(.total-row)');
+                const items = [];
+                rows.forEach(row => {
+                  const cells = row.querySelectorAll('td');
+                  if (cells.length >= 6) {
+                    items.push({
+                      sr_no: cells[0]?.textContent?.trim(),
+                      item: cells[1]?.textContent?.trim(),
+                      date_time: cells[2]?.textContent?.trim(),
+                      cghs_nabh_rate: cells[3]?.textContent?.trim(),
+                      qty: cells[4]?.textContent?.trim(),
+                      rate: cells[5]?.textContent?.trim()
+                    });
+                  }
+                });
+                const totalRow = document.querySelector('.total-row');
+                const totalCells = totalRow?.querySelectorAll('td');
+                const total = totalCells?.[1]?.textContent?.trim() || '0';
+                const cghsTotal = items.reduce((sum, i) => sum + (parseFloat(i.cghs_nabh_rate) || 0), 0);
+
+                const patientCells = document.querySelectorAll('.patient-table td');
+                const patientName = patientCells[0]?.textContent?.replace('Patient Name:', '').trim() || '';
+                const regNo = patientCells[2]?.textContent?.replace('Reg No:', '').trim() || '';
+                const corporate = patientCells[4]?.textContent?.replace('Corporate:', '').trim() || '';
+
+                const payload = {
+                  visit_id: window._visitId,
+                  patient_name: patientName,
+                  registration_no: regNo,
+                  corporate_name: corporate,
+                  hospital_name: 'Hope Hospital Nagpur',
+                  items: items,
+                  total_amount: parseFloat(total) || 0,
+                  cghs_total: cghsTotal,
+                  status: 'saved'
+                };
+
+                const res = await fetch(window._supabaseUrl + '/rest/v1/lab_breakup', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'apikey': window._supabaseKey,
+                    'Authorization': 'Bearer ' + window._supabaseKey,
+                    'Prefer': 'return=representation'
+                  },
+                  body: JSON.stringify(payload)
+                });
+
+                if (res.ok) {
+                  statusEl.textContent = 'Saved successfully!';
+                  statusEl.style.color = '#4CAF50';
+                } else {
+                  const err = await res.text();
+                  statusEl.textContent = 'Error: ' + err;
+                  statusEl.style.color = '#f44336';
+                }
+              } catch(e) {
+                statusEl.textContent = 'Error: ' + e.message;
+                statusEl.style.color = '#f44336';
+              }
+            }
+          </script>
         </body>
       </html>
     `;
@@ -504,6 +581,9 @@ const DetailedInvoice = () => {
       <!DOCTYPE html>
       <html>
         <head>
+          <meta name="supabase-url" content="${import.meta.env.VITE_SUPABASE_URL || ''}" />
+          <meta name="supabase-key" content="${import.meta.env.VITE_SUPABASE_ANON_KEY || ''}" />
+          <meta name="visit-id" content="${visitId}" />
           <title>${sectionTitles[section]} Report (Selected)</title>
           <style>
             @page { size: A4; margin: 0; }
@@ -537,6 +617,8 @@ const DetailedInvoice = () => {
             <button class="print-btn" onclick="window.print()">Print</button>
             <button class="close-btn" onclick="window.close()">Close</button>
             <span>Click any cell to edit before printing</span>
+            <button class="print-btn" style="background:#2196F3" onclick="saveBreakup()">Save to Database</button>
+            <span id="save-status" style="color:#4CAF50;font-weight:bold"></span>
           </div>
 
           <div class="header">
@@ -585,6 +667,78 @@ const DetailedInvoice = () => {
               </tr>
             </tbody>
           </table>
+        
+          <script>
+            window._supabaseUrl = document.querySelector('meta[name="supabase-url"]')?.content || '';
+            window._supabaseKey = document.querySelector('meta[name="supabase-key"]')?.content || '';
+            window._visitId = document.querySelector('meta[name="visit-id"]')?.content || '';
+
+            async function saveBreakup() {
+              const statusEl = document.getElementById('save-status');
+              statusEl.textContent = 'Saving...';
+              try {
+                const rows = document.querySelectorAll('table:last-of-type tbody tr:not(.total-row)');
+                const items = [];
+                rows.forEach(row => {
+                  const cells = row.querySelectorAll('td');
+                  if (cells.length >= 6) {
+                    items.push({
+                      sr_no: cells[0]?.textContent?.trim(),
+                      item: cells[1]?.textContent?.trim(),
+                      date_time: cells[2]?.textContent?.trim(),
+                      cghs_nabh_rate: cells[3]?.textContent?.trim(),
+                      qty: cells[4]?.textContent?.trim(),
+                      rate: cells[5]?.textContent?.trim()
+                    });
+                  }
+                });
+                const totalRow = document.querySelector('.total-row');
+                const totalCells = totalRow?.querySelectorAll('td');
+                const total = totalCells?.[1]?.textContent?.trim() || '0';
+                const cghsTotal = items.reduce((sum, i) => sum + (parseFloat(i.cghs_nabh_rate) || 0), 0);
+
+                const patientCells = document.querySelectorAll('.patient-table td');
+                const patientName = patientCells[0]?.textContent?.replace('Patient Name:', '').trim() || '';
+                const regNo = patientCells[2]?.textContent?.replace('Reg No:', '').trim() || '';
+                const corporate = patientCells[4]?.textContent?.replace('Corporate:', '').trim() || '';
+
+                const payload = {
+                  visit_id: window._visitId,
+                  patient_name: patientName,
+                  registration_no: regNo,
+                  corporate_name: corporate,
+                  hospital_name: 'Hope Hospital Nagpur',
+                  items: items,
+                  total_amount: parseFloat(total) || 0,
+                  cghs_total: cghsTotal,
+                  status: 'saved'
+                };
+
+                const res = await fetch(window._supabaseUrl + '/rest/v1/lab_breakup', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'apikey': window._supabaseKey,
+                    'Authorization': 'Bearer ' + window._supabaseKey,
+                    'Prefer': 'return=representation'
+                  },
+                  body: JSON.stringify(payload)
+                });
+
+                if (res.ok) {
+                  statusEl.textContent = 'Saved successfully!';
+                  statusEl.style.color = '#4CAF50';
+                } else {
+                  const err = await res.text();
+                  statusEl.textContent = 'Error: ' + err;
+                  statusEl.style.color = '#f44336';
+                }
+              } catch(e) {
+                statusEl.textContent = 'Error: ' + e.message;
+                statusEl.style.color = '#f44336';
+              }
+            }
+          </script>
         </body>
       </html>
     `;
@@ -614,6 +768,9 @@ const DetailedInvoice = () => {
       <!DOCTYPE html>
       <html>
         <head>
+          <meta name="supabase-url" content="${import.meta.env.VITE_SUPABASE_URL || ''}" />
+          <meta name="supabase-key" content="${import.meta.env.VITE_SUPABASE_ANON_KEY || ''}" />
+          <meta name="visit-id" content="${visitId}" />
           <title>${sectionTitles[section]} Summary</title>
           <style>
             @page { size: A4; margin: 0; }
@@ -644,6 +801,8 @@ const DetailedInvoice = () => {
             <button class="print-btn" onclick="window.print()">Print</button>
             <button class="close-btn" onclick="window.close()">Close</button>
             <span>Click any cell to edit before printing</span>
+            <button class="print-btn" style="background:#2196F3" onclick="saveBreakup()">Save to Database</button>
+            <span id="save-status" style="color:#4CAF50;font-weight:bold"></span>
           </div>
 
           <div class="header">
@@ -678,6 +837,78 @@ const DetailedInvoice = () => {
               <span>Rs. ${total.toLocaleString()}</span>
             </div>
           </div>
+        
+          <script>
+            window._supabaseUrl = document.querySelector('meta[name="supabase-url"]')?.content || '';
+            window._supabaseKey = document.querySelector('meta[name="supabase-key"]')?.content || '';
+            window._visitId = document.querySelector('meta[name="visit-id"]')?.content || '';
+
+            async function saveBreakup() {
+              const statusEl = document.getElementById('save-status');
+              statusEl.textContent = 'Saving...';
+              try {
+                const rows = document.querySelectorAll('table:last-of-type tbody tr:not(.total-row)');
+                const items = [];
+                rows.forEach(row => {
+                  const cells = row.querySelectorAll('td');
+                  if (cells.length >= 6) {
+                    items.push({
+                      sr_no: cells[0]?.textContent?.trim(),
+                      item: cells[1]?.textContent?.trim(),
+                      date_time: cells[2]?.textContent?.trim(),
+                      cghs_nabh_rate: cells[3]?.textContent?.trim(),
+                      qty: cells[4]?.textContent?.trim(),
+                      rate: cells[5]?.textContent?.trim()
+                    });
+                  }
+                });
+                const totalRow = document.querySelector('.total-row');
+                const totalCells = totalRow?.querySelectorAll('td');
+                const total = totalCells?.[1]?.textContent?.trim() || '0';
+                const cghsTotal = items.reduce((sum, i) => sum + (parseFloat(i.cghs_nabh_rate) || 0), 0);
+
+                const patientCells = document.querySelectorAll('.patient-table td');
+                const patientName = patientCells[0]?.textContent?.replace('Patient Name:', '').trim() || '';
+                const regNo = patientCells[2]?.textContent?.replace('Reg No:', '').trim() || '';
+                const corporate = patientCells[4]?.textContent?.replace('Corporate:', '').trim() || '';
+
+                const payload = {
+                  visit_id: window._visitId,
+                  patient_name: patientName,
+                  registration_no: regNo,
+                  corporate_name: corporate,
+                  hospital_name: 'Hope Hospital Nagpur',
+                  items: items,
+                  total_amount: parseFloat(total) || 0,
+                  cghs_total: cghsTotal,
+                  status: 'saved'
+                };
+
+                const res = await fetch(window._supabaseUrl + '/rest/v1/lab_breakup', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'apikey': window._supabaseKey,
+                    'Authorization': 'Bearer ' + window._supabaseKey,
+                    'Prefer': 'return=representation'
+                  },
+                  body: JSON.stringify(payload)
+                });
+
+                if (res.ok) {
+                  statusEl.textContent = 'Saved successfully!';
+                  statusEl.style.color = '#4CAF50';
+                } else {
+                  const err = await res.text();
+                  statusEl.textContent = 'Error: ' + err;
+                  statusEl.style.color = '#f44336';
+                }
+              } catch(e) {
+                statusEl.textContent = 'Error: ' + e.message;
+                statusEl.style.color = '#f44336';
+              }
+            }
+          </script>
         </body>
       </html>
     `;
