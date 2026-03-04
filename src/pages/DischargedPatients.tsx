@@ -20,13 +20,13 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuCheckboxItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { Loader2, Search, Users, Calendar, Clock, UserCheck, Shield, AlertTriangle, Filter, RotateCcw, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, FileText, Printer, Upload, Download } from "lucide-react";
 import * as XLSX from 'xlsx';
-import * as pdfjsLib from 'pdfjs-dist';
-// @ts-ignore
-import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.js?url';
+// pdfjs loaded dynamically when needed
+
+// pdfjs worker loaded dynamically
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
 // Set PDF.js worker from local package
-pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
+// pdfjs worker set dynamically when needed
 import { toast } from "@/hooks/use-toast";
 import { format } from 'date-fns';
 import { CascadingBillingStatusDropdown } from '@/components/shared/CascadingBillingStatusDropdown';
@@ -1220,6 +1220,8 @@ const DischargedPatients = () => {
   // Parse PDF file and extract Sr. No. and Visit ID
   const parsePdfFile = async (file: File): Promise<Array<{visit_id: string, discharged_sr_no: string}>> => {
     const arrayBuffer = await file.arrayBuffer();
+    const pdfjsLib = await import("pdfjs-dist");
+    pdfjsLib.GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/build/pdf.worker.min.js", import.meta.url).href;
     const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
 
     let allText = '';
