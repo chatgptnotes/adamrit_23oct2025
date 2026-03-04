@@ -258,6 +258,10 @@ Return JSON only:
     const msg = messages[idx];
     if (!msg.extracted) return;
     const e = msg.extracted;
+    
+    // Get photos from the user message (previous message)
+    const userMsg = messages[idx - 1];
+    const photos = userMsg?.photos || [];
 
     try {
       // Step 1: Find or create Corporate (e.g., WCL)
@@ -325,7 +329,7 @@ Return JSON only:
               area_id: areaId,
               name: e.contactName,
               designation: e.designation || null,
-              photos: msg.photos || [],
+              photos: photos,
             })
             .select('id')
             .single();
@@ -344,7 +348,7 @@ Return JSON only:
           action_requested: e.actionItems || null,
           follow_up_date: e.followUpDate || null,
           follow_up_needed: e.followUpNeeded || false,
-          photos: msg.photos || [],
+          photos: photos,
           marketing_staff: e.marketingStaff || null,
         });
         
