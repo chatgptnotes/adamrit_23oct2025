@@ -87,15 +87,22 @@ const CorporateBill = () => {
 
   const handleSave = async () => {
     try {
-      const { error } = await supabase.from('lab_breakup').insert({
+      const { error } = await supabase.from('yojna_bills').insert({
         visit_id: visitId,
         patient_name: patientInfo.patientName,
         registration_no: patientInfo.registrationNo,
         corporate_name: patientInfo.category,
         hospital_name: 'Hope Hospital Nagpur',
+        invoice_no: patientInfo.invoiceNo,
+        diagnosis: diagnosis,
+        primary_consultant: patientInfo.primaryConsultant,
+        date_of_registration: patientInfo.dateOfRegistration,
+        date_of_discharge: patientInfo.dateOfDischarge,
+        date_of_invoice: patientInfo.dateOfInvoice,
+        age_sex: patientInfo.ageSex,
+        address: patientInfo.address,
         items: rows.filter(r => r.item || r.procedure),
         total_amount: getTotal(),
-        cghs_total: getTotal(),
         status: 'saved'
       });
       if (error) throw error;
