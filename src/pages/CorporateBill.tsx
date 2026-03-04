@@ -88,7 +88,7 @@ const CorporateBill = () => {
 
   const handleSave = async () => {
     try {
-      const { error } = await supabase.from('yojna_bills').insert({
+      const payload = {
         visit_id: visitId,
         patient_name: patientInfo.patientName,
         registration_no: patientInfo.registrationNo,
@@ -105,7 +105,15 @@ const CorporateBill = () => {
         items: rows.filter(r => r.item || r.procedure),
         total_amount: getTotal(),
         status: 'saved'
-      });
+      };
+      // Check if entry exists — update instead of duplicate
+      const { data: existing } = await supabase.from('yojna_bills').select('id').eq('visit_id', visitId).limit(1);
+      let error;
+      if (existing && existing.length > 0) {
+        ({ error } = await supabase.from('yojna_bills').update(payload).eq('visit_id', visitId));
+      } else {
+        ({ error } = await supabase.from('yojna_bills').insert(payload));
+      }
       if (error) throw error;
       alert('Yojna Bill saved successfully!');
     } catch (err: any) {

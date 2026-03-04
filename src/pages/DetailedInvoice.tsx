@@ -515,19 +515,41 @@ const DetailedInvoice = () => {
                   status: 'saved'
                 };
 
-                const res = await fetch(window._supabaseUrl + '/rest/v1/lab_breakup', {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                    'apikey': window._supabaseKey,
-                    'Authorization': 'Bearer ' + window._supabaseKey,
-                    'Prefer': 'return=representation'
-                  },
-                  body: JSON.stringify(payload)
+                // First check if entry exists for this visit
+                const checkRes = await fetch(window._supabaseUrl + '/rest/v1/lab_breakup?visit_id=eq.' + encodeURIComponent(payload.visit_id) + '&select=id', {
+                  headers: { 'apikey': window._supabaseKey, 'Authorization': 'Bearer ' + window._supabaseKey }
                 });
+                const existing = await checkRes.json();
+                
+                let res;
+                if (existing && existing.length > 0) {
+                  // Update existing entry
+                  res = await fetch(window._supabaseUrl + '/rest/v1/lab_breakup?visit_id=eq.' + encodeURIComponent(payload.visit_id), {
+                    method: 'PATCH',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      'apikey': window._supabaseKey,
+                      'Authorization': 'Bearer ' + window._supabaseKey,
+                      'Prefer': 'return=representation'
+                    },
+                    body: JSON.stringify(payload)
+                  });
+                } else {
+                  // Insert new entry
+                  res = await fetch(window._supabaseUrl + '/rest/v1/lab_breakup', {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      'apikey': window._supabaseKey,
+                      'Authorization': 'Bearer ' + window._supabaseKey,
+                      'Prefer': 'return=representation'
+                    },
+                    body: JSON.stringify(payload)
+                  });
+                }
 
                 if (res.ok) {
-                  statusEl.textContent = 'Saved successfully!';
+                  statusEl.textContent = (existing && existing.length > 0) ? 'Updated successfully!' : 'Saved successfully!';
                   statusEl.style.color = '#4CAF50';
                 } else {
                   const err = await res.text();
@@ -714,19 +736,41 @@ const DetailedInvoice = () => {
                   status: 'saved'
                 };
 
-                const res = await fetch(window._supabaseUrl + '/rest/v1/lab_breakup', {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                    'apikey': window._supabaseKey,
-                    'Authorization': 'Bearer ' + window._supabaseKey,
-                    'Prefer': 'return=representation'
-                  },
-                  body: JSON.stringify(payload)
+                // First check if entry exists for this visit
+                const checkRes = await fetch(window._supabaseUrl + '/rest/v1/lab_breakup?visit_id=eq.' + encodeURIComponent(payload.visit_id) + '&select=id', {
+                  headers: { 'apikey': window._supabaseKey, 'Authorization': 'Bearer ' + window._supabaseKey }
                 });
+                const existing = await checkRes.json();
+                
+                let res;
+                if (existing && existing.length > 0) {
+                  // Update existing entry
+                  res = await fetch(window._supabaseUrl + '/rest/v1/lab_breakup?visit_id=eq.' + encodeURIComponent(payload.visit_id), {
+                    method: 'PATCH',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      'apikey': window._supabaseKey,
+                      'Authorization': 'Bearer ' + window._supabaseKey,
+                      'Prefer': 'return=representation'
+                    },
+                    body: JSON.stringify(payload)
+                  });
+                } else {
+                  // Insert new entry
+                  res = await fetch(window._supabaseUrl + '/rest/v1/lab_breakup', {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      'apikey': window._supabaseKey,
+                      'Authorization': 'Bearer ' + window._supabaseKey,
+                      'Prefer': 'return=representation'
+                    },
+                    body: JSON.stringify(payload)
+                  });
+                }
 
                 if (res.ok) {
-                  statusEl.textContent = 'Saved successfully!';
+                  statusEl.textContent = (existing && existing.length > 0) ? 'Updated successfully!' : 'Saved successfully!';
                   statusEl.style.color = '#4CAF50';
                 } else {
                   const err = await res.text();
@@ -884,19 +928,41 @@ const DetailedInvoice = () => {
                   status: 'saved'
                 };
 
-                const res = await fetch(window._supabaseUrl + '/rest/v1/lab_breakup', {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                    'apikey': window._supabaseKey,
-                    'Authorization': 'Bearer ' + window._supabaseKey,
-                    'Prefer': 'return=representation'
-                  },
-                  body: JSON.stringify(payload)
+                // First check if entry exists for this visit
+                const checkRes = await fetch(window._supabaseUrl + '/rest/v1/lab_breakup?visit_id=eq.' + encodeURIComponent(payload.visit_id) + '&select=id', {
+                  headers: { 'apikey': window._supabaseKey, 'Authorization': 'Bearer ' + window._supabaseKey }
                 });
+                const existing = await checkRes.json();
+                
+                let res;
+                if (existing && existing.length > 0) {
+                  // Update existing entry
+                  res = await fetch(window._supabaseUrl + '/rest/v1/lab_breakup?visit_id=eq.' + encodeURIComponent(payload.visit_id), {
+                    method: 'PATCH',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      'apikey': window._supabaseKey,
+                      'Authorization': 'Bearer ' + window._supabaseKey,
+                      'Prefer': 'return=representation'
+                    },
+                    body: JSON.stringify(payload)
+                  });
+                } else {
+                  // Insert new entry
+                  res = await fetch(window._supabaseUrl + '/rest/v1/lab_breakup', {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      'apikey': window._supabaseKey,
+                      'Authorization': 'Bearer ' + window._supabaseKey,
+                      'Prefer': 'return=representation'
+                    },
+                    body: JSON.stringify(payload)
+                  });
+                }
 
                 if (res.ok) {
-                  statusEl.textContent = 'Saved successfully!';
+                  statusEl.textContent = (existing && existing.length > 0) ? 'Updated successfully!' : 'Saved successfully!';
                   statusEl.style.color = '#4CAF50';
                 } else {
                   const err = await res.text();
