@@ -23,7 +23,17 @@ INSERT INTO "User" (email, password, role, hospital_type) VALUES
 ('sunita@ayushmanhospital.com', 'sunita123', 'nurse', 'ayushman'),
 ('admin@test.com', 'test123', 'admin', 'hope'),
 ('demo@hope.com', 'demo123', 'user', 'hope'),
-('demo@ayushman.com', 'demo123', 'user', 'ayushman')
+('demo@ayushman.com', 'demo123', 'user', 'ayushman'),
+
+-- Marketing Staff Users (Hope Hospital)
+('ankit@hopehospital.com', 'Ankit@123', 'marketing_manager', 'hope'),
+('hamza@hopehospital.com', 'Hamza@123', 'marketing_manager', 'hope'),
+('lokesh@hopehospital.com', 'Lokesh@123', 'marketing_manager', 'hope'),
+('ganesh@hopehospital.com', 'Ganesh@123', 'marketing_manager', 'hope'),
+('arpit@hopehospital.com', 'Arpit@123', 'marketing_manager', 'hope'),
+
+-- MRD Management
+('noor@hopehospital.com', 'Noor@123', 'admin', 'hope')
 
 ON CONFLICT (email) DO NOTHING;
 

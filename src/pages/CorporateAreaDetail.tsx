@@ -478,9 +478,25 @@ const CorporateAreaDetail: React.FC = () => {
                     <span className="font-bold text-gray-900 text-sm">{m.meeting_date}</span>
                     {m.person_met && <span className="text-gray-600 text-sm">— {m.person_met}</span>}
                   </div>
+                  {m.marketing_staff && <div className="text-xs text-purple-600 mb-1">🧑‍💼 Visited by: <strong>{m.marketing_staff}</strong></div>}
                   {m.location && <div className="text-xs text-gray-500 mb-1"><MapPin className="w-3 h-3 inline mr-1" />{m.location}</div>}
                   {m.conversation && <p className="text-sm text-gray-700 mb-2">{m.conversation}</p>}
+                  {/* Meeting Photos */}
+                  {m.photos && m.photos.length > 0 && (
+                    <div className="flex gap-2 mt-2 mb-2 overflow-x-auto pb-1">
+                      {m.photos.map((url: string, i: number) => (
+                        <img 
+                          key={i} 
+                          src={url} 
+                          className="w-20 h-20 rounded-lg object-cover shrink-0 cursor-pointer hover:ring-2 ring-blue-500 transition-all" 
+                          onClick={() => window.open(url, '_blank')} 
+                          alt={`Meeting photo ${i + 1}`}
+                        />
+                      ))}
+                    </div>
+                  )}
                   <div className="flex flex-wrap gap-2">
+                    {m.marketing_staff && <span className="text-xs bg-purple-50 text-purple-700 px-2 py-1 rounded">🧑‍💼 {m.marketing_staff}</span>}
                     {m.action_taken && <span className="text-xs bg-green-50 text-green-700 px-2 py-1 rounded">✓ {m.action_taken}</span>}
                     {m.action_requested && <span className="text-xs bg-blue-50 text-blue-700 px-2 py-1 rounded">→ {m.action_requested}</span>}
                     {m.follow_up_date && <span className="text-xs bg-orange-50 text-orange-700 px-2 py-1 rounded">📅 Follow-up: {m.follow_up_date}</span>}
