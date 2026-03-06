@@ -8,6 +8,7 @@ import NotFound from "../pages/NotFound";
 import PatientDashboard from "../pages/PatientDashboard";
 import PatientOverview from "../pages/PatientOverview";
 import TodaysIpdDashboard from "../pages/TodaysIpdDashboard";
+import ConferenceCallPage from "../pages/ConferenceCall";
 import TodaysOpd from "../pages/TodaysOpd";
 import AdvanceStatementReport from "../pages/AdvanceStatementReport";
 import NoDeductionLetterPage from "../pages/NoDeductionLetter";
@@ -132,6 +133,7 @@ export const AppRoutes = () => {
         <Route path="/patient-overview" element={<PatientOverview />} />
         <Route path="/patient-profile" element={<Suspense fallback={<PageLoader />}><PatientProfile /></Suspense>} />
         <Route path="/todays-ipd" element={<TodaysIpdDashboard />} />
+        <Route path="/conference-call" element={<ConferenceCallPage />} />
         <Route path="/todays-opd" element={<TodaysOpd />} />
         <Route path="/advance-statement-report" element={<AdvanceStatementReport />} />
         <Route path="/advanced-statement-report" element={<Suspense fallback={<PageLoader />}><AdvancedStatementReport /></Suspense>} />
