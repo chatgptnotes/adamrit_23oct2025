@@ -89,6 +89,7 @@ const Invoice = lazy(() => import("../pages/Invoice"));
 const DetailedInvoice = lazy(() => import("../pages/DetailedInvoice"));
 const DischargeInvoice = lazy(() => import("../pages/DischargeInvoice"));
 const Corporate = lazy(() => import("../pages/Corporate"));
+const CorporateBill = lazy(() => import("../pages/CorporateBill"));
 const CorporateBulkPayments = lazy(() => import("../pages/CorporateBulkPayments"));
 const BillSubmission = lazy(() => import("../pages/BillSubmission"));
 const BillAgingStatement = lazy(() => import("../pages/BillAgingStatement"));
@@ -175,6 +176,7 @@ export const AppRoutes = () => {
         <Route path="/day-book" element={<Suspense fallback={<PageLoader />}><DayBook /></Suspense>} />
         <Route path="/ledger-statement" element={<Suspense fallback={<PageLoader />}><LedgerStatement /></Suspense>} />
         <Route path="/corporate" element={<Suspense fallback={<PageLoader />}><Corporate /></Suspense>} />
+        <Route path="/yojna-bill/:visitId" element={<Suspense fallback={<PageLoader />}><CorporateBill /></Suspense>} />
         <Route path="/corporate-bulk-payments" element={<Suspense fallback={<PageLoader />}><CorporateBulkPayments /></Suspense>} />
         <Route path="/pharmacy/goods-received-note" element={<Suspense fallback={<PageLoader />}><Pharmacy /></Suspense>} />
         <Route path="/pharmacy/purchase-orders/add" element={<Suspense fallback={<PageLoader />}><Pharmacy /></Suspense>} />

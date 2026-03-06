@@ -11,6 +11,7 @@ const DetailedInvoice = () => {
   const { visitId } = useParams();
   const navigate = useNavigate();
   const { hospitalConfig } = useAuth();
+  const hospitalName = hospitalConfig?.fullName || 'Hope Hospital Nagpur';
   const [patientData, setPatientData] = useState(null);
   const printRef = useRef(null);
 
@@ -211,11 +212,7 @@ const DetailedInvoice = () => {
       printWindow.document.close();
 
       // Wait for content to load, then print
-      setTimeout(() => {
-        printWindow.focus();
-        printWindow.print();
-        printWindow.close();
-      }, 500);
+      printWindow.focus();
 
     } catch (error) {
       console.error('❌ Error during print:', error);
@@ -386,6 +383,9 @@ const DetailedInvoice = () => {
       <!DOCTYPE html>
       <html>
         <head>
+          <meta name="supabase-url" content="${import.meta.env.VITE_SUPABASE_URL || ''}" />
+          <meta name="supabase-key" content="${import.meta.env.VITE_SUPABASE_ANON_KEY || ''}" />
+          <meta name="visit-id" content="${visitId}" />
           <title>${sectionTitles[section]} Report</title>
           <style>
             @page { size: A4; margin: 0; }
@@ -400,12 +400,31 @@ const DetailedInvoice = () => {
             .text-right { text-align: right; }
             .total-row { font-weight: bold; background-color: #f0f0f0; }
             .patient-table { width: 100%; border-collapse: collapse; margin-bottom: 15px; font-size: 12px; }
-            .patient-table td { border: 1px solid #ccc; padding: 5px 8px; width: 50%; }
+            .patient-table td { border: 1px solid #ccc; padding: 5px 8px; width: 50%; cursor: text; }
+            .toolbar { position: fixed; top: 0; left: 0; right: 0; background: #333; color: white; padding: 8px 20px; display: flex; gap: 10px; align-items: center; z-index: 1000; }
+            .toolbar button { padding: 6px 16px; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: bold; }
+            .toolbar .print-btn { background: #4CAF50; color: white; }
+            .toolbar .print-btn:hover { background: #45a049; }
+            .toolbar .close-btn { background: #f44336; color: white; }
+            .toolbar .close-btn:hover { background: #d32f2f; }
+            .toolbar span { font-size: 12px; color: #ccc; margin-left: 10px; }
+            td[contenteditable="true"] { outline: none; background: #fffff0; }
+            td[contenteditable="true"]:focus { background: #fff9c4; border: 1px solid #2196F3; }
+            @media print { .toolbar { display: none !important; } td[contenteditable="true"] { background: white !important; } }
+
           </style>
         </head>
         <body>
+          <div class="toolbar">
+            <button class="print-btn" onclick="window.print()">Print</button>
+            <button class="close-btn" onclick="window.close()">Close</button>
+            <span>Click any cell to edit before printing</span>
+            <button class="print-btn" style="background:#2196F3" onclick="saveBreakup()">Save to Database</button>
+            <span id="save-status" style="color:#4CAF50;font-weight:bold"></span>
+          </div>
+
           <div class="header">
-            <h1>${hospitalConfig?.fullName || 'HOSPITAL'}</h1>
+            <h1>${hospitalName}</h1>
             <h2>${sectionTitles[section]} REPORT</h2>
           </div>
           <table class="patient-table">
@@ -418,7 +437,7 @@ const DetailedInvoice = () => {
               <td><strong>Contact:</strong> ${patientData?.contactNo || 'N/A'}</td>
             </tr>
             <tr>
-              <td><strong>Address:</strong> ${patientData?.address || 'N/A'}</td>
+              <td><strong>Corporate:</strong> ${patientData?.corporateName || patientData?.address || 'N/A'}</td>
               <td><strong>Date of Admission:</strong> ${patientData?.dateOfAdmission || 'N/A'}</td>
             </tr>
           </table>
@@ -428,6 +447,7 @@ const DetailedInvoice = () => {
                 <th class="text-center" style="width: 50px;">SR.NO.</th>
                 <th>ITEM</th>
                 <th class="text-center" style="width: 120px;">DATE & TIME</th>
+                <th class="text-center" style="width: 100px;">CGHS NABH RATE</th>
                 <th class="text-center" style="width: 80px;">QTY</th>
                 <th class="text-right" style="width: 100px;">RATE</th>
               </tr>
@@ -436,18 +456,97 @@ const DetailedInvoice = () => {
               ${items.map((item, index) => `
                 <tr>
                   <td class="text-center">${index + 1}</td>
-                  <td>${item.item}</td>
-                  <td class="text-center">${item.dateTime}</td>
-                  <td class="text-center">${item.qty}</td>
-                  <td class="text-right">${item.rate}</td>
+                  <td contenteditable="true">${item.item}</td>
+                  <td class="text-center" contenteditable="true">${item.dateTime}</td>
+                  <td class="text-center" contenteditable="true">${item.cghsRate || ''}</td>
+                  <td class="text-center" contenteditable="true">${item.qty}</td>
+                  <td class="text-right" contenteditable="true">${item.rate}</td>
                 </tr>
               `).join('')}
               <tr class="total-row">
-                <td colspan="4" class="text-right">TOTAL:</td>
+                <td colspan="5" class="text-right">TOTAL:</td>
                 <td class="text-right">${total}</td>
               </tr>
             </tbody>
           </table>
+        
+          <script>
+            window._supabaseUrl = document.querySelector('meta[name="supabase-url"]')?.content || '';
+            window._supabaseKey = document.querySelector('meta[name="supabase-key"]')?.content || '';
+            window._visitId = document.querySelector('meta[name="visit-id"]')?.content || '';
+
+            async function saveBreakup() {
+              const statusEl = document.getElementById('save-status');
+              statusEl.textContent = 'Saving...';
+              try {
+                const rows = document.querySelectorAll('table:last-of-type tbody tr:not(.total-row)');
+                const items = [];
+                rows.forEach(row => {
+                  const cells = row.querySelectorAll('td');
+                  if (cells.length >= 6) {
+                    items.push({
+                      sr_no: cells[0]?.textContent?.trim(),
+                      item: cells[1]?.textContent?.trim(),
+                      date_time: cells[2]?.textContent?.trim(),
+                      cghs_nabh_rate: cells[3]?.textContent?.trim(),
+                      qty: cells[4]?.textContent?.trim(),
+                      rate: cells[5]?.textContent?.trim()
+                    });
+                  }
+                });
+                const totalRow = document.querySelector('.total-row');
+                const totalCells = totalRow?.querySelectorAll('td');
+                const total = totalCells?.[1]?.textContent?.trim() || '0';
+                const cghsTotal = items.reduce((sum, i) => sum + (parseFloat(i.cghs_nabh_rate) || 0), 0);
+
+                const patientCells = document.querySelectorAll('.patient-table td');
+                const patientName = patientCells[0]?.textContent?.replace('Patient Name:', '').trim() || '';
+                const regNo = patientCells[2]?.textContent?.replace('Reg No:', '').trim() || '';
+                const corporate = patientCells[4]?.textContent?.replace('Corporate:', '').trim() || '';
+
+                const payload = {
+                  visit_id: window._visitId,
+                  patient_name: patientName,
+                  registration_no: regNo,
+                  corporate_name: corporate,
+                  hospital_name: hospitalName,
+                  items: items,
+                  total_amount: parseFloat(total) || 0,
+                  cghs_total: cghsTotal,
+                  status: 'saved'
+                };
+
+                // Delete any existing entry for this visit, then insert fresh
+                await fetch(window._supabaseUrl + '/rest/v1/lab_breakup?visit_id=eq.' + encodeURIComponent(payload.visit_id), {
+                  method: 'DELETE',
+                  headers: { 'apikey': window._supabaseKey, 'Authorization': 'Bearer ' + window._supabaseKey }
+                });
+                
+                const res = await fetch(window._supabaseUrl + '/rest/v1/lab_breakup', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'apikey': window._supabaseKey,
+                    'Authorization': 'Bearer ' + window._supabaseKey,
+                    'Prefer': 'return=representation'
+                  },
+                  body: JSON.stringify(payload)
+                });
+
+                if (res.ok) {
+                  statusEl.textContent = 'Saved successfully!';
+                  statusEl.style.color = '#4CAF50';
+                } else {
+                  const err = await res.text();
+                  statusEl.textContent = 'Error: ' + err;
+                  statusEl.style.color = '#f44336';
+                }
+              } catch(e) {
+                statusEl.textContent = 'Error: ' + e.message;
+                statusEl.style.color = '#f44336';
+              }
+            }
+          </script>
         </body>
       </html>
     `;
@@ -456,11 +555,7 @@ const DetailedInvoice = () => {
     if (printWindow) {
       printWindow.document.write(printContent);
       printWindow.document.close();
-      setTimeout(() => {
-        printWindow.focus();
-        printWindow.print();
-        printWindow.close();
-      }, 500);
+      printWindow.focus();
     }
   };
 
@@ -493,6 +588,9 @@ const DetailedInvoice = () => {
       <!DOCTYPE html>
       <html>
         <head>
+          <meta name="supabase-url" content="${import.meta.env.VITE_SUPABASE_URL || ''}" />
+          <meta name="supabase-key" content="${import.meta.env.VITE_SUPABASE_ANON_KEY || ''}" />
+          <meta name="visit-id" content="${visitId}" />
           <title>${sectionTitles[section]} Report (Selected)</title>
           <style>
             @page { size: A4; margin: 0; }
@@ -507,12 +605,31 @@ const DetailedInvoice = () => {
             .text-right { text-align: right; }
             .total-row { font-weight: bold; background-color: #f0f0f0; }
             .patient-table { width: 100%; border-collapse: collapse; margin-bottom: 15px; font-size: 12px; }
-            .patient-table td { border: 1px solid #ccc; padding: 5px 8px; width: 50%; }
+            .patient-table td { border: 1px solid #ccc; padding: 5px 8px; width: 50%; cursor: text; }
+            .toolbar { position: fixed; top: 0; left: 0; right: 0; background: #333; color: white; padding: 8px 20px; display: flex; gap: 10px; align-items: center; z-index: 1000; }
+            .toolbar button { padding: 6px 16px; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: bold; }
+            .toolbar .print-btn { background: #4CAF50; color: white; }
+            .toolbar .print-btn:hover { background: #45a049; }
+            .toolbar .close-btn { background: #f44336; color: white; }
+            .toolbar .close-btn:hover { background: #d32f2f; }
+            .toolbar span { font-size: 12px; color: #ccc; margin-left: 10px; }
+            td[contenteditable="true"] { outline: none; background: #fffff0; }
+            td[contenteditable="true"]:focus { background: #fff9c4; border: 1px solid #2196F3; }
+            @media print { .toolbar { display: none !important; } td[contenteditable="true"] { background: white !important; } }
+
           </style>
         </head>
         <body>
+          <div class="toolbar">
+            <button class="print-btn" onclick="window.print()">Print</button>
+            <button class="close-btn" onclick="window.close()">Close</button>
+            <span>Click any cell to edit before printing</span>
+            <button class="print-btn" style="background:#2196F3" onclick="saveBreakup()">Save to Database</button>
+            <span id="save-status" style="color:#4CAF50;font-weight:bold"></span>
+          </div>
+
           <div class="header">
-            <h1>${hospitalConfig?.fullName || 'HOSPITAL'}</h1>
+            <h1>${hospitalName}</h1>
             <h2>${sectionTitles[section]} REPORT</h2>
           </div>
           <table class="patient-table">
@@ -525,7 +642,7 @@ const DetailedInvoice = () => {
               <td><strong>Contact:</strong> ${patientData?.contactNo || 'N/A'}</td>
             </tr>
             <tr>
-              <td><strong>Address:</strong> ${patientData?.address || 'N/A'}</td>
+              <td><strong>Corporate:</strong> ${patientData?.corporateName || patientData?.address || 'N/A'}</td>
               <td><strong>Date of Admission:</strong> ${patientData?.dateOfAdmission || 'N/A'}</td>
             </tr>
           </table>
@@ -535,6 +652,7 @@ const DetailedInvoice = () => {
                 <th class="text-center" style="width: 50px;">SR.NO.</th>
                 <th>ITEM</th>
                 <th class="text-center" style="width: 120px;">DATE & TIME</th>
+                <th class="text-center" style="width: 100px;">CGHS NABH RATE</th>
                 <th class="text-center" style="width: 80px;">QTY</th>
                 <th class="text-right" style="width: 100px;">RATE</th>
               </tr>
@@ -543,18 +661,97 @@ const DetailedInvoice = () => {
               ${items.map((item, index) => `
                 <tr>
                   <td class="text-center">${index + 1}</td>
-                  <td>${item.item}</td>
-                  <td class="text-center">${item.dateTime}</td>
-                  <td class="text-center">${item.qty}</td>
-                  <td class="text-right">${item.rate}</td>
+                  <td contenteditable="true">${item.item}</td>
+                  <td class="text-center" contenteditable="true">${item.dateTime}</td>
+                  <td class="text-center" contenteditable="true">${item.cghsRate || ''}</td>
+                  <td class="text-center" contenteditable="true">${item.qty}</td>
+                  <td class="text-right" contenteditable="true">${item.rate}</td>
                 </tr>
               `).join('')}
               <tr class="total-row">
-                <td colspan="4" class="text-right">TOTAL:</td>
+                <td colspan="5" class="text-right">TOTAL:</td>
                 <td class="text-right">${total}</td>
               </tr>
             </tbody>
           </table>
+        
+          <script>
+            window._supabaseUrl = document.querySelector('meta[name="supabase-url"]')?.content || '';
+            window._supabaseKey = document.querySelector('meta[name="supabase-key"]')?.content || '';
+            window._visitId = document.querySelector('meta[name="visit-id"]')?.content || '';
+
+            async function saveBreakup() {
+              const statusEl = document.getElementById('save-status');
+              statusEl.textContent = 'Saving...';
+              try {
+                const rows = document.querySelectorAll('table:last-of-type tbody tr:not(.total-row)');
+                const items = [];
+                rows.forEach(row => {
+                  const cells = row.querySelectorAll('td');
+                  if (cells.length >= 6) {
+                    items.push({
+                      sr_no: cells[0]?.textContent?.trim(),
+                      item: cells[1]?.textContent?.trim(),
+                      date_time: cells[2]?.textContent?.trim(),
+                      cghs_nabh_rate: cells[3]?.textContent?.trim(),
+                      qty: cells[4]?.textContent?.trim(),
+                      rate: cells[5]?.textContent?.trim()
+                    });
+                  }
+                });
+                const totalRow = document.querySelector('.total-row');
+                const totalCells = totalRow?.querySelectorAll('td');
+                const total = totalCells?.[1]?.textContent?.trim() || '0';
+                const cghsTotal = items.reduce((sum, i) => sum + (parseFloat(i.cghs_nabh_rate) || 0), 0);
+
+                const patientCells = document.querySelectorAll('.patient-table td');
+                const patientName = patientCells[0]?.textContent?.replace('Patient Name:', '').trim() || '';
+                const regNo = patientCells[2]?.textContent?.replace('Reg No:', '').trim() || '';
+                const corporate = patientCells[4]?.textContent?.replace('Corporate:', '').trim() || '';
+
+                const payload = {
+                  visit_id: window._visitId,
+                  patient_name: patientName,
+                  registration_no: regNo,
+                  corporate_name: corporate,
+                  hospital_name: hospitalName,
+                  items: items,
+                  total_amount: parseFloat(total) || 0,
+                  cghs_total: cghsTotal,
+                  status: 'saved'
+                };
+
+                // Delete any existing entry for this visit, then insert fresh
+                await fetch(window._supabaseUrl + '/rest/v1/lab_breakup?visit_id=eq.' + encodeURIComponent(payload.visit_id), {
+                  method: 'DELETE',
+                  headers: { 'apikey': window._supabaseKey, 'Authorization': 'Bearer ' + window._supabaseKey }
+                });
+                
+                const res = await fetch(window._supabaseUrl + '/rest/v1/lab_breakup', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'apikey': window._supabaseKey,
+                    'Authorization': 'Bearer ' + window._supabaseKey,
+                    'Prefer': 'return=representation'
+                  },
+                  body: JSON.stringify(payload)
+                });
+
+                if (res.ok) {
+                  statusEl.textContent = 'Saved successfully!';
+                  statusEl.style.color = '#4CAF50';
+                } else {
+                  const err = await res.text();
+                  statusEl.textContent = 'Error: ' + err;
+                  statusEl.style.color = '#f44336';
+                }
+              } catch(e) {
+                statusEl.textContent = 'Error: ' + e.message;
+                statusEl.style.color = '#f44336';
+              }
+            }
+          </script>
         </body>
       </html>
     `;
@@ -563,11 +760,7 @@ const DetailedInvoice = () => {
     if (printWindow) {
       printWindow.document.write(printContent);
       printWindow.document.close();
-      setTimeout(() => {
-        printWindow.focus();
-        printWindow.print();
-        printWindow.close();
-      }, 500);
+      printWindow.focus();
     }
   };
 
@@ -588,6 +781,9 @@ const DetailedInvoice = () => {
       <!DOCTYPE html>
       <html>
         <head>
+          <meta name="supabase-url" content="${import.meta.env.VITE_SUPABASE_URL || ''}" />
+          <meta name="supabase-key" content="${import.meta.env.VITE_SUPABASE_ANON_KEY || ''}" />
+          <meta name="visit-id" content="${visitId}" />
           <title>${sectionTitles[section]} Summary</title>
           <style>
             @page { size: A4; margin: 0; }
@@ -599,12 +795,31 @@ const DetailedInvoice = () => {
             .summary-row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #ccc; }
             .summary-row:last-child { border-bottom: none; font-weight: bold; font-size: 16px; }
             .patient-table { width: 100%; border-collapse: collapse; margin-bottom: 15px; font-size: 12px; }
-            .patient-table td { border: 1px solid #ccc; padding: 5px 8px; width: 50%; }
+            .patient-table td { border: 1px solid #ccc; padding: 5px 8px; width: 50%; cursor: text; }
+            .toolbar { position: fixed; top: 0; left: 0; right: 0; background: #333; color: white; padding: 8px 20px; display: flex; gap: 10px; align-items: center; z-index: 1000; }
+            .toolbar button { padding: 6px 16px; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: bold; }
+            .toolbar .print-btn { background: #4CAF50; color: white; }
+            .toolbar .print-btn:hover { background: #45a049; }
+            .toolbar .close-btn { background: #f44336; color: white; }
+            .toolbar .close-btn:hover { background: #d32f2f; }
+            .toolbar span { font-size: 12px; color: #ccc; margin-left: 10px; }
+            td[contenteditable="true"] { outline: none; background: #fffff0; }
+            td[contenteditable="true"]:focus { background: #fff9c4; border: 1px solid #2196F3; }
+            @media print { .toolbar { display: none !important; } td[contenteditable="true"] { background: white !important; } }
+
           </style>
         </head>
         <body>
+          <div class="toolbar">
+            <button class="print-btn" onclick="window.print()">Print</button>
+            <button class="close-btn" onclick="window.close()">Close</button>
+            <span>Click any cell to edit before printing</span>
+            <button class="print-btn" style="background:#2196F3" onclick="saveBreakup()">Save to Database</button>
+            <span id="save-status" style="color:#4CAF50;font-weight:bold"></span>
+          </div>
+
           <div class="header">
-            <h1>${hospitalConfig?.fullName || 'HOSPITAL'}</h1>
+            <h1>${hospitalName}</h1>
             <h2>${sectionTitles[section]} SUMMARY</h2>
           </div>
           <table class="patient-table">
@@ -617,7 +832,7 @@ const DetailedInvoice = () => {
               <td><strong>Contact:</strong> ${patientData?.contactNo || 'N/A'}</td>
             </tr>
             <tr>
-              <td><strong>Address:</strong> ${patientData?.address || 'N/A'}</td>
+              <td><strong>Corporate:</strong> ${patientData?.corporateName || patientData?.address || 'N/A'}</td>
               <td><strong>Date of Admission:</strong> ${patientData?.dateOfAdmission || 'N/A'}</td>
             </tr>
           </table>
@@ -635,6 +850,84 @@ const DetailedInvoice = () => {
               <span>Rs. ${total.toLocaleString()}</span>
             </div>
           </div>
+        
+          <script>
+            window._supabaseUrl = document.querySelector('meta[name="supabase-url"]')?.content || '';
+            window._supabaseKey = document.querySelector('meta[name="supabase-key"]')?.content || '';
+            window._visitId = document.querySelector('meta[name="visit-id"]')?.content || '';
+
+            async function saveBreakup() {
+              const statusEl = document.getElementById('save-status');
+              statusEl.textContent = 'Saving...';
+              try {
+                const rows = document.querySelectorAll('table:last-of-type tbody tr:not(.total-row)');
+                const items = [];
+                rows.forEach(row => {
+                  const cells = row.querySelectorAll('td');
+                  if (cells.length >= 6) {
+                    items.push({
+                      sr_no: cells[0]?.textContent?.trim(),
+                      item: cells[1]?.textContent?.trim(),
+                      date_time: cells[2]?.textContent?.trim(),
+                      cghs_nabh_rate: cells[3]?.textContent?.trim(),
+                      qty: cells[4]?.textContent?.trim(),
+                      rate: cells[5]?.textContent?.trim()
+                    });
+                  }
+                });
+                const totalRow = document.querySelector('.total-row');
+                const totalCells = totalRow?.querySelectorAll('td');
+                const total = totalCells?.[1]?.textContent?.trim() || '0';
+                const cghsTotal = items.reduce((sum, i) => sum + (parseFloat(i.cghs_nabh_rate) || 0), 0);
+
+                const patientCells = document.querySelectorAll('.patient-table td');
+                const patientName = patientCells[0]?.textContent?.replace('Patient Name:', '').trim() || '';
+                const regNo = patientCells[2]?.textContent?.replace('Reg No:', '').trim() || '';
+                const corporate = patientCells[4]?.textContent?.replace('Corporate:', '').trim() || '';
+
+                const payload = {
+                  visit_id: window._visitId,
+                  patient_name: patientName,
+                  registration_no: regNo,
+                  corporate_name: corporate,
+                  hospital_name: hospitalName,
+                  items: items,
+                  total_amount: parseFloat(total) || 0,
+                  cghs_total: cghsTotal,
+                  status: 'saved'
+                };
+
+                // Delete any existing entry for this visit, then insert fresh
+                await fetch(window._supabaseUrl + '/rest/v1/lab_breakup?visit_id=eq.' + encodeURIComponent(payload.visit_id), {
+                  method: 'DELETE',
+                  headers: { 'apikey': window._supabaseKey, 'Authorization': 'Bearer ' + window._supabaseKey }
+                });
+                
+                const res = await fetch(window._supabaseUrl + '/rest/v1/lab_breakup', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'apikey': window._supabaseKey,
+                    'Authorization': 'Bearer ' + window._supabaseKey,
+                    'Prefer': 'return=representation'
+                  },
+                  body: JSON.stringify(payload)
+                });
+
+                if (res.ok) {
+                  statusEl.textContent = 'Saved successfully!';
+                  statusEl.style.color = '#4CAF50';
+                } else {
+                  const err = await res.text();
+                  statusEl.textContent = 'Error: ' + err;
+                  statusEl.style.color = '#f44336';
+                }
+              } catch(e) {
+                statusEl.textContent = 'Error: ' + e.message;
+                statusEl.style.color = '#f44336';
+              }
+            }
+          </script>
         </body>
       </html>
     `;
@@ -643,11 +936,7 @@ const DetailedInvoice = () => {
     if (printWindow) {
       printWindow.document.write(printContent);
       printWindow.document.close();
-      setTimeout(() => {
-        printWindow.focus();
-        printWindow.print();
-        printWindow.close();
-      }, 500);
+      printWindow.focus();
     }
   };
 
@@ -1168,7 +1457,8 @@ const DetailedInvoice = () => {
         primaryConsultant: visit.appointment_with || 'N/A',
         totalAmount: totalAmount,
         amountInWords: convertNumberToWords(totalAmount),
-        tariff: patient?.corporate || 'Private'
+        tariff: patient?.corporate || 'Private',
+        corporateName: patient?.corporate || 'N/A'
       };
 
       console.log('📋 Final processed patient data:', processedData);
@@ -1211,7 +1501,8 @@ const DetailedInvoice = () => {
       item: lab.lab?.name || 'Lab Test',
       dateTime: lab.ordered_date ? format(new Date(lab.ordered_date), 'dd/MM/yyyy HH:mm:ss') : '',
       qty: 1,
-      rate: lab.cost || lab.unit_rate || 100  // Use saved rate from visit_labs
+      cghsRate: lab.lab?.NABH_rates_in_rupee || lab.lab?.CGHS_code || '',
+      rate: lab.cost || lab.unit_rate || 100
     })) || [],
     radiology: visitData?.radiologyOrders?.map((radio, index) => ({
       item: radio.radiology?.name || 'Radiology Test',
@@ -1338,6 +1629,29 @@ const DetailedInvoice = () => {
       </div>
     );
   }
+  // Toggle select all for a section
+  const toggleSelectAll = (section: 'laboratory' | 'radiology' | 'surgery' | 'anesthetist' | 'implants') => {
+    const items = section === 'laboratory' ? serviceData.laboratory :
+                  section === 'radiology' ? serviceData.radiology :
+                  section === 'surgery' ? serviceData.surgery :
+                  section === 'anesthetist' ? serviceData.anesthetist :
+                  serviceData.implants;
+    const selected = section === 'laboratory' ? selectedLabItems :
+                     section === 'radiology' ? selectedRadiologyItems :
+                     section === 'surgery' ? selectedSurgeryItems :
+                     section === 'anesthetist' ? selectedAnesthetistItems :
+                     selectedImplantItems;
+    const setter = section === 'laboratory' ? setSelectedLabItems :
+                   section === 'radiology' ? setSelectedRadiologyItems :
+                   section === 'surgery' ? setSelectedSurgeryItems :
+                   section === 'anesthetist' ? setSelectedAnesthetistItems :
+                   setSelectedImplantItems;
+    if (selected.length === items.length) {
+      setter([]);
+    } else {
+      setter(items.map((_: any, i: number) => i));
+    }
+  };
 
   return (
     <div className="min-h-screen bg-white p-6">
@@ -1513,7 +1827,7 @@ const DetailedInvoice = () => {
           {/* LABORATORY */}
           <div className="mb-0">
             <div className="bg-gray-200 border border-gray-400 border-t-0 p-1 flex justify-between items-center">
-              <strong className="text-xs">LABORATORY</strong>
+              <div className="flex items-center gap-2"><input type="checkbox" checked={selectedLabItems.length === serviceData.laboratory.length && serviceData.laboratory.length > 0} onChange={() => toggleSelectAll('laboratory')} className="cursor-pointer" title="Select All" /><strong className="text-xs">LABORATORY</strong><span className="text-[10px] text-gray-500">({selectedLabItems.length}/{serviceData.laboratory.length})</span></div>
               <div className="flex gap-1">
                 <button onClick={() => handlePrintSectionAll('laboratory')} className="text-xs bg-green-100 px-1 hover:bg-green-200 cursor-pointer" title="Print All">📊</button>
                 <button onClick={() => handlePrintSectionSelected('laboratory')} className="text-xs bg-blue-100 px-1 hover:bg-blue-200 cursor-pointer" title="Print Selected">🖨️</button>
@@ -1551,7 +1865,7 @@ const DetailedInvoice = () => {
           {/* RADIOLOGY */}
           <div className="mb-4">
             <div className="bg-gray-200 border border-gray-400 border-t-0 p-1 flex justify-between items-center">
-              <strong className="text-xs">RADIOLOGY</strong>
+              <div className="flex items-center gap-2"><input type="checkbox" checked={selectedRadiologyItems.length === serviceData.radiology.length && serviceData.radiology.length > 0} onChange={() => toggleSelectAll('radiology')} className="cursor-pointer" title="Select All" /><strong className="text-xs">RADIOLOGY</strong><span className="text-[10px] text-gray-500">({selectedRadiologyItems.length}/{serviceData.radiology.length})</span></div>
               <div className="flex gap-1">
                 <button onClick={() => handlePrintSectionAll('radiology')} className="text-xs bg-green-100 px-1 hover:bg-green-200 cursor-pointer" title="Print All">📊</button>
                 <button onClick={() => handlePrintSectionSelected('radiology')} className="text-xs bg-blue-100 px-1 hover:bg-blue-200 cursor-pointer" title="Print Selected">🖨️</button>
@@ -1589,7 +1903,7 @@ const DetailedInvoice = () => {
           {/* SURGERY (includes implants) */}
           <div className="mb-4">
             <div className="bg-gray-200 border border-gray-400 border-t-0 p-1 flex justify-between items-center">
-              <strong className="text-xs">SURGERY</strong>
+              <div className="flex items-center gap-2"><input type="checkbox" checked={selectedSurgeryItems.length === serviceData.surgery.length && serviceData.surgery.length > 0} onChange={() => toggleSelectAll('surgery')} className="cursor-pointer" title="Select All" /><strong className="text-xs">SURGERY</strong><span className="text-[10px] text-gray-500">({selectedSurgeryItems.length}/{serviceData.surgery.length})</span></div>
               <div className="flex gap-1">
                 <button onClick={() => handlePrintSectionAll('surgery')} className="text-xs bg-green-100 px-1 hover:bg-green-200 cursor-pointer" title="Print All">📊</button>
                 <button onClick={() => handlePrintSectionSelected('surgery')} className="text-xs bg-blue-100 px-1 hover:bg-blue-200 cursor-pointer" title="Print Selected">🖨️</button>
@@ -1640,7 +1954,7 @@ const DetailedInvoice = () => {
           {/* ANESTHETIST */}
           <div className="mb-4">
             <div className="bg-gray-200 border border-gray-400 border-t-0 p-1 flex justify-between items-center">
-              <strong className="text-xs">ANESTHETIST</strong>
+              <div className="flex items-center gap-2"><input type="checkbox" checked={selectedAnesthetistItems.length === serviceData.anesthetist.length && serviceData.anesthetist.length > 0} onChange={() => toggleSelectAll('anesthetist')} className="cursor-pointer" title="Select All" /><strong className="text-xs">ANESTHETIST</strong><span className="text-[10px] text-gray-500">({selectedAnesthetistItems.length}/{serviceData.anesthetist.length})</span></div>
               <div className="flex gap-1">
                 <button onClick={() => handlePrintSectionAll('anesthetist')} className="text-xs bg-green-100 px-1 hover:bg-green-200 cursor-pointer" title="Print All">📊</button>
                 <button onClick={() => handlePrintSectionSelected('anesthetist')} className="text-xs bg-blue-100 px-1 hover:bg-blue-200 cursor-pointer" title="Print Selected">🖨️</button>

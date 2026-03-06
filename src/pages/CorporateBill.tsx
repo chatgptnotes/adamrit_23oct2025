@@ -1,189 +1,284 @@
-import React, { useState } from 'react';
+// Yojna Bill v2 - saves to yojna_bills table
+import { useState, useEffect } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
+import { useParams } from 'react-router-dom';
+import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
 
 const CorporateBill = () => {
-  const [selectedCorporate, setSelectedCorporate] = useState('');
-  const [selectedPatient, setSelectedPatient] = useState('');
-  const [billType, setBillType] = useState('comprehensive');
+  const { hospitalConfig } = useAuth();
+  const hospitalName = hospitalConfig?.fullName || 'Hope Hospital Nagpur';
+  const { visitId } = useParams<{ visitId: string }>();
+  const [loading, setLoading] = useState(true);
+  const [patientInfo, setPatientInfo] = useState<any>({});
+  const [diagnosis, setDiagnosis] = useState('');
+  const [rows, setRows] = useState([{ item: '', procedure: '', rate: '', qty: '', amount: '' }]);
 
-  const corporateData = [
-    { id: 'C001', name: 'ABC Corporation', contact: 'Mr. John Smith', phone: '+91-9876543210' },
-    { id: 'C002', name: 'XYZ Industries', contact: 'Ms. Sarah Johnson', phone: '+91-9876543211' },
-    { id: 'C003', name: 'DEF Enterprises', contact: 'Mr. Mike Wilson', phone: '+91-9876543212' }
-  ];
+  useEffect(() => {
+    if (visitId) fetchBillData();
+  }, [visitId]);
 
-  const sampleCorporateBill = {
-    corporateName: 'ABC Corporation',
-    corporateId: 'C001',
-    contactPerson: 'Mr. John Smith',
-    patientName: 'John Doe',
-    patientId: 'P001',
-    admissionDate: '2024-01-10',
-    dischargeDate: '2024-01-15',
-    totalAmount: 78141,
-    corporateDiscount: 15,
-    discountAmount: 11721,
-    finalAmount: 66420,
-    services: [
-      { name: 'Clinical Services', amount: 11276, discount: 1691 },
-      { name: 'Laboratory Services', amount: 6565, discount: 985 },
-      { name: 'Radiology', amount: 28000, discount: 4200 },
-      { name: 'Mandatory Services', amount: 6100, discount: 915 },
-      { name: 'Consultation', amount: 10000, discount: 1500 },
-      { name: 'Accommodation Charges', amount: 16200, discount: 2430 }
-    ]
+  const fetchBillData = async () => {
+    try {
+      setLoading(true);
+      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(visitId || '');
+      let visit: any = null;
+
+      if (isUUID) {
+        const { data } = await supabase.from('visits').select('*, patients(*)').eq('id', visitId).single();
+        visit = data;
+      } else {
+        const { data } = await supabase.from('visits').select('*, patients(*)').eq('visit_id', visitId).single();
+        visit = data;
+      }
+
+      if (!visit) { setLoading(false); return; }
+      const patient = visit.patients;
+      const actualVisitId = visit.visit_id || visitId;
+
+      // Fetch bill number from bills table
+      const { data: billData } = await supabase
+        .from('bills')
+        .select('bill_no')
+        .eq('visit_id', actualVisitId)
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      const billNo = billData?.[0]?.bill_no || `BILL-${actualVisitId}`;
+
+      setPatientInfo({
+        patientName: patient?.name || '',
+        ageSex: `${patient?.age || ''}Y / ${patient?.gender || ''}`,
+        address: patient?.address || '',
+        dateOfRegistration: patient?.created_at ? format(new Date(patient.created_at), 'dd-MM-yyyy') : '',
+        dateOfDischarge: visit.discharge_date ? format(new Date(visit.discharge_date), 'dd-MM-yyyy') : '',
+        dateOfInvoice: format(new Date(), 'dd-MM-yyyy'),
+        invoiceNo: billNo,
+        registrationNo: actualVisitId || '',
+        category: patient?.corporate || 'Private',
+        primaryConsultant: visit.appointment_with || '',
+      });
+      setDiagnosis(visit.diagnosis || '');
+
+      // Load previously saved Yojna Bill data if exists
+      const { data: savedBill } = await supabase
+        .from('yojna_bills')
+        .select('*')
+        .eq('visit_id', actualVisitId)
+        .order('updated_at', { ascending: false })
+        .limit(1);
+
+      if (savedBill && savedBill.length > 0) {
+        const bill = savedBill[0];
+        if (bill.items && Array.isArray(bill.items) && bill.items.length > 0) {
+          setRows(bill.items.map((item: any) => ({
+            item: item.item || '',
+            procedure: item.procedure || '',
+            rate: item.rate?.toString() || '',
+            qty: item.qty?.toString() || '',
+            amount: item.amount?.toString() || '',
+          })));
+        }
+        if (bill.diagnosis) setDiagnosis(bill.diagnosis);
+        // Update patient info with saved values if they exist
+        if (bill.invoice_no || bill.date_of_invoice) {
+          setPatientInfo(prev => ({
+            ...prev,
+            ...(bill.invoice_no ? { invoiceNo: bill.invoice_no } : {}),
+            ...(bill.date_of_invoice ? { dateOfInvoice: bill.date_of_invoice } : {}),
+          }));
+        }
+      }
+    } catch (error) {
+      console.error('Error:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
+  const addRow = () => {
+    setRows([...rows, { item: '', procedure: '', rate: '', qty: '', amount: '' }]);
+  };
+
+  const removeRow = (index: number) => {
+    if (rows.length <= 1) return;
+    setRows(rows.filter((_, i) => i !== index));
+  };
+
+  const updateRow = (index: number, field: string, value: string) => {
+    const newRows = [...rows];
+    newRows[index] = { ...newRows[index], [field]: value };
+    // Auto-calculate amount = rate * qty
+    if (field === 'rate' || field === 'qty') {
+      const rate = parseFloat(field === 'rate' ? value : newRows[index].rate) || 0;
+      const qty = parseFloat(field === 'qty' ? value : newRows[index].qty) || 0;
+      newRows[index].amount = (rate * qty).toString();
+    }
+    setRows(newRows);
+  };
+
+  const getTotal = () => rows.reduce((sum, r) => sum + (parseFloat(r.amount) || 0), 0);
+
+  const handleSave = async () => {
+    try {
+      const payload = {
+        visit_id: visitId,
+        patient_name: patientInfo.patientName,
+        registration_no: patientInfo.registrationNo,
+        corporate_name: patientInfo.category,
+        hospital_name: hospitalName,
+        invoice_no: patientInfo.invoiceNo,
+        diagnosis: diagnosis,
+        primary_consultant: patientInfo.primaryConsultant,
+        date_of_registration: patientInfo.dateOfRegistration,
+        date_of_discharge: patientInfo.dateOfDischarge,
+        date_of_invoice: patientInfo.dateOfInvoice,
+        age_sex: patientInfo.ageSex,
+        address: patientInfo.address,
+        items: rows.filter(r => r.item || r.procedure),
+        total_amount: getTotal(),
+        status: 'saved'
+      };
+      // Check if entry exists — update instead of duplicate
+      const { data: existing } = await supabase.from('yojna_bills').select('id').eq('visit_id', visitId).limit(1);
+      let error;
+      if (existing && existing.length > 0) {
+        ({ error } = await supabase.from('yojna_bills').update(payload).eq('visit_id', visitId));
+      } else {
+        ({ error } = await supabase.from('yojna_bills').insert(payload));
+      }
+      if (error) throw error;
+      alert('Yojna Bill saved successfully!');
+    } catch (err: any) {
+      alert('Error saving: ' + err.message);
+    }
+  };
+
+  if (loading) return <div className="flex items-center justify-center min-h-screen"><div className="text-lg">Loading Yojna Bill...</div></div>;
+
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
-      <div className="max-w-6xl mx-auto">
-        {/* Header */}
-        <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
-          <h1 className="text-3xl font-bold text-gray-900 mb-4">Corporate Bill Management</h1>
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <label className="text-sm font-medium">Corporate:</label>
-              <select
-                value={selectedCorporate}
-                onChange={(e) => setSelectedCorporate(e.target.value)}
-                className="border border-gray-300 rounded px-3 py-1 text-sm"
-              >
-                <option value="">Select Corporate</option>
-                {corporateData.map(corp => (
-                  <option key={corp.id} value={corp.id}>{corp.id} - {corp.name}</option>
-                ))}
-              </select>
-            </div>
-            <div className="flex items-center gap-2">
-              <label className="text-sm font-medium">Patient:</label>
-              <select
-                value={selectedPatient}
-                onChange={(e) => setSelectedPatient(e.target.value)}
-                className="border border-gray-300 rounded px-3 py-1 text-sm"
-              >
-                <option value="">Select Patient</option>
-                <option value="P001">P001 - John Doe</option>
-                <option value="P002">P002 - Jane Smith</option>
-              </select>
-            </div>
-            <div className="flex items-center gap-2">
-              <label className="text-sm font-medium">Bill Type:</label>
-              <select
-                value={billType}
-                onChange={(e) => setBillType(e.target.value)}
-                className="border border-gray-300 rounded px-3 py-1 text-sm"
-              >
-                <option value="comprehensive">Comprehensive</option>
-                <option value="summary">Summary</option>
-                <option value="detailed">Detailed</option>
-              </select>
-            </div>
-            <button className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors text-sm">
-              Generate Corporate Bill
-            </button>
-          </div>
-        </div>
+    <div className="min-h-screen bg-gray-100 p-4">
+      {/* Toolbar */}
+      <div className="print:hidden mb-4 flex gap-3 items-center bg-gray-800 text-white p-3 rounded-lg flex-wrap">
+        <button onClick={() => window.print()} className="px-4 py-2 bg-green-500 rounded font-bold hover:bg-green-600">Print</button>
+        <button onClick={handleSave} className="px-4 py-2 bg-blue-500 rounded font-bold hover:bg-blue-600">Save to Database</button>
+        <button onClick={() => window.history.back()} className="px-4 py-2 bg-red-500 rounded font-bold hover:bg-red-600">Back</button>
+        <span className="text-sm text-gray-300 ml-2">All fields are editable</span>
+      </div>
 
-        {/* Corporate Bill Preview */}
-        <div className="bg-white rounded-lg shadow-lg p-6">
-          <h2 className="text-xl font-bold text-gray-900 mb-4">Corporate Bill Preview</h2>
-          
-          {/* Bill Header */}
-          <div className="border-b border-gray-300 pb-4 mb-6">
-            <div className="flex justify-between items-start">
-              <div>
-                <h3 className="text-2xl font-bold text-gray-900">CORPORATE BILL</h3>
-                <p className="text-gray-600">Bill #: CB-2024-001</p>
-                <p className="text-gray-600">Date: {format(new Date(), 'dd/MM/yyyy')}</p>
-              </div>
-              <div className="text-right">
-                <h4 className="font-bold text-gray-900">Corporate Details</h4>
-                <p className="text-gray-600">Name: {sampleCorporateBill.corporateName}</p>
-                <p className="text-gray-600">ID: {sampleCorporateBill.corporateId}</p>
-                <p className="text-gray-600">Contact: {sampleCorporateBill.contactPerson}</p>
-              </div>
-            </div>
-            <div className="mt-4">
-              <h4 className="font-bold text-gray-900">Patient Details</h4>
-              <p className="text-gray-600">Name: {sampleCorporateBill.patientName}</p>
-              <p className="text-gray-600">ID: {sampleCorporateBill.patientId}</p>
-              <p className="text-gray-600">Admission: {format(new Date(sampleCorporateBill.admissionDate), 'dd/MM/yyyy')}</p>
-              <p className="text-gray-600">Discharge: {format(new Date(sampleCorporateBill.dischargeDate), 'dd/MM/yyyy')}</p>
+      {/* Bill */}
+      <div className="max-w-[210mm] mx-auto bg-white shadow-lg print:shadow-none print:m-0">
+        <div className="p-6 print:p-4" style={{ fontFamily: 'Arial, sans-serif' }}>
+
+          <div className="text-center border-b-2 border-black pb-2 mb-0">
+            <h1 className="text-xl font-bold tracking-wide">FINAL BILL</h1>
+          </div>
+
+          {/* Patient Info */}
+          <table className="w-full text-sm border-collapse">
+            <tbody>
+              {[
+                ['Name Of Patient', 'patientName'],
+                ['Age/Sex', 'ageSex'],
+                ['Address', 'address'],
+                ['Date Of Registration', 'dateOfRegistration'],
+                ['Date Of Discharge', 'dateOfDischarge'],
+                ['Date Of Invoice', 'dateOfInvoice'],
+                ['Invoice No.', 'invoiceNo'],
+                ['Registration No.', 'registrationNo'],
+                ['Category', 'category'],
+                ['Primary Consultant', 'primaryConsultant'],
+              ].map(([label, key], idx) => (
+                <tr key={idx}>
+                  <td className="py-1 font-semibold w-[200px] border border-gray-300 px-2 bg-green-50">{label}</td>
+                  <td className="py-1 w-[10px] border border-gray-300 text-center">:</td>
+                  <td className="py-1 border border-gray-300 px-2 font-medium" contentEditable suppressContentEditableWarning
+                    onBlur={(e) => setPatientInfo({...patientInfo, [key]: e.currentTarget.textContent || ''})}>
+                    {patientInfo[key]}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          {/* Diagnosis */}
+          <div className="border border-gray-300 border-t-0 flex text-sm">
+            <div className="font-semibold px-2 py-1 w-[200px] bg-green-50 border-r border-gray-300">Diagnosis</div>
+            <div className="px-2 py-1 flex-1 italic" contentEditable suppressContentEditableWarning
+              onBlur={(e) => setDiagnosis(e.currentTarget.textContent || '')}>
+              {diagnosis || 'N/A'}
             </div>
           </div>
 
-          {/* Services Table */}
-          <div className="mb-6">
-            <h4 className="font-bold text-gray-900 mb-3">Services with Corporate Discount</h4>
-            <div className="overflow-x-auto">
-              <table className="w-full border-collapse border border-gray-300 text-sm">
-                <thead>
-                  <tr className="bg-blue-100">
-                    <th className="border border-gray-300 p-2 text-left font-bold">Service Description</th>
-                    <th className="border border-gray-300 p-2 text-center font-bold">Original Amount (₹)</th>
-                    <th className="border border-gray-300 p-2 text-center font-bold">Discount ({sampleCorporateBill.corporateDiscount}%)</th>
-                    <th className="border border-gray-300 p-2 text-center font-bold">Final Amount (₹)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {sampleCorporateBill.services.map((service, index) => (
-                    <tr key={index} className="bg-gray-50">
-                      <td className="border border-gray-300 p-2">{service.name}</td>
-                      <td className="border border-gray-300 p-2 text-center">{service.amount.toLocaleString()}</td>
-                      <td className="border border-gray-300 p-2 text-center">{service.discount.toLocaleString()}</td>
-                      <td className="border border-gray-300 p-2 text-center">{(service.amount - service.discount).toLocaleString()}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+          {/* Items Table */}
+          <table className="w-full text-sm border-collapse mt-0">
+            <thead>
+              <tr className="bg-green-50">
+                <th className="border border-gray-400 px-2 py-2 text-center w-[50px]">Sr. No.</th>
+                <th className="border border-gray-400 px-2 py-2 text-center w-[100px]">Item</th>
+                <th className="border border-gray-400 px-2 py-2 text-center">Procedure</th>
+                <th className="border border-gray-400 px-2 py-2 text-center w-[80px]">Rate</th>
+                <th className="border border-gray-400 px-2 py-2 text-center w-[50px]">Qty.</th>
+                <th className="border border-gray-400 px-2 py-2 text-center w-[90px]">Amount</th>
+                <th className="border border-gray-400 px-2 py-2 text-center w-[40px] print:hidden"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row, index) => (
+                <tr key={index}>
+                  <td className="border border-gray-400 px-2 py-2 text-center">{index + 1}</td>
+                  <td className="border border-gray-400 px-1 py-1">
+                    <input type="text" value={row.item} onChange={(e) => updateRow(index, 'item', e.target.value)}
+                      className="w-full text-center text-sm outline-none border-none bg-transparent" placeholder="Item" />
+                  </td>
+                  <td className="border border-gray-400 px-1 py-1">
+                    <input type="text" value={row.procedure} onChange={(e) => updateRow(index, 'procedure', e.target.value)}
+                      className="w-full text-center text-sm outline-none border-none bg-transparent" placeholder="Procedure" />
+                  </td>
+                  <td className="border border-gray-400 px-1 py-1">
+                    <input type="number" value={row.rate} onChange={(e) => updateRow(index, 'rate', e.target.value)}
+                      className="w-full text-center text-sm outline-none border-none bg-transparent" placeholder="0" />
+                  </td>
+                  <td className="border border-gray-400 px-1 py-1">
+                    <input type="number" value={row.qty} onChange={(e) => updateRow(index, 'qty', e.target.value)}
+                      className="w-full text-center text-sm outline-none border-none bg-transparent" placeholder="0" />
+                  </td>
+                  <td className="border border-gray-400 px-2 py-2 text-center font-bold">{row.amount || ''}</td>
+                  <td className="border border-gray-400 px-1 py-1 text-center print:hidden whitespace-nowrap">
+                    <button onClick={addRow} className="text-green-600 hover:text-green-800 font-bold text-sm mr-1" title="Add Row">+</button>
+                    {rows.length > 1 && (
+                      <button onClick={() => removeRow(index)} className="text-red-500 hover:text-red-700 font-bold text-sm" title="Remove Row">-</button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+              <tr className="font-bold">
+                <td className="border border-gray-400 px-2 py-2 text-center" colSpan={5}>Total</td>
+                <td className="border border-gray-400 px-2 py-2 text-center">{getTotal()}</td>
+                <td className="border border-gray-400 print:hidden"></td>
+              </tr>
+            </tbody>
+          </table>
+
+
+
+          {/* Tax Info */}
+          <div className="mt-6 text-sm space-y-1">
+            <div className="flex">
+              <span className="font-semibold w-[200px]">Hospital Service Tax No.</span>
+              <span className="w-[10px] text-center">:</span>
+              <span className="ml-2 font-medium" contentEditable suppressContentEditableWarning>ABUPK3997PSD001</span>
+            </div>
+            <div className="flex">
+              <span className="font-semibold w-[200px]">Hospitals PAN</span>
+              <span className="w-[10px] text-center">:</span>
+              <span className="ml-2 font-medium" contentEditable suppressContentEditableWarning>AAECD9144P</span>
             </div>
           </div>
 
-          {/* Summary */}
-          <div className="border-t border-gray-300 pt-4">
-            <div className="flex justify-end">
-              <div className="w-64">
-                <div className="flex justify-between mb-2">
-                  <span className="font-medium">Total Amount:</span>
-                  <span>₹{sampleCorporateBill.totalAmount.toLocaleString()}</span>
-                </div>
-                <div className="flex justify-between mb-2">
-                  <span className="font-medium">Corporate Discount:</span>
-                  <span>₹{sampleCorporateBill.discountAmount.toLocaleString()}</span>
-                </div>
-                <div className="flex justify-between border-t border-gray-300 pt-2">
-                  <span className="font-bold">Final Amount:</span>
-                  <span className="font-bold">₹{sampleCorporateBill.finalAmount.toLocaleString()}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Corporate Terms */}
-          <div className="mt-6 p-4 bg-gray-50 rounded-lg">
-            <h4 className="font-bold text-gray-900 mb-2">Corporate Terms & Conditions</h4>
-            <ul className="text-sm text-gray-600 space-y-1">
-              <li>• Payment due within 30 days of bill generation</li>
-              <li>• Corporate discount of {sampleCorporateBill.corporateDiscount}% applied</li>
-              <li>• All disputes subject to local jurisdiction</li>
-              <li>• Late payment may incur additional charges</li>
-            </ul>
-          </div>
-
-          {/* Action Buttons */}
-          <div className="flex justify-center gap-4 mt-6">
-            <button className="px-6 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors">
-              Print Corporate Bill
-            </button>
-            <button className="px-6 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition-colors">
-              Download PDF
-            </button>
-            <button className="px-6 py-2 bg-purple-500 text-white rounded hover:bg-purple-600 transition-colors">
-              Email to Corporate
-            </button>
-            <button className="px-6 py-2 bg-orange-500 text-white rounded hover:bg-orange-600 transition-colors">
-              Send for Approval
-            </button>
+          <div className="mt-16 text-right text-sm">
+            <p className="font-bold">{hospitalName}</p>
+            <p className="font-semibold">Authorized Signatory</p>
           </div>
         </div>
       </div>

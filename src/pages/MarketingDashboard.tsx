@@ -6,8 +6,10 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { Camera, Send, Save, Edit2, Users, TrendingUp, Building2, Percent, IndianRupee, ClipboardList, CalendarCheck } from 'lucide-react';
+import { Camera, Send, Save, Edit2, Users, TrendingUp, Building2, Percent, IndianRupee, ClipboardList, CalendarCheck, Mic, MicOff, ImagePlus, ChevronDown, ChevronUp } from 'lucide-react';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/contexts/AuthContext';
 
 const db = supabase as any;
 
@@ -41,6 +43,7 @@ interface ChatMessage {
 
 export default function MarketingDashboard() {
   const { toast } = useToast();
+  const { user } = useAuth();
   const [today, setToday] = useState<DayStats>(emptyStats);
   const [monthRows, setMonthRows] = useState<any[]>([]);
   const [yearRows, setYearRows] = useState<any[]>([]);
@@ -48,14 +51,79 @@ export default function MarketingDashboard() {
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState<DayStats>(emptyStats);
   const [loading, setLoading] = useState(true);
+  const [showStats, setShowStats] = useState(false);
 
   // Chat state
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState('');
   const [chatPhotos, setChatPhotos] = useState<File[]>([]);
   const [chatLoading, setChatLoading] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [speechLang, setSpeechLang] = useState<'hi-IN' | 'en-IN'>('hi-IN');
+  const [contactPrefs, setContactPrefs] = useState<Record<number, { dietary_preference: string; drinks_alcohol: string; gratification_type: string; phone: string; email: string; gratification_details: string; personal_habits: string; family_details: string; birthday: string; anniversary: string }>>({});
+  const [editedExtracted, setEditedExtracted] = useState<Record<number, { corporateId?: string; corporate?: string; areaId?: string; area?: string }>>({});
+  const [corporateList, setCorporateList] = useState<any[]>([]);
+  const [areaListByIdx, setAreaListByIdx] = useState<Record<number, any[]>>({});
   const chatEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const recognitionRef = useRef<any>(null);
+
+  // Speech recognition setup
+  const startRecording = () => {
+    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+      toast({ title: 'Speech recognition not supported', description: 'Please use Chrome or Edge browser', variant: 'destructive' });
+      return;
+    }
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    const recognition = new SpeechRecognition();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = speechLang;
+
+    let finalTranscript = '';
+
+    recognition.onresult = (event: any) => {
+      let interimTranscript = '';
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const text = event.results[i][0].transcript;
+        if (event.results[i].isFinal) {
+          finalTranscript += text + ' ';
+        } else {
+          interimTranscript += text;
+        }
+      }
+      setChatInput(finalTranscript + interimTranscript);
+    };
+
+    recognition.onerror = (event: any) => {
+      console.error('Speech error:', event.error);
+      setIsRecording(false);
+    };
+
+    recognition.onend = () => {
+      setIsRecording(false);
+    };
+
+    recognitionRef.current = recognition;
+    recognition.start();
+    setIsRecording(true);
+  };
+
+  const stopRecording = () => {
+    if (recognitionRef.current) {
+      recognitionRef.current.stop();
+    }
+    setIsRecording(false);
+  };
+
+  const toggleRecording = () => {
+    if (isRecording) {
+      stopRecording();
+    } else {
+      startRecording();
+    }
+  };
 
   const todayStr = new Date().toISOString().split('T')[0];
   const now = new Date();
@@ -65,18 +133,25 @@ export default function MarketingDashboard() {
 
   const fetchData = async () => {
     setLoading(true);
-    const [todayRes, monthRes, yearRes, yestRes] = await Promise.all([
+    const [todayRes, monthRes, yearRes, yestRes, corpRes] = await Promise.all([
       db.from('marketing_daily_stats').select('*').eq('date', todayStr).maybeSingle(),
       db.from('marketing_daily_stats').select('*').gte('date', monthStart).lte('date', todayStr),
       db.from('marketing_daily_stats').select('revenue').gte('date', yearStart).lte('date', todayStr),
       db.from('marketing_daily_stats').select('*').eq('date', yesterday).maybeSingle(),
+      db.from('corporate_master').select('id, name').order('name'),
     ]);
     if (todayRes.data) { setToday(todayRes.data); setForm(todayRes.data); }
     else { setToday(emptyStats); setForm(emptyStats); }
     setMonthRows(monthRes.data || []);
     setYearRows(yearRes.data || []);
     setYesterdayRow(yestRes.data);
+    setCorporateList(corpRes.data || []);
     setLoading(false);
+  };
+
+  const fetchAreasForCorporate = async (corporateId: string, msgIdx: number) => {
+    const { data } = await db.from('corporate_areas').select('id, area_name').eq('corporate_id', corporateId).order('area_name');
+    setAreaListByIdx(prev => ({ ...prev, [msgIdx]: data || [] }));
   };
 
   useEffect(() => { fetchData(); }, []);
@@ -126,14 +201,86 @@ export default function MarketingDashboard() {
     setChatPhotos([]);
 
     try {
-      const res = await fetch('/api/ai-field-assistant', {
+      const todayDate = new Date().toISOString().split('T')[0];
+      const prompt = `Extract visit info as JSON. Summarize conversation professionally (2-3 sentences max).
+
+Input: "${chatInput}"${photoUrls.length ? ` [${photoUrls.length} photos]` : ''}
+
+Known corporates: WCL, ESIC, CGHS, ECHS, Central Railway, SECR, MPKAY, PM-JAY, MP Police
+
+Return JSON only:
+{
+  "corporate": "organization name or null",
+  "area": "city/area name or null", 
+  "contactName": "person name or null",
+  "designation": "role or null",
+  "conversation": "professional summary of discussion",
+  "actionItems": "action points or null",
+  "followUpDate": "YYYY-MM-DD or null",
+  "followUpNeeded": false,
+  "marketingStaff": "staff name or null",
+  "meetingDate": "${todayDate}"
+}`;
+
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${import.meta.env.VITE_GEMINI_API_KEY}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: chatInput, photos: photoUrls })
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: {
+            temperature: 0.2,
+            responseMimeType: 'application/json'
+          }
+        })
       });
-      const extracted = await res.json();
-      setMessages(prev => [...prev, { role: 'assistant', text: '', extracted }]);
-    } catch {
+      
+      const data = await res.json();
+      console.log('Gemini response:', data);
+      
+      if (data.error) {
+        throw new Error(data.error.message);
+      }
+      
+      let text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      console.log('Raw text:', text);
+      
+      // Clean up JSON if needed
+      text = text.trim();
+      if (text.startsWith('```json')) text = text.slice(7);
+      if (text.startsWith('```')) text = text.slice(3);
+      if (text.endsWith('```')) text = text.slice(0, -3);
+      text = text.trim();
+      
+      let extracted = JSON.parse(text);
+      // Handle if Gemini returns an array instead of object
+      if (Array.isArray(extracted)) {
+        extracted = extracted[0];
+      }
+      // Clean up "null" strings and normalize values from AI response
+      for (const key of Object.keys(extracted)) {
+        if (extracted[key] === 'null' || extracted[key] === null || extracted[key] === 'undefined') extracted[key] = '';
+        if (key === 'followUpNeeded') extracted[key] = extracted[key] === true || extracted[key] === 'true';
+      }
+      // Auto-set marketing staff from logged-in user
+      if (!extracted.marketingStaff && user?.username) {
+        extracted.marketingStaff = user.username;
+      }
+      console.log('Extracted:', extracted);
+      setMessages(prev => {
+        const newMessages = [...prev, { role: 'assistant' as const, text: '', extracted }];
+        const newIdx = newMessages.length - 1;
+        // Auto-resolve corporate ID if corporate was detected, so area dropdown can load
+        if (extracted.corporate && extracted.corporate !== 'null' && extracted.corporate !== 'Unknown') {
+          const match = corporateList.find((c: any) => c.name.toLowerCase().includes(extracted.corporate.toLowerCase()) || extracted.corporate.toLowerCase().includes(c.name.toLowerCase()));
+          if (match) {
+            setEditedExtracted(prev => ({ ...prev, [newIdx]: { ...prev[newIdx], corporateId: match.id, corporate: match.name } }));
+            fetchAreasForCorporate(match.id, newIdx);
+          }
+        }
+        return newMessages;
+      });
+    } catch (err) {
+      console.error('AI Error:', err);
       setMessages(prev => [...prev, { role: 'assistant', text: 'Failed to process. Try again.' }]);
     }
     setChatLoading(false);
@@ -142,41 +289,144 @@ export default function MarketingDashboard() {
   const saveToMaster = async (idx: number) => {
     const msg = messages[idx];
     if (!msg.extracted) return;
-    const e = msg.extracted;
+    const e = { ...msg.extracted };
 
-    // Upsert contact
-    const { data: existing } = await db.from('corporate_area_contacts')
-      .select('id')
-      .ilike('name', e.contactName || '')
-      .maybeSingle();
+    // Apply user edits for corporate/area
+    const edits = editedExtracted[idx];
+    if (edits?.corporate) e.corporate = edits.corporate;
+    if (edits?.area) e.area = edits.area;
 
-    let contactId = existing?.id;
-    if (!contactId && e.contactName) {
-      const { data: newC } = await db.from('corporate_area_contacts').insert({
-        name: e.contactName,
-        designation: e.designation,
-        organization: e.organization,
-        area: e.area,
-        location: e.location,
-      }).select('id').single();
-      contactId = newC?.id;
-    }
+    // Get photos from the user message (previous message)
+    const userMsg = messages[idx - 1];
+    const photos = userMsg?.photos || [];
 
-    // Create meeting
-    if (contactId) {
-      await db.from('corporate_area_meetings').insert({
-        contact_id: contactId,
-        meeting_date: e.meetingDate || todayStr,
-        conversation: e.conversation,
-        action_items: e.actionItems,
-        follow_up_date: e.followUpDate,
-        follow_up_needed: e.followUpNeeded,
-        photos: msg.photos || [],
+    try {
+      // Step 1: Use selected corporate ID from dropdown, or find/create by name
+      let corporateId = edits?.corporateId || null;
+      if (!corporateId && e.corporate) {
+        const { data: existingCorps } = await db.from('corporate_master')
+          .select('id, name')
+          .or(`name.ilike.%${e.corporate}%,name.ilike.${e.corporate}%`);
+
+        if (existingCorps && existingCorps.length > 0) {
+          corporateId = existingCorps[0].id;
+          console.log('Found existing corporate:', existingCorps[0].name);
+        } else {
+          const { data: newCorp } = await db.from('corporate_master')
+            .insert({ name: e.corporate, category: 'government' })
+            .select('id')
+            .single();
+          corporateId = newCorp?.id;
+          console.log('Created new corporate:', e.corporate);
+        }
+      }
+
+      // Step 2: Use selected area ID from dropdown, or find/create by name
+      let areaId = edits?.areaId || null;
+      if (!areaId && e.area && corporateId) {
+        const { data: existingAreas } = await db.from('corporate_areas')
+          .select('id, area_name')
+          .eq('corporate_id', corporateId)
+          .or(`area_name.ilike.%${e.area}%,area_name.ilike.${e.area}%`);
+
+        if (existingAreas && existingAreas.length > 0) {
+          areaId = existingAreas[0].id;
+          console.log('Found existing area:', existingAreas[0].area_name);
+        } else {
+          const { data: newArea } = await db.from('corporate_areas')
+            .insert({
+              corporate_id: corporateId,
+              area_name: e.area,
+              status: 'active'
+            })
+            .select('id')
+            .single();
+          areaId = newArea?.id;
+          console.log('Created new area:', e.area);
+        }
+      }
+
+      // Step 3: Find or create Contact under Area (e.g., Dr. Sharma)
+      let contactId = null;
+      const prefs = contactPrefs[idx] || { dietary_preference: 'unknown', drinks_alcohol: 'unknown', gratification_type: '', phone: '', email: '', gratification_details: '', personal_habits: '', family_details: '', birthday: '', anniversary: '' };
+      if (e.contactName && areaId) {
+        const { data: existingContact } = await db.from('corporate_area_contacts')
+          .select('id')
+          .eq('area_id', areaId)
+          .ilike('name', e.contactName)
+          .maybeSingle();
+
+        if (existingContact) {
+          contactId = existingContact.id;
+          // Update all profile fields on existing contact
+          const updateData: any = {};
+          if (prefs.dietary_preference && prefs.dietary_preference !== 'unknown') updateData.dietary_preference = prefs.dietary_preference;
+          if (prefs.drinks_alcohol && prefs.drinks_alcohol !== 'unknown') updateData.drinks_alcohol = prefs.drinks_alcohol;
+          if (prefs.gratification_type) updateData.gratification_type = prefs.gratification_type;
+          if (prefs.phone) updateData.phone = prefs.phone;
+          if (prefs.email) updateData.email = prefs.email;
+          if (prefs.gratification_details) updateData.gratification_details = prefs.gratification_details;
+          if (prefs.personal_habits) updateData.personal_habits = prefs.personal_habits;
+          if (prefs.family_details) updateData.family_details = prefs.family_details;
+          if (prefs.birthday) updateData.birthday = prefs.birthday;
+          if (prefs.anniversary) updateData.anniversary = prefs.anniversary;
+          if (Object.keys(updateData).length > 0) {
+            await db.from('corporate_area_contacts').update(updateData).eq('id', contactId);
+          }
+        } else {
+          const { data: newContact } = await db.from('corporate_area_contacts')
+            .insert({
+              area_id: areaId,
+              name: e.contactName,
+              designation: e.designation || null,
+              photos: photos,
+              dietary_preference: prefs.dietary_preference || 'unknown',
+              drinks_alcohol: prefs.drinks_alcohol || 'unknown',
+              gratification_type: prefs.gratification_type || null,
+              phone: prefs.phone || null,
+              email: prefs.email || null,
+              gratification_details: prefs.gratification_details || null,
+              personal_habits: prefs.personal_habits || null,
+              family_details: prefs.family_details || null,
+              birthday: prefs.birthday && prefs.birthday.match(/^\d{4}-\d{2}-\d{2}$/) ? prefs.birthday : null,
+              anniversary: prefs.anniversary && prefs.anniversary.match(/^\d{4}-\d{2}-\d{2}$/) ? prefs.anniversary : null,
+            })
+            .select('id')
+            .single();
+          contactId = newContact?.id;
+        }
+      }
+
+      // Step 4: Create Meeting record under Area
+      if (areaId) {
+        const { error: meetingError } = await db.from('corporate_area_meetings').insert({
+          area_id: areaId,
+          meeting_date: e.meetingDate || todayStr,
+          person_met: e.contactName || null,
+          location: e.area || null,
+          conversation: e.conversation || null,
+          action_requested: e.actionItems || null,
+          follow_up_date: e.followUpDate && e.followUpDate.match(/^\d{4}-\d{2}-\d{2}$/) ? e.followUpDate : null,
+          follow_up_needed: e.followUpNeeded === true,
+          photos: photos,
+          marketing_staff: e.marketingStaff || null,
+        });
+        
+        if (meetingError) {
+          console.error('Meeting save error:', meetingError);
+          throw meetingError;
+        }
+      }
+
+      setMessages(prev => prev.map((m, i) => i === idx ? { ...m, saved: true } : m));
+      toast({ 
+        title: 'Saved to Corporate Master!',
+        description: `${e.corporate || 'Unknown'} → ${e.area || 'Unknown'} → ${e.contactName || 'Meeting recorded'}`
       });
+    } catch (error) {
+      console.error('Save error:', error);
+      toast({ title: 'Failed to save', description: 'Please try again', variant: 'destructive' });
     }
-
-    setMessages(prev => prev.map((m, i) => i === idx ? { ...m, saved: true } : m));
-    toast({ title: 'Saved to Corporate Master!' });
   };
 
   const StatCard = ({ icon: Icon, label, value, color = 'blue' }: { icon: any; label: string; value: string | number; color?: string }) => (
@@ -194,49 +444,10 @@ export default function MarketingDashboard() {
   if (loading) return <div className="flex items-center justify-center h-screen"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" /></div>;
 
   return (
-    <div className="max-w-4xl mx-auto p-4 space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-gray-900">📊 Marketing Dashboard</h1>
-        <Button size="sm" onClick={() => { setForm(today.id ? today : emptyStats); setShowModal(true); }}>
-          {today.id ? 'Edit Stats' : 'Update Stats'}
-        </Button>
-      </div>
-
-      {/* Top: 6 stat cards */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-        <StatCard icon={Users} label="Doctors Today" value={today.doctors_contacted} color="blue" />
-        <StatCard icon={Users} label="Doctors Month" value={monthSum('doctors_contacted')} color="indigo" />
-        <StatCard icon={TrendingUp} label="Admissions Yest." value={yesterdayRow?.admissions || 0} color="green" />
-        <StatCard icon={TrendingUp} label="Admissions Month" value={monthSum('admissions')} color="emerald" />
-        <StatCard icon={Percent} label="Occupancy Today" value={`${today.occupancy_percent}%`} color="orange" />
-        <StatCard icon={Percent} label="Avg Occ. Month" value={`${monthAvg('occupancy_percent').toFixed(0)}%`} color="amber" />
-      </div>
-
-      {/* Revenue cards */}
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-        <StatCard icon={IndianRupee} label="Revenue Today" value={inr(today.revenue)} color="green" />
-        <StatCard icon={IndianRupee} label="Revenue Month" value={inr(monthSum('revenue'))} color="emerald" />
-        <StatCard icon={IndianRupee} label="Revenue Year" value={inr(yearSum('revenue'))} color="teal" />
-      </div>
-
-      {/* Activity cards */}
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-        <StatCard icon={Building2} label="Discharges Yest." value={yesterdayRow?.discharges || 0} color="purple" />
-        <StatCard icon={Building2} label="Discharges Month" value={monthSum('discharges')} color="violet" />
-        <Card className="bg-white border border-gray-100 shadow-sm col-span-2 md:col-span-1">
-          <CardContent className="p-3">
-            <div className="flex items-center gap-2 mb-1">
-              <ClipboardList className="h-4 w-4 text-blue-500" />
-              <span className="text-xs text-gray-500">Today's Plan</span>
-            </div>
-            <p className="text-sm text-gray-700 line-clamp-3">{today.plan_for_today || 'No plan set'}</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* AI Field Assistant Chat */}
-      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden mt-6">
-        <div className="p-3 bg-blue-600 text-white font-semibold flex items-center gap-2">
+    <div className="max-w-4xl mx-auto p-2 md:p-4 space-y-3 md:space-y-4">
+      {/* AI Field Assistant Chat - FIRST on mobile */}
+      <div className="bg-white border-2 border-blue-400 rounded-xl overflow-hidden shadow-lg md:order-none">
+        <div className="p-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white font-semibold flex items-center gap-2">
           🤖 AI Field Assistant
           <span className="text-xs text-blue-200 ml-auto">Snap photos & chat about your visits</span>
         </div>
@@ -261,20 +472,159 @@ export default function MarketingDashboard() {
                 {msg.extracted && (
                   <div className="mt-2 space-y-2">
                     <div className="bg-blue-50 rounded-lg p-3 text-sm space-y-1">
-                      {msg.extracted.contactName && <p><strong>Contact:</strong> {msg.extracted.contactName}</p>}
-                      {msg.extracted.designation && <p><strong>Designation:</strong> {msg.extracted.designation}</p>}
-                      {msg.extracted.organization && <p><strong>Organization:</strong> {msg.extracted.organization}</p>}
-                      {msg.extracted.area && <p><strong>Area:</strong> {msg.extracted.area}</p>}
-                      {msg.extracted.location && <p><strong>Location:</strong> {msg.extracted.location}</p>}
-                      {msg.extracted.conversation && <p><strong>Notes:</strong> {msg.extracted.conversation}</p>}
-                      {msg.extracted.actionItems && <p><strong>Action Items:</strong> {msg.extracted.actionItems}</p>}
-                      {msg.extracted.followUpDate && <p><strong>Follow-up:</strong> {msg.extracted.followUpDate}</p>}
+                      {/* Hierarchy: Corporate → Area - dropdown if unknown */}
+                      {!msg.saved ? (
+                        <div className="flex items-center gap-1 flex-wrap">
+                          <span>🏢</span>
+                          {(!msg.extracted.corporate || msg.extracted.corporate === 'null' || msg.extracted.corporate === 'Unknown') ? (
+                            <select
+                              value={editedExtracted[idx]?.corporateId || ''}
+                              onChange={e => {
+                                const corp = corporateList.find((c: any) => c.id === e.target.value);
+                                setEditedExtracted(prev => ({ ...prev, [idx]: { ...prev[idx], corporateId: e.target.value, corporate: corp?.name || '', areaId: '', area: '' } }));
+                                if (e.target.value) fetchAreasForCorporate(e.target.value, idx);
+                              }}
+                              className="text-xs border border-orange-300 rounded px-2 py-1 bg-orange-50 text-orange-800 w-40"
+                            >
+                              <option value="">-- Select Corporate --</option>
+                              {corporateList.map((c: any) => (
+                                <option key={c.id} value={c.id}>{c.name}</option>
+                              ))}
+                            </select>
+                          ) : (
+                            <span className="text-blue-700 font-medium">{msg.extracted.corporate}</span>
+                          )}
+                          <span>→ 📍</span>
+                          {(!msg.extracted.area || msg.extracted.area === 'null' || msg.extracted.area === 'Unknown') ? (
+                            areaListByIdx[idx] && areaListByIdx[idx].length > 0 ? (
+                              <select
+                                value={editedExtracted[idx]?.areaId || ''}
+                                onChange={e => {
+                                  const ar = areaListByIdx[idx]?.find((a: any) => a.id === e.target.value);
+                                  setEditedExtracted(prev => ({ ...prev, [idx]: { ...prev[idx], areaId: e.target.value, area: ar?.area_name || '' } }));
+                                }}
+                                className="text-xs border border-orange-300 rounded px-2 py-1 bg-orange-50 text-orange-800 w-40"
+                              >
+                                <option value="">-- Select Area --</option>
+                                {areaListByIdx[idx].map((a: any) => (
+                                  <option key={a.id} value={a.id}>{a.area_name}</option>
+                                ))}
+                              </select>
+                            ) : (
+                              <span className="text-xs text-orange-500 italic">{editedExtracted[idx]?.corporateId ? 'No areas found' : 'Select corporate first'}</span>
+                            )
+                          ) : (
+                            <span className="text-blue-700 font-medium">{msg.extracted.area}</span>
+                          )}
+                        </div>
+                      ) : (
+                        (msg.extracted.corporate || msg.extracted.area) && (
+                          <p className="text-blue-700 font-medium">
+                            🏢 {msg.extracted.corporate || 'Unknown'} → 📍 {msg.extracted.area || 'Unknown'}
+                          </p>
+                        )
+                      )}
+                      {msg.extracted.contactName && msg.extracted.contactName !== 'null' && <p><strong>👤 Contact:</strong> {msg.extracted.contactName}</p>}
+                      {msg.extracted.designation && msg.extracted.designation !== 'null' && <p><strong>💼 Designation:</strong> {msg.extracted.designation}</p>}
+                      <p><strong>🧑‍💼 Visited by:</strong> {msg.extracted.marketingStaff && msg.extracted.marketingStaff !== 'null' ? msg.extracted.marketingStaff : user?.username || 'Unknown'}</p>
+                      {msg.extracted.conversation && msg.extracted.conversation !== 'null' && <p><strong>💬 Notes:</strong> {msg.extracted.conversation}</p>}
+                      {msg.extracted.actionItems && msg.extracted.actionItems !== 'null' && <p><strong>✅ Action Items:</strong> {msg.extracted.actionItems}</p>}
+                      {msg.extracted.followUpDate && msg.extracted.followUpDate !== 'null' && <p><strong>📅 Follow-up:</strong> {msg.extracted.followUpDate}</p>}
                     </div>
                     {!msg.saved ? (
-                      <div className="flex gap-2">
-                        <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white" onClick={() => saveToMaster(idx)}>
-                          <Save className="h-3 w-3 mr-1" /> Save to Corporate Master
-                        </Button>
+                      <div className="space-y-2">
+                        {msg.extracted.contactName && (() => {
+                          const p = contactPrefs[idx] || { dietary_preference: 'unknown', drinks_alcohol: 'unknown', gratification_type: '', phone: '', email: '', gratification_details: '', personal_habits: '', family_details: '', birthday: '', anniversary: '' };
+                          const up = (field: string, val: string) => setContactPrefs(prev => ({ ...prev, [idx]: { ...p, ...prev[idx], [field]: val } }));
+                          return (
+                          <div className="bg-pink-50 rounded-lg p-3 space-y-2">
+                            <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">📋 Doctor's Profile</p>
+                            {/* Phone & Email */}
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <label className="text-xs text-gray-500">📞 Phone</label>
+                                <input type="tel" placeholder="Phone number" value={contactPrefs[idx]?.phone || ''} onChange={e => up('phone', e.target.value)} className="w-full text-xs border rounded px-2 py-1.5 bg-white" />
+                              </div>
+                              <div>
+                                <label className="text-xs text-gray-500">📧 Email</label>
+                                <input type="email" placeholder="Email address" value={contactPrefs[idx]?.email || ''} onChange={e => up('email', e.target.value)} className="w-full text-xs border rounded px-2 py-1.5 bg-white" />
+                              </div>
+                            </div>
+                            {/* Preferences */}
+                            <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mt-2">🎯 Preferences & Gratification</p>
+                            <div className="grid grid-cols-3 gap-2">
+                              <div>
+                                <label className="text-xs text-gray-500">Dietary</label>
+                                <select value={contactPrefs[idx]?.dietary_preference || 'unknown'} onChange={e => up('dietary_preference', e.target.value)} className="w-full text-xs border rounded px-2 py-1.5 bg-white">
+                                  <option value="unknown">❓ Unknown</option>
+                                  <option value="vegetarian">🥬 Veg</option>
+                                  <option value="non-vegetarian">🍗 Non-Veg</option>
+                                  <option value="eggetarian">🥚 Eggetarian</option>
+                                  <option value="vegan">🌱 Vegan</option>
+                                  <option value="jain">🙏 Jain</option>
+                                </select>
+                              </div>
+                              <div>
+                                <label className="text-xs text-gray-500">Alcohol</label>
+                                <select value={contactPrefs[idx]?.drinks_alcohol || 'unknown'} onChange={e => up('drinks_alcohol', e.target.value)} className="w-full text-xs border rounded px-2 py-1.5 bg-white">
+                                  <option value="unknown">❓ Unknown</option>
+                                  <option value="no">🚫 No</option>
+                                  <option value="occasionally">🍷 Occasionally</option>
+                                  <option value="socially">🥂 Socially</option>
+                                  <option value="regularly">🍺 Regularly</option>
+                                </select>
+                              </div>
+                              <div>
+                                <label className="text-xs text-gray-500">Gratification</label>
+                                <select value={contactPrefs[idx]?.gratification_type || ''} onChange={e => up('gratification_type', e.target.value)} className="w-full text-xs border rounded px-2 py-1.5 bg-white">
+                                  <option value="">-- Select --</option>
+                                  <option value="monetary">💰 Monetary</option>
+                                  <option value="gifts_in_kind">🎁 Gifts</option>
+                                  <option value="family_outing">👨‍👩‍👧‍👦 Outing</option>
+                                  <option value="dinner">🍽️ Dinner</option>
+                                  <option value="travel">✈️ Travel</option>
+                                  <option value="festival_gifts">🎊 Festival</option>
+                                  <option value="professional_favor">🤝 Favor</option>
+                                  <option value="none">🚫 None</option>
+                                </select>
+                              </div>
+                            </div>
+                            {/* Gratification Details & Personal Habits */}
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <label className="text-xs text-gray-500">Gratification Details</label>
+                                <textarea placeholder="E.g. Prefers whisky, likes trips to Goa" value={contactPrefs[idx]?.gratification_details || ''} onChange={e => up('gratification_details', e.target.value)} className="w-full text-xs border rounded px-2 py-1.5 bg-white" rows={2} />
+                              </div>
+                              <div>
+                                <label className="text-xs text-gray-500">Personal Habits & Interests</label>
+                                <textarea placeholder="E.g. Morning walker, cricket fan" value={contactPrefs[idx]?.personal_habits || ''} onChange={e => up('personal_habits', e.target.value)} className="w-full text-xs border rounded px-2 py-1.5 bg-white" rows={2} />
+                              </div>
+                            </div>
+                            {/* Family & Dates */}
+                            <div className="grid grid-cols-1 gap-2">
+                              <div>
+                                <label className="text-xs text-gray-500">Family Details</label>
+                                <input type="text" placeholder="E.g. Wife: Sunita, Son: 10th class" value={contactPrefs[idx]?.family_details || ''} onChange={e => up('family_details', e.target.value)} className="w-full text-xs border rounded px-2 py-1.5 bg-white" />
+                              </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <label className="text-xs text-gray-500">🎂 Birthday</label>
+                                <input type="date" value={contactPrefs[idx]?.birthday || ''} onChange={e => up('birthday', e.target.value)} className="w-full text-xs border rounded px-2 py-1.5 bg-white" />
+                              </div>
+                              <div>
+                                <label className="text-xs text-gray-500">💍 Anniversary</label>
+                                <input type="date" value={contactPrefs[idx]?.anniversary || ''} onChange={e => up('anniversary', e.target.value)} className="w-full text-xs border rounded px-2 py-1.5 bg-white" />
+                              </div>
+                            </div>
+                          </div>
+                          );
+                        })()}
+                        <div className="flex gap-2">
+                          <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white" onClick={() => saveToMaster(idx)}>
+                            <Save className="h-3 w-3 mr-1" /> Save to Corporate Master
+                          </Button>
+                        </div>
                       </div>
                     ) : (
                       <p className="text-xs text-green-600 font-medium">✅ Saved to Corporate Master</p>
@@ -309,18 +659,108 @@ export default function MarketingDashboard() {
               ))}
             </div>
           )}
+          {/* Hidden file inputs */}
+          <input type="file" accept="image/*" capture="environment" ref={cameraInputRef} className="hidden"
+            onChange={e => { if (e.target.files) { setChatPhotos(prev => [...prev, ...Array.from(e.target.files!)]); e.target.value = ''; } }} />
+          <input type="file" accept="image/*" multiple ref={fileInputRef} className="hidden"
+            onChange={e => { if (e.target.files) setChatPhotos(prev => [...prev, ...Array.from(e.target.files!)]); }} />
+
+          {/* Action buttons row */}
+          <div className="flex items-center gap-2 mb-2">
+            <button
+              onClick={() => cameraInputRef.current?.click()}
+              className="flex flex-col items-center justify-center gap-0.5 px-3 py-2 rounded-xl bg-blue-50 hover:bg-blue-100 border border-blue-200 transition active:scale-95"
+            >
+              <Camera className="h-5 w-5 text-blue-600" />
+              <span className="text-[10px] text-blue-600 font-medium">Camera</span>
+            </button>
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="flex flex-col items-center justify-center gap-0.5 px-3 py-2 rounded-xl bg-purple-50 hover:bg-purple-100 border border-purple-200 transition active:scale-95"
+            >
+              <ImagePlus className="h-5 w-5 text-purple-600" />
+              <span className="text-[10px] text-purple-600 font-medium">Gallery</span>
+            </button>
+            <button
+              onClick={toggleRecording}
+              className={`flex flex-col items-center justify-center gap-0.5 px-3 py-2 rounded-xl border transition active:scale-95 ${
+                isRecording
+                  ? 'bg-red-100 border-red-300 animate-pulse'
+                  : 'bg-green-50 hover:bg-green-100 border-green-200'
+              }`}
+            >
+              {isRecording ? <MicOff className="h-5 w-5 text-red-600" /> : <Mic className="h-5 w-5 text-green-600" />}
+              <span className={`text-[10px] font-medium ${isRecording ? 'text-red-600' : 'text-green-600'}`}>
+                {isRecording ? 'Stop' : 'Mic'}
+              </span>
+            </button>
+            <button
+              onClick={() => setSpeechLang(prev => prev === 'hi-IN' ? 'en-IN' : 'hi-IN')}
+              className="flex flex-col items-center justify-center gap-0.5 px-3 py-2 rounded-xl bg-orange-50 hover:bg-orange-100 border border-orange-200 transition active:scale-95"
+              title={speechLang === 'hi-IN' ? 'Hindi mode - tap for English' : 'English mode - tap for Hindi'}
+            >
+              <span className="text-sm font-bold text-orange-600">{speechLang === 'hi-IN' ? 'हि' : 'EN'}</span>
+              <span className="text-[10px] text-orange-600 font-medium">{speechLang === 'hi-IN' ? 'Hindi' : 'English'}</span>
+            </button>
+          </div>
+
+          {/* Text input row */}
           <div className="flex gap-2">
-            <input type="file" accept="image/*" capture="environment" multiple ref={fileInputRef} className="hidden"
-              onChange={e => { if (e.target.files) setChatPhotos(prev => [...prev, ...Array.from(e.target.files!)]); }} />
-            <Button variant="outline" size="icon" onClick={() => fileInputRef.current?.click()}>
-              <Camera className="h-4 w-4" />
-            </Button>
-            <Input placeholder="Describe your visit..." value={chatInput}
+            <Input
+              placeholder="Describe your visit..."
+              value={chatInput}
               onChange={e => setChatInput(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); } }} />
-            <Button onClick={sendChat} disabled={chatLoading}>
-              <Send className="h-4 w-4" />
+              onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); } }}
+              className="flex-1 h-10"
+            />
+            <Button onClick={sendChat} disabled={chatLoading} className="h-10 px-4 bg-blue-600 hover:bg-blue-700">
+              <Send className="h-5 w-5" />
             </Button>
+          </div>
+        </div>
+      </div>
+
+      {/* Stats Section - Collapsible on mobile */}
+      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+        <button
+          onClick={() => setShowStats(!showStats)}
+          className="w-full p-3 flex items-center justify-between bg-gray-50 hover:bg-gray-100 transition md:hidden"
+        >
+          <span className="text-sm font-semibold text-gray-700">📊 Dashboard Stats</span>
+          {showStats ? <ChevronUp className="h-4 w-4 text-gray-500" /> : <ChevronDown className="h-4 w-4 text-gray-500" />}
+        </button>
+        <div className={`p-3 space-y-3 ${showStats ? 'block' : 'hidden md:block'}`}>
+          <div className="flex items-center justify-between md:mb-2">
+            <h1 className="text-lg font-bold text-gray-900 hidden md:block">📊 Marketing Dashboard</h1>
+            <Button size="sm" onClick={() => { setForm(today.id ? today : emptyStats); setShowModal(true); }}>
+              {today.id ? 'Edit Stats' : 'Update Stats'}
+            </Button>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2">
+            <StatCard icon={Users} label="Doctors Today" value={today.doctors_contacted} color="blue" />
+            <StatCard icon={Users} label="Doctors Month" value={monthSum('doctors_contacted')} color="indigo" />
+            <StatCard icon={TrendingUp} label="Admissions Yest." value={yesterdayRow?.admissions || 0} color="green" />
+            <StatCard icon={TrendingUp} label="Admissions Month" value={monthSum('admissions')} color="emerald" />
+            <StatCard icon={Percent} label="Occupancy Today" value={`${today.occupancy_percent}%`} color="orange" />
+            <StatCard icon={Percent} label="Avg Occ. Month" value={`${monthAvg('occupancy_percent').toFixed(0)}%`} color="amber" />
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+            <StatCard icon={IndianRupee} label="Revenue Today" value={inr(today.revenue)} color="green" />
+            <StatCard icon={IndianRupee} label="Revenue Month" value={inr(monthSum('revenue'))} color="emerald" />
+            <StatCard icon={IndianRupee} label="Revenue Year" value={inr(yearSum('revenue'))} color="teal" />
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+            <StatCard icon={Building2} label="Discharges Yest." value={yesterdayRow?.discharges || 0} color="purple" />
+            <StatCard icon={Building2} label="Discharges Month" value={monthSum('discharges')} color="violet" />
+            <Card className="bg-white border border-gray-100 shadow-sm col-span-2 md:col-span-1">
+              <CardContent className="p-3">
+                <div className="flex items-center gap-2 mb-1">
+                  <ClipboardList className="h-4 w-4 text-blue-500" />
+                  <span className="text-xs text-gray-500">Today's Plan</span>
+                </div>
+                <p className="text-sm text-gray-700 line-clamp-3">{today.plan_for_today || 'No plan set'}</p>
+              </CardContent>
+            </Card>
           </div>
         </div>
       </div>
