@@ -22,6 +22,7 @@ interface VisitDetailsSectionProps {
     referringDoctor?: string;
     relationshipManager?: string;
     claimId?: string;
+    cardNo?: string;
   };
   handleInputChange: (field: string, value: string) => void;
   existingVisit?: any; // Optional existing visit data for edit mode
@@ -488,6 +489,19 @@ export const VisitDetailsSection: React.FC<VisitDetailsSectionProps> = ({
             placeholder="Enter Claim Id"
             value={formData.claimId || ''}
             onChange={(e) => handleInputChange('claimId', e.target.value)}
+          />
+        </div>
+
+        {/* Card No */}
+        <div className="space-y-2">
+          <Label htmlFor="cardNo" className="text-sm font-medium">
+            Card No
+          </Label>
+          <Input
+            id="cardNo"
+            placeholder="Enter Card No"
+            value={formData.cardNo || ''}
+            onChange={(e) => handleInputChange('cardNo', e.target.value)}
           />
         </div>
 

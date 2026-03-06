@@ -42,6 +42,7 @@ export const VisitRegistrationForm: React.FC<VisitRegistrationFormProps> = ({
     referringDoctor: '',
     relationshipManager: '',
     claimId: '',
+    cardNo: '',
     patientType: '',
     wardAllotted: '',
     roomAllotted: '',
@@ -69,6 +70,7 @@ export const VisitRegistrationForm: React.FC<VisitRegistrationFormProps> = ({
         referringDoctor: existingVisit.referring_doctor || '',
         relationshipManager: existingVisit.relationship_manager || '',
         claimId: existingVisit.claim_id || '',
+        cardNo: existingVisit.card_no || '',
         patientType: existingVisit.patient_type || 'OPD',
         wardAllotted: existingVisit.ward_allotted || '',
         roomAllotted: existingVisit.room_allotted || '',
@@ -244,6 +246,7 @@ export const VisitRegistrationForm: React.FC<VisitRegistrationFormProps> = ({
           referring_doctor_id: selectedIds.referringDoctorId || null,
           relationship_manager_id: selectedIds.relationshipManagerId || null,
           claim_id: formData.claimId,
+          card_no: formData.cardNo || null,
           admission_date: admissionDate
         });
 
@@ -260,6 +263,7 @@ export const VisitRegistrationForm: React.FC<VisitRegistrationFormProps> = ({
             referring_doctor_id: selectedIds.referringDoctorId || null,
             relationship_manager_id: selectedIds.relationshipManagerId || null,
             claim_id: formData.claimId || null,
+            card_no: formData.cardNo || null,
             ward_allotted: formData.wardAllotted || null,
             room_allotted: formData.roomAllotted || null,
             admission_date: admissionDate
@@ -332,6 +336,7 @@ export const VisitRegistrationForm: React.FC<VisitRegistrationFormProps> = ({
             referring_doctor_id: selectedIds.referringDoctorId || null,
             relationship_manager_id: selectedIds.relationshipManagerId || null,
             claim_id: formData.claimId,
+          card_no: formData.cardNo || null,
             ward_allotted: formData.wardAllotted || null,
             room_allotted: formData.roomAllotted || null,
             admission_date: isIPDOrEmergency ? new Date().toISOString() : null
@@ -395,6 +400,7 @@ export const VisitRegistrationForm: React.FC<VisitRegistrationFormProps> = ({
             surgery_performed_by: formData.appointmentWith,
             reff_dr_name: formData.referringDoctor,
             claim_id: formData.claimId || visitData.visit_id,
+            card_no: formData.cardNo || null,
             intimation_done_not_done: 'Done',
             payment_status: 'Pending',
             // Map additional fields from patient data
@@ -439,6 +445,7 @@ export const VisitRegistrationForm: React.FC<VisitRegistrationFormProps> = ({
             surgery_performed_by: formData.appointmentWith,
             reff_dr_name: formData.referringDoctor,
             claim_id: formData.claimId || visitData.visit_id,
+            card_no: formData.cardNo || null,
             intimation_done_not_done: 'Done',
             payment_status: 'Pending',
             // Map additional fields from patient data
