@@ -500,6 +500,40 @@ const DetailedInvoice = () => {
             window._visitId = document.querySelector('meta[name="visit-id"]')?.content || '';
             window._hospitalName = document.querySelector('meta[name="hospital-name"]')?.content || 'Hope Hospital Nagpur';
 
+            async function loadSavedData() {
+              if (!window._visitId || !window._supabaseUrl) return;
+              try {
+                const res = await fetch(window._supabaseUrl + '/rest/v1/lab_breakup?visit_id=eq.' + encodeURIComponent(window._visitId) + '&select=items,total_amount', {
+                  headers: { 'apikey': window._supabaseKey, 'Authorization': 'Bearer ' + window._supabaseKey }
+                });
+                const data = await res.json();
+                if (!data || data.length === 0) return;
+                const saved = data[0];
+                if (!saved.items || !Array.isArray(saved.items)) return;
+
+                const rows = document.querySelectorAll('tbody tr:not(.total-row)');
+                rows.forEach((row, idx) => {
+                  const savedItem = saved.items[idx];
+                  if (!savedItem) return;
+                  const cells = row.querySelectorAll('td');
+                  if (cells[3] && savedItem.cghs_nabh_rate !== undefined) cells[3].textContent = savedItem.cghs_nabh_rate;
+                  if (cells[4] && savedItem.qty !== undefined) cells[4].textContent = savedItem.qty;
+                  if (cells[5] && savedItem.rate !== undefined) cells[5].textContent = savedItem.rate;
+                });
+
+                // Update total
+                const totalEl = document.getElementById('grand-total');
+                if (totalEl && saved.total_amount) totalEl.textContent = saved.total_amount;
+
+                const statusEl = document.getElementById('save-status');
+                if (statusEl) statusEl.textContent = 'Loaded saved data';
+                setTimeout(() => { if (statusEl) statusEl.textContent = ''; }, 3000);
+              } catch(e) { console.log('Load error:', e); }
+            }
+
+            // Load saved data when page is ready
+            window.addEventListener('load', loadSavedData);
+
             async function saveBreakup() {
               const statusEl = document.getElementById('save-status');
               statusEl.textContent = 'Saving...';
@@ -730,6 +764,40 @@ const DetailedInvoice = () => {
             window._visitId = document.querySelector('meta[name="visit-id"]')?.content || '';
             window._hospitalName = document.querySelector('meta[name="hospital-name"]')?.content || 'Hope Hospital Nagpur';
 
+            async function loadSavedData() {
+              if (!window._visitId || !window._supabaseUrl) return;
+              try {
+                const res = await fetch(window._supabaseUrl + '/rest/v1/lab_breakup?visit_id=eq.' + encodeURIComponent(window._visitId) + '&select=items,total_amount', {
+                  headers: { 'apikey': window._supabaseKey, 'Authorization': 'Bearer ' + window._supabaseKey }
+                });
+                const data = await res.json();
+                if (!data || data.length === 0) return;
+                const saved = data[0];
+                if (!saved.items || !Array.isArray(saved.items)) return;
+
+                const rows = document.querySelectorAll('tbody tr:not(.total-row)');
+                rows.forEach((row, idx) => {
+                  const savedItem = saved.items[idx];
+                  if (!savedItem) return;
+                  const cells = row.querySelectorAll('td');
+                  if (cells[3] && savedItem.cghs_nabh_rate !== undefined) cells[3].textContent = savedItem.cghs_nabh_rate;
+                  if (cells[4] && savedItem.qty !== undefined) cells[4].textContent = savedItem.qty;
+                  if (cells[5] && savedItem.rate !== undefined) cells[5].textContent = savedItem.rate;
+                });
+
+                // Update total
+                const totalEl = document.getElementById('grand-total');
+                if (totalEl && saved.total_amount) totalEl.textContent = saved.total_amount;
+
+                const statusEl = document.getElementById('save-status');
+                if (statusEl) statusEl.textContent = 'Loaded saved data';
+                setTimeout(() => { if (statusEl) statusEl.textContent = ''; }, 3000);
+              } catch(e) { console.log('Load error:', e); }
+            }
+
+            // Load saved data when page is ready
+            window.addEventListener('load', loadSavedData);
+
             async function saveBreakup() {
               const statusEl = document.getElementById('save-status');
               statusEl.textContent = 'Saving...';
@@ -907,6 +975,40 @@ const DetailedInvoice = () => {
             window._supabaseKey = document.querySelector('meta[name="supabase-key"]')?.content || '';
             window._visitId = document.querySelector('meta[name="visit-id"]')?.content || '';
             window._hospitalName = document.querySelector('meta[name="hospital-name"]')?.content || 'Hope Hospital Nagpur';
+
+            async function loadSavedData() {
+              if (!window._visitId || !window._supabaseUrl) return;
+              try {
+                const res = await fetch(window._supabaseUrl + '/rest/v1/lab_breakup?visit_id=eq.' + encodeURIComponent(window._visitId) + '&select=items,total_amount', {
+                  headers: { 'apikey': window._supabaseKey, 'Authorization': 'Bearer ' + window._supabaseKey }
+                });
+                const data = await res.json();
+                if (!data || data.length === 0) return;
+                const saved = data[0];
+                if (!saved.items || !Array.isArray(saved.items)) return;
+
+                const rows = document.querySelectorAll('tbody tr:not(.total-row)');
+                rows.forEach((row, idx) => {
+                  const savedItem = saved.items[idx];
+                  if (!savedItem) return;
+                  const cells = row.querySelectorAll('td');
+                  if (cells[3] && savedItem.cghs_nabh_rate !== undefined) cells[3].textContent = savedItem.cghs_nabh_rate;
+                  if (cells[4] && savedItem.qty !== undefined) cells[4].textContent = savedItem.qty;
+                  if (cells[5] && savedItem.rate !== undefined) cells[5].textContent = savedItem.rate;
+                });
+
+                // Update total
+                const totalEl = document.getElementById('grand-total');
+                if (totalEl && saved.total_amount) totalEl.textContent = saved.total_amount;
+
+                const statusEl = document.getElementById('save-status');
+                if (statusEl) statusEl.textContent = 'Loaded saved data';
+                setTimeout(() => { if (statusEl) statusEl.textContent = ''; }, 3000);
+              } catch(e) { console.log('Load error:', e); }
+            }
+
+            // Load saved data when page is ready
+            window.addEventListener('load', loadSavedData);
 
             async function saveBreakup() {
               const statusEl = document.getElementById('save-status');
