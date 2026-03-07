@@ -1,4 +1,4 @@
-import { BarChart3, Calendar, Users, UserPlus, Database, Activity, FileText, TestTube, Camera, Pill, MapPin, Stethoscope, UserCog, ScrollText, Calculator, Syringe, Shield, Building2, ClipboardList, ShieldCheck, Receipt, HeartHandshake, ExternalLink, UserCheck, Bed, DoorOpen, LayoutDashboard, BookOpen, Clock, TrendingUp, Scissors, Heart, Cross, ClipboardCheck } from 'lucide-react';
+import { BarChart3, Calendar, Users, UserPlus, Database, Activity, FileText, TestTube, Camera, Pill, MapPin, Stethoscope, UserCog, ScrollText, Calculator, Syringe, Shield, Building2, ClipboardList, ShieldCheck, Receipt, HeartHandshake, ExternalLink, UserCheck, Bed, DoorOpen, LayoutDashboard, BookOpen, Clock, TrendingUp, Scissors, Heart, Cross, ClipboardCheck, PhoneCall } from 'lucide-react';
 
 export const menuItems = [
   {
@@ -25,6 +25,11 @@ export const menuItems = [
     title: "Marketing Dashboard",
     url: "/marketing-dashboard",
     icon: BarChart3,
+  },
+  {
+    title: "Conference Call",
+    url: "/conference-call",
+    icon: PhoneCall,
   },
   {
     title: "IPD Dashboard",
