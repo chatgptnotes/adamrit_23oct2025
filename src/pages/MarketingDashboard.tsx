@@ -53,6 +53,13 @@ export default function MarketingDashboard() {
   const [monthRows, setMonthRows] = useState<any[]>([]);
   const [yearRows, setYearRows] = useState<any[]>([]);
   const [yesterdayRow, setYesterdayRow] = useState<any>(null);
+  const [liveStats, setLiveStats] = useState({
+    doctorsToday: 0, doctorsMonth: 0,
+    admissionsToday: 0, admissionsYesterday: 0, admissionsMonth: 0,
+    dischargesToday: 0, dischargesYesterday: 0, dischargesMonth: 0,
+    revenueToday: 0, revenueMonth: 0, revenueYear: 0,
+    occupancyToday: 0, planForToday: '',
+  });
   const [expandedPaymentRows, setExpandedPaymentRows] = useState<Set<string>>(new Set());
   const togglePaymentRow = (id: string) => setExpandedPaymentRows(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; });
   const [bulkPayments, setBulkPayments] = useState<any[]>([]);
@@ -142,19 +149,55 @@ export default function MarketingDashboard() {
 
   const fetchData = async () => {
     setLoading(true);
-    const [todayRes, monthRes, yearRes, yestRes, corpRes] = await Promise.all([
-      db.from('marketing_daily_stats').select('*').eq('date', todayStr).maybeSingle(),
-      db.from('marketing_daily_stats').select('*').gte('date', monthStart).lte('date', todayStr),
-      db.from('marketing_daily_stats').select('revenue').gte('date', yearStart).lte('date', todayStr),
-      db.from('marketing_daily_stats').select('*').eq('date', yesterday).maybeSingle(),
+    const [corpRes,
+      doctorsTodayRes, doctorsMonthRes,
+      admTodayRes, admYestRes, admMonthRes,
+      disTodayRes, disYestRes, disMonthRes,
+      revTodayRes, revMonthRes, revYearRes,
+      occupancyRes,
+      planRes,
+    ] = await Promise.all([
       db.from('corporate_master').select('id, name').order('name'),
+      // Doctors visited today / this month (marketing_visits)
+      db.from('marketing_visits').select('id', { count: 'exact', head: true }).eq('visit_date', todayStr),
+      db.from('marketing_visits').select('id', { count: 'exact', head: true }).gte('visit_date', monthStart).lte('visit_date', todayStr),
+      // Admissions today / yesterday / month (visits.admission_date)
+      db.from('visits').select('id', { count: 'exact', head: true }).eq('admission_date', todayStr),
+      db.from('visits').select('id', { count: 'exact', head: true }).eq('admission_date', yesterday),
+      db.from('visits').select('id', { count: 'exact', head: true }).gte('admission_date', monthStart).lte('admission_date', todayStr),
+      // Discharges today / yesterday / month (visits.discharge_date)
+      db.from('visits').select('id', { count: 'exact', head: true }).eq('discharge_date', todayStr),
+      db.from('visits').select('id', { count: 'exact', head: true }).eq('discharge_date', yesterday),
+      db.from('visits').select('id', { count: 'exact', head: true }).gte('discharge_date', monthStart).lte('discharge_date', todayStr),
+      // Revenue (final_payments.amount by payment_date)
+      db.from('final_payments').select('amount').eq('payment_date', todayStr),
+      db.from('final_payments').select('amount').gte('payment_date', monthStart).lte('payment_date', todayStr),
+      db.from('final_payments').select('amount').gte('payment_date', yearStart).lte('payment_date', todayStr),
+      // Occupancy = currently admitted (no discharge_date set yet)
+      db.from('visits').select('id', { count: 'exact', head: true }).not('admission_date', 'is', null).is('discharge_date', null),
+      // Today's plan from marketing_daily_stats
+      db.from('marketing_daily_stats').select('plan_for_today').eq('date', todayStr).maybeSingle(),
     ]);
-    if (todayRes.data) { setToday(todayRes.data); setForm(todayRes.data); }
-    else { setToday(emptyStats); setForm(emptyStats); }
-    setMonthRows(monthRes.data || []);
-    setYearRows(yearRes.data || []);
-    setYesterdayRow(yestRes.data);
+
     setCorporateList(corpRes.data || []);
+
+    const sumAmount = (rows: any[]) => (rows || []).reduce((s: number, r: any) => s + (Number(r.amount) || 0), 0);
+
+    setLiveStats({
+      doctorsToday: doctorsTodayRes.count || 0,
+      doctorsMonth: doctorsMonthRes.count || 0,
+      admissionsToday: admTodayRes.count || 0,
+      admissionsYesterday: admYestRes.count || 0,
+      admissionsMonth: admMonthRes.count || 0,
+      dischargesToday: disTodayRes.count || 0,
+      dischargesYesterday: disYestRes.count || 0,
+      dischargesMonth: disMonthRes.count || 0,
+      revenueToday: sumAmount(revTodayRes.data),
+      revenueMonth: sumAmount(revMonthRes.data),
+      revenueYear: sumAmount(revYearRes.data),
+      occupancyToday: occupancyRes.count || 0,
+      planForToday: planRes.data?.plan_for_today || '',
+    });
 
     setLoading(false);
   };
@@ -759,33 +802,30 @@ Return JSON only:
         <div className={`p-3 space-y-3 ${showStats ? 'block' : 'hidden md:block'}`}>
           <div className="flex items-center justify-between md:mb-2">
             <h1 className="text-lg font-bold text-gray-900 hidden md:block">📊 Marketing Dashboard</h1>
-            <Button size="sm" onClick={() => { setForm(today.id ? today : emptyStats); setShowModal(true); }}>
-              {today.id ? 'Edit Stats' : 'Update Stats'}
-            </Button>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2">
-            <StatCard icon={Users} label="Doctors Today" value={today.doctors_contacted} color="blue" />
-            <StatCard icon={Users} label="Doctors Month" value={monthSum('doctors_contacted')} color="indigo" />
-            <StatCard icon={TrendingUp} label="Admissions Yest." value={yesterdayRow?.admissions || 0} color="green" />
-            <StatCard icon={TrendingUp} label="Admissions Month" value={monthSum('admissions')} color="emerald" />
-            <StatCard icon={Percent} label="Occupancy Today" value={`${today.occupancy_percent}%`} color="orange" />
-            <StatCard icon={Percent} label="Avg Occ. Month" value={`${monthAvg('occupancy_percent').toFixed(0)}%`} color="amber" />
+            <StatCard icon={Users} label="Doctors Today" value={liveStats.doctorsToday} color="blue" />
+            <StatCard icon={Users} label="Doctors Month" value={liveStats.doctorsMonth} color="indigo" />
+            <StatCard icon={TrendingUp} label="Admissions Yest." value={liveStats.admissionsYesterday} color="green" />
+            <StatCard icon={TrendingUp} label="Admissions Month" value={liveStats.admissionsMonth} color="emerald" />
+            <StatCard icon={Percent} label="Occupancy Today" value={liveStats.occupancyToday} color="orange" />
+            <StatCard icon={Percent} label="Avg Occ. Month" value={liveStats.admissionsMonth} color="amber" />
           </div>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-            <StatCard icon={IndianRupee} label="Revenue Today" value={inr(today.revenue)} color="green" />
-            <StatCard icon={IndianRupee} label="Revenue Month" value={inr(monthSum('revenue'))} color="emerald" />
-            <StatCard icon={IndianRupee} label="Revenue Year" value={inr(yearSum('revenue'))} color="teal" />
+            <StatCard icon={IndianRupee} label="Revenue Today" value={inr(liveStats.revenueToday)} color="green" />
+            <StatCard icon={IndianRupee} label="Revenue Month" value={inr(liveStats.revenueMonth)} color="emerald" />
+            <StatCard icon={IndianRupee} label="Revenue Year" value={inr(liveStats.revenueYear)} color="teal" />
           </div>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-            <StatCard icon={Building2} label="Discharges Yest." value={yesterdayRow?.discharges || 0} color="purple" />
-            <StatCard icon={Building2} label="Discharges Month" value={monthSum('discharges')} color="violet" />
+            <StatCard icon={Building2} label="Discharges Yest." value={liveStats.dischargesYesterday} color="purple" />
+            <StatCard icon={Building2} label="Discharges Month" value={liveStats.dischargesMonth} color="violet" />
             <Card className="bg-white border border-gray-100 shadow-sm col-span-2 md:col-span-1">
               <CardContent className="p-3">
                 <div className="flex items-center gap-2 mb-1">
                   <ClipboardList className="h-4 w-4 text-blue-500" />
                   <span className="text-xs text-gray-500">Today's Plan</span>
                 </div>
-                <p className="text-sm text-gray-700 line-clamp-3">{today.plan_for_today || 'No plan set'}</p>
+                <p className="text-sm text-gray-700 line-clamp-3">{liveStats.planForToday || 'No plan set'}</p>
               </CardContent>
             </Card>
           </div>
