@@ -1,12 +1,17 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { useCorporateBulkPayments } from '@/hooks/useCorporateBulkPayments';
+import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+} from '@/components/ui/table';
+import { Card as ShadCard, CardContent as ShadCardContent, CardHeader as ShadCardHeader, CardTitle as ShadCardTitle } from '@/components/ui/card';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { Camera, Send, Save, Edit2, Users, TrendingUp, Building2, Percent, IndianRupee, ClipboardList, CalendarCheck, Mic, MicOff, ImagePlus, ChevronDown, ChevronUp, FileText } from 'lucide-react';
+import { Camera, Send, Save, Edit2, Users, TrendingUp, Building2, Percent, IndianRupee, ClipboardList, CalendarCheck, Mic, MicOff, ImagePlus, ChevronDown, ChevronUp, ChevronRight, FileText } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
@@ -48,8 +53,9 @@ export default function MarketingDashboard() {
   const [monthRows, setMonthRows] = useState<any[]>([]);
   const [yearRows, setYearRows] = useState<any[]>([]);
   const [yesterdayRow, setYesterdayRow] = useState<any>(null);
-  const [billSubmissions, setBillSubmissions] = useState<any[]>([]);
-  const [billSearch, setBillSearch] = useState('');
+  const [expandedPaymentRows, setExpandedPaymentRows] = useState<Set<string>>(new Set());
+  const togglePaymentRow = (id: string) => setExpandedPaymentRows(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; });
+  const { data: bulkPayments = [], isLoading: bulkLoading } = useCorporateBulkPayments({});
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState<DayStats>(emptyStats);
   const [loading, setLoading] = useState(true);
@@ -148,40 +154,6 @@ export default function MarketingDashboard() {
     setYearRows(yearRes.data || []);
     setYesterdayRow(yestRes.data);
     setCorporateList(corpRes.data || []);
-
-    // Fetch payment receipt data from corporate_bulk_payment_allocations
-    const { data: billData } = await db.from('corporate_bulk_payment_allocations')
-      .select(`
-        id,
-        patient_name,
-        patient_id,
-        visit_id,
-        bill_amount,
-        amount,
-        deduction_amount,
-        tds_amount,
-        remarks,
-        created_at,
-        corporate_bulk_payments!bulk_payment_id(
-          receipt_number,
-          corporate_name,
-          payment_date,
-          payment_mode
-        ),
-        visits!visit_id(
-          visit_id
-        )
-      `)
-      .order('created_at', { ascending: false })
-      .limit(500);
-    setBillSubmissions((billData || []).map((b: any) => ({
-      ...b,
-      received_amount: b.amount,
-      corporate: b.corporate_bulk_payments?.corporate_name || '',
-      date: b.corporate_bulk_payments?.payment_date || b.created_at,
-      receipt_number: b.corporate_bulk_payments?.receipt_number || '',
-      readable_visit_id: b.visits?.visit_id || b.visit_id || '',
-    })));
 
     setLoading(false);
   };
@@ -843,6 +815,102 @@ Return JSON only:
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Corporate Bulk Payment Receipts - same as Corporate Receipts page */}
+      <ShadCard className="mt-6">
+        <ShadCardHeader>
+          <ShadCardTitle className="text-lg">Payment Receipts</ShadCardTitle>
+        </ShadCardHeader>
+        <ShadCardContent>
+          {bulkLoading ? (
+            <div className="text-center py-8 text-gray-500">Loading...</div>
+          ) : bulkPayments.length === 0 ? (
+            <div className="text-center py-8 text-gray-500">No corporate bulk payment receipts found.</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-10"></TableHead>
+                    <TableHead>Receipt No.</TableHead>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Corporate</TableHead>
+                    <TableHead>Mode</TableHead>
+                    <TableHead>Reference</TableHead>
+                    <TableHead>Bank Name</TableHead>
+                    <TableHead className="text-right">Claim Amount</TableHead>
+                    <TableHead className="text-right">Total Amount</TableHead>
+                    <TableHead className="text-right">Patients</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {bulkPayments.map((payment: any) => (
+                    <React.Fragment key={payment.id}>
+                      <TableRow className="cursor-pointer hover:bg-gray-50" onClick={() => togglePaymentRow(payment.id)}>
+                        <TableCell>
+                          {expandedPaymentRows.has(payment.id) ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                        </TableCell>
+                        <TableCell className="font-medium">{payment.receipt_number}</TableCell>
+                        <TableCell>{payment.payment_date ? new Date(payment.payment_date).toLocaleDateString('en-GB') : '-'}</TableCell>
+                        <TableCell>{payment.corporate_name}</TableCell>
+                        <TableCell>{payment.payment_mode}</TableCell>
+                        <TableCell>{payment.reference_number || '-'}</TableCell>
+                        <TableCell>{payment.bank_name || '-'}</TableCell>
+                        <TableCell className="text-right">{payment.claim_amount ? `Rs. ${Number(payment.claim_amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '-'}</TableCell>
+                        <TableCell className="text-right font-medium">Rs. {Number(payment.total_amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</TableCell>
+                        <TableCell className="text-right">{payment.allocations?.length || 0}</TableCell>
+                      </TableRow>
+                      {expandedPaymentRows.has(payment.id) && (
+                        <TableRow>
+                          <TableCell colSpan={10} className="bg-gray-50 p-0">
+                            <div className="p-4">
+                              {payment.narration && <p className="text-sm text-gray-600 mb-3"><span className="font-medium">Narration:</span> {payment.narration}</p>}
+                              {payment.allocations && payment.allocations.length > 0 ? (
+                                <Table>
+                                  <TableHeader>
+                                    <TableRow>
+                                      <TableHead className="w-10">#</TableHead>
+                                      <TableHead>Patient Name</TableHead>
+                                      <TableHead>Patient ID</TableHead>
+                                      <TableHead>Visit ID</TableHead>
+                                      <TableHead className="text-right">Bill Amount</TableHead>
+                                      <TableHead className="text-right">Received Amt</TableHead>
+                                      <TableHead className="text-right">Deduction</TableHead>
+                                      <TableHead className="text-right">TDS</TableHead>
+                                      <TableHead>Remarks</TableHead>
+                                    </TableRow>
+                                  </TableHeader>
+                                  <TableBody>
+                                    {payment.allocations.map((alloc: any, idx: number) => (
+                                      <TableRow key={alloc.id}>
+                                        <TableCell className="text-center">{idx + 1}</TableCell>
+                                        <TableCell className="font-medium">{alloc.patient_name}</TableCell>
+                                        <TableCell>{alloc.patients_id || '-'}</TableCell>
+                                        <TableCell>{alloc.visit_id || '-'}</TableCell>
+                                        <TableCell className="text-right">{alloc.bill_amount ? `Rs. ${Number(alloc.bill_amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '-'}</TableCell>
+                                        <TableCell className="text-right">Rs. {Number(alloc.amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</TableCell>
+                                        <TableCell className="text-right">{alloc.deduction_amount ? `Rs. ${Number(alloc.deduction_amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '-'}</TableCell>
+                                        <TableCell className="text-right">{alloc.tds_amount ? `Rs. ${Number(alloc.tds_amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '-'}</TableCell>
+                                        <TableCell>{alloc.remarks || '-'}</TableCell>
+                                      </TableRow>
+                                    ))}
+                                  </TableBody>
+                                </Table>
+                              ) : (
+                                <p className="text-sm text-gray-500">No allocations recorded.</p>
+                              )}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </React.Fragment>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </ShadCardContent>
+      </ShadCard>
 
       {/* Sales Book Section */}
       <div className="bg-white border border-gray-200 rounded-xl p-4 mt-6">
