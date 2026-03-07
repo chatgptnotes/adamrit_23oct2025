@@ -386,6 +386,7 @@ const DetailedInvoice = () => {
           <meta name="supabase-url" content="${import.meta.env.VITE_SUPABASE_URL || ''}" />
           <meta name="supabase-key" content="${import.meta.env.VITE_SUPABASE_ANON_KEY || ''}" />
           <meta name="visit-id" content="${visitId}" />
+          <meta name="hospital-name" content="${hospitalName}" />
           <title>${sectionTitles[section]} Report</title>
           <style>
             @page { size: A4; margin: 0; }
@@ -497,6 +498,7 @@ const DetailedInvoice = () => {
             window._supabaseUrl = document.querySelector('meta[name="supabase-url"]')?.content || '';
             window._supabaseKey = document.querySelector('meta[name="supabase-key"]')?.content || '';
             window._visitId = document.querySelector('meta[name="visit-id"]')?.content || '';
+            window._hospitalName = document.querySelector('meta[name="hospital-name"]')?.content || 'Hope Hospital Nagpur';
 
             async function saveBreakup() {
               const statusEl = document.getElementById('save-status');
@@ -532,7 +534,7 @@ const DetailedInvoice = () => {
                   patient_name: patientName,
                   registration_no: regNo,
                   corporate_name: corporate,
-                  hospital_name: "${hospitalName}",
+                  hospital_name: window._hospitalName,
                   items: items,
                   total_amount: parseFloat(total) || 0,
                   cghs_total: cghsTotal,
@@ -614,6 +616,7 @@ const DetailedInvoice = () => {
           <meta name="supabase-url" content="${import.meta.env.VITE_SUPABASE_URL || ''}" />
           <meta name="supabase-key" content="${import.meta.env.VITE_SUPABASE_ANON_KEY || ''}" />
           <meta name="visit-id" content="${visitId}" />
+          <meta name="hospital-name" content="${hospitalName}" />
           <title>${sectionTitles[section]} Report (Selected)</title>
           <style>
             @page { size: A4; margin: 0; }
@@ -725,6 +728,7 @@ const DetailedInvoice = () => {
             window._supabaseUrl = document.querySelector('meta[name="supabase-url"]')?.content || '';
             window._supabaseKey = document.querySelector('meta[name="supabase-key"]')?.content || '';
             window._visitId = document.querySelector('meta[name="visit-id"]')?.content || '';
+            window._hospitalName = document.querySelector('meta[name="hospital-name"]')?.content || 'Hope Hospital Nagpur';
 
             async function saveBreakup() {
               const statusEl = document.getElementById('save-status');
@@ -760,7 +764,7 @@ const DetailedInvoice = () => {
                   patient_name: patientName,
                   registration_no: regNo,
                   corporate_name: corporate,
-                  hospital_name: "${hospitalName}",
+                  hospital_name: window._hospitalName,
                   items: items,
                   total_amount: parseFloat(total) || 0,
                   cghs_total: cghsTotal,
@@ -830,6 +834,7 @@ const DetailedInvoice = () => {
           <meta name="supabase-url" content="${import.meta.env.VITE_SUPABASE_URL || ''}" />
           <meta name="supabase-key" content="${import.meta.env.VITE_SUPABASE_ANON_KEY || ''}" />
           <meta name="visit-id" content="${visitId}" />
+          <meta name="hospital-name" content="${hospitalName}" />
           <title>${sectionTitles[section]} Summary</title>
           <style>
             @page { size: A4; margin: 0; }
@@ -901,6 +906,7 @@ const DetailedInvoice = () => {
             window._supabaseUrl = document.querySelector('meta[name="supabase-url"]')?.content || '';
             window._supabaseKey = document.querySelector('meta[name="supabase-key"]')?.content || '';
             window._visitId = document.querySelector('meta[name="visit-id"]')?.content || '';
+            window._hospitalName = document.querySelector('meta[name="hospital-name"]')?.content || 'Hope Hospital Nagpur';
 
             async function saveBreakup() {
               const statusEl = document.getElementById('save-status');
@@ -936,7 +942,7 @@ const DetailedInvoice = () => {
                   patient_name: patientName,
                   registration_no: regNo,
                   corporate_name: corporate,
-                  hospital_name: "${hospitalName}",
+                  hospital_name: window._hospitalName,
                   items: items,
                   total_amount: parseFloat(total) || 0,
                   cghs_total: cghsTotal,
