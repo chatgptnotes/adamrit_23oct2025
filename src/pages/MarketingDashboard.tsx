@@ -1,15 +1,18 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { Camera, Send, Save, Edit2, Users, TrendingUp, Building2, Percent, IndianRupee, ClipboardList, CalendarCheck, Mic, MicOff, ImagePlus, ChevronDown, ChevronUp } from 'lucide-react';
+import { Camera, Send, Save, Edit2, Users, TrendingUp, Building2, Percent, IndianRupee, ClipboardList, CalendarCheck, Mic, MicOff, ImagePlus, ChevronDown, ChevronUp, ChevronRight } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { useCorporateBulkPayments } from '@/hooks/useCorporateBulkPayments';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 const db = supabase as any;
 
@@ -43,8 +46,39 @@ interface ChatMessage {
 
 export default function MarketingDashboard() {
   const { toast } = useToast();
-  const { user } = useAuth();
+  const { user, hospitalConfig } = useAuth();
+
+  // Payment Receipts state
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+
+  const { data: payments = [], isLoading: paymentsLoading } = useCorporateBulkPayments({
+    hospital_name: hospitalConfig?.name,
+  });
+
+  const toggleRow = (id: string) => {
+    setExpandedRows((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const formatReceiptDate = (dateStr: string) => {
+    try {
+      const d = new Date(dateStr);
+      return d.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    } catch { return dateStr; }
+  };
+
   const [today, setToday] = useState<DayStats>(emptyStats);
+  const [currentlyAdmittedCount, setCurrentlyAdmittedCount] = useState(0);
+  const [delayedBillSubmissions, setDelayedBillSubmissions] = useState<any[]>([]);
+  const [delayedPayments, setDelayedPayments] = useState<any[]>([]);
+  const [patientWisePending, setPatientWisePending] = useState<any[]>([]);
+  const [corporateVisitsData, setCorporateVisitsData] = useState<any[]>([]);
+  const [areaWiseData, setAreaWiseData] = useState<any[]>([]);
+  const [openDelayCard, setOpenDelayCard] = useState<string | null>(null);
+  const [chartFilter, setChartFilter] = useState<'daily' | 'monthly' | 'yearly'>('monthly');
   const [monthRows, setMonthRows] = useState<any[]>([]);
   const [yearRows, setYearRows] = useState<any[]>([]);
   const [yesterdayRow, setYesterdayRow] = useState<any>(null);
@@ -132,23 +166,261 @@ export default function MarketingDashboard() {
   const yearStart = `${now.getFullYear()}-01-01`;
   const yesterday = new Date(now.getTime() - 86400000).toISOString().split('T')[0];
 
+  const allChartVisitsRef = useRef<any[]>([]);
+
+  const buildChartData = (filter: 'daily' | 'monthly' | 'yearly', visits?: any[]) => {
+    const data = visits || allChartVisitsRef.current;
+    let startDate = monthStart;
+    if (filter === 'daily') startDate = todayStr;
+    else if (filter === 'yearly') startDate = yearStart;
+
+    const filtered = data.filter((v: any) => v.admission_date >= startDate && v.admission_date <= todayStr);
+
+    // Corporate-wise
+    const corpMap: Record<string, number> = {};
+    filtered.forEach((v: any) => {
+      const corp = v.patients?.corporate || 'Private';
+      corpMap[corp] = (corpMap[corp] || 0) + 1;
+    });
+    setCorporateVisitsData(
+      Object.entries(corpMap)
+        .map(([name, count]) => ({ name: name.length > 20 ? name.slice(0, 18) + '..' : name, fullName: name, visits: count }))
+        .sort((a, b) => b.visits - a.visits)
+    );
+
+    // Area-wise
+    const areaMap: Record<string, number> = {};
+    filtered.forEach((v: any) => {
+      const area = v.patients?.city_town || 'Unknown';
+      areaMap[area] = (areaMap[area] || 0) + 1;
+    });
+    setAreaWiseData(
+      Object.entries(areaMap)
+        .map(([name, count]) => ({ name: name.length > 20 ? name.slice(0, 18) + '..' : name, fullName: name, patients: count }))
+        .sort((a, b) => b.patients - a.patients)
+    );
+  };
+
   const fetchData = async () => {
     setLoading(true);
-    const [todayRes, monthRes, yearRes, yestRes, corpRes, receiptsRes] = await Promise.all([
-      db.from('marketing_daily_stats').select('*').eq('date', todayStr).maybeSingle(),
-      db.from('marketing_daily_stats').select('*').gte('date', monthStart).lte('date', todayStr),
-      db.from('marketing_daily_stats').select('revenue').gte('date', yearStart).lte('date', todayStr),
-      db.from('marketing_daily_stats').select('*').eq('date', yesterday).maybeSingle(),
-      db.from('corporate_master').select('id, name').order('name'),
-      db.from('final_payments').select('id, patient_name, bill_no, amount, payment_date, payment_mode, remarks').order('payment_date', { ascending: false }).limit(50),
-    ]);
-    if (todayRes.data) { setToday(todayRes.data); setForm(todayRes.data); }
-    else { setToday(emptyStats); setForm(emptyStats); }
-    setMonthRows(monthRes.data || []);
-    setYearRows(yearRes.data || []);
-    setYesterdayRow(yestRes.data);
-    setCorporateList(corpRes.data || []);
-    setPaymentReceipts(receiptsRes.data || []);
+    try {
+      const hospitalFilter = hospitalConfig?.name;
+
+      const isHope = hospitalFilter?.toLowerCase() === 'hope';
+
+      // Fetch all dynamic data in parallel
+      const [
+        admTodayRes, admMonthRes, admYestRes,
+        disTodayRes, disMonthRes, disYestRes,
+        revTodayRes, revMonthRes, revYearRes,
+        currentlyAdmittedRes, totalBedsRes,
+        monthlyOccVisitsRes,
+        doctorsTodayRes, doctorsMonthRes,
+        planRes, corpRes,
+        // Pharmacy credit payments (Hope only)
+        pharmCreditTodayRes, pharmCreditMonthRes, pharmCreditYearRes,
+        // Delay tracking & charts
+        dischargedVisitsRes, billPrepRes, monthVisitsForChartsRes,
+      ] = await Promise.all([
+        // Admissions today (IPD + OPD, filtered by hospital)
+        (() => { let q = db.from('visits').select('id, patients!inner(hospital_name)', { count: 'exact', head: true }).eq('admission_date', todayStr); if (hospitalFilter) q = q.eq('patients.hospital_name', hospitalFilter); return q; })(),
+        // Admissions this month (IPD + OPD, filtered by hospital)
+        (() => { let q = db.from('visits').select('id, patients!inner(hospital_name)', { count: 'exact', head: true }).gte('admission_date', monthStart).lte('admission_date', todayStr); if (hospitalFilter) q = q.eq('patients.hospital_name', hospitalFilter); return q; })(),
+        // Admissions yesterday (IPD + OPD, filtered by hospital)
+        (() => { let q = db.from('visits').select('id, patients!inner(hospital_name)', { count: 'exact', head: true }).eq('admission_date', yesterday); if (hospitalFilter) q = q.eq('patients.hospital_name', hospitalFilter); return q; })(),
+        // Discharges today (filtered by hospital)
+        (() => { let q = db.from('visits').select('id, patients!inner(hospital_name)', { count: 'exact', head: true }).eq('patient_type', 'IPD').eq('discharge_date', todayStr); if (hospitalFilter) q = q.eq('patients.hospital_name', hospitalFilter); return q; })(),
+        // Discharges this month (filtered by hospital)
+        (() => { let q = db.from('visits').select('id, patients!inner(hospital_name)', { count: 'exact', head: true }).eq('patient_type', 'IPD').gte('discharge_date', monthStart).lte('discharge_date', todayStr); if (hospitalFilter) q = q.eq('patients.hospital_name', hospitalFilter); return q; })(),
+        // Discharges yesterday (filtered by hospital)
+        (() => { let q = db.from('visits').select('id, patients!inner(hospital_name)', { count: 'exact', head: true }).eq('patient_type', 'IPD').eq('discharge_date', yesterday); if (hospitalFilter) q = q.eq('patients.hospital_name', hospitalFilter); return q; })(),
+        // Revenue today (from DayBook RPC - filtered by hospital)
+        db.rpc('get_cash_book_transactions_direct', { p_from_date: todayStr, p_to_date: todayStr, p_transaction_type: null, p_patient_id: null, p_hospital_name: hospitalFilter || null }),
+        // Revenue this month
+        db.rpc('get_cash_book_transactions_direct', { p_from_date: monthStart, p_to_date: todayStr, p_transaction_type: null, p_patient_id: null, p_hospital_name: hospitalFilter || null }),
+        // Revenue this year
+        db.rpc('get_cash_book_transactions_direct', { p_from_date: yearStart, p_to_date: todayStr, p_transaction_type: null, p_patient_id: null, p_hospital_name: hospitalFilter || null }),
+        // Currently admitted IPD patients (for occupancy, filtered by hospital)
+        (() => { let q = db.from('visits').select('id, patients!inner(hospital_name)', { count: 'exact', head: true }).eq('patient_type', 'IPD').is('discharge_date', null); if (hospitalFilter) q = q.eq('patients.hospital_name', hospitalFilter); return q; })(),
+        // Total beds (filtered by hospital)
+        (() => { let q = db.from('room_management').select('maximum_rooms'); if (hospitalFilter) q = q.eq('hospital_name', hospitalFilter); return q; })(),
+        // IPD visits overlapping this month (for avg monthly occupancy)
+        (() => { let q = db.from('visits').select('admission_date, discharge_date, patients!inner(hospital_name)').eq('patient_type', 'IPD').lte('admission_date', todayStr).or(`discharge_date.gte.${monthStart},discharge_date.is.null`); if (hospitalFilter) q = q.eq('patients.hospital_name', hospitalFilter); return q; })(),
+        // Doctors contacted today (marketing_visits)
+        db.from('marketing_visits').select('id', { count: 'exact', head: true }).eq('visit_date', todayStr),
+        // Doctors contacted this month
+        db.from('marketing_visits').select('id', { count: 'exact', head: true }).gte('visit_date', monthStart).lte('visit_date', todayStr),
+        // Plan for today from marketing_daily_stats
+        db.from('marketing_daily_stats').select('plan_for_today').eq('date', todayStr).maybeSingle(),
+        // Corporate list
+        db.from('corporate_master').select('id, name').order('name'),
+        // Pharmacy credit payments today (Hope only)
+        isHope
+          ? db.from('pharmacy_credit_payments').select('amount').neq('payment_method', 'CREDIT').ilike('hospital_name', '%hope%').gte('payment_date', `${todayStr}T00:00:00`).lte('payment_date', `${todayStr}T23:59:59`)
+          : Promise.resolve({ data: [] }),
+        // Pharmacy credit payments this month (Hope only)
+        isHope
+          ? db.from('pharmacy_credit_payments').select('amount').neq('payment_method', 'CREDIT').ilike('hospital_name', '%hope%').gte('payment_date', `${monthStart}T00:00:00`).lte('payment_date', `${todayStr}T23:59:59`)
+          : Promise.resolve({ data: [] }),
+        // Pharmacy credit payments this year (Hope only)
+        isHope
+          ? db.from('pharmacy_credit_payments').select('amount').neq('payment_method', 'CREDIT').ilike('hospital_name', '%hope%').gte('payment_date', `${yearStart}T00:00:00`).lte('payment_date', `${todayStr}T23:59:59`)
+          : Promise.resolve({ data: [] }),
+        // Discharged IPD visits (last 90 days) for delay tracking
+        (() => { const ninetyDaysAgo = new Date(now.getTime() - 90 * 86400000).toISOString().split('T')[0]; let q = db.from('visits').select('visit_id, admission_date, discharge_date, patients!inner(name, corporate, city_town, hospital_name)').eq('patient_type', 'IPD').not('discharge_date', 'is', null).gte('discharge_date', ninetyDaysAgo); if (hospitalFilter) q = q.eq('patients.hospital_name', hospitalFilter); return q; })(),
+        // Bill preparation records for delay/pending tracking
+        (() => { let q = db.from('bill_preparation').select('visit_id, bill_amount, date_of_submission, received_amount, received_date, deduction_amount, tds_amount, visits!inner!visit_id(patients!inner(name, corporate, hospital_name))'); if (hospitalFilter) q = q.eq('visits.patients.hospital_name', hospitalFilter); return q; })(),
+        // Visits for corporate/area charts (fetch yearly range, filter client-side per chartFilter)
+        (() => { let q = db.from('visits').select('visit_id, admission_date, patients!inner(corporate, city_town, hospital_name)').gte('admission_date', yearStart).lte('admission_date', todayStr); if (hospitalFilter) q = q.eq('patients.hospital_name', hospitalFilter); return q; })(),
+      ]);
+
+      // Sum ALL revenue from DayBook RPC (Advance Payments + Final Payments, all payment modes)
+      const sumAllRevenue = (res: any) => {
+        return (res.data || []).reduce((s: number, t: any) => s + (Number(t.amount) || 0), 0);
+      };
+
+      // Sum pharmacy credit payments (Hope only)
+      const sumPharmCredit = (res: any) => (res.data || []).reduce((s: number, r: any) => s + (Number(r.amount) || 0), 0);
+
+      const revenueToday = sumAllRevenue(revTodayRes) + sumPharmCredit(pharmCreditTodayRes);
+      const revenueMonth = sumAllRevenue(revMonthRes) + sumPharmCredit(pharmCreditMonthRes);
+      const revenueYear = sumAllRevenue(revYearRes) + sumPharmCredit(pharmCreditYearRes);
+
+      const totalBeds = (totalBedsRes.data || []).reduce((s: number, r: any) => s + (Number(r.maximum_rooms) || 0), 0);
+      const currentlyAdmitted = currentlyAdmittedRes.count || 0;
+      setCurrentlyAdmittedCount(currentlyAdmitted);
+      const occupancyToday = totalBeds > 0 ? Math.round((currentlyAdmitted / totalBeds) * 100) : 0;
+
+      // Calculate average monthly occupancy using patient-days
+      const monthStartDate = new Date(now.getFullYear(), now.getMonth(), 1);
+      const todayDate = new Date(todayStr);
+      const daysElapsed = Math.max(1, Math.floor((todayDate.getTime() - monthStartDate.getTime()) / 86400000) + 1);
+
+      let totalPatientDays = 0;
+      const monthVisits = monthlyOccVisitsRes.data || [];
+      monthVisits.forEach((v: any) => {
+        const admDate = new Date(v.admission_date);
+        const disDate = v.discharge_date ? new Date(v.discharge_date) : todayDate;
+        // Clamp to month boundaries
+        const start = admDate < monthStartDate ? monthStartDate : admDate;
+        const end = disDate > todayDate ? todayDate : disDate;
+        const days = Math.max(0, Math.floor((end.getTime() - start.getTime()) / 86400000) + 1);
+        totalPatientDays += days;
+      });
+
+      const avgOccupancyMonth = totalBeds > 0 ? Math.round((totalPatientDays / (daysElapsed * totalBeds)) * 100) : 0;
+
+      const todayData: DayStats = {
+        date: todayStr,
+        doctors_contacted: doctorsTodayRes.count || 0,
+        admissions: admTodayRes.count || 0,
+        discharges: disTodayRes.count || 0,
+        occupancy_percent: occupancyToday,
+        revenue: revenueToday,
+        plan_for_today: planRes.data?.plan_for_today || '',
+        notes: '',
+      };
+
+      setToday(todayData);
+      setForm(todayData);
+
+      // Build monthRows-compatible array for monthSum/monthAvg helpers
+      setMonthRows([{
+        doctors_contacted: doctorsMonthRes.count || 0,
+        admissions: admMonthRes.count || 0,
+        discharges: disMonthRes.count || 0,
+        occupancy_percent: avgOccupancyMonth,
+        revenue: revenueMonth,
+      }]);
+
+      setYearRows([{ revenue: revenueYear }]);
+
+      setYesterdayRow({
+        admissions: admYestRes.count || 0,
+        discharges: disYestRes.count || 0,
+      });
+
+      setCorporateList(corpRes.data || []);
+
+      // === Delay & Chart Processing ===
+      const threeDaysAgo = new Date(now.getTime() - 3 * 86400000).toISOString().split('T')[0];
+      const dischargedVisits = dischargedVisitsRes.data || [];
+      const billPrepRecords = billPrepRes.data || [];
+      const billPrepByVisit = new Map(billPrepRecords.map((bp: any) => [bp.visit_id, bp]));
+
+      // Helper: check if patient is corporate (not private)
+      const isCorporate = (corp: any) => corp && corp !== '' && corp.toLowerCase() !== 'private';
+
+      // 1. Delay in Bill Submission: discharged >3 days ago, no bill submitted (corporate only)
+      const delayedBills = dischargedVisits
+        .filter((v: any) => {
+          if (!isCorporate(v.patients?.corporate)) return false;
+          if (v.discharge_date > threeDaysAgo) return false;
+          const bp = billPrepByVisit.get(v.visit_id);
+          return !bp || !bp.date_of_submission;
+        })
+        .map((v: any) => ({
+          patient_name: v.patients?.name || 'Unknown',
+          visit_id: v.visit_id,
+          discharge_date: v.discharge_date,
+          days_overdue: Math.floor((new Date(todayStr).getTime() - new Date(v.discharge_date).getTime()) / 86400000),
+        }))
+        .sort((a: any, b: any) => b.days_overdue - a.days_overdue);
+      setDelayedBillSubmissions(delayedBills);
+
+      // 2. Delay in Receiving Payment: bill submitted >3 days ago, no payment received (corporate only)
+      const delayedPay = billPrepRecords
+        .filter((bp: any) => {
+          if (!isCorporate(bp.visits?.patients?.corporate)) return false;
+          if (!bp.date_of_submission) return false;
+          if (bp.date_of_submission > threeDaysAgo) return false;
+          return !bp.received_date && (!bp.received_amount || Number(bp.received_amount) === 0);
+        })
+        .map((bp: any) => ({
+          patient_name: bp.visits?.patients?.name || 'Unknown',
+          visit_id: bp.visit_id,
+          bill_amount: Number(bp.bill_amount) || 0,
+          date_of_submission: bp.date_of_submission,
+          days_overdue: Math.floor((new Date(todayStr).getTime() - new Date(bp.date_of_submission).getTime()) / 86400000),
+        }))
+        .sort((a: any, b: any) => b.days_overdue - a.days_overdue);
+      setDelayedPayments(delayedPay);
+
+      // 3. Patient-wise Pending Payment (corporate only)
+      const pending = billPrepRecords
+        .filter((bp: any) => {
+          if (!isCorporate(bp.visits?.patients?.corporate)) return false;
+          const billAmt = Number(bp.bill_amount) || 0;
+          const receivedAmt = Number(bp.received_amount) || 0;
+          const deduction = Number(bp.deduction_amount) || 0;
+          const tds = Number(bp.tds_amount) || 0;
+          return billAmt > 0 && (receivedAmt + deduction + tds) < billAmt;
+        })
+        .map((bp: any) => {
+          const billAmt = Number(bp.bill_amount) || 0;
+          const receivedAmt = Number(bp.received_amount) || 0;
+          const deduction = Number(bp.deduction_amount) || 0;
+          const tds = Number(bp.tds_amount) || 0;
+          return {
+            patient_name: bp.visits?.patients?.name || 'Unknown',
+            corporate: bp.visits?.patients?.corporate || 'Private',
+            visit_id: bp.visit_id,
+            bill_amount: billAmt,
+            received_amount: receivedAmt,
+            deduction_amount: deduction,
+            tds_amount: tds,
+            pending_amount: billAmt - receivedAmt - deduction - tds,
+          };
+        })
+        .sort((a: any, b: any) => b.pending_amount - a.pending_amount);
+      setPatientWisePending(pending);
+
+      // 4 & 5. Store raw chart visits, process via buildChartData
+      allChartVisitsRef.current = monthVisitsForChartsRes.data || [];
+      buildChartData(chartFilter, monthVisitsForChartsRes.data || []);
+    } catch (err) {
+      console.error('Error fetching dashboard data:', err);
+    }
     setLoading(false);
   };
 
@@ -159,6 +431,7 @@ export default function MarketingDashboard() {
 
   useEffect(() => { fetchData(); }, []);
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
+  useEffect(() => { if (allChartVisitsRef.current.length > 0) buildChartData(chartFilter); }, [chartFilter]);
 
   const monthSum = (key: string) => monthRows.reduce((s: number, r: any) => s + (Number(r[key]) || 0), 0);
   const monthAvg = (key: string) => monthRows.length ? monthSum(key) / monthRows.length : 0;
@@ -741,7 +1014,7 @@ Return JSON only:
             <StatCard icon={Users} label="Doctors Month" value={monthSum('doctors_contacted')} color="indigo" />
             <StatCard icon={TrendingUp} label="Admissions Yest." value={yesterdayRow?.admissions || 0} color="green" />
             <StatCard icon={TrendingUp} label="Admissions Month" value={monthSum('admissions')} color="emerald" />
-            <StatCard icon={Percent} label="Occupancy Today" value={`${today.occupancy_percent}%`} color="orange" />
+            <StatCard icon={Percent} label="Occupancy Today" value={currentlyAdmittedCount} color="orange" />
             <StatCard icon={Percent} label="Avg Occ. Month" value={`${monthAvg('occupancy_percent').toFixed(0)}%`} color="amber" />
           </div>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
@@ -808,35 +1081,364 @@ Return JSON only:
       </Dialog>
 
       {/* Payment Receipts Table */}
-      <div className="bg-white border border-gray-200 rounded-xl p-4 mt-6">
-        <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">🧾 Payment Receipts</h2>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm border-collapse">
-            <thead>
-              <tr className="bg-gray-50 border-b border-gray-200">
-                <th className="text-left p-3 font-semibold text-gray-700">Patient Name</th>
-                <th className="text-left p-3 font-semibold text-gray-700">Bill No</th>
-                <th className="text-left p-3 font-semibold text-gray-700">Amount</th>
-                <th className="text-left p-3 font-semibold text-gray-700">Date</th>
-                <th className="text-left p-3 font-semibold text-gray-700">Mode</th>
-                <th className="text-left p-3 font-semibold text-gray-700">Remarks</th>
-              </tr>
-            </thead>
-            <tbody>
-              {paymentReceipts.length === 0 ? (
-                <tr><td colSpan={6} className="text-center p-6 text-gray-400">No payment receipts found</td></tr>
-              ) : paymentReceipts.map((r, i) => (
-                <tr key={r.id || i} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                  <td className="p-3 text-gray-800">{r.patient_name || '—'}</td>
-                  <td className="p-3 text-gray-600">{r.bill_no || '—'}</td>
-                  <td className="p-3 font-semibold text-green-700">{r.amount != null ? inr(Number(r.amount)) : '—'}</td>
-                  <td className="p-3 text-gray-600">{r.payment_date ? new Date(r.payment_date).toLocaleDateString('en-IN') : '—'}</td>
-                  <td className="p-3 text-gray-600">{r.payment_mode || '—'}</td>
-                  <td className="p-3 text-gray-500 text-xs">{r.remarks || '—'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      <Card className="mt-6">
+        <CardHeader>
+          <CardTitle className="text-lg">Payment Receipts</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {paymentsLoading ? (
+            <div className="text-center py-8 text-gray-500">Loading...</div>
+          ) : payments.length === 0 ? (
+            <div className="text-center py-8 text-gray-500">
+              No corporate bulk payment receipts found.
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-10"></TableHead>
+                    <TableHead>Receipt No.</TableHead>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Corporate</TableHead>
+                    <TableHead>Mode</TableHead>
+                    <TableHead>Reference</TableHead>
+                    <TableHead>Bank Name</TableHead>
+                    <TableHead className="text-right">Claim Amount</TableHead>
+                    <TableHead className="text-right">Total Amount</TableHead>
+                    <TableHead className="text-right">Patients</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {payments.map((payment) => (
+                    <React.Fragment key={payment.id}>
+                      <TableRow className="cursor-pointer hover:bg-gray-50" onClick={() => toggleRow(payment.id)}>
+                        <TableCell>
+                          {expandedRows.has(payment.id) ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                        </TableCell>
+                        <TableCell className="font-medium">{payment.receipt_number}</TableCell>
+                        <TableCell>{formatReceiptDate(payment.payment_date)}</TableCell>
+                        <TableCell>{payment.corporate_name}</TableCell>
+                        <TableCell>{payment.payment_mode}</TableCell>
+                        <TableCell>{payment.reference_number || '-'}</TableCell>
+                        <TableCell>{payment.bank_name || '-'}</TableCell>
+                        <TableCell className="text-right">
+                          {payment.claim_amount ? `Rs. ${Number(payment.claim_amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '-'}
+                        </TableCell>
+                        <TableCell className="text-right font-medium">
+                          Rs. {Number(payment.total_amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                        </TableCell>
+                        <TableCell className="text-right">{payment.allocations?.length || 0}</TableCell>
+                      </TableRow>
+
+                      {expandedRows.has(payment.id) && (
+                        <TableRow>
+                          <TableCell colSpan={10} className="bg-gray-50 p-0">
+                            <div className="p-4">
+                              {payment.narration && (
+                                <p className="text-sm text-gray-600 mb-3">
+                                  <span className="font-medium">Narration:</span> {payment.narration}
+                                </p>
+                              )}
+                              {payment.allocations && payment.allocations.length > 0 ? (
+                                <Table>
+                                  <TableHeader>
+                                    <TableRow>
+                                      <TableHead className="w-10">#</TableHead>
+                                      <TableHead>Patient Name</TableHead>
+                                      <TableHead>Patient ID</TableHead>
+                                      <TableHead>Visit ID</TableHead>
+                                      <TableHead className="text-right">Bill Amount</TableHead>
+                                      <TableHead className="text-right">Received Amt</TableHead>
+                                      <TableHead className="text-right">Deduction</TableHead>
+                                      <TableHead className="text-right">TDS</TableHead>
+                                      <TableHead>Remarks</TableHead>
+                                    </TableRow>
+                                  </TableHeader>
+                                  <TableBody>
+                                    {payment.allocations.map((alloc, idx) => (
+                                      <TableRow key={alloc.id}>
+                                        <TableCell className="text-center">{idx + 1}</TableCell>
+                                        <TableCell className="font-medium">{alloc.patient_name}</TableCell>
+                                        <TableCell>{alloc.patients_id || '-'}</TableCell>
+                                        <TableCell>{alloc.visit_id || '-'}</TableCell>
+                                        <TableCell className="text-right">
+                                          {alloc.bill_amount ? `Rs. ${Number(alloc.bill_amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '-'}
+                                        </TableCell>
+                                        <TableCell className="text-right">
+                                          Rs. {Number(alloc.amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                        </TableCell>
+                                        <TableCell className="text-right">
+                                          {alloc.deduction_amount ? `Rs. ${Number(alloc.deduction_amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '-'}
+                                        </TableCell>
+                                        <TableCell className="text-right">
+                                          {alloc.tds_amount ? `Rs. ${Number(alloc.tds_amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '-'}
+                                        </TableCell>
+                                        <TableCell>{alloc.remarks || '-'}</TableCell>
+                                      </TableRow>
+                                    ))}
+                                  </TableBody>
+                                </Table>
+                              ) : (
+                                <p className="text-sm text-gray-500">No allocations recorded.</p>
+                              )}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </React.Fragment>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Delay & Pending Counter Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
+        <Card
+          className={`cursor-pointer transition hover:shadow-md border-2 ${openDelayCard === 'bill_submission' ? 'border-red-400 bg-red-50' : 'border-gray-100'}`}
+          onClick={() => setOpenDelayCard(openDelayCard === 'bill_submission' ? null : 'bill_submission')}
+        >
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs text-gray-500 mb-1">Delay in Bill Submission (&gt;3 Days)</p>
+                <p className="text-2xl font-bold text-red-600">{delayedBillSubmissions.length}</p>
+                <p className="text-xs text-gray-400 mt-1">Patients</p>
+              </div>
+              <ClipboardList className="h-8 w-8 text-red-400" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card
+          className={`cursor-pointer transition hover:shadow-md border-2 ${openDelayCard === 'payment_delay' ? 'border-orange-400 bg-orange-50' : 'border-gray-100'}`}
+          onClick={() => setOpenDelayCard(openDelayCard === 'payment_delay' ? null : 'payment_delay')}
+        >
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs text-gray-500 mb-1">Delay in Receiving Payment (&gt;3 Days)</p>
+                <p className="text-2xl font-bold text-orange-600">{delayedPayments.length}</p>
+                <p className="text-xs text-gray-400 mt-1">Patients &middot; {inr(delayedPayments.reduce((s, r) => s + r.bill_amount, 0))}</p>
+              </div>
+              <CalendarCheck className="h-8 w-8 text-orange-400" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card
+          className={`cursor-pointer transition hover:shadow-md border-2 ${openDelayCard === 'pending_payment' ? 'border-amber-400 bg-amber-50' : 'border-gray-100'}`}
+          onClick={() => setOpenDelayCard(openDelayCard === 'pending_payment' ? null : 'pending_payment')}
+        >
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs text-gray-500 mb-1">Patient-wise Pending Payment</p>
+                <p className="text-2xl font-bold text-amber-600">{patientWisePending.length}</p>
+                <p className="text-xs text-gray-400 mt-1">Patients &middot; {inr(patientWisePending.reduce((s, r) => s + r.pending_amount, 0))}</p>
+              </div>
+              <IndianRupee className="h-8 w-8 text-amber-400" />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Expanded Table for selected delay card */}
+      {openDelayCard === 'bill_submission' && (
+        <Card className="mt-3">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Delay in Bill Submission (&gt;3 Days)</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {delayedBillSubmissions.length === 0 ? (
+              <div className="text-center py-6 text-gray-500 text-sm">No delayed bill submissions found.</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>#</TableHead>
+                      <TableHead>Patient Name</TableHead>
+                      <TableHead>Visit ID</TableHead>
+                      <TableHead>Discharge Date</TableHead>
+                      <TableHead className="text-right">Days Overdue</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {delayedBillSubmissions.map((row: any, idx: number) => (
+                      <TableRow key={row.visit_id}>
+                        <TableCell>{idx + 1}</TableCell>
+                        <TableCell className="font-medium">{row.patient_name}</TableCell>
+                        <TableCell>{row.visit_id}</TableCell>
+                        <TableCell>{row.discharge_date}</TableCell>
+                        <TableCell className="text-right font-medium text-red-600">{row.days_overdue}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {openDelayCard === 'payment_delay' && (
+        <Card className="mt-3">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Delay in Receiving Payment (&gt;3 Days)</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {delayedPayments.length === 0 ? (
+              <div className="text-center py-6 text-gray-500 text-sm">No delayed payments found.</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>#</TableHead>
+                      <TableHead>Patient Name</TableHead>
+                      <TableHead>Visit ID</TableHead>
+                      <TableHead className="text-right">Bill Amount</TableHead>
+                      <TableHead>Submitted On</TableHead>
+                      <TableHead className="text-right">Days Overdue</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {delayedPayments.map((row: any, idx: number) => (
+                      <TableRow key={row.visit_id}>
+                        <TableCell>{idx + 1}</TableCell>
+                        <TableCell className="font-medium">{row.patient_name}</TableCell>
+                        <TableCell>{row.visit_id}</TableCell>
+                        <TableCell className="text-right">{inr(row.bill_amount)}</TableCell>
+                        <TableCell>{row.date_of_submission}</TableCell>
+                        <TableCell className="text-right font-medium text-red-600">{row.days_overdue}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {openDelayCard === 'pending_payment' && (
+        <Card className="mt-3">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Patient-wise Pending Payment</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {patientWisePending.length === 0 ? (
+              <div className="text-center py-6 text-gray-500 text-sm">No pending payments found.</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>#</TableHead>
+                      <TableHead>Patient Name</TableHead>
+                      <TableHead>Visit ID</TableHead>
+                      <TableHead>Corporate</TableHead>
+                      <TableHead className="text-right">Bill Amount</TableHead>
+                      <TableHead className="text-right">Received</TableHead>
+                      <TableHead className="text-right">Deduction</TableHead>
+                      <TableHead className="text-right">TDS</TableHead>
+                      <TableHead className="text-right">Pending</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {patientWisePending.map((row: any, idx: number) => (
+                      <TableRow key={row.visit_id}>
+                        <TableCell>{idx + 1}</TableCell>
+                        <TableCell className="font-medium">{row.patient_name}</TableCell>
+                        <TableCell>{row.visit_id}</TableCell>
+                        <TableCell>{row.corporate}</TableCell>
+                        <TableCell className="text-right">{inr(row.bill_amount)}</TableCell>
+                        <TableCell className="text-right">{inr(row.received_amount)}</TableCell>
+                        <TableCell className="text-right">{inr(row.deduction_amount)}</TableCell>
+                        <TableCell className="text-right">{inr(row.tds_amount)}</TableCell>
+                        <TableCell className="text-right font-medium text-red-600">{inr(row.pending_amount)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Charts Section */}
+      <div className="mt-6">
+        {/* Filter Buttons */}
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-lg font-bold text-gray-900">Patient Analytics</h2>
+          <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
+            {(['daily', 'monthly', 'yearly'] as const).map((f) => (
+              <button
+                key={f}
+                onClick={() => setChartFilter(f)}
+                className={`px-3 py-1.5 text-xs font-medium rounded-md transition ${chartFilter === f ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+              >
+                {f === 'daily' ? 'Today' : f === 'monthly' ? 'This Month' : 'This Year'}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Corporate-wise Patient Visits Bar Chart */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Corporate-wise Patient Visits</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {corporateVisitsData.length === 0 ? (
+                <div className="text-center py-6 text-gray-500 text-sm">No visit data available.</div>
+              ) : (
+                <ResponsiveContainer width="100%" height={320}>
+                  <BarChart data={corporateVisitsData} margin={{ top: 5, right: 10, left: 0, bottom: 5 }} layout="vertical">
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <YAxis dataKey="name" type="category" width={120} tick={{ fontSize: 11 }} />
+                    <XAxis type="number" allowDecimals={false} />
+                    <Tooltip formatter={(value: any) => [value, 'Visits']} labelFormatter={(label: any) => {
+                      const item = corporateVisitsData.find(d => d.name === label);
+                      return item?.fullName || label;
+                    }} />
+                    <Bar dataKey="visits" fill="#2563eb" radius={[0, 4, 4, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Area-wise Patient Origin Bar Chart */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Area-wise Patient Origin</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {areaWiseData.length === 0 ? (
+                <div className="text-center py-6 text-gray-500 text-sm">No area data available.</div>
+              ) : (
+                <ResponsiveContainer width="100%" height={320}>
+                  <BarChart data={areaWiseData} margin={{ top: 5, right: 10, left: 0, bottom: 5 }} layout="vertical">
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <YAxis dataKey="name" type="category" width={120} tick={{ fontSize: 11 }} />
+                    <XAxis type="number" allowDecimals={false} />
+                    <Tooltip formatter={(value: any) => [value, 'Patients']} labelFormatter={(label: any) => {
+                      const item = areaWiseData.find(d => d.name === label);
+                      return item?.fullName || label;
+                    }} />
+                    <Bar dataKey="patients" fill="#16a34a" radius={[0, 4, 4, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </CardContent>
+          </Card>
         </div>
       </div>
 
