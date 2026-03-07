@@ -4,8 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
-import { Card as ShadCard, CardContent as ShadCardContent, CardHeader as ShadCardHeader, CardTitle as ShadCardTitle } from '@/components/ui/card';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -876,10 +875,10 @@ Return JSON only:
 
       {/* Corporate Bulk Payment Receipts - same as Corporate Receipts page */}
       <ShadCard className="mt-6">
-        <ShadCardHeader>
-          <ShadCardTitle className="text-lg">Payment Receipts</ShadCardTitle>
-        </ShadCardHeader>
-        <ShadCardContent>
+        <CardHeader>
+          <CardTitle className="text-lg">Payment Receipts</CardTitle>
+        </CardHeader>
+        <CardContent>
           {bulkLoading ? (
             <div className="text-center py-8 text-gray-500">Loading...</div>
           ) : bulkPayments.length === 0 ? (
@@ -967,8 +966,8 @@ Return JSON only:
               </Table>
             </div>
           )}
-        </ShadCardContent>
-      </ShadCard>
+        </CardContent>
+      </Card>
 
       {/* Sales Book Section */}
       <div className="bg-white border border-gray-200 rounded-xl p-4 mt-6">
