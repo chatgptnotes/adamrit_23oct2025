@@ -52,6 +52,7 @@ export default function MarketingDashboard() {
   const [form, setForm] = useState<DayStats>(emptyStats);
   const [loading, setLoading] = useState(true);
   const [showStats, setShowStats] = useState(false);
+  const [paymentReceipts, setPaymentReceipts] = useState<any[]>([]);
 
   // Chat state
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -133,12 +134,13 @@ export default function MarketingDashboard() {
 
   const fetchData = async () => {
     setLoading(true);
-    const [todayRes, monthRes, yearRes, yestRes, corpRes] = await Promise.all([
+    const [todayRes, monthRes, yearRes, yestRes, corpRes, receiptsRes] = await Promise.all([
       db.from('marketing_daily_stats').select('*').eq('date', todayStr).maybeSingle(),
       db.from('marketing_daily_stats').select('*').gte('date', monthStart).lte('date', todayStr),
       db.from('marketing_daily_stats').select('revenue').gte('date', yearStart).lte('date', todayStr),
       db.from('marketing_daily_stats').select('*').eq('date', yesterday).maybeSingle(),
       db.from('corporate_master').select('id, name').order('name'),
+      db.from('final_payments').select('id, patient_name, bill_no, amount, payment_date, payment_mode, remarks').order('payment_date', { ascending: false }).limit(50),
     ]);
     if (todayRes.data) { setToday(todayRes.data); setForm(todayRes.data); }
     else { setToday(emptyStats); setForm(emptyStats); }
@@ -146,6 +148,7 @@ export default function MarketingDashboard() {
     setYearRows(yearRes.data || []);
     setYesterdayRow(yestRes.data);
     setCorporateList(corpRes.data || []);
+    setPaymentReceipts(receiptsRes.data || []);
     setLoading(false);
   };
 
@@ -732,9 +735,6 @@ Return JSON only:
         <div className={`p-3 space-y-3 ${showStats ? 'block' : 'hidden md:block'}`}>
           <div className="flex items-center justify-between md:mb-2">
             <h1 className="text-lg font-bold text-gray-900 hidden md:block">📊 Marketing Dashboard</h1>
-            <Button size="sm" onClick={() => { setForm(today.id ? today : emptyStats); setShowModal(true); }}>
-              {today.id ? 'Edit Stats' : 'Update Stats'}
-            </Button>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2">
             <StatCard icon={Users} label="Doctors Today" value={today.doctors_contacted} color="blue" />
@@ -806,6 +806,39 @@ Return JSON only:
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Payment Receipts Table */}
+      <div className="bg-white border border-gray-200 rounded-xl p-4 mt-6">
+        <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">🧾 Payment Receipts</h2>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm border-collapse">
+            <thead>
+              <tr className="bg-gray-50 border-b border-gray-200">
+                <th className="text-left p-3 font-semibold text-gray-700">Patient Name</th>
+                <th className="text-left p-3 font-semibold text-gray-700">Bill No</th>
+                <th className="text-left p-3 font-semibold text-gray-700">Amount</th>
+                <th className="text-left p-3 font-semibold text-gray-700">Date</th>
+                <th className="text-left p-3 font-semibold text-gray-700">Mode</th>
+                <th className="text-left p-3 font-semibold text-gray-700">Remarks</th>
+              </tr>
+            </thead>
+            <tbody>
+              {paymentReceipts.length === 0 ? (
+                <tr><td colSpan={6} className="text-center p-6 text-gray-400">No payment receipts found</td></tr>
+              ) : paymentReceipts.map((r, i) => (
+                <tr key={r.id || i} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                  <td className="p-3 text-gray-800">{r.patient_name || '—'}</td>
+                  <td className="p-3 text-gray-600">{r.bill_no || '—'}</td>
+                  <td className="p-3 font-semibold text-green-700">{r.amount != null ? inr(Number(r.amount)) : '—'}</td>
+                  <td className="p-3 text-gray-600">{r.payment_date ? new Date(r.payment_date).toLocaleDateString('en-IN') : '—'}</td>
+                  <td className="p-3 text-gray-600">{r.payment_mode || '—'}</td>
+                  <td className="p-3 text-gray-500 text-xs">{r.remarks || '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
 
       {/* Sales Book Section */}
       <div className="bg-white border border-gray-200 rounded-xl p-4 mt-6">
