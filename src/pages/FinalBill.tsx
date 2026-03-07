@@ -21331,7 +21331,7 @@ Dr. Murali B K
                           </td>
                           <td className="border border-gray-300 p-2 font-bold">
                             <div className="w-full px-2 py-1 text-sm text-center bg-green-50 rounded border border-gray-200 min-h-[32px] flex items-center justify-center font-bold text-green-800">
-                              {financialSummaryData.finalPayment?.total || '0'}
+                              {financialSummaryData?.finalPayment?.total || '0'}
                             </div>
                           </td>
                         </tr>
