@@ -482,11 +482,18 @@ const DetailedInvoice = () => {
               const totalEl = document.getElementById('grand-total');
               if (totalEl) totalEl.textContent = sum;
             }
-            document.addEventListener('blur', function(e) {
+            // focusout bubbles unlike blur - fires when user leaves any editable cell
+            document.addEventListener('focusout', function(e) {
               if (e.target && e.target.hasAttribute && e.target.hasAttribute('contenteditable')) {
                 recalcTotal();
               }
-            }, true);
+            });
+            // Also recalc on input for real-time update
+            document.addEventListener('input', function(e) {
+              if (e.target && e.target.hasAttribute && e.target.hasAttribute('contenteditable')) {
+                recalcTotal();
+              }
+            });
             window._supabaseUrl = document.querySelector('meta[name="supabase-url"]')?.content || '';
             window._supabaseKey = document.querySelector('meta[name="supabase-key"]')?.content || '';
             window._visitId = document.querySelector('meta[name="visit-id"]')?.content || '';
@@ -703,11 +710,18 @@ const DetailedInvoice = () => {
               const totalEl = document.getElementById('grand-total');
               if (totalEl) totalEl.textContent = sum;
             }
-            document.addEventListener('blur', function(e) {
+            // focusout bubbles unlike blur - fires when user leaves any editable cell
+            document.addEventListener('focusout', function(e) {
               if (e.target && e.target.hasAttribute && e.target.hasAttribute('contenteditable')) {
                 recalcTotal();
               }
-            }, true);
+            });
+            // Also recalc on input for real-time update
+            document.addEventListener('input', function(e) {
+              if (e.target && e.target.hasAttribute && e.target.hasAttribute('contenteditable')) {
+                recalcTotal();
+              }
+            });
             window._supabaseUrl = document.querySelector('meta[name="supabase-url"]')?.content || '';
             window._supabaseKey = document.querySelector('meta[name="supabase-key"]')?.content || '';
             window._visitId = document.querySelector('meta[name="visit-id"]')?.content || '';
