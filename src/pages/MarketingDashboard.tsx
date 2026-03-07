@@ -149,30 +149,34 @@ export default function MarketingDashboard() {
     setYesterdayRow(yestRes.data);
     setCorporateList(corpRes.data || []);
 
-    // Fetch bill submissions from bill_preparation with patient join
-    const { data: billData } = await db.from('bill_preparation')
+    // Fetch payment receipt data from corporate_bulk_payment_allocations
+    const { data: billData } = await db.from('corporate_bulk_payment_allocations')
       .select(`
         id,
+        patient_name,
+        patient_id,
         visit_id,
         bill_amount,
-        received_amount,
+        amount,
         deduction_amount,
         tds_amount,
-        date_of_submission,
-        received_date,
-        corporate,
-        executive_who_submitted,
+        remarks,
         created_at,
-        visits!inner!visit_id(
-          patients!inner(name, patients_id)
+        corporate_bulk_payments!bulk_payment_id(
+          receipt_number,
+          corporate_name,
+          payment_date,
+          payment_mode
         )
       `)
       .order('created_at', { ascending: false })
-      .limit(200);
+      .limit(500);
     setBillSubmissions((billData || []).map((b: any) => ({
       ...b,
-      patient_name: b.visits?.patients?.name || '',
-      patient_id: b.visits?.patients?.patients_id || '',
+      received_amount: b.amount,
+      corporate: b.corporate_bulk_payments?.corporate_name || '',
+      date: b.corporate_bulk_payments?.payment_date || b.created_at,
+      receipt_number: b.corporate_bulk_payments?.receipt_number || '',
     })));
 
     setLoading(false);
@@ -841,7 +845,7 @@ Return JSON only:
         <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
           <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
             <FileText className="h-5 w-5 text-blue-600" />
-            Patient Bill Details
+            Payment Receipt Table
           </h2>
           <Input
             placeholder="Search by patient name, visit ID..."
@@ -854,13 +858,15 @@ Return JSON only:
           <table className="w-full text-sm border-collapse">
             <thead>
               <tr className="bg-blue-50 text-left">
+                <th className="px-3 py-2 border border-gray-200 font-semibold text-gray-700 whitespace-nowrap">Receipt No.</th>
                 <th className="px-3 py-2 border border-gray-200 font-semibold text-gray-700 whitespace-nowrap">Patient Name</th>
+                <th className="px-3 py-2 border border-gray-200 font-semibold text-gray-700 whitespace-nowrap">Patient ID</th>
                 <th className="px-3 py-2 border border-gray-200 font-semibold text-gray-700 whitespace-nowrap">Visit ID</th>
                 <th className="px-3 py-2 border border-gray-200 font-semibold text-gray-700 whitespace-nowrap">Bill Amount</th>
                 <th className="px-3 py-2 border border-gray-200 font-semibold text-gray-700 whitespace-nowrap">Received Amount</th>
                 <th className="px-3 py-2 border border-gray-200 font-semibold text-gray-700 whitespace-nowrap">Deduction Amount</th>
                 <th className="px-3 py-2 border border-gray-200 font-semibold text-gray-700 whitespace-nowrap">TDS</th>
-                <th className="px-3 py-2 border border-gray-200 font-semibold text-gray-700 whitespace-nowrap">Corporate</th>
+                <th className="px-3 py-2 border border-gray-200 font-semibold text-gray-700 whitespace-nowrap">Remarks</th>
                 <th className="px-3 py-2 border border-gray-200 font-semibold text-gray-700 whitespace-nowrap">Date</th>
               </tr>
             </thead>
@@ -873,15 +879,17 @@ Return JSON only:
                 )
                 .map((b, i) => (
                   <tr key={b.id} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                    <td className="px-3 py-2 border border-gray-200 font-mono text-xs text-gray-600">{b.receipt_number || '-'}</td>
                     <td className="px-3 py-2 border border-gray-200 font-medium">{b.patient_name || '-'}</td>
+                    <td className="px-3 py-2 border border-gray-200 font-mono text-xs text-gray-500">{b.patient_id || '-'}</td>
                     <td className="px-3 py-2 border border-gray-200 text-blue-600 font-mono text-xs">{b.visit_id || '-'}</td>
                     <td className="px-3 py-2 border border-gray-200">{b.bill_amount != null ? inr(Number(b.bill_amount)) : '-'}</td>
-                    <td className="px-3 py-2 border border-gray-200 text-green-700">{b.received_amount != null ? inr(Number(b.received_amount)) : '-'}</td>
+                    <td className="px-3 py-2 border border-gray-200 text-green-700 font-medium">{b.received_amount != null ? inr(Number(b.received_amount)) : '-'}</td>
                     <td className="px-3 py-2 border border-gray-200 text-red-600">{b.deduction_amount != null ? inr(Number(b.deduction_amount)) : '-'}</td>
                     <td className="px-3 py-2 border border-gray-200 text-orange-600">{b.tds_amount != null ? inr(Number(b.tds_amount)) : '-'}</td>
-                    <td className="px-3 py-2 border border-gray-200 text-gray-600 max-w-xs truncate">{b.corporate || '-'}</td>
+                    <td className="px-3 py-2 border border-gray-200 text-gray-600 max-w-xs truncate">{b.remarks || '-'}</td>
                     <td className="px-3 py-2 border border-gray-200 text-gray-500 text-xs whitespace-nowrap">
-                      {b.date_of_submission || (b.created_at ? new Date(b.created_at).toLocaleDateString('en-GB') : '-')}
+                      {b.date ? new Date(b.date).toLocaleDateString('en-GB') : '-'}
                     </td>
                   </tr>
                 ))}
