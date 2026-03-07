@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { useCorporateBulkPayments } from '@/hooks/useCorporateBulkPayments';
+
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
@@ -55,7 +55,8 @@ export default function MarketingDashboard() {
   const [yesterdayRow, setYesterdayRow] = useState<any>(null);
   const [expandedPaymentRows, setExpandedPaymentRows] = useState<Set<string>>(new Set());
   const togglePaymentRow = (id: string) => setExpandedPaymentRows(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; });
-  const { data: bulkPayments = [], isLoading: bulkLoading } = useCorporateBulkPayments({});
+  const [bulkPayments, setBulkPayments] = useState<any[]>([]);
+  const [bulkLoading, setBulkLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState<DayStats>(emptyStats);
   const [loading, setLoading] = useState(true);
@@ -164,6 +165,23 @@ export default function MarketingDashboard() {
   };
 
   useEffect(() => { fetchData(); }, []);
+
+  useEffect(() => {
+    const fetchBulkPayments = async () => {
+      setBulkLoading(true);
+      const { data, error } = await (supabase as any)
+        .from('corporate_bulk_payments')
+        .select(`*, corporate_bulk_payment_allocations(*)`)
+        .order('payment_date', { ascending: false });
+      if (!error) {
+        // map allocations
+        const mapped = (data || []).map((p: any) => ({ ...p, allocations: p.corporate_bulk_payment_allocations || [] }));
+        setBulkPayments(mapped);
+      }
+      setBulkLoading(false);
+    };
+    fetchBulkPayments();
+  }, []);
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
 
   const monthSum = (key: string) => monthRows.reduce((s: number, r: any) => s + (Number(r[key]) || 0), 0);
