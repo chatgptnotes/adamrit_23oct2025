@@ -1,30 +1,15 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-
-import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from '@/components/ui/table';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { Camera, Send, Save, Edit2, Users, TrendingUp, Building2, Percent, IndianRupee, ClipboardList, CalendarCheck, Mic, MicOff, ImagePlus, ChevronDown, ChevronUp, ChevronRight, FileText, Pencil, Trash2 } from 'lucide-react';
+import { Camera, Send, Save, Edit2, Users, TrendingUp, Building2, Percent, IndianRupee, ClipboardList, CalendarCheck, Mic, MicOff, ImagePlus, ChevronDown, ChevronUp } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
-import { SearchableSelect } from '@/components/ui/searchable-select';
-import { useCorporateData } from '@/hooks/useCorporateData';
-import { useCorporateBulkPayments, useDeleteCorporateBulkPayment } from '@/hooks/useCorporateBulkPayments';
-import { CorporateBulkPayment } from '@/types/corporateBulkPayment';
-import BulkPaymentReceiptForm from '@/components/corporate-bulk-payment/BulkPaymentReceiptForm';
-import { toast as sonnerToast } from 'sonner';
-
-const ShadCard = Card;
-const ShadCardContent = CardContent;
-const ShadCardHeader = CardHeader;
-const ShadCardTitle = CardTitle;
 
 const db = supabase as any;
 
@@ -58,38 +43,16 @@ interface ChatMessage {
 
 export default function MarketingDashboard() {
   const { toast } = useToast();
-  const { user, hospitalConfig } = useAuth();
-  const { corporateOptions } = useCorporateData();
-  const deleteMutation = useDeleteCorporateBulkPayment();
-  const { data: bulkPayments = [], isLoading: bulkLoading } = useCorporateBulkPayments({
-    from_date: fromDate || undefined,
-    to_date: toDate || undefined,
-    corporate_name: filterCorporate !== 'all' ? filterCorporate : undefined,
-    hospital_name: hospitalConfig?.name,
-  });
+  const { user } = useAuth();
   const [today, setToday] = useState<DayStats>(emptyStats);
   const [monthRows, setMonthRows] = useState<any[]>([]);
   const [yearRows, setYearRows] = useState<any[]>([]);
   const [yesterdayRow, setYesterdayRow] = useState<any>(null);
-  const [liveStats, setLiveStats] = useState({
-    doctorsToday: 0, doctorsMonth: 0,
-    admissionsToday: 0, admissionsYesterday: 0, admissionsMonth: 0,
-    dischargesToday: 0, dischargesYesterday: 0, dischargesMonth: 0,
-    revenueToday: 0, revenueMonth: 0, revenueYear: 0,
-    occupancyToday: 0, planForToday: '',
-  });
-  // Corporate Receipts section state (same as Corporate Receipts page)
-  const [fromDate, setFromDate] = useState('');
-  const [toDate, setToDate] = useState('');
-  const [filterCorporate, setFilterCorporate] = useState('all');
-  const [isReceiptFormOpen, setIsReceiptFormOpen] = useState(false);
-  const [editingPayment, setEditingPayment] = useState<CorporateBulkPayment | null>(null);
-  const [expandedPaymentRows, setExpandedPaymentRows] = useState<Set<string>>(new Set());
-  const togglePaymentRow = (id: string) => setExpandedPaymentRows(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; });
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState<DayStats>(emptyStats);
   const [loading, setLoading] = useState(true);
   const [showStats, setShowStats] = useState(false);
+  const [paymentReceipts, setPaymentReceipts] = useState<any[]>([]);
 
   // Chat state
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -171,56 +134,21 @@ export default function MarketingDashboard() {
 
   const fetchData = async () => {
     setLoading(true);
-    const [corpRes,
-      doctorsTodayRes, doctorsMonthRes,
-      admTodayRes, admYestRes, admMonthRes,
-      disTodayRes, disYestRes, disMonthRes,
-      revTodayRes, revMonthRes, revYearRes,
-      occupancyRes,
-      planRes,
-    ] = await Promise.all([
+    const [todayRes, monthRes, yearRes, yestRes, corpRes, receiptsRes] = await Promise.all([
+      db.from('marketing_daily_stats').select('*').eq('date', todayStr).maybeSingle(),
+      db.from('marketing_daily_stats').select('*').gte('date', monthStart).lte('date', todayStr),
+      db.from('marketing_daily_stats').select('revenue').gte('date', yearStart).lte('date', todayStr),
+      db.from('marketing_daily_stats').select('*').eq('date', yesterday).maybeSingle(),
       db.from('corporate_master').select('id, name').order('name'),
-      // Doctors visited today / this month (marketing_visits)
-      db.from('marketing_visits').select('id', { count: 'exact', head: true }).eq('visit_date', todayStr),
-      db.from('marketing_visits').select('id', { count: 'exact', head: true }).gte('visit_date', monthStart).lte('visit_date', todayStr),
-      // Admissions today / yesterday / month (visits.admission_date)
-      db.from('visits').select('id', { count: 'exact', head: true }).eq('admission_date', todayStr),
-      db.from('visits').select('id', { count: 'exact', head: true }).eq('admission_date', yesterday),
-      db.from('visits').select('id', { count: 'exact', head: true }).gte('admission_date', monthStart).lte('admission_date', todayStr),
-      // Discharges today / yesterday / month (visits.discharge_date)
-      db.from('visits').select('id', { count: 'exact', head: true }).eq('discharge_date', todayStr),
-      db.from('visits').select('id', { count: 'exact', head: true }).eq('discharge_date', yesterday),
-      db.from('visits').select('id', { count: 'exact', head: true }).gte('discharge_date', monthStart).lte('discharge_date', todayStr),
-      // Revenue (final_payments.amount by payment_date)
-      db.from('final_payments').select('amount').eq('payment_date', todayStr),
-      db.from('final_payments').select('amount').gte('payment_date', monthStart).lte('payment_date', todayStr),
-      db.from('final_payments').select('amount').gte('payment_date', yearStart).lte('payment_date', todayStr),
-      // Occupancy = currently admitted (no discharge_date set yet)
-      db.from('visits').select('id', { count: 'exact', head: true }).not('admission_date', 'is', null).is('discharge_date', null),
-      // Today's plan from marketing_daily_stats
-      db.from('marketing_daily_stats').select('plan_for_today').eq('date', todayStr).maybeSingle(),
+      db.from('final_payments').select('id, patient_name, bill_no, amount, payment_date, payment_mode, remarks').order('payment_date', { ascending: false }).limit(50),
     ]);
-
+    if (todayRes.data) { setToday(todayRes.data); setForm(todayRes.data); }
+    else { setToday(emptyStats); setForm(emptyStats); }
+    setMonthRows(monthRes.data || []);
+    setYearRows(yearRes.data || []);
+    setYesterdayRow(yestRes.data);
     setCorporateList(corpRes.data || []);
-
-    const sumAmount = (rows: any[]) => (rows || []).reduce((s: number, r: any) => s + (Number(r.amount) || 0), 0);
-
-    setLiveStats({
-      doctorsToday: doctorsTodayRes.count || 0,
-      doctorsMonth: doctorsMonthRes.count || 0,
-      admissionsToday: admTodayRes.count || 0,
-      admissionsYesterday: admYestRes.count || 0,
-      admissionsMonth: admMonthRes.count || 0,
-      dischargesToday: disTodayRes.count || 0,
-      dischargesYesterday: disYestRes.count || 0,
-      dischargesMonth: disMonthRes.count || 0,
-      revenueToday: sumAmount(revTodayRes.data),
-      revenueMonth: sumAmount(revMonthRes.data),
-      revenueYear: sumAmount(revYearRes.data),
-      occupancyToday: occupancyRes.count || 0,
-      planForToday: planRes.data?.plan_for_today || '',
-    });
-
+    setPaymentReceipts(receiptsRes.data || []);
     setLoading(false);
   };
 
@@ -230,23 +158,6 @@ export default function MarketingDashboard() {
   };
 
   useEffect(() => { fetchData(); }, []);
-
-  useEffect(() => {
-    const fetchBulkPayments = async () => {
-      setBulkLoading(true);
-      const { data, error } = await (supabase as any)
-        .from('corporate_bulk_payments')
-        .select(`*, corporate_bulk_payment_allocations(*)`)
-        .order('payment_date', { ascending: false });
-      if (!error) {
-        // map allocations
-        const mapped = (data || []).map((p: any) => ({ ...p, allocations: p.corporate_bulk_payment_allocations || [] }));
-        setBulkPayments(mapped);
-      }
-      setBulkLoading(false);
-    };
-    fetchBulkPayments();
-  }, []);
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
 
   const monthSum = (key: string) => monthRows.reduce((s: number, r: any) => s + (Number(r[key]) || 0), 0);
@@ -826,28 +737,28 @@ Return JSON only:
             <h1 className="text-lg font-bold text-gray-900 hidden md:block">📊 Marketing Dashboard</h1>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2">
-            <StatCard icon={Users} label="Doctors Today" value={liveStats.doctorsToday} color="blue" />
-            <StatCard icon={Users} label="Doctors Month" value={liveStats.doctorsMonth} color="indigo" />
-            <StatCard icon={TrendingUp} label="Admissions Yest." value={liveStats.admissionsYesterday} color="green" />
-            <StatCard icon={TrendingUp} label="Admissions Month" value={liveStats.admissionsMonth} color="emerald" />
-            <StatCard icon={Percent} label="Occupancy Today" value={liveStats.occupancyToday} color="orange" />
-            <StatCard icon={Percent} label="Avg Occ. Month" value={liveStats.admissionsMonth} color="amber" />
+            <StatCard icon={Users} label="Doctors Today" value={today.doctors_contacted} color="blue" />
+            <StatCard icon={Users} label="Doctors Month" value={monthSum('doctors_contacted')} color="indigo" />
+            <StatCard icon={TrendingUp} label="Admissions Yest." value={yesterdayRow?.admissions || 0} color="green" />
+            <StatCard icon={TrendingUp} label="Admissions Month" value={monthSum('admissions')} color="emerald" />
+            <StatCard icon={Percent} label="Occupancy Today" value={`${today.occupancy_percent}%`} color="orange" />
+            <StatCard icon={Percent} label="Avg Occ. Month" value={`${monthAvg('occupancy_percent').toFixed(0)}%`} color="amber" />
           </div>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-            <StatCard icon={IndianRupee} label="Revenue Today" value={inr(liveStats.revenueToday)} color="green" />
-            <StatCard icon={IndianRupee} label="Revenue Month" value={inr(liveStats.revenueMonth)} color="emerald" />
-            <StatCard icon={IndianRupee} label="Revenue Year" value={inr(liveStats.revenueYear)} color="teal" />
+            <StatCard icon={IndianRupee} label="Revenue Today" value={inr(today.revenue)} color="green" />
+            <StatCard icon={IndianRupee} label="Revenue Month" value={inr(monthSum('revenue'))} color="emerald" />
+            <StatCard icon={IndianRupee} label="Revenue Year" value={inr(yearSum('revenue'))} color="teal" />
           </div>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-            <StatCard icon={Building2} label="Discharges Yest." value={liveStats.dischargesYesterday} color="purple" />
-            <StatCard icon={Building2} label="Discharges Month" value={liveStats.dischargesMonth} color="violet" />
+            <StatCard icon={Building2} label="Discharges Yest." value={yesterdayRow?.discharges || 0} color="purple" />
+            <StatCard icon={Building2} label="Discharges Month" value={monthSum('discharges')} color="violet" />
             <Card className="bg-white border border-gray-100 shadow-sm col-span-2 md:col-span-1">
               <CardContent className="p-3">
                 <div className="flex items-center gap-2 mb-1">
                   <ClipboardList className="h-4 w-4 text-blue-500" />
                   <span className="text-xs text-gray-500">Today's Plan</span>
                 </div>
-                <p className="text-sm text-gray-700 line-clamp-3">{liveStats.planForToday || 'No plan set'}</p>
+                <p className="text-sm text-gray-700 line-clamp-3">{today.plan_for_today || 'No plan set'}</p>
               </CardContent>
             </Card>
           </div>
@@ -896,6 +807,38 @@ Return JSON only:
         </DialogContent>
       </Dialog>
 
+      {/* Payment Receipts Table */}
+      <div className="bg-white border border-gray-200 rounded-xl p-4 mt-6">
+        <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">🧾 Payment Receipts</h2>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm border-collapse">
+            <thead>
+              <tr className="bg-gray-50 border-b border-gray-200">
+                <th className="text-left p-3 font-semibold text-gray-700">Patient Name</th>
+                <th className="text-left p-3 font-semibold text-gray-700">Bill No</th>
+                <th className="text-left p-3 font-semibold text-gray-700">Amount</th>
+                <th className="text-left p-3 font-semibold text-gray-700">Date</th>
+                <th className="text-left p-3 font-semibold text-gray-700">Mode</th>
+                <th className="text-left p-3 font-semibold text-gray-700">Remarks</th>
+              </tr>
+            </thead>
+            <tbody>
+              {paymentReceipts.length === 0 ? (
+                <tr><td colSpan={6} className="text-center p-6 text-gray-400">No payment receipts found</td></tr>
+              ) : paymentReceipts.map((r, i) => (
+                <tr key={r.id || i} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                  <td className="p-3 text-gray-800">{r.patient_name || '—'}</td>
+                  <td className="p-3 text-gray-600">{r.bill_no || '—'}</td>
+                  <td className="p-3 font-semibold text-green-700">{r.amount != null ? inr(Number(r.amount)) : '—'}</td>
+                  <td className="p-3 text-gray-600">{r.payment_date ? new Date(r.payment_date).toLocaleDateString('en-IN') : '—'}</td>
+                  <td className="p-3 text-gray-600">{r.payment_mode || '—'}</td>
+                  <td className="p-3 text-gray-500 text-xs">{r.remarks || '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
 
       {/* Sales Book Section */}
       <div className="bg-white border border-gray-200 rounded-xl p-4 mt-6">
@@ -918,4 +861,3 @@ Return JSON only:
     </div>
   );
 }
-
