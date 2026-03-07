@@ -344,6 +344,8 @@ export default function MarketingDashboard() {
 
       // === Delay & Chart Processing ===
       const threeDaysAgo = new Date(now.getTime() - 3 * 86400000).toISOString().split('T')[0];
+      const twoMonthsAgo = new Date(now.getTime() - 60 * 86400000).toISOString().split('T')[0];
+      const fortyEightHoursAgo = new Date(now.getTime() - 2 * 86400000).toISOString().split('T')[0];
       const dischargedVisits = dischargedVisitsRes.data || [];
       const billPrepRecords = billPrepRes.data || [];
       const billPrepByVisit = new Map(billPrepRecords.map((bp: any) => [bp.visit_id, bp]));
@@ -368,12 +370,12 @@ export default function MarketingDashboard() {
         .sort((a: any, b: any) => b.days_overdue - a.days_overdue);
       setDelayedBillSubmissions(delayedBills);
 
-      // 2. Delay in Receiving Payment: bill submitted >3 days ago, no payment received (corporate only)
+      // 2. Delay in Receiving Payment: bill submitted >2 months ago, no payment received (corporate only)
       const delayedPay = billPrepRecords
         .filter((bp: any) => {
           if (!isCorporate(bp.visits?.patients?.corporate)) return false;
           if (!bp.date_of_submission) return false;
-          if (bp.date_of_submission > threeDaysAgo) return false;
+          if (bp.date_of_submission > twoMonthsAgo) return false;
           return !bp.received_date && (!bp.received_amount || Number(bp.received_amount) === 0);
         })
         .map((bp: any) => ({
@@ -386,10 +388,12 @@ export default function MarketingDashboard() {
         .sort((a: any, b: any) => b.days_overdue - a.days_overdue);
       setDelayedPayments(delayedPay);
 
-      // 3. Patient-wise Pending Payment (corporate only)
+      // 3. Patient-wise Pending Payment: pending >48 hours (corporate only)
       const pending = billPrepRecords
         .filter((bp: any) => {
           if (!isCorporate(bp.visits?.patients?.corporate)) return false;
+          if (!bp.date_of_submission) return false;
+          if (bp.date_of_submission > fortyEightHoursAgo) return false;
           const billAmt = Number(bp.bill_amount) || 0;
           const receivedAmt = Number(bp.received_amount) || 0;
           const deduction = Number(bp.deduction_amount) || 0;
@@ -1220,7 +1224,7 @@ Return JSON only:
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs text-gray-500 mb-1">Delay in Receiving Payment (&gt;3 Days)</p>
+                <p className="text-xs text-gray-500 mb-1">Delay in Receiving Payment (&gt;2 Months)</p>
                 <p className="text-2xl font-bold text-orange-600">{delayedPayments.length}</p>
                 <p className="text-xs text-gray-400 mt-1">Patients &middot; {inr(delayedPayments.reduce((s, r) => s + r.bill_amount, 0))}</p>
               </div>
@@ -1236,7 +1240,7 @@ Return JSON only:
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs text-gray-500 mb-1">Patient-wise Pending Payment</p>
+                <p className="text-xs text-gray-500 mb-1">Patient-wise Pending Payment (&gt;48 Hours)</p>
                 <p className="text-2xl font-bold text-amber-600">{patientWisePending.length}</p>
                 <p className="text-xs text-gray-400 mt-1">Patients &middot; {inr(patientWisePending.reduce((s, r) => s + r.pending_amount, 0))}</p>
               </div>
@@ -1288,7 +1292,7 @@ Return JSON only:
       {openDelayCard === 'payment_delay' && (
         <Card className="mt-3">
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">Delay in Receiving Payment (&gt;3 Days)</CardTitle>
+            <CardTitle className="text-base">Delay in Receiving Payment (&gt;2 Months)</CardTitle>
           </CardHeader>
           <CardContent>
             {delayedPayments.length === 0 ? (
@@ -1328,7 +1332,7 @@ Return JSON only:
       {openDelayCard === 'pending_payment' && (
         <Card className="mt-3">
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">Patient-wise Pending Payment</CardTitle>
+            <CardTitle className="text-base">Patient-wise Pending Payment (&gt;48 Hours)</CardTitle>
           </CardHeader>
           <CardContent>
             {patientWisePending.length === 0 ? (
