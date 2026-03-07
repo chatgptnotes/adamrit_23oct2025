@@ -386,6 +386,7 @@ const DetailedInvoice = () => {
           <meta name="supabase-url" content="${import.meta.env.VITE_SUPABASE_URL || ''}" />
           <meta name="supabase-key" content="${import.meta.env.VITE_SUPABASE_ANON_KEY || ''}" />
           <meta name="visit-id" content="${visitId}" />
+          <meta name="hospital-name" content="${hospitalName}" />
           <title>${sectionTitles[section]} Report</title>
           <style>
             @page { size: A4; margin: 0; }
@@ -465,15 +466,73 @@ const DetailedInvoice = () => {
               `).join('')}
               <tr class="total-row">
                 <td colspan="5" class="text-right">TOTAL:</td>
-                <td class="text-right">${total}</td>
+                <td class="text-right" id="grand-total">${total}</td>
               </tr>
             </tbody>
           </table>
         
           <script>
+
+            function recalcTotal() {
+              const rateCells = document.querySelectorAll('tbody tr:not(.total-row) td:last-child');
+              let sum = 0;
+              rateCells.forEach(cell => {
+                const val = parseFloat(cell.textContent.trim()) || 0;
+                sum += val;
+              });
+              const totalEl = document.getElementById('grand-total');
+              if (totalEl) totalEl.textContent = sum;
+            }
+            // focusout bubbles unlike blur - fires when user leaves any editable cell
+            document.addEventListener('focusout', function(e) {
+              if (e.target && e.target.hasAttribute && e.target.hasAttribute('contenteditable')) {
+                recalcTotal();
+              }
+            });
+            // Also recalc on input for real-time update
+            document.addEventListener('input', function(e) {
+              if (e.target && e.target.hasAttribute && e.target.hasAttribute('contenteditable')) {
+                recalcTotal();
+              }
+            });
             window._supabaseUrl = document.querySelector('meta[name="supabase-url"]')?.content || '';
             window._supabaseKey = document.querySelector('meta[name="supabase-key"]')?.content || '';
             window._visitId = document.querySelector('meta[name="visit-id"]')?.content || '';
+            window._hospitalName = document.querySelector('meta[name="hospital-name"]')?.content || 'Hope Hospital Nagpur';
+
+            async function loadSavedData() {
+              if (!window._visitId || !window._supabaseUrl) return;
+              try {
+                const res = await fetch(window._supabaseUrl + '/rest/v1/lab_breakup?visit_id=eq.' + encodeURIComponent(window._visitId) + '&select=items,total_amount', {
+                  headers: { 'apikey': window._supabaseKey, 'Authorization': 'Bearer ' + window._supabaseKey }
+                });
+                const data = await res.json();
+                if (!data || data.length === 0) return;
+                const saved = data[0];
+                if (!saved.items || !Array.isArray(saved.items)) return;
+
+                const rows = document.querySelectorAll('tbody tr:not(.total-row)');
+                rows.forEach((row, idx) => {
+                  const savedItem = saved.items[idx];
+                  if (!savedItem) return;
+                  const cells = row.querySelectorAll('td');
+                  if (cells[3] && savedItem.cghs_nabh_rate !== undefined) cells[3].textContent = savedItem.cghs_nabh_rate;
+                  if (cells[4] && savedItem.qty !== undefined) cells[4].textContent = savedItem.qty;
+                  if (cells[5] && savedItem.rate !== undefined) cells[5].textContent = savedItem.rate;
+                });
+
+                // Update total
+                const totalEl = document.getElementById('grand-total');
+                if (totalEl && saved.total_amount) totalEl.textContent = saved.total_amount;
+
+                const statusEl = document.getElementById('save-status');
+                if (statusEl) statusEl.textContent = 'Loaded saved data';
+                setTimeout(() => { if (statusEl) statusEl.textContent = ''; }, 3000);
+              } catch(e) { console.log('Load error:', e); }
+            }
+
+            // Load saved data when page is ready
+            window.addEventListener('load', loadSavedData);
 
             async function saveBreakup() {
               const statusEl = document.getElementById('save-status');
@@ -509,7 +568,7 @@ const DetailedInvoice = () => {
                   patient_name: patientName,
                   registration_no: regNo,
                   corporate_name: corporate,
-                  hospital_name: hospitalName,
+                  hospital_name: window._hospitalName,
                   items: items,
                   total_amount: parseFloat(total) || 0,
                   cghs_total: cghsTotal,
@@ -591,6 +650,7 @@ const DetailedInvoice = () => {
           <meta name="supabase-url" content="${import.meta.env.VITE_SUPABASE_URL || ''}" />
           <meta name="supabase-key" content="${import.meta.env.VITE_SUPABASE_ANON_KEY || ''}" />
           <meta name="visit-id" content="${visitId}" />
+          <meta name="hospital-name" content="${hospitalName}" />
           <title>${sectionTitles[section]} Report (Selected)</title>
           <style>
             @page { size: A4; margin: 0; }
@@ -670,15 +730,73 @@ const DetailedInvoice = () => {
               `).join('')}
               <tr class="total-row">
                 <td colspan="5" class="text-right">TOTAL:</td>
-                <td class="text-right">${total}</td>
+                <td class="text-right" id="grand-total">${total}</td>
               </tr>
             </tbody>
           </table>
         
           <script>
+
+            function recalcTotal() {
+              const rateCells = document.querySelectorAll('tbody tr:not(.total-row) td:last-child');
+              let sum = 0;
+              rateCells.forEach(cell => {
+                const val = parseFloat(cell.textContent.trim()) || 0;
+                sum += val;
+              });
+              const totalEl = document.getElementById('grand-total');
+              if (totalEl) totalEl.textContent = sum;
+            }
+            // focusout bubbles unlike blur - fires when user leaves any editable cell
+            document.addEventListener('focusout', function(e) {
+              if (e.target && e.target.hasAttribute && e.target.hasAttribute('contenteditable')) {
+                recalcTotal();
+              }
+            });
+            // Also recalc on input for real-time update
+            document.addEventListener('input', function(e) {
+              if (e.target && e.target.hasAttribute && e.target.hasAttribute('contenteditable')) {
+                recalcTotal();
+              }
+            });
             window._supabaseUrl = document.querySelector('meta[name="supabase-url"]')?.content || '';
             window._supabaseKey = document.querySelector('meta[name="supabase-key"]')?.content || '';
             window._visitId = document.querySelector('meta[name="visit-id"]')?.content || '';
+            window._hospitalName = document.querySelector('meta[name="hospital-name"]')?.content || 'Hope Hospital Nagpur';
+
+            async function loadSavedData() {
+              if (!window._visitId || !window._supabaseUrl) return;
+              try {
+                const res = await fetch(window._supabaseUrl + '/rest/v1/lab_breakup?visit_id=eq.' + encodeURIComponent(window._visitId) + '&select=items,total_amount', {
+                  headers: { 'apikey': window._supabaseKey, 'Authorization': 'Bearer ' + window._supabaseKey }
+                });
+                const data = await res.json();
+                if (!data || data.length === 0) return;
+                const saved = data[0];
+                if (!saved.items || !Array.isArray(saved.items)) return;
+
+                const rows = document.querySelectorAll('tbody tr:not(.total-row)');
+                rows.forEach((row, idx) => {
+                  const savedItem = saved.items[idx];
+                  if (!savedItem) return;
+                  const cells = row.querySelectorAll('td');
+                  if (cells[3] && savedItem.cghs_nabh_rate !== undefined) cells[3].textContent = savedItem.cghs_nabh_rate;
+                  if (cells[4] && savedItem.qty !== undefined) cells[4].textContent = savedItem.qty;
+                  if (cells[5] && savedItem.rate !== undefined) cells[5].textContent = savedItem.rate;
+                });
+
+                // Update total
+                const totalEl = document.getElementById('grand-total');
+                if (totalEl && saved.total_amount) totalEl.textContent = saved.total_amount;
+
+                const statusEl = document.getElementById('save-status');
+                if (statusEl) statusEl.textContent = 'Loaded saved data';
+                setTimeout(() => { if (statusEl) statusEl.textContent = ''; }, 3000);
+              } catch(e) { console.log('Load error:', e); }
+            }
+
+            // Load saved data when page is ready
+            window.addEventListener('load', loadSavedData);
 
             async function saveBreakup() {
               const statusEl = document.getElementById('save-status');
@@ -714,7 +832,7 @@ const DetailedInvoice = () => {
                   patient_name: patientName,
                   registration_no: regNo,
                   corporate_name: corporate,
-                  hospital_name: hospitalName,
+                  hospital_name: window._hospitalName,
                   items: items,
                   total_amount: parseFloat(total) || 0,
                   cghs_total: cghsTotal,
@@ -784,6 +902,7 @@ const DetailedInvoice = () => {
           <meta name="supabase-url" content="${import.meta.env.VITE_SUPABASE_URL || ''}" />
           <meta name="supabase-key" content="${import.meta.env.VITE_SUPABASE_ANON_KEY || ''}" />
           <meta name="visit-id" content="${visitId}" />
+          <meta name="hospital-name" content="${hospitalName}" />
           <title>${sectionTitles[section]} Summary</title>
           <style>
             @page { size: A4; margin: 0; }
@@ -855,6 +974,41 @@ const DetailedInvoice = () => {
             window._supabaseUrl = document.querySelector('meta[name="supabase-url"]')?.content || '';
             window._supabaseKey = document.querySelector('meta[name="supabase-key"]')?.content || '';
             window._visitId = document.querySelector('meta[name="visit-id"]')?.content || '';
+            window._hospitalName = document.querySelector('meta[name="hospital-name"]')?.content || 'Hope Hospital Nagpur';
+
+            async function loadSavedData() {
+              if (!window._visitId || !window._supabaseUrl) return;
+              try {
+                const res = await fetch(window._supabaseUrl + '/rest/v1/lab_breakup?visit_id=eq.' + encodeURIComponent(window._visitId) + '&select=items,total_amount', {
+                  headers: { 'apikey': window._supabaseKey, 'Authorization': 'Bearer ' + window._supabaseKey }
+                });
+                const data = await res.json();
+                if (!data || data.length === 0) return;
+                const saved = data[0];
+                if (!saved.items || !Array.isArray(saved.items)) return;
+
+                const rows = document.querySelectorAll('tbody tr:not(.total-row)');
+                rows.forEach((row, idx) => {
+                  const savedItem = saved.items[idx];
+                  if (!savedItem) return;
+                  const cells = row.querySelectorAll('td');
+                  if (cells[3] && savedItem.cghs_nabh_rate !== undefined) cells[3].textContent = savedItem.cghs_nabh_rate;
+                  if (cells[4] && savedItem.qty !== undefined) cells[4].textContent = savedItem.qty;
+                  if (cells[5] && savedItem.rate !== undefined) cells[5].textContent = savedItem.rate;
+                });
+
+                // Update total
+                const totalEl = document.getElementById('grand-total');
+                if (totalEl && saved.total_amount) totalEl.textContent = saved.total_amount;
+
+                const statusEl = document.getElementById('save-status');
+                if (statusEl) statusEl.textContent = 'Loaded saved data';
+                setTimeout(() => { if (statusEl) statusEl.textContent = ''; }, 3000);
+              } catch(e) { console.log('Load error:', e); }
+            }
+
+            // Load saved data when page is ready
+            window.addEventListener('load', loadSavedData);
 
             async function saveBreakup() {
               const statusEl = document.getElementById('save-status');
@@ -890,7 +1044,7 @@ const DetailedInvoice = () => {
                   patient_name: patientName,
                   registration_no: regNo,
                   corporate_name: corporate,
-                  hospital_name: hospitalName,
+                  hospital_name: window._hospitalName,
                   items: items,
                   total_amount: parseFloat(total) || 0,
                   cghs_total: cghsTotal,

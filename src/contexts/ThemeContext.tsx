@@ -25,24 +25,25 @@ export const ThemeProvider = ({ children }: ThemeProviderProps) => {
   const { hospitalConfig } = useAuth();
 
   const applyHospitalTheme = React.useCallback(() => {
+    if (!hospitalConfig) return;
     const root = document.documentElement;
     
     // Set CSS custom properties for hospital theme
     root.style.setProperty('--hospital-primary', hospitalConfig.primaryColor);
     root.style.setProperty('--hospital-secondary', hospitalConfig.secondaryColor);
     root.style.setProperty('--hospital-accent', hospitalConfig.accentColor);
-    root.style.setProperty('--hospital-sidebar-bg', hospitalConfig.theme.sidebarBg);
-    root.style.setProperty('--hospital-header-bg', hospitalConfig.theme.headerBg);
-    root.style.setProperty('--hospital-card-bg', hospitalConfig.theme.cardBg);
-    root.style.setProperty('--hospital-text-primary', hospitalConfig.theme.textPrimary);
-    root.style.setProperty('--hospital-text-secondary', hospitalConfig.theme.textSecondary);
+    root.style.setProperty('--hospital-sidebar-bg', hospitalConfig.theme?.sidebarBg);
+    root.style.setProperty('--hospital-header-bg', hospitalConfig.theme?.headerBg);
+    root.style.setProperty('--hospital-card-bg', hospitalConfig.theme?.cardBg);
+    root.style.setProperty('--hospital-text-primary', hospitalConfig.theme?.textPrimary);
+    root.style.setProperty('--hospital-text-secondary', hospitalConfig.theme?.textSecondary);
     
     // Update document title and favicon
     document.title = `${hospitalConfig.name} - Hospital Management System`;
     
     // Update favicon if it exists
     const favicon = document.querySelector("link[rel*='icon']") as HTMLLinkElement;
-    if (favicon) {
+    if (favicon && hospitalConfig.favicon) {
       favicon.href = hospitalConfig.favicon;
     }
   }, [hospitalConfig]);

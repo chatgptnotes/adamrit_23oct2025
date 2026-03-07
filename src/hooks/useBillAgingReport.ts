@@ -67,6 +67,7 @@ const fetchBillAgingData = async (hospitalName?: string): Promise<BillAgingRecor
       bill_amount,
       received_amount,
       deduction_amount,
+      tds_amount,
       date_of_submission,
       expected_payment_date,
       received_date,
@@ -95,6 +96,7 @@ const fetchBillAgingData = async (hospitalName?: string): Promise<BillAgingRecor
     const billAmount = Number(item.bill_amount) || 0;
     const receivedAmount = Number(item.received_amount) || 0;
     const deductionAmount = Number(item.deduction_amount) || 0;
+    const tdsAmount = Number(item.tds_amount) || 0;
     const outstandingAmount = billAmount - receivedAmount - deductionAmount;
     const daysOutstanding = calculateDaysOutstanding(
       item.date_of_submission,
@@ -114,6 +116,7 @@ const fetchBillAgingData = async (hospitalName?: string): Promise<BillAgingRecor
       bill_amount: billAmount,
       received_amount: receivedAmount,
       deduction_amount: deductionAmount,
+      tds_amount: tdsAmount,
       outstanding_amount: Math.max(0, outstandingAmount),
       date_of_submission: item.date_of_submission,
       expected_payment_date: item.expected_payment_date,

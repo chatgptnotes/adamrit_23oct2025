@@ -86,6 +86,7 @@ export default function MarketingDashboard() {
   const [form, setForm] = useState<DayStats>(emptyStats);
   const [loading, setLoading] = useState(true);
   const [showStats, setShowStats] = useState(false);
+  const [paymentReceipts, setPaymentReceipts] = useState<any[]>([]);
 
   // Chat state
   const [messages, setMessages] = useState<ChatMessage[]>([]);
