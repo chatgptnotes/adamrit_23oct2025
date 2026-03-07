@@ -874,7 +874,7 @@ Return JSON only:
       </Dialog>
 
       {/* Corporate Bulk Payment Receipts - same as Corporate Receipts page */}
-      <ShadCard className="mt-6">
+      <Card className="mt-6">
         <CardHeader>
           <CardTitle className="text-lg">Payment Receipts</CardTitle>
         </CardHeader>
