@@ -78,6 +78,7 @@ const FinalBillTest = lazy(() => import("../pages/FinalBillTest"));
 const LabPrintDemo = lazy(() => import("../pages/LabPrintDemo"));
 const StoreRequisition = lazy(() => import("../components/pharmacy/StoreRequisition"));
 const MarketingDashboard = lazy(() => import("../pages/MarketingDashboard"));
+const ConferenceCallPage = lazy(() => import("../pages/ConferenceCallPage"));
 const EditSaleBill = lazy(() => import("../components/pharmacy/EditSaleBill"));
 const DaywiseBills = lazy(() => import("../pages/DaywiseBills"));
 const OldBills = lazy(() => import("../pages/OldBills"));
@@ -216,6 +217,7 @@ export const AppRoutes = () => {
         <Route path="/user-management" element={<Suspense fallback={<PageLoader />}><UserManagement /></Suspense>} />
         <Route path="/activity-log" element={<Suspense fallback={<PageLoader />}><ActivityLog /></Suspense>} />
         <Route path="/marketing-dashboard" element={<Suspense fallback={<PageLoader />}><MarketingDashboard /></Suspense>} />
+        <Route path="/conference-call" element={<Suspense fallback={<PageLoader />}><ConferenceCallPage /></Suspense>} />
         <Route path="/corporate-master" element={<Suspense fallback={<PageLoader />}><CorporateMaster /></Suspense>} />
         <Route path="/corporate-master/:corporateId" element={<Suspense fallback={<PageLoader />}><CorporateAreas /></Suspense>} />
         <Route path="/corporate-master/:corporateId/area/:areaId" element={<Suspense fallback={<PageLoader />}><CorporateAreaDetail /></Suspense>} />
