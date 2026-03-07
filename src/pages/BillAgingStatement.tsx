@@ -256,6 +256,7 @@ const BillAgingStatement: React.FC = () => {
       'Bill Amount': record.bill_amount,
       'Received Amount': record.received_amount,
       'Deduction': record.deduction_amount,
+      'TDS': record.tds_amount,
       'Outstanding': record.outstanding_amount,
       'Submission Date': formatDate(record.date_of_submission),
       'Received Date': formatDate(record.received_date),
@@ -275,6 +276,7 @@ const BillAgingStatement: React.FC = () => {
       'Bill Amount': summary.total_bill_amount,
       'Received Amount': summary.total_received_amount,
       'Deduction': 0,
+      'TDS': 0,
       'Outstanding': summary.total_outstanding_amount,
       'Submission Date': '',
       'Received Date': '',
@@ -620,6 +622,7 @@ const BillAgingStatement: React.FC = () => {
                         Deduction {renderSortIcon('deduction_amount')}
                       </div>
                     </TableHead>
+                    <TableHead className="text-right">TDS</TableHead>
                     <TableHead
                       className="cursor-pointer hover:bg-muted text-right"
                       onClick={() => handleSort('outstanding_amount')}
@@ -667,7 +670,7 @@ const BillAgingStatement: React.FC = () => {
                 <TableBody>
                   {data.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={15} className="text-center py-8 text-muted-foreground">
+                      <TableCell colSpan={16} className="text-center py-8 text-muted-foreground">
                         No records found
                       </TableCell>
                     </TableRow>
@@ -682,7 +685,7 @@ const BillAgingStatement: React.FC = () => {
                           <React.Fragment key={bucket}>
                             {/* Bucket Heading Row */}
                             <TableRow className={getHeadingRowClass(bucket)}>
-                              <TableCell colSpan={15} className="py-3">
+                              <TableCell colSpan={16} className="py-3">
                                 <div className="flex items-center gap-2">
                                   <Badge
                                     className={`${getAgingBucketBadgeClass(bucket)} text-sm px-3 py-1`}
@@ -716,6 +719,9 @@ const BillAgingStatement: React.FC = () => {
                                   </TableCell>
                                   <TableCell className="text-right text-orange-600">
                                     {formatCurrency(record.deduction_amount)}
+                                  </TableCell>
+                                  <TableCell className="text-right text-purple-600">
+                                    {formatCurrency(record.tds_amount)}
                                   </TableCell>
                                   <TableCell className="text-right font-medium text-blue-600">
                                     {formatCurrency(record.outstanding_amount)}
