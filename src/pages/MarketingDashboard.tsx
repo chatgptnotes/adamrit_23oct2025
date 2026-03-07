@@ -167,6 +167,9 @@ export default function MarketingDashboard() {
           corporate_name,
           payment_date,
           payment_mode
+        ),
+        visits!visit_id(
+          visit_id
         )
       `)
       .order('created_at', { ascending: false })
@@ -177,6 +180,7 @@ export default function MarketingDashboard() {
       corporate: b.corporate_bulk_payments?.corporate_name || '',
       date: b.corporate_bulk_payments?.payment_date || b.created_at,
       receipt_number: b.corporate_bulk_payments?.receipt_number || '',
+      readable_visit_id: b.visits?.visit_id || b.visit_id || '',
     })));
 
     setLoading(false);
@@ -882,7 +886,7 @@ Return JSON only:
                     <td className="px-3 py-2 border border-gray-200 font-mono text-xs text-gray-600">{b.receipt_number || '-'}</td>
                     <td className="px-3 py-2 border border-gray-200 font-medium">{b.patient_name || '-'}</td>
                     <td className="px-3 py-2 border border-gray-200 font-mono text-xs text-gray-500">{b.patient_id || '-'}</td>
-                    <td className="px-3 py-2 border border-gray-200 text-blue-600 font-mono text-xs">{b.visit_id || '-'}</td>
+                    <td className="px-3 py-2 border border-gray-200 text-blue-600 font-mono text-xs">{b.readable_visit_id || '-'}</td>
                     <td className="px-3 py-2 border border-gray-200">{b.bill_amount != null ? inr(Number(b.bill_amount)) : '-'}</td>
                     <td className="px-3 py-2 border border-gray-200 text-green-700 font-medium">{b.received_amount != null ? inr(Number(b.received_amount)) : '-'}</td>
                     <td className="px-3 py-2 border border-gray-200 text-red-600">{b.deduction_amount != null ? inr(Number(b.deduction_amount)) : '-'}</td>
