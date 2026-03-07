@@ -76,17 +76,6 @@ export default function ConferenceCallPage() {
         </CardHeader>
 
         <CardContent className="pt-6 space-y-5">
-          {/* Patient Name */}
-          <div className="space-y-1">
-            <Label className="text-sm font-semibold">Patient Name (optional)</Label>
-            <input
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="Enter patient name..."
-              value={patientName}
-              onChange={e => setPatientName(e.target.value)}
-            />
-          </div>
-
           {/* Our Doctor - fixed */}
           <div className="bg-blue-50 rounded-lg p-3">
             <p className="text-xs text-blue-500 font-semibold mb-2">OUR DOCTOR (Fixed)</p>
