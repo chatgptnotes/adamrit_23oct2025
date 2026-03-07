@@ -1,16 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-
-import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from '@/components/ui/table';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { Camera, Send, Save, Edit2, Users, TrendingUp, Building2, Percent, IndianRupee, ClipboardList, CalendarCheck, Mic, MicOff, ImagePlus, ChevronDown, ChevronUp, ChevronRight, FileText } from 'lucide-react';
+import { Camera, Send, Save, Edit2, Users, TrendingUp, Building2, Percent, IndianRupee, ClipboardList, CalendarCheck, Mic, MicOff, ImagePlus, ChevronDown, ChevronUp, FileText } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
@@ -50,19 +46,13 @@ export default function MarketingDashboard() {
   const { user } = useAuth();
   const [today, setToday] = useState<DayStats>(emptyStats);
   const [monthRows, setMonthRows] = useState<any[]>([]);
+  const [bulkPayments, setBulkPayments] = useState<any[]>([]);
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+  const toggleRow = (id: string) => setExpandedRows(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; });
   const [yearRows, setYearRows] = useState<any[]>([]);
   const [yesterdayRow, setYesterdayRow] = useState<any>(null);
-  const [liveStats, setLiveStats] = useState({
-    doctorsToday: 0, doctorsMonth: 0,
-    admissionsToday: 0, admissionsYesterday: 0, admissionsMonth: 0,
-    dischargesToday: 0, dischargesYesterday: 0, dischargesMonth: 0,
-    revenueToday: 0, revenueMonth: 0, revenueYear: 0,
-    occupancyToday: 0, planForToday: '',
-  });
-  const [expandedPaymentRows, setExpandedPaymentRows] = useState<Set<string>>(new Set());
-  const togglePaymentRow = (id: string) => setExpandedPaymentRows(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; });
-  const [bulkPayments, setBulkPayments] = useState<any[]>([]);
-  const [bulkLoading, setBulkLoading] = useState(true);
+  const [billSubmissions, setBillSubmissions] = useState<any[]>([]);
+  const [billSearch, setBillSearch] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState<DayStats>(emptyStats);
   const [loading, setLoading] = useState(true);
@@ -148,55 +138,53 @@ export default function MarketingDashboard() {
 
   const fetchData = async () => {
     setLoading(true);
-    const [corpRes,
-      doctorsTodayRes, doctorsMonthRes,
-      admTodayRes, admYestRes, admMonthRes,
-      disTodayRes, disYestRes, disMonthRes,
-      revTodayRes, revMonthRes, revYearRes,
-      occupancyRes,
-      planRes,
-    ] = await Promise.all([
+    const [todayRes, monthRes, yearRes, yestRes, corpRes] = await Promise.all([
+      db.from('marketing_daily_stats').select('*').eq('date', todayStr).maybeSingle(),
+      db.from('marketing_daily_stats').select('*').gte('date', monthStart).lte('date', todayStr),
+      db.from('marketing_daily_stats').select('revenue').gte('date', yearStart).lte('date', todayStr),
+      db.from('marketing_daily_stats').select('*').eq('date', yesterday).maybeSingle(),
       db.from('corporate_master').select('id, name').order('name'),
-      // Doctors visited today / this month (marketing_visits)
-      db.from('marketing_visits').select('id', { count: 'exact', head: true }).eq('visit_date', todayStr),
-      db.from('marketing_visits').select('id', { count: 'exact', head: true }).gte('visit_date', monthStart).lte('visit_date', todayStr),
-      // Admissions today / yesterday / month (visits.admission_date)
-      db.from('visits').select('id', { count: 'exact', head: true }).eq('admission_date', todayStr),
-      db.from('visits').select('id', { count: 'exact', head: true }).eq('admission_date', yesterday),
-      db.from('visits').select('id', { count: 'exact', head: true }).gte('admission_date', monthStart).lte('admission_date', todayStr),
-      // Discharges today / yesterday / month (visits.discharge_date)
-      db.from('visits').select('id', { count: 'exact', head: true }).eq('discharge_date', todayStr),
-      db.from('visits').select('id', { count: 'exact', head: true }).eq('discharge_date', yesterday),
-      db.from('visits').select('id', { count: 'exact', head: true }).gte('discharge_date', monthStart).lte('discharge_date', todayStr),
-      // Revenue (final_payments.amount by payment_date)
-      db.from('final_payments').select('amount').eq('payment_date', todayStr),
-      db.from('final_payments').select('amount').gte('payment_date', monthStart).lte('payment_date', todayStr),
-      db.from('final_payments').select('amount').gte('payment_date', yearStart).lte('payment_date', todayStr),
-      // Occupancy = currently admitted (no discharge_date set yet)
-      db.from('visits').select('id', { count: 'exact', head: true }).not('admission_date', 'is', null).is('discharge_date', null),
-      // Today's plan from marketing_daily_stats
-      db.from('marketing_daily_stats').select('plan_for_today').eq('date', todayStr).maybeSingle(),
     ]);
-
+    if (todayRes.data) { setToday(todayRes.data); setForm(todayRes.data); }
+    else { setToday(emptyStats); setForm(emptyStats); }
+    setMonthRows(monthRes.data || []);
+    setYearRows(yearRes.data || []);
+    setYesterdayRow(yestRes.data);
     setCorporateList(corpRes.data || []);
 
-    const sumAmount = (rows: any[]) => (rows || []).reduce((s: number, r: any) => s + (Number(r.amount) || 0), 0);
-
-    setLiveStats({
-      doctorsToday: doctorsTodayRes.count || 0,
-      doctorsMonth: doctorsMonthRes.count || 0,
-      admissionsToday: admTodayRes.count || 0,
-      admissionsYesterday: admYestRes.count || 0,
-      admissionsMonth: admMonthRes.count || 0,
-      dischargesToday: disTodayRes.count || 0,
-      dischargesYesterday: disYestRes.count || 0,
-      dischargesMonth: disMonthRes.count || 0,
-      revenueToday: sumAmount(revTodayRes.data),
-      revenueMonth: sumAmount(revMonthRes.data),
-      revenueYear: sumAmount(revYearRes.data),
-      occupancyToday: occupancyRes.count || 0,
-      planForToday: planRes.data?.plan_for_today || '',
-    });
+    // Fetch payment receipt data from corporate_bulk_payment_allocations
+    const { data: billData } = await db.from('corporate_bulk_payment_allocations')
+      .select(`
+        id,
+        patient_name,
+        patient_id,
+        visit_id,
+        bill_amount,
+        amount,
+        deduction_amount,
+        tds_amount,
+        remarks,
+        created_at,
+        corporate_bulk_payments!bulk_payment_id(
+          receipt_number,
+          corporate_name,
+          payment_date,
+          payment_mode
+        ),
+        visits!visit_id(
+          visit_id
+        )
+      `)
+      .order('created_at', { ascending: false })
+      .limit(500);
+    setBillSubmissions((billData || []).map((b: any) => ({
+      ...b,
+      received_amount: b.amount,
+      corporate: b.corporate_bulk_payments?.corporate_name || '',
+      date: b.corporate_bulk_payments?.payment_date || b.created_at,
+      receipt_number: b.corporate_bulk_payments?.receipt_number || '',
+      readable_visit_id: b.visits?.visit_id || b.visit_id || '',
+    })));
 
     setLoading(false);
   };
@@ -209,21 +197,14 @@ export default function MarketingDashboard() {
   useEffect(() => { fetchData(); }, []);
 
   useEffect(() => {
-    const fetchBulkPayments = async () => {
-      setBulkLoading(true);
-      const { data, error } = await (supabase as any)
-        .from('corporate_bulk_payments')
-        .select(`*, corporate_bulk_payment_allocations(*)`)
-        .order('payment_date', { ascending: false });
-      if (!error) {
-        // map allocations
-        const mapped = (data || []).map((p: any) => ({ ...p, allocations: p.corporate_bulk_payment_allocations || [] }));
-        setBulkPayments(mapped);
-      }
-      setBulkLoading(false);
-    };
-    fetchBulkPayments();
+    (supabase as any).from('corporate_bulk_payments')
+      .select('*, corporate_bulk_payment_allocations(*)')
+      .order('payment_date', { ascending: false })
+      .then(({ data }: any) => {
+        setBulkPayments((data || []).map((p: any) => ({ ...p, allocations: p.corporate_bulk_payment_allocations || [] })));
+      });
   }, []);
+
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
 
   const monthSum = (key: string) => monthRows.reduce((s: number, r: any) => s + (Number(r[key]) || 0), 0);
@@ -801,30 +782,33 @@ Return JSON only:
         <div className={`p-3 space-y-3 ${showStats ? 'block' : 'hidden md:block'}`}>
           <div className="flex items-center justify-between md:mb-2">
             <h1 className="text-lg font-bold text-gray-900 hidden md:block">📊 Marketing Dashboard</h1>
+            <Button size="sm" onClick={() => { setForm(today.id ? today : emptyStats); setShowModal(true); }}>
+              {today.id ? 'Edit Stats' : 'Update Stats'}
+            </Button>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2">
-            <StatCard icon={Users} label="Doctors Today" value={liveStats.doctorsToday} color="blue" />
-            <StatCard icon={Users} label="Doctors Month" value={liveStats.doctorsMonth} color="indigo" />
-            <StatCard icon={TrendingUp} label="Admissions Yest." value={liveStats.admissionsYesterday} color="green" />
-            <StatCard icon={TrendingUp} label="Admissions Month" value={liveStats.admissionsMonth} color="emerald" />
-            <StatCard icon={Percent} label="Occupancy Today" value={liveStats.occupancyToday} color="orange" />
-            <StatCard icon={Percent} label="Avg Occ. Month" value={liveStats.admissionsMonth} color="amber" />
+            <StatCard icon={Users} label="Doctors Today" value={today.doctors_contacted} color="blue" />
+            <StatCard icon={Users} label="Doctors Month" value={monthSum('doctors_contacted')} color="indigo" />
+            <StatCard icon={TrendingUp} label="Admissions Yest." value={yesterdayRow?.admissions || 0} color="green" />
+            <StatCard icon={TrendingUp} label="Admissions Month" value={monthSum('admissions')} color="emerald" />
+            <StatCard icon={Percent} label="Occupancy Today" value={`${today.occupancy_percent}%`} color="orange" />
+            <StatCard icon={Percent} label="Avg Occ. Month" value={`${monthAvg('occupancy_percent').toFixed(0)}%`} color="amber" />
           </div>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-            <StatCard icon={IndianRupee} label="Revenue Today" value={inr(liveStats.revenueToday)} color="green" />
-            <StatCard icon={IndianRupee} label="Revenue Month" value={inr(liveStats.revenueMonth)} color="emerald" />
-            <StatCard icon={IndianRupee} label="Revenue Year" value={inr(liveStats.revenueYear)} color="teal" />
+            <StatCard icon={IndianRupee} label="Revenue Today" value={inr(today.revenue)} color="green" />
+            <StatCard icon={IndianRupee} label="Revenue Month" value={inr(monthSum('revenue'))} color="emerald" />
+            <StatCard icon={IndianRupee} label="Revenue Year" value={inr(yearSum('revenue'))} color="teal" />
           </div>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-            <StatCard icon={Building2} label="Discharges Yest." value={liveStats.dischargesYesterday} color="purple" />
-            <StatCard icon={Building2} label="Discharges Month" value={liveStats.dischargesMonth} color="violet" />
+            <StatCard icon={Building2} label="Discharges Yest." value={yesterdayRow?.discharges || 0} color="purple" />
+            <StatCard icon={Building2} label="Discharges Month" value={monthSum('discharges')} color="violet" />
             <Card className="bg-white border border-gray-100 shadow-sm col-span-2 md:col-span-1">
               <CardContent className="p-3">
                 <div className="flex items-center gap-2 mb-1">
                   <ClipboardList className="h-4 w-4 text-blue-500" />
                   <span className="text-xs text-gray-500">Today's Plan</span>
                 </div>
-                <p className="text-sm text-gray-700 line-clamp-3">{liveStats.planForToday || 'No plan set'}</p>
+                <p className="text-sm text-gray-700 line-clamp-3">{today.plan_for_today || 'No plan set'}</p>
               </CardContent>
             </Card>
           </div>
@@ -873,101 +857,90 @@ Return JSON only:
         </DialogContent>
       </Dialog>
 
-      {/* Corporate Bulk Payment Receipts - same as Corporate Receipts page */}
-      <Card className="mt-6">
-        <CardHeader>
-          <CardTitle className="text-lg">Payment Receipts</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {bulkLoading ? (
-            <div className="text-center py-8 text-gray-500">Loading...</div>
-          ) : bulkPayments.length === 0 ? (
-            <div className="text-center py-8 text-gray-500">No corporate bulk payment receipts found.</div>
-          ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-10"></TableHead>
-                    <TableHead>Receipt No.</TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Corporate</TableHead>
-                    <TableHead>Mode</TableHead>
-                    <TableHead>Reference</TableHead>
-                    <TableHead>Bank Name</TableHead>
-                    <TableHead className="text-right">Claim Amount</TableHead>
-                    <TableHead className="text-right">Total Amount</TableHead>
-                    <TableHead className="text-right">Patients</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {bulkPayments.map((payment: any) => (
-                    <React.Fragment key={payment.id}>
-                      <TableRow className="cursor-pointer hover:bg-gray-50" onClick={() => togglePaymentRow(payment.id)}>
-                        <TableCell>
-                          {expandedPaymentRows.has(payment.id) ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                        </TableCell>
-                        <TableCell className="font-medium">{payment.receipt_number}</TableCell>
-                        <TableCell>{payment.payment_date ? new Date(payment.payment_date).toLocaleDateString('en-GB') : '-'}</TableCell>
-                        <TableCell>{payment.corporate_name}</TableCell>
-                        <TableCell>{payment.payment_mode}</TableCell>
-                        <TableCell>{payment.reference_number || '-'}</TableCell>
-                        <TableCell>{payment.bank_name || '-'}</TableCell>
-                        <TableCell className="text-right">{payment.claim_amount ? `Rs. ${Number(payment.claim_amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '-'}</TableCell>
-                        <TableCell className="text-right font-medium">Rs. {Number(payment.total_amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</TableCell>
-                        <TableCell className="text-right">{payment.allocations?.length || 0}</TableCell>
-                      </TableRow>
-                      {expandedPaymentRows.has(payment.id) && (
-                        <TableRow>
-                          <TableCell colSpan={10} className="bg-gray-50 p-0">
-                            <div className="p-4">
-                              {payment.narration && <p className="text-sm text-gray-600 mb-3"><span className="font-medium">Narration:</span> {payment.narration}</p>}
-                              {payment.allocations && payment.allocations.length > 0 ? (
-                                <Table>
-                                  <TableHeader>
-                                    <TableRow>
-                                      <TableHead className="w-10">#</TableHead>
-                                      <TableHead>Patient Name</TableHead>
-                                      <TableHead>Patient ID</TableHead>
-                                      <TableHead>Visit ID</TableHead>
-                                      <TableHead className="text-right">Bill Amount</TableHead>
-                                      <TableHead className="text-right">Received Amt</TableHead>
-                                      <TableHead className="text-right">Deduction</TableHead>
-                                      <TableHead className="text-right">TDS</TableHead>
-                                      <TableHead>Remarks</TableHead>
-                                    </TableRow>
-                                  </TableHeader>
-                                  <TableBody>
-                                    {payment.allocations.map((alloc: any, idx: number) => (
-                                      <TableRow key={alloc.id}>
-                                        <TableCell className="text-center">{idx + 1}</TableCell>
-                                        <TableCell className="font-medium">{alloc.patient_name}</TableCell>
-                                        <TableCell>{alloc.patients_id || '-'}</TableCell>
-                                        <TableCell>{alloc.visit_id || '-'}</TableCell>
-                                        <TableCell className="text-right">{alloc.bill_amount ? `Rs. ${Number(alloc.bill_amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '-'}</TableCell>
-                                        <TableCell className="text-right">Rs. {Number(alloc.amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</TableCell>
-                                        <TableCell className="text-right">{alloc.deduction_amount ? `Rs. ${Number(alloc.deduction_amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '-'}</TableCell>
-                                        <TableCell className="text-right">{alloc.tds_amount ? `Rs. ${Number(alloc.tds_amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '-'}</TableCell>
-                                        <TableCell>{alloc.remarks || '-'}</TableCell>
-                                      </TableRow>
-                                    ))}
-                                  </TableBody>
-                                </Table>
-                              ) : (
-                                <p className="text-sm text-gray-500">No allocations recorded.</p>
-                              )}
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      )}
-                    </React.Fragment>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      {/* Payment Receipts Table - same as Corporate Bulk Payments */}
+      <div className="bg-white border border-gray-200 rounded-xl p-4 mt-6">
+        <h2 className="text-lg font-bold text-gray-900 mb-4">Payment Receipts</h2>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm border-collapse">
+            <thead>
+              <tr className="bg-gray-50 border-b border-gray-200">
+                <th className="px-3 py-2 text-left font-semibold text-gray-700 w-8"></th>
+                <th className="px-3 py-2 text-left font-semibold text-gray-700 whitespace-nowrap">Receipt No.</th>
+                <th className="px-3 py-2 text-left font-semibold text-gray-700 whitespace-nowrap">Date</th>
+                <th className="px-3 py-2 text-left font-semibold text-gray-700 whitespace-nowrap">Corporate</th>
+                <th className="px-3 py-2 text-left font-semibold text-gray-700 whitespace-nowrap">Mode</th>
+                <th className="px-3 py-2 text-left font-semibold text-gray-700 whitespace-nowrap">Reference</th>
+                <th className="px-3 py-2 text-left font-semibold text-gray-700 whitespace-nowrap">Bank Name</th>
+                <th className="px-3 py-2 text-right font-semibold text-gray-700 whitespace-nowrap">Claim Amount</th>
+                <th className="px-3 py-2 text-right font-semibold text-gray-700 whitespace-nowrap">Total Amount</th>
+                <th className="px-3 py-2 text-right font-semibold text-gray-700 whitespace-nowrap">Patients</th>
+              </tr>
+            </thead>
+            <tbody>
+              {bulkPayments.length === 0 && (
+                <tr><td colSpan={10} className="px-3 py-8 text-center text-gray-400">No payment receipts found</td></tr>
+              )}
+              {bulkPayments.map((payment: any) => (
+                <React.Fragment key={payment.id}>
+                  <tr className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer" onClick={() => toggleRow(payment.id)}>
+                    <td className="px-3 py-2 text-gray-400">{expandedRows.has(payment.id) ? '▼' : '▶'}</td>
+                    <td className="px-3 py-2 font-medium">{payment.receipt_number}</td>
+                    <td className="px-3 py-2 whitespace-nowrap">{payment.payment_date ? new Date(payment.payment_date).toLocaleDateString('en-GB') : '-'}</td>
+                    <td className="px-3 py-2">{payment.corporate_name}</td>
+                    <td className="px-3 py-2">{payment.payment_mode}</td>
+                    <td className="px-3 py-2">{payment.reference_number || '-'}</td>
+                    <td className="px-3 py-2">{payment.bank_name || '-'}</td>
+                    <td className="px-3 py-2 text-right">{payment.claim_amount ? `Rs. ${Number(payment.claim_amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '-'}</td>
+                    <td className="px-3 py-2 text-right font-medium">Rs. {Number(payment.total_amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                    <td className="px-3 py-2 text-right">{payment.allocations?.length || 0}</td>
+                  </tr>
+                  {expandedRows.has(payment.id) && (
+                    <tr>
+                      <td colSpan={10} className="bg-gray-50 px-6 py-3">
+                        {payment.narration && <p className="text-sm text-gray-600 mb-2"><span className="font-medium">Narration:</span> {payment.narration}</p>}
+                        {payment.allocations?.length > 0 ? (
+                          <table className="w-full text-sm border-collapse">
+                            <thead>
+                              <tr className="bg-white border-b border-gray-200">
+                                <th className="px-2 py-1 text-left text-xs font-semibold text-gray-600">#</th>
+                                <th className="px-2 py-1 text-left text-xs font-semibold text-gray-600">Patient Name</th>
+                                <th className="px-2 py-1 text-left text-xs font-semibold text-gray-600">Patient ID</th>
+                                <th className="px-2 py-1 text-left text-xs font-semibold text-gray-600">Visit ID</th>
+                                <th className="px-2 py-1 text-right text-xs font-semibold text-gray-600">Bill Amount</th>
+                                <th className="px-2 py-1 text-right text-xs font-semibold text-gray-600">Received Amt</th>
+                                <th className="px-2 py-1 text-right text-xs font-semibold text-gray-600">Deduction</th>
+                                <th className="px-2 py-1 text-right text-xs font-semibold text-gray-600">TDS</th>
+                                <th className="px-2 py-1 text-left text-xs font-semibold text-gray-600">Remarks</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {payment.allocations.map((alloc: any, idx: number) => (
+                                <tr key={alloc.id} className="border-b border-gray-100">
+                                  <td className="px-2 py-1 text-center text-gray-500">{idx + 1}</td>
+                                  <td className="px-2 py-1 font-medium">{alloc.patient_name || '-'}</td>
+                                  <td className="px-2 py-1 text-gray-500">{alloc.patient_id || '-'}</td>
+                                  <td className="px-2 py-1 text-blue-600">{alloc.visit_id || '-'}</td>
+                                  <td className="px-2 py-1 text-right">{alloc.bill_amount ? `Rs. ${Number(alloc.bill_amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '-'}</td>
+                                  <td className="px-2 py-1 text-right">Rs. {Number(alloc.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                                  <td className="px-2 py-1 text-right">{alloc.deduction_amount ? `Rs. ${Number(alloc.deduction_amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '-'}</td>
+                                  <td className="px-2 py-1 text-right">{alloc.tds_amount ? `Rs. ${Number(alloc.tds_amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '-'}</td>
+                                  <td className="px-2 py-1">{alloc.remarks || '-'}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        ) : (
+                          <p className="text-sm text-gray-500">No allocations recorded.</p>
+                        )}
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
 
       {/* Sales Book Section */}
       <div className="bg-white border border-gray-200 rounded-xl p-4 mt-6">
