@@ -782,9 +782,6 @@ Return JSON only:
         <div className={`p-3 space-y-3 ${showStats ? 'block' : 'hidden md:block'}`}>
           <div className="flex items-center justify-between md:mb-2">
             <h1 className="text-lg font-bold text-gray-900 hidden md:block">📊 Marketing Dashboard</h1>
-            <Button size="sm" onClick={() => { setForm(today.id ? today : emptyStats); setShowModal(true); }}>
-              {today.id ? 'Edit Stats' : 'Update Stats'}
-            </Button>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2">
             <StatCard icon={Users} label="Doctors Today" value={today.doctors_contacted} color="blue" />
