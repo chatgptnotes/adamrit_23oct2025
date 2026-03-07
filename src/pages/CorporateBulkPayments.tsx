@@ -30,7 +30,8 @@ import { CorporateBulkPayment } from '@/types/corporateBulkPayment';
 import BulkPaymentReceiptForm from '@/components/corporate-bulk-payment/BulkPaymentReceiptForm';
 
 const CorporateBulkPayments: React.FC = () => {
-  const { hospitalConfig } = useAuth();
+  const { hospitalConfig, user } = useAuth();
+  const isSuperAdmin = user?.role === 'superadmin' || user?.role === 'super_admin';
   const { corporateOptions } = useCorporateData();
   const deleteMutation = useDeleteCorporateBulkPayment();
 
@@ -269,17 +270,19 @@ const CorporateBulkPayments: React.FC = () => {
                             >
                               <Pencil className="h-4 w-4" />
                             </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-7 w-7 p-0 text-red-500 hover:text-red-700"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDelete(payment.id, payment.receipt_number);
-                              }}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
+                            {isSuperAdmin && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 w-7 p-0 text-red-500 hover:text-red-700"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDelete(payment.id, payment.receipt_number);
+                                }}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            )}
                           </div>
                         </TableCell>
                       </TableRow>
