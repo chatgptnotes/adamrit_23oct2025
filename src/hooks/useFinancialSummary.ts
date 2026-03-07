@@ -1368,7 +1368,7 @@ const fetchAnesthetistTotal = async (): Promise<number> => {
         laboratoryServices: financialSummaryData.discount.laboratoryServices,
         clinicalServices: financialSummaryData.discount.clinicalServices,
         pharmacy: financialSummaryData.discount.pharmacy,
-        total: financialSummaryData.discount.total,
+        total: financialSummaryData?.discount?.total,
         allDiscountValues: financialSummaryData.discount
       });
 
@@ -1393,7 +1393,7 @@ const fetchAnesthetistTotal = async (): Promise<number> => {
         total_amount_implant_cost: parseFloat(financialSummaryData.totalAmount.implantCost) || 0,
         total_amount_private: parseFloat(financialSummaryData.totalAmount.private) || 0,
         total_amount_accommodation_charges: parseFloat(financialSummaryData.totalAmount.accommodationCharges) || 0,
-        total_amount_total: parseFloat(financialSummaryData.totalAmount.total) || 0,
+        total_amount_total: parseFloat(financialSummaryData?.totalAmount?.total) || 0,
         
         // 🔥 ENHANCED: Discount Row - handle DEFAULT 0 database constraint properly
         discount_advance_payment: financialSummaryData.discount.advancePayment && financialSummaryData.discount.advancePayment.trim() !== '' && financialSummaryData.discount.advancePayment.trim() !== '0' ? parseFloat(financialSummaryData.discount.advancePayment) : null,
@@ -1411,7 +1411,7 @@ const fetchAnesthetistTotal = async (): Promise<number> => {
         discount_implant_cost: financialSummaryData.discount.implantCost && financialSummaryData.discount.implantCost.trim() !== '' && financialSummaryData.discount.implantCost.trim() !== '0' ? parseFloat(financialSummaryData.discount.implantCost) : null,
         discount_private: financialSummaryData.discount.private && financialSummaryData.discount.private.trim() !== '' && financialSummaryData.discount.private.trim() !== '0' ? parseFloat(financialSummaryData.discount.private) : null,
         discount_accommodation_charges: financialSummaryData.discount.accommodationCharges && financialSummaryData.discount.accommodationCharges.trim() !== '' && financialSummaryData.discount.accommodationCharges.trim() !== '0' ? parseFloat(financialSummaryData.discount.accommodationCharges) : null,
-        discount_total: financialSummaryData.discount.total && financialSummaryData.discount.total.trim() !== '' && financialSummaryData.discount.total.trim() !== '0' ? parseFloat(financialSummaryData.discount.total) : null,
+        discount_total: financialSummaryData?.discount?.total && financialSummaryData?.discount?.total.trim() !== '' && financialSummaryData?.discount?.total.trim() !== '0' ? parseFloat(financialSummaryData?.discount?.total) : null,
         
         // Amount Paid Row
         amount_paid_advance_payment: parseFloat(financialSummaryData.amountPaid.advancePayment) || 0,
@@ -1429,7 +1429,7 @@ const fetchAnesthetistTotal = async (): Promise<number> => {
         amount_paid_implant_cost: parseFloat(financialSummaryData.amountPaid.implantCost) || 0,
         amount_paid_private: parseFloat(financialSummaryData.amountPaid.private) || 0,
         amount_paid_accommodation_charges: parseFloat(financialSummaryData.amountPaid.accommodationCharges) || 0,
-        amount_paid_total: parseFloat(financialSummaryData.amountPaid.total) || 0,
+        amount_paid_total: parseFloat(financialSummaryData?.amountPaid?.total) || 0,
         
         // Refunded Amount Row
         refunded_amount_advance_payment: parseFloat(financialSummaryData.refundedAmount.advancePayment) || 0,
@@ -1447,7 +1447,7 @@ const fetchAnesthetistTotal = async (): Promise<number> => {
         refunded_amount_implant_cost: parseFloat(financialSummaryData.refundedAmount.implantCost) || 0,
         refunded_amount_private: parseFloat(financialSummaryData.refundedAmount.private) || 0,
         refunded_amount_accommodation_charges: parseFloat(financialSummaryData.refundedAmount.accommodationCharges) || 0,
-        refunded_amount_total: parseFloat(financialSummaryData.refundedAmount.total) || 0,
+        refunded_amount_total: parseFloat(financialSummaryData?.refundedAmount?.total) || 0,
         
         // Balance Row
         balance_advance_payment: parseFloat(financialSummaryData.balance.advancePayment) || 0,
@@ -1465,7 +1465,7 @@ const fetchAnesthetistTotal = async (): Promise<number> => {
         balance_implant_cost: parseFloat(financialSummaryData.balance.implantCost) || 0,
         balance_private: parseFloat(financialSummaryData.balance.private) || 0,
         balance_accommodation_charges: parseFloat(financialSummaryData.balance.accommodationCharges) || 0,
-        balance_total: parseFloat(financialSummaryData.balance.total) || 0,
+        balance_total: parseFloat(financialSummaryData?.balance?.total) || 0,
         
         // Package dates
         package_start_date: packageDates.start_date || null,
@@ -1559,7 +1559,7 @@ const fetchAnesthetistTotal = async (): Promise<number> => {
             radiology: verificationData.discount_radiology === (parseFloat(financialSummaryData.discount.radiology) || 0),
             pharmacy: verificationData.discount_pharmacy === (parseFloat(financialSummaryData.discount.pharmacy) || 0),
             clinical: verificationData.discount_clinical_services === (parseFloat(financialSummaryData.discount.clinicalServices) || 0),
-            total: verificationData.discount_total === (parseFloat(financialSummaryData.discount.total) || 0)
+            total: verificationData.discount_total === (parseFloat(financialSummaryData?.discount?.total) || 0)
           }
         });
 
@@ -1905,7 +1905,7 @@ const fetchAnesthetistTotal = async (): Promise<number> => {
     const previousDiscountData = lastDiscountDataRef.current;
 
     // Log discount total specifically
-    console.log('🔍 [DISCOUNT TRACKER] Current discount total in state:', financialSummaryData.discount.total);
+    console.log('🔍 [DISCOUNT TRACKER] Current discount total in state:', financialSummaryData?.discount?.total);
     console.log('🔍 [DISCOUNT TRACKER] Full discount object:', financialSummaryData.discount);
 
     if (previousDiscountData && currentDiscountData !== previousDiscountData) {
@@ -2096,10 +2096,10 @@ const fetchAnesthetistTotal = async (): Promise<number> => {
       // Step 2: Use saved discount values if available, otherwise use memory values
       const currentDiscountValues = savedDiscountValues || prev.discount;
       const discountTotal = parseFloat(currentDiscountValues.total) || 0;
-      const totalAmount = parseFloat(prev.totalAmount.total) || 0;
-      const amountPaidTotal = parseFloat(prev.amountPaid.total) || 0;
-      const refundedTotal = parseFloat(prev.refundedAmount.total) || 0;
-      const finalPaymentTotal = parseFloat(prev.finalPayment.total) || 0;
+      const totalAmount = parseFloat(prev?.totalAmount?.total) || 0;
+      const amountPaidTotal = parseFloat(prev?.amountPaid?.total) || 0;
+      const refundedTotal = parseFloat(prev?.refundedAmount?.total) || 0;
+      const finalPaymentTotal = parseFloat(prev.finalPayment?.total) || 0;
 
       // Calculate new balance: Total - Discount - Amount Paid - Final Payment + Refunded
       const newBalance = totalAmount - discountTotal - amountPaidTotal - finalPaymentTotal + refundedTotal;
