@@ -465,12 +465,28 @@ const DetailedInvoice = () => {
               `).join('')}
               <tr class="total-row">
                 <td colspan="5" class="text-right">TOTAL:</td>
-                <td class="text-right">${total}</td>
+                <td class="text-right" id="grand-total">${total}</td>
               </tr>
             </tbody>
           </table>
         
           <script>
+
+            function recalcTotal() {
+              const rateCells = document.querySelectorAll('tbody tr:not(.total-row) td:last-child');
+              let sum = 0;
+              rateCells.forEach(cell => {
+                const val = parseFloat(cell.textContent.trim()) || 0;
+                sum += val;
+              });
+              const totalEl = document.getElementById('grand-total');
+              if (totalEl) totalEl.textContent = sum;
+            }
+            document.addEventListener('blur', function(e) {
+              if (e.target && e.target.hasAttribute && e.target.hasAttribute('contenteditable')) {
+                recalcTotal();
+              }
+            }, true);
             window._supabaseUrl = document.querySelector('meta[name="supabase-url"]')?.content || '';
             window._supabaseKey = document.querySelector('meta[name="supabase-key"]')?.content || '';
             window._visitId = document.querySelector('meta[name="visit-id"]')?.content || '';
@@ -670,12 +686,28 @@ const DetailedInvoice = () => {
               `).join('')}
               <tr class="total-row">
                 <td colspan="5" class="text-right">TOTAL:</td>
-                <td class="text-right">${total}</td>
+                <td class="text-right" id="grand-total">${total}</td>
               </tr>
             </tbody>
           </table>
         
           <script>
+
+            function recalcTotal() {
+              const rateCells = document.querySelectorAll('tbody tr:not(.total-row) td:last-child');
+              let sum = 0;
+              rateCells.forEach(cell => {
+                const val = parseFloat(cell.textContent.trim()) || 0;
+                sum += val;
+              });
+              const totalEl = document.getElementById('grand-total');
+              if (totalEl) totalEl.textContent = sum;
+            }
+            document.addEventListener('blur', function(e) {
+              if (e.target && e.target.hasAttribute && e.target.hasAttribute('contenteditable')) {
+                recalcTotal();
+              }
+            }, true);
             window._supabaseUrl = document.querySelector('meta[name="supabase-url"]')?.content || '';
             window._supabaseKey = document.querySelector('meta[name="supabase-key"]')?.content || '';
             window._visitId = document.querySelector('meta[name="visit-id"]')?.content || '';
