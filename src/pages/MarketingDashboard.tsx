@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { Camera, Send, Save, Edit2, Users, TrendingUp, Building2, Percent, IndianRupee, ClipboardList, CalendarCheck, Mic, MicOff, ImagePlus, ChevronDown, ChevronUp } from 'lucide-react';
+import { Camera, Send, Save, Edit2, Users, TrendingUp, Building2, Percent, IndianRupee, ClipboardList, CalendarCheck, Mic, MicOff, ImagePlus, ChevronDown, ChevronUp, FileText } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
@@ -48,6 +48,8 @@ export default function MarketingDashboard() {
   const [monthRows, setMonthRows] = useState<any[]>([]);
   const [yearRows, setYearRows] = useState<any[]>([]);
   const [yesterdayRow, setYesterdayRow] = useState<any>(null);
+  const [billSubmissions, setBillSubmissions] = useState<any[]>([]);
+  const [billSearch, setBillSearch] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState<DayStats>(emptyStats);
   const [loading, setLoading] = useState(true);
@@ -146,6 +148,14 @@ export default function MarketingDashboard() {
     setYearRows(yearRes.data || []);
     setYesterdayRow(yestRes.data);
     setCorporateList(corpRes.data || []);
+
+    // Fetch bill submissions
+    const { data: billData } = await db.from('bill_submission')
+      .select('id, visit_id, patient_name, bill_amount, received_amount, deduction_amount, tds_amount, remarks, submission_date, created_at')
+      .order('created_at', { ascending: false })
+      .limit(200);
+    setBillSubmissions(billData || []);
+
     setLoading(false);
   };
 
@@ -806,6 +816,68 @@ Return JSON only:
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Bill Submission Table */}
+      <div className="bg-white border border-gray-200 rounded-xl p-4 mt-6">
+        <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+          <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+            <FileText className="h-5 w-5 text-blue-600" />
+            Patient Bill Details
+          </h2>
+          <Input
+            placeholder="Search by patient name, visit ID..."
+            value={billSearch}
+            onChange={e => setBillSearch(e.target.value)}
+            className="w-64 text-sm"
+          />
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm border-collapse">
+            <thead>
+              <tr className="bg-blue-50 text-left">
+                <th className="px-3 py-2 border border-gray-200 font-semibold text-gray-700 whitespace-nowrap">Patient Name</th>
+                <th className="px-3 py-2 border border-gray-200 font-semibold text-gray-700 whitespace-nowrap">Visit ID</th>
+                <th className="px-3 py-2 border border-gray-200 font-semibold text-gray-700 whitespace-nowrap">Bill Amount</th>
+                <th className="px-3 py-2 border border-gray-200 font-semibold text-gray-700 whitespace-nowrap">Received Amount</th>
+                <th className="px-3 py-2 border border-gray-200 font-semibold text-gray-700 whitespace-nowrap">Deduction Amount</th>
+                <th className="px-3 py-2 border border-gray-200 font-semibold text-gray-700 whitespace-nowrap">TDS</th>
+                <th className="px-3 py-2 border border-gray-200 font-semibold text-gray-700 whitespace-nowrap">Remarks</th>
+                <th className="px-3 py-2 border border-gray-200 font-semibold text-gray-700 whitespace-nowrap">Date</th>
+              </tr>
+            </thead>
+            <tbody>
+              {billSubmissions
+                .filter(b =>
+                  !billSearch ||
+                  (b.patient_name || '').toLowerCase().includes(billSearch.toLowerCase()) ||
+                  (b.visit_id || '').toLowerCase().includes(billSearch.toLowerCase())
+                )
+                .map((b, i) => (
+                  <tr key={b.id} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                    <td className="px-3 py-2 border border-gray-200 font-medium">{b.patient_name || '-'}</td>
+                    <td className="px-3 py-2 border border-gray-200 text-blue-600 font-mono text-xs">{b.visit_id || '-'}</td>
+                    <td className="px-3 py-2 border border-gray-200">{b.bill_amount != null ? inr(Number(b.bill_amount)) : '-'}</td>
+                    <td className="px-3 py-2 border border-gray-200 text-green-700">{b.received_amount != null ? inr(Number(b.received_amount)) : '-'}</td>
+                    <td className="px-3 py-2 border border-gray-200 text-red-600">{b.deduction_amount != null ? inr(Number(b.deduction_amount)) : '-'}</td>
+                    <td className="px-3 py-2 border border-gray-200 text-orange-600">{b.tds_amount != null ? inr(Number(b.tds_amount)) : '-'}</td>
+                    <td className="px-3 py-2 border border-gray-200 text-gray-600 max-w-xs truncate">{b.remarks || '-'}</td>
+                    <td className="px-3 py-2 border border-gray-200 text-gray-500 text-xs whitespace-nowrap">
+                      {b.submission_date || (b.created_at ? new Date(b.created_at).toLocaleDateString('en-GB') : '-')}
+                    </td>
+                  </tr>
+                ))}
+              {billSubmissions.length === 0 && (
+                <tr>
+                  <td colSpan={8} className="px-3 py-8 text-center text-gray-400">No bill submissions found</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+        {billSubmissions.length > 0 && (
+          <p className="text-xs text-gray-400 mt-2">Showing {Math.min(billSubmissions.filter(b => !billSearch || (b.patient_name||'').toLowerCase().includes(billSearch.toLowerCase()) || (b.visit_id||'').toLowerCase().includes(billSearch.toLowerCase())).length, 200)} records</p>
+        )}
+      </div>
 
       {/* Sales Book Section */}
       <div className="bg-white border border-gray-200 rounded-xl p-4 mt-6">
