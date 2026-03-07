@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { Camera, Send, Save, Edit2, Users, TrendingUp, Building2, Percent, IndianRupee, ClipboardList, CalendarCheck, Mic, MicOff, ImagePlus, ChevronDown, ChevronUp, FileText } from 'lucide-react';
+import { Camera, Send, Save, Edit2, Users, TrendingUp, Building2, Percent, IndianRupee, ClipboardList, CalendarCheck, Mic, MicOff, ImagePlus, ChevronDown, ChevronUp } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
@@ -46,13 +46,8 @@ export default function MarketingDashboard() {
   const { user } = useAuth();
   const [today, setToday] = useState<DayStats>(emptyStats);
   const [monthRows, setMonthRows] = useState<any[]>([]);
-  const [bulkPayments, setBulkPayments] = useState<any[]>([]);
-  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
-  const toggleRow = (id: string) => setExpandedRows(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; });
   const [yearRows, setYearRows] = useState<any[]>([]);
   const [yesterdayRow, setYesterdayRow] = useState<any>(null);
-  const [billSubmissions, setBillSubmissions] = useState<any[]>([]);
-  const [billSearch, setBillSearch] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState<DayStats>(emptyStats);
   const [loading, setLoading] = useState(true);
@@ -151,41 +146,6 @@ export default function MarketingDashboard() {
     setYearRows(yearRes.data || []);
     setYesterdayRow(yestRes.data);
     setCorporateList(corpRes.data || []);
-
-    // Fetch payment receipt data from corporate_bulk_payment_allocations
-    const { data: billData } = await db.from('corporate_bulk_payment_allocations')
-      .select(`
-        id,
-        patient_name,
-        patient_id,
-        visit_id,
-        bill_amount,
-        amount,
-        deduction_amount,
-        tds_amount,
-        remarks,
-        created_at,
-        corporate_bulk_payments!bulk_payment_id(
-          receipt_number,
-          corporate_name,
-          payment_date,
-          payment_mode
-        ),
-        visits!visit_id(
-          visit_id
-        )
-      `)
-      .order('created_at', { ascending: false })
-      .limit(500);
-    setBillSubmissions((billData || []).map((b: any) => ({
-      ...b,
-      received_amount: b.amount,
-      corporate: b.corporate_bulk_payments?.corporate_name || '',
-      date: b.corporate_bulk_payments?.payment_date || b.created_at,
-      receipt_number: b.corporate_bulk_payments?.receipt_number || '',
-      readable_visit_id: b.visits?.visit_id || b.visit_id || '',
-    })));
-
     setLoading(false);
   };
 
@@ -195,16 +155,6 @@ export default function MarketingDashboard() {
   };
 
   useEffect(() => { fetchData(); }, []);
-
-  useEffect(() => {
-    (supabase as any).from('corporate_bulk_payments')
-      .select('*, corporate_bulk_payment_allocations(*)')
-      .order('payment_date', { ascending: false })
-      .then(({ data }: any) => {
-        setBulkPayments((data || []).map((p: any) => ({ ...p, allocations: p.corporate_bulk_payment_allocations || [] })));
-      });
-  }, []);
-
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
 
   const monthSum = (key: string) => monthRows.reduce((s: number, r: any) => s + (Number(r[key]) || 0), 0);
@@ -782,6 +732,9 @@ Return JSON only:
         <div className={`p-3 space-y-3 ${showStats ? 'block' : 'hidden md:block'}`}>
           <div className="flex items-center justify-between md:mb-2">
             <h1 className="text-lg font-bold text-gray-900 hidden md:block">📊 Marketing Dashboard</h1>
+            <Button size="sm" onClick={() => { setForm(today.id ? today : emptyStats); setShowModal(true); }}>
+              {today.id ? 'Edit Stats' : 'Update Stats'}
+            </Button>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2">
             <StatCard icon={Users} label="Doctors Today" value={today.doctors_contacted} color="blue" />
@@ -853,91 +806,6 @@ Return JSON only:
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {/* Payment Receipts Table - same as Corporate Bulk Payments */}
-      <div className="bg-white border border-gray-200 rounded-xl p-4 mt-6">
-        <h2 className="text-lg font-bold text-gray-900 mb-4">Payment Receipts</h2>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm border-collapse">
-            <thead>
-              <tr className="bg-gray-50 border-b border-gray-200">
-                <th className="px-3 py-2 text-left font-semibold text-gray-700 w-8"></th>
-                <th className="px-3 py-2 text-left font-semibold text-gray-700 whitespace-nowrap">Receipt No.</th>
-                <th className="px-3 py-2 text-left font-semibold text-gray-700 whitespace-nowrap">Date</th>
-                <th className="px-3 py-2 text-left font-semibold text-gray-700 whitespace-nowrap">Corporate</th>
-                <th className="px-3 py-2 text-left font-semibold text-gray-700 whitespace-nowrap">Mode</th>
-                <th className="px-3 py-2 text-left font-semibold text-gray-700 whitespace-nowrap">Reference</th>
-                <th className="px-3 py-2 text-left font-semibold text-gray-700 whitespace-nowrap">Bank Name</th>
-                <th className="px-3 py-2 text-right font-semibold text-gray-700 whitespace-nowrap">Claim Amount</th>
-                <th className="px-3 py-2 text-right font-semibold text-gray-700 whitespace-nowrap">Total Amount</th>
-                <th className="px-3 py-2 text-right font-semibold text-gray-700 whitespace-nowrap">Patients</th>
-              </tr>
-            </thead>
-            <tbody>
-              {bulkPayments.length === 0 && (
-                <tr><td colSpan={10} className="px-3 py-8 text-center text-gray-400">No payment receipts found</td></tr>
-              )}
-              {bulkPayments.map((payment: any) => (
-                <React.Fragment key={payment.id}>
-                  <tr className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer" onClick={() => toggleRow(payment.id)}>
-                    <td className="px-3 py-2 text-gray-400">{expandedRows.has(payment.id) ? '▼' : '▶'}</td>
-                    <td className="px-3 py-2 font-medium">{payment.receipt_number}</td>
-                    <td className="px-3 py-2 whitespace-nowrap">{payment.payment_date ? new Date(payment.payment_date).toLocaleDateString('en-GB') : '-'}</td>
-                    <td className="px-3 py-2">{payment.corporate_name}</td>
-                    <td className="px-3 py-2">{payment.payment_mode}</td>
-                    <td className="px-3 py-2">{payment.reference_number || '-'}</td>
-                    <td className="px-3 py-2">{payment.bank_name || '-'}</td>
-                    <td className="px-3 py-2 text-right">{payment.claim_amount ? `Rs. ${Number(payment.claim_amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '-'}</td>
-                    <td className="px-3 py-2 text-right font-medium">Rs. {Number(payment.total_amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                    <td className="px-3 py-2 text-right">{payment.allocations?.length || 0}</td>
-                  </tr>
-                  {expandedRows.has(payment.id) && (
-                    <tr>
-                      <td colSpan={10} className="bg-gray-50 px-6 py-3">
-                        {payment.narration && <p className="text-sm text-gray-600 mb-2"><span className="font-medium">Narration:</span> {payment.narration}</p>}
-                        {payment.allocations?.length > 0 ? (
-                          <table className="w-full text-sm border-collapse">
-                            <thead>
-                              <tr className="bg-white border-b border-gray-200">
-                                <th className="px-2 py-1 text-left text-xs font-semibold text-gray-600">#</th>
-                                <th className="px-2 py-1 text-left text-xs font-semibold text-gray-600">Patient Name</th>
-                                <th className="px-2 py-1 text-left text-xs font-semibold text-gray-600">Patient ID</th>
-                                <th className="px-2 py-1 text-left text-xs font-semibold text-gray-600">Visit ID</th>
-                                <th className="px-2 py-1 text-right text-xs font-semibold text-gray-600">Bill Amount</th>
-                                <th className="px-2 py-1 text-right text-xs font-semibold text-gray-600">Received Amt</th>
-                                <th className="px-2 py-1 text-right text-xs font-semibold text-gray-600">Deduction</th>
-                                <th className="px-2 py-1 text-right text-xs font-semibold text-gray-600">TDS</th>
-                                <th className="px-2 py-1 text-left text-xs font-semibold text-gray-600">Remarks</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {payment.allocations.map((alloc: any, idx: number) => (
-                                <tr key={alloc.id} className="border-b border-gray-100">
-                                  <td className="px-2 py-1 text-center text-gray-500">{idx + 1}</td>
-                                  <td className="px-2 py-1 font-medium">{alloc.patient_name || '-'}</td>
-                                  <td className="px-2 py-1 text-gray-500">{alloc.patient_id || '-'}</td>
-                                  <td className="px-2 py-1 text-blue-600">{alloc.visit_id || '-'}</td>
-                                  <td className="px-2 py-1 text-right">{alloc.bill_amount ? `Rs. ${Number(alloc.bill_amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '-'}</td>
-                                  <td className="px-2 py-1 text-right">Rs. {Number(alloc.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                                  <td className="px-2 py-1 text-right">{alloc.deduction_amount ? `Rs. ${Number(alloc.deduction_amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '-'}</td>
-                                  <td className="px-2 py-1 text-right">{alloc.tds_amount ? `Rs. ${Number(alloc.tds_amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '-'}</td>
-                                  <td className="px-2 py-1">{alloc.remarks || '-'}</td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        ) : (
-                          <p className="text-sm text-gray-500">No allocations recorded.</p>
-                        )}
-                      </td>
-                    </tr>
-                  )}
-                </React.Fragment>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
 
       {/* Sales Book Section */}
       <div className="bg-white border border-gray-200 rounded-xl p-4 mt-6">
