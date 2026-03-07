@@ -149,12 +149,31 @@ export default function MarketingDashboard() {
     setYesterdayRow(yestRes.data);
     setCorporateList(corpRes.data || []);
 
-    // Fetch bill submissions
-    const { data: billData } = await db.from('bill_submission')
-      .select('id, visit_id, patient_name, bill_amount, received_amount, deduction_amount, tds_amount, remarks, submission_date, created_at')
+    // Fetch bill submissions from bill_preparation with patient join
+    const { data: billData } = await db.from('bill_preparation')
+      .select(`
+        id,
+        visit_id,
+        bill_amount,
+        received_amount,
+        deduction_amount,
+        tds_amount,
+        date_of_submission,
+        received_date,
+        corporate,
+        executive_who_submitted,
+        created_at,
+        visits!inner!visit_id(
+          patients!inner(name, patients_id)
+        )
+      `)
       .order('created_at', { ascending: false })
       .limit(200);
-    setBillSubmissions(billData || []);
+    setBillSubmissions((billData || []).map((b: any) => ({
+      ...b,
+      patient_name: b.visits?.patients?.name || '',
+      patient_id: b.visits?.patients?.patients_id || '',
+    })));
 
     setLoading(false);
   };
@@ -841,7 +860,7 @@ Return JSON only:
                 <th className="px-3 py-2 border border-gray-200 font-semibold text-gray-700 whitespace-nowrap">Received Amount</th>
                 <th className="px-3 py-2 border border-gray-200 font-semibold text-gray-700 whitespace-nowrap">Deduction Amount</th>
                 <th className="px-3 py-2 border border-gray-200 font-semibold text-gray-700 whitespace-nowrap">TDS</th>
-                <th className="px-3 py-2 border border-gray-200 font-semibold text-gray-700 whitespace-nowrap">Remarks</th>
+                <th className="px-3 py-2 border border-gray-200 font-semibold text-gray-700 whitespace-nowrap">Corporate</th>
                 <th className="px-3 py-2 border border-gray-200 font-semibold text-gray-700 whitespace-nowrap">Date</th>
               </tr>
             </thead>
@@ -860,9 +879,9 @@ Return JSON only:
                     <td className="px-3 py-2 border border-gray-200 text-green-700">{b.received_amount != null ? inr(Number(b.received_amount)) : '-'}</td>
                     <td className="px-3 py-2 border border-gray-200 text-red-600">{b.deduction_amount != null ? inr(Number(b.deduction_amount)) : '-'}</td>
                     <td className="px-3 py-2 border border-gray-200 text-orange-600">{b.tds_amount != null ? inr(Number(b.tds_amount)) : '-'}</td>
-                    <td className="px-3 py-2 border border-gray-200 text-gray-600 max-w-xs truncate">{b.remarks || '-'}</td>
+                    <td className="px-3 py-2 border border-gray-200 text-gray-600 max-w-xs truncate">{b.corporate || '-'}</td>
                     <td className="px-3 py-2 border border-gray-200 text-gray-500 text-xs whitespace-nowrap">
-                      {b.submission_date || (b.created_at ? new Date(b.created_at).toLocaleDateString('en-GB') : '-')}
+                      {b.date_of_submission || (b.created_at ? new Date(b.created_at).toLocaleDateString('en-GB') : '-')}
                     </td>
                   </tr>
                 ))}
