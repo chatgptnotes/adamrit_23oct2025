@@ -21276,57 +21276,57 @@ Dr. Murali B K
                           </td>
                           <td className="border border-gray-300 p-3 min-w-[120px]">
                             <div className="w-full px-3 py-2 text-sm text-center bg-white rounded border border-gray-200 min-h-[38px] flex items-center justify-center">
-                              {financialSummaryData.finalPayment?.advancePayment || '0'}
+                              {financialSummaryData?.finalPayment?.advancePayment || '0'}
                             </div>
                           </td>
                           <td className="border border-gray-300 p-3 min-w-[120px]">
                             <div className="w-full px-3 py-2 text-sm text-center bg-white rounded border border-gray-200 min-h-[38px] flex items-center justify-center">
-                              {financialSummaryData.finalPayment?.clinicalServices || '0'}
+                              {financialSummaryData?.finalPayment?.clinicalServices || '0'}
                             </div>
                           </td>
                           <td className="border border-gray-300 p-3 min-w-[120px]">
                             <div className="w-full px-3 py-2 text-sm text-center bg-white rounded border border-gray-200 min-h-[38px] flex items-center justify-center">
-                              {financialSummaryData.finalPayment?.laboratoryServices || '0'}
+                              {financialSummaryData?.finalPayment?.laboratoryServices || '0'}
                             </div>
                           </td>
                           <td className="border border-gray-300 p-3 min-w-[120px]">
                             <div className="w-full px-3 py-2 text-sm text-center bg-white rounded border border-gray-200 min-h-[38px] flex items-center justify-center">
-                              {financialSummaryData.finalPayment?.radiology || '0'}
+                              {financialSummaryData?.finalPayment?.radiology || '0'}
                             </div>
                           </td>
                           <td className="border border-gray-300 p-3 min-w-[120px]">
                             <div className="w-full px-3 py-2 text-sm text-center bg-white rounded border border-gray-200 min-h-[38px] flex items-center justify-center">
-                              {financialSummaryData.finalPayment?.pharmacy || '0'}
+                              {financialSummaryData?.finalPayment?.pharmacy || '0'}
                             </div>
                           </td>
                           <td className="border border-gray-300 p-3 min-w-[120px]">
                             <div className="w-full px-3 py-2 text-sm text-center bg-white rounded border border-gray-200 min-h-[38px] flex items-center justify-center">
-                              {financialSummaryData.finalPayment?.implant || '0'}
+                              {financialSummaryData?.finalPayment?.implant || '0'}
                             </div>
                           </td>
                           <td className="border border-gray-300 p-3 min-w-[120px]">
                             <div className="w-full px-3 py-2 text-sm text-center bg-white rounded border border-gray-200 min-h-[38px] flex items-center justify-center">
-                              {financialSummaryData.finalPayment?.surgery || '0'}
+                              {financialSummaryData?.finalPayment?.surgery || '0'}
                             </div>
                           </td>
                           <td className="border border-gray-300 p-3 min-w-[120px]">
                             <div className="w-full px-3 py-2 text-sm text-center bg-white rounded border border-gray-200 min-h-[38px] flex items-center justify-center">
-                              {financialSummaryData.finalPayment?.mandatoryServices || '0'}
+                              {financialSummaryData?.finalPayment?.mandatoryServices || '0'}
                             </div>
                           </td>
                           <td className="border border-gray-300 p-3 min-w-[120px]">
                             <div className="w-full px-3 py-2 text-sm text-center bg-white rounded border border-gray-200 min-h-[38px] flex items-center justify-center">
-                              {financialSummaryData.finalPayment?.physiotherapy || '0'}
+                              {financialSummaryData?.finalPayment?.physiotherapy || '0'}
                             </div>
                           </td>
                           <td className="border border-gray-300 p-3 min-w-[120px]">
                             <div className="w-full px-3 py-2 text-sm text-center bg-white rounded border border-gray-200 min-h-[38px] flex items-center justify-center">
-                              {financialSummaryData.finalPayment?.consultation || '0'}
+                              {financialSummaryData?.finalPayment?.consultation || '0'}
                             </div>
                           </td>
                           <td className="border border-gray-300 p-3 min-w-[120px]">
                             <div className="w-full px-3 py-2 text-sm text-center bg-white rounded border border-gray-200 min-h-[38px] flex items-center justify-center">
-                              {financialSummaryData.finalPayment?.accommodationCharges || '0'}
+                              {financialSummaryData?.finalPayment?.accommodationCharges || '0'}
                             </div>
                           </td>
                           <td className="border border-gray-300 p-2 font-bold">
