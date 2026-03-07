@@ -97,7 +97,7 @@ const fetchBillAgingData = async (hospitalName?: string): Promise<BillAgingRecor
     const receivedAmount = Number(item.received_amount) || 0;
     const deductionAmount = Number(item.deduction_amount) || 0;
     const tdsAmount = Number(item.tds_amount) || 0;
-    const outstandingAmount = billAmount - receivedAmount - deductionAmount;
+    const outstandingAmount = billAmount - receivedAmount - deductionAmount - tdsAmount;
     const daysOutstanding = calculateDaysOutstanding(
       item.date_of_submission,
       item.received_date
