@@ -1,9 +1,43 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { Clock, BedDouble, RotateCcw, TrendingUp, Wallet, LogIn, RefreshCw } from 'lucide-react';
+import { Clock, BedDouble, RotateCcw, TrendingUp, Wallet, LogIn, RefreshCw, UserPlus, UserCheck, Scissors, Calendar } from 'lucide-react';
 
 const TOTAL_BEDS = 42;
-const PERIOD_DAYS = 30;
+const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000; // UTC+5:30
+
+// Returns yesterday's midnight IST as UTC Date objects: { from, to }
+function getYesterdayISTWindow() {
+  const nowUTC = new Date();
+  const nowIST = new Date(nowUTC.getTime() + IST_OFFSET_MS);
+
+  // Today 00:00 IST = "to"
+  const todayMidnightIST = new Date(nowIST);
+  todayMidnightIST.setHours(0, 0, 0, 0);
+
+  // Yesterday 00:00 IST = "from"
+  const yesterdayMidnightIST = new Date(todayMidnightIST.getTime() - 24 * 60 * 60 * 1000);
+
+  // Convert back to UTC for Supabase queries
+  const from = new Date(yesterdayMidnightIST.getTime() - IST_OFFSET_MS);
+  const to   = new Date(todayMidnightIST.getTime()   - IST_OFFSET_MS);
+
+  return { from, to, fromIST: yesterdayMidnightIST, toIST: todayMidnightIST };
+}
+
+function fmtIST(d: Date) {
+  return d.toLocaleDateString('en-IN', {
+    day: 'numeric', month: 'long', year: 'numeric',
+    hour: '2-digit', minute: '2-digit', hour12: true,
+    timeZone: 'Asia/Kolkata',
+  });
+}
+
+interface DailyActivity {
+  admissions: number;
+  discharges: number;
+  surgeries: number;
+  opd: number;
+}
 
 interface KPIData {
   alos: string;
@@ -17,6 +51,7 @@ interface KPIData {
   dischargeCount: number;
   totalRevenue: number;
   activeIpd: number;
+  daily: DailyActivity;
   loading: boolean;
   error: string | null;
 }
@@ -25,38 +60,62 @@ export const ClinicalKPIs = () => {
   const [kpi, setKpi] = useState<KPIData>({
     alos: '—', bor: 0, btr: '—', bti: '—', arpp: 0, admissionRate: 0,
     totalVisits: 0, ipdCount: 0, dischargeCount: 0, totalRevenue: 0, activeIpd: 0,
+    daily: { admissions: 0, discharges: 0, surgeries: 0, opd: 0 },
     loading: true, error: null,
   });
+
+  const window = getYesterdayISTWindow();
 
   const fetchKPIs = async () => {
     setKpi(prev => ({ ...prev, loading: true, error: null }));
     try {
-      // ── Visits: count total, IPD admissions, discharged ───────────────────
+      const fromISO = window.from.toISOString();
+      const toISO   = window.to.toISOString();
+
+      // ── All-time visits (for overall KPIs) ────────────────────────────────
       const { data: allVisits, error: vErr } = await supabase
         .from('visits')
-        .select('visit_type, is_discharged, admission_date, discharge_date');
+        .select('visit_type, is_discharged');
       if (vErr) throw vErr;
 
       const totalVisits = allVisits?.length || 0;
       const ipdAdmissions = allVisits?.filter(v =>
-        v.visit_type === 'patient-admission' || v.visit_type === 'ipd' || v.visit_type === 'IPD'
+        ['patient-admission', 'ipd', 'IPD'].includes(v.visit_type)
       ) || [];
-      const ipdCount = ipdAdmissions.length;
-      const discharged = allVisits?.filter(v => v.is_discharged) || [];
-      const dischargeCount = discharged.length;
-      const activeIpd = ipdAdmissions.filter(v => !v.is_discharged).length;
+      const ipdCount       = ipdAdmissions.length;
+      const dischargeCount = allVisits?.filter(v => v.is_discharged).length || 0;
+      const activeIpd      = ipdAdmissions.filter(v => !v.is_discharged).length;
 
-      // ── ALOS from visit_accommodations ─────────────────────────────────────
+      // ── Yesterday's activity (midnight IST to midnight IST) ───────────────
+      const { data: dailyVisits, error: dvErr } = await supabase
+        .from('visits')
+        .select('visit_type, is_discharged, created_at')
+        .gte('created_at', fromISO)
+        .lt('created_at', toISO);
+      if (dvErr) throw dvErr;
+
+      const daily: DailyActivity = {
+        admissions: dailyVisits?.filter(v =>
+          ['patient-admission', 'ipd', 'IPD'].includes(v.visit_type)
+        ).length || 0,
+        discharges: dailyVisits?.filter(v => v.is_discharged).length || 0,
+        surgeries:  dailyVisits?.filter(v => v.visit_type === 'surgery').length || 0,
+        opd:        dailyVisits?.filter(v =>
+          ['consultation', 'follow-up', 'routine-checkup'].includes(v.visit_type)
+        ).length || 0,
+      };
+
+      // ── ALOS from visit_accommodations (all-time) ─────────────────────────
       const { data: accommodations, error: aErr } = await supabase
         .from('visit_accommodations')
-        .select('days, start_date, end_date');
+        .select('days');
       if (aErr) throw aErr;
 
       const totalInpatientDays = accommodations?.reduce((sum, a) => sum + (a.days || 0), 0) || 0;
       const alosNum = dischargeCount > 0 ? totalInpatientDays / dischargeCount : 0;
       const alos = alosNum > 0 ? alosNum.toFixed(1) : '—';
 
-      // ── Revenue from bills ─────────────────────────────────────────────────
+      // ── Revenue from bills (all-time) ──────────────────────────────────────
       const { data: billsData, error: bErr } = await supabase
         .from('bills')
         .select('total_amount');
@@ -64,30 +123,17 @@ export const ClinicalKPIs = () => {
       const totalRevenue = billsData?.reduce((sum, b) => sum + (Number(b.total_amount) || 0), 0) || 0;
 
       // ── KPI calculations ───────────────────────────────────────────────────
-      const availableBedDays = TOTAL_BEDS * PERIOD_DAYS;
-      const bor = availableBedDays > 0
-        ? Math.min(100, Math.round((totalInpatientDays / availableBedDays) * 100))
-        : 0;
-
-      const btr = TOTAL_BEDS > 0
-        ? (dischargeCount / TOTAL_BEDS).toFixed(1)
-        : '—';
-
-      const bti = dischargeCount > 0
-        ? Math.max(0, (availableBedDays - totalInpatientDays) / dischargeCount).toFixed(1)
-        : '—';
-
-      const patientCount = totalVisits || 1;
-      const arpp = Math.round(totalRevenue / patientCount);
-
-      const admissionRate = totalVisits > 0
-        ? Math.round((ipdCount / totalVisits) * 100)
-        : 0;
+      const availableBedDays = TOTAL_BEDS * 30;
+      const bor  = availableBedDays > 0 ? Math.min(100, Math.round((totalInpatientDays / availableBedDays) * 100)) : 0;
+      const btr  = TOTAL_BEDS > 0 ? (dischargeCount / TOTAL_BEDS).toFixed(1) : '—';
+      const bti  = dischargeCount > 0 ? Math.max(0, (availableBedDays - totalInpatientDays) / dischargeCount).toFixed(1) : '—';
+      const arpp = totalVisits > 0 ? Math.round(totalRevenue / totalVisits) : 0;
+      const admissionRate = totalVisits > 0 ? Math.round((ipdCount / totalVisits) * 100) : 0;
 
       setKpi({
         alos, bor, btr, bti, arpp, admissionRate,
         totalVisits, ipdCount, dischargeCount, totalRevenue, activeIpd,
-        loading: false, error: null,
+        daily, loading: false, error: null,
       });
     } catch (err: any) {
       setKpi(prev => ({ ...prev, loading: false, error: err.message || 'Failed to load KPIs' }));
@@ -96,116 +142,131 @@ export const ClinicalKPIs = () => {
 
   useEffect(() => { fetchKPIs(); }, []);
 
-  const cards = [
+  const kpiCards = [
     {
       title: 'ALOS', subtitle: 'Avg Length of Stay',
       value: kpi.alos === '—' ? '—' : `${kpi.alos} days`,
-      formula: 'Inpatient Days ÷ Discharges',
-      benchmark: '< 4 days ideal',
-      good: kpi.alos !== '—' && parseFloat(kpi.alos) <= 4,
+      benchmark: '< 4 days', good: kpi.alos !== '—' && parseFloat(kpi.alos) <= 4,
       color: 'from-blue-500 to-blue-600', icon: Clock,
-      detail: `${kpi.dischargeCount} discharges`,
+      detail: `${kpi.dischargeCount} total discharges`,
     },
     {
       title: 'BOR', subtitle: 'Bed Occupancy Rate',
       value: `${kpi.bor}%`,
-      formula: `Inpatient Days ÷ (${TOTAL_BEDS} beds × ${PERIOD_DAYS}d) × 100`,
-      benchmark: '75–85% ideal',
-      good: kpi.bor >= 75 && kpi.bor <= 85,
+      benchmark: '75–85% ideal', good: kpi.bor >= 75 && kpi.bor <= 85,
       color: 'from-purple-500 to-purple-600', icon: BedDouble,
       detail: `${TOTAL_BEDS} beds configured`,
     },
     {
       title: 'BTR', subtitle: 'Bed Turnover Rate',
       value: kpi.btr === '—' ? '—' : `${kpi.btr}×`,
-      formula: `Discharges ÷ ${TOTAL_BEDS} beds`,
-      benchmark: '> 4× per month',
-      good: kpi.btr !== '—' && parseFloat(kpi.btr) >= 4,
+      benchmark: '> 4× per month', good: kpi.btr !== '—' && parseFloat(kpi.btr) >= 4,
       color: 'from-green-500 to-green-600', icon: RotateCcw,
-      detail: `${kpi.dischargeCount} total discharges`,
+      detail: `${kpi.dischargeCount} discharges`,
     },
     {
       title: 'BTI', subtitle: 'Bed Turnover Interval',
       value: kpi.bti === '—' ? '—' : `${kpi.bti} days`,
-      formula: '(Avail Bed Days − Inpatient Days) ÷ Discharges',
-      benchmark: '< 1 day ideal',
-      good: kpi.bti !== '—' && parseFloat(kpi.bti) <= 1,
+      benchmark: '< 1 day', good: kpi.bti !== '—' && parseFloat(kpi.bti) <= 1,
       color: 'from-amber-500 to-amber-600', icon: TrendingUp,
-      detail: 'Time bed sits empty',
+      detail: 'Empty bed time',
     },
     {
       title: 'ARPP', subtitle: 'Avg Revenue Per Visit',
       value: `₹${kpi.arpp.toLocaleString('en-IN')}`,
-      formula: 'Total Bill Amount ÷ Total Visits',
-      benchmark: '> ₹5,000 ideal',
-      good: kpi.arpp >= 5000,
+      benchmark: '> ₹5,000', good: kpi.arpp >= 5000,
       color: 'from-emerald-500 to-emerald-600', icon: Wallet,
-      detail: `₹${(kpi.totalRevenue / 100000).toFixed(1)}L total billed`,
+      detail: `₹${(kpi.totalRevenue / 100000).toFixed(1)}L total`,
     },
     {
       title: 'Admission Rate', subtitle: 'IPD Conversion',
       value: `${kpi.admissionRate}%`,
-      formula: '(IPD Admissions ÷ Total Visits) × 100',
-      benchmark: '15–25% ideal',
-      good: kpi.admissionRate >= 15 && kpi.admissionRate <= 25,
+      benchmark: '15–25% ideal', good: kpi.admissionRate >= 15 && kpi.admissionRate <= 25,
       color: 'from-rose-500 to-rose-600', icon: LogIn,
       detail: `${kpi.ipdCount} of ${kpi.totalVisits} visits`,
     },
   ];
 
   if (kpi.loading) {
-    return (
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
-        {[...Array(6)].map((_, i) => (
-          <div key={i} className="h-28 bg-gray-100 rounded-xl animate-pulse" />
-        ))}
+    return <div className="space-y-3 mb-6">
+      <div className="h-24 bg-gray-100 rounded-xl animate-pulse" />
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+        {[...Array(6)].map((_, i) => <div key={i} className="h-28 bg-gray-100 rounded-xl animate-pulse" />)}
       </div>
-    );
+    </div>;
   }
 
-  if (kpi.error) {
-    return (
-      <div className="mb-6 p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-600">
-        KPI load error: {kpi.error}
-        <button onClick={fetchKPIs} className="ml-3 underline">Retry</button>
-      </div>
-    );
-  }
+  if (kpi.error) return (
+    <div className="mb-6 p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-600">
+      KPI error: {kpi.error} <button onClick={fetchKPIs} className="ml-2 underline">Retry</button>
+    </div>
+  );
 
   return (
-    <div className="mb-6">
-      <div className="flex items-center justify-between mb-3">
-        <div>
-          <h2 className="text-base font-bold text-gray-800">Clinical KPIs</h2>
-          <p className="text-xs text-gray-500">{TOTAL_BEDS} beds · All-time data · {kpi.activeIpd} currently admitted</p>
-        </div>
-        <button onClick={fetchKPIs} className="flex items-center gap-1 text-xs text-gray-500 hover:text-blue-600 transition-colors">
-          <RefreshCw className="w-3 h-3" /> Refresh
-        </button>
-      </div>
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-        {cards.map((card) => (
-          <div key={card.title} className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-            <div className={`bg-gradient-to-br ${card.color} px-3 py-2 flex items-center justify-between`}>
-              <div>
-                <div className="text-white/80 text-[10px] font-medium">{card.title}</div>
-                <div className="text-white font-extrabold text-lg leading-tight">{card.value}</div>
-              </div>
-              <card.icon className="w-5 h-5 text-white/60" />
-            </div>
-            <div className="px-3 py-2 space-y-1">
-              <div className="text-[10px] text-gray-500 leading-tight">{card.subtitle}</div>
-              <div className="flex items-center gap-1">
-                <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${card.good ? 'bg-green-500' : 'bg-amber-400'}`} />
-                <span className={`text-[10px] font-medium ${card.good ? 'text-green-600' : 'text-amber-600'}`}>
-                  {card.benchmark}
-                </span>
-              </div>
-              <div className="text-[10px] text-gray-400">{card.detail}</div>
-            </div>
+    <div className="mb-6 space-y-4">
+
+      {/* ── Yesterday's Activity Banner ─────────────────────────── */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+        <div className="bg-gradient-to-r from-slate-700 to-slate-800 px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Calendar className="w-4 h-4 text-white/70" />
+            <span className="text-white font-semibold text-sm">Yesterday's Activity</span>
           </div>
-        ))}
+          <div className="text-white/60 text-xs text-right">
+            <div>{fmtIST(window.fromIST)}</div>
+            <div>to {fmtIST(window.toIST)}</div>
+          </div>
+        </div>
+        <div className="grid grid-cols-4 divide-x divide-gray-100">
+          {[
+            { label: 'Admissions',  value: kpi.daily.admissions, icon: UserPlus,  color: 'text-blue-600' },
+            { label: 'Discharges',  value: kpi.daily.discharges, icon: UserCheck, color: 'text-green-600' },
+            { label: 'Surgeries',   value: kpi.daily.surgeries,  icon: Scissors,  color: 'text-red-600' },
+            { label: 'OPD Visits',  value: kpi.daily.opd,        icon: Clock,     color: 'text-purple-600' },
+          ].map(({ label, value, icon: Icon, color }) => (
+            <div key={label} className="flex flex-col items-center justify-center py-4 gap-1">
+              <Icon className={`w-5 h-5 ${color}`} />
+              <div className={`text-2xl font-extrabold ${color}`}>{value}</div>
+              <div className="text-xs text-gray-500">{label}</div>
+            </div>
+          ))}
+        </div>
       </div>
+
+      {/* ── Clinical KPIs (all-time) ────────────────────────────── */}
+      <div>
+        <div className="flex items-center justify-between mb-2">
+          <div>
+            <span className="text-sm font-bold text-gray-700">Clinical KPIs</span>
+            <span className="ml-2 text-xs text-gray-400">{TOTAL_BEDS} beds · All-time · {kpi.activeIpd} currently admitted</span>
+          </div>
+          <button onClick={fetchKPIs} className="flex items-center gap-1 text-xs text-gray-400 hover:text-blue-600 transition-colors">
+            <RefreshCw className="w-3 h-3" /> Refresh
+          </button>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+          {kpiCards.map((card) => (
+            <div key={card.title} className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+              <div className={`bg-gradient-to-br ${card.color} px-3 py-2 flex items-center justify-between`}>
+                <div>
+                  <div className="text-white/80 text-[10px] font-medium">{card.title}</div>
+                  <div className="text-white font-extrabold text-lg leading-tight">{card.value}</div>
+                </div>
+                <card.icon className="w-5 h-5 text-white/60" />
+              </div>
+              <div className="px-3 py-2 space-y-1">
+                <div className="text-[10px] text-gray-500">{card.subtitle}</div>
+                <div className="flex items-center gap-1">
+                  <div className={`w-1.5 h-1.5 rounded-full ${card.good ? 'bg-green-500' : 'bg-amber-400'}`} />
+                  <span className={`text-[10px] font-medium ${card.good ? 'text-green-600' : 'text-amber-600'}`}>{card.benchmark}</span>
+                </div>
+                <div className="text-[10px] text-gray-400">{card.detail}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
     </div>
   );
 };
