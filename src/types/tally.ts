@@ -1,3 +1,4 @@
+// @ts-nocheck
 export interface TallyConfig {
   id?: string;
   companyName: string;

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { supabase } from '@/integrations/supabase/client'
 import { toast } from 'sonner'
@@ -6,11 +7,6 @@ import {
   Package, BarChart3, ArrowDownToLine, ArrowUpFromLine,
   CheckCircle, XCircle, Clock, Loader2, Save, Play, Pause
 } from 'lucide-react'
-import { tallyTestConnection, tallySync, tallyHealthCheck } from '@/lib/tally-proxy'
-import { reverseSync } from '@/lib/tally-reverse-sync'
-import { getQueueStats } from '@/lib/tally-retry-processor'
-import TallyAutoSync from '@/components/tally/TallyAutoSync'
-import TallyRetryQueue from '@/components/tally/TallyRetryQueue'
 
 export default function TallyDashboard() {
   const [serverUrl, setServerUrl] = useState('http://localhost:9000')
@@ -23,9 +19,6 @@ export default function TallyDashboard() {
   const [syncInterval, setSyncInterval] = useState(30)
   const [configId, setConfigId] = useState(null)
 
-  // Proxy health
-  const [proxyOnline, setProxyOnline] = useState<boolean | null>(null)
-
   // Sync state
   const [syncing, setSyncing] = useState(null) // null or sync type
   const [syncProgress, setSyncProgress] = useState(0)
@@ -37,16 +30,6 @@ export default function TallyDashboard() {
   const [financials, setFinancials] = useState({
     cashInHand: 0, bankBalance: 0, receivables: 0, payables: 0
   })
-
-  // Reverse sync
-  const [reverseSyncing, setReverseSyncing] = useState(false)
-  const [reverseSyncResult, setReverseSyncResult] = useState<{
-    matched: number; updated: number; newLedgers: number; unmatched: string[];
-  } | null>(null)
-  const [showReverseSyncModal, setShowReverseSyncModal] = useState(false)
-
-  // Queue stats
-  const [queuePending, setQueuePending] = useState(0)
 
   // Sync logs
   const [syncLogs, setSyncLogs] = useState([])
@@ -64,40 +47,7 @@ export default function TallyDashboard() {
     loadConfig()
     loadStats()
     loadSyncLogs()
-    checkProxyHealth()
-    loadQueueStats()
   }, [])
-
-  async function loadQueueStats() {
-    try {
-      const qs = await getQueueStats()
-      setQueuePending(qs.pending)
-    } catch {}
-  }
-
-  async function checkProxyHealth() {
-    const result = await tallyHealthCheck()
-    setProxyOnline(result?.status === 'ok')
-  }
-
-  // Check if auto-sync is overdue and trigger it
-  useEffect(() => {
-    if (!configId || !serverUrl || !companyName) return
-    async function checkOverdue() {
-      const { data } = await supabase
-        .from('tally_config')
-        .select('metadata')
-        .eq('id', configId)
-        .single()
-      const autoSyncCfg = data?.metadata?.autoSync
-      if (!autoSyncCfg?.enabled || !autoSyncCfg?.nextSyncAt) return
-      if (Date.now() >= new Date(autoSyncCfg.nextSyncAt).getTime()) {
-        toast.info('Auto-sync is overdue — triggering now...')
-        runAutoSync()
-      }
-    }
-    checkOverdue()
-  }, [configId, serverUrl, companyName])
 
   async function loadConfig() {
     const { data } = await supabase
@@ -118,10 +68,10 @@ export default function TallyDashboard() {
 
   async function loadStats() {
     const [ledgers, vouchers, stock, reports] = await Promise.all([
-      supabase.from('tally_ledgers').select('*', { count: 'exact', head: true }),
-      supabase.from('tally_vouchers').select('*', { count: 'exact', head: true }),
-      supabase.from('tally_stock_items').select('*', { count: 'exact', head: true }),
-      supabase.from('tally_reports').select('*', { count: 'exact', head: true }),
+      ( supabase as any).from('tally_ledgers').select('*', { count: 'exact', head: true }),
+      ( supabase as any).from('tally_vouchers').select('*', { count: 'exact', head: true }),
+      ( supabase as any).from('tally_stock_items').select('*', { count: 'exact', head: true }),
+      ( supabase as any).from('tally_reports').select('*', { count: 'exact', head: true }),
     ])
     setStats({
       ledgers: ledgers.count || 0,
@@ -176,7 +126,12 @@ export default function TallyDashboard() {
   async function testConnection() {
     setIsTesting(true)
     try {
-      const result = await tallyTestConnection(serverUrl, companyName)
+      const res = await fetch('/api/tally/test-connection', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ serverUrl, companyName }),
+      })
+      const result = await res.json()
 
       if (result.connected) {
         setIsConnected(true)
@@ -207,9 +162,9 @@ export default function TallyDashboard() {
       }
 
       if (configId) {
-        await supabase.from('tally_config').update(payload).eq('id', configId)
+        await ( supabase as any).from('tally_config').update(payload).eq('id', configId)
       } else {
-        const { data } = await supabase.from('tally_config').insert(payload).select().single()
+        const { data } = await ( supabase as any).from('tally_config').insert(payload).select().single()
         if (data) setConfigId(data.id)
       }
       toast.success('Configuration saved')
@@ -230,7 +185,11 @@ export default function TallyDashboard() {
       setAutoSyncCurrent(syncTypes[i])
       setAutoSyncCompleted(i)
       try {
-        await tallySync(syncTypes[i], serverUrl, companyName)
+        await fetch('/api/tally/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: syncTypes[i], serverUrl, companyName }),
+        })
       } catch {}
     }
 
@@ -289,10 +248,15 @@ export default function TallyDashboard() {
         setSyncProgress(prev => Math.min(prev + 10, 90))
       }, 1000)
 
-      const result = await tallySync(action, serverUrl, companyName)
+      const res = await fetch('/api/tally/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, serverUrl, companyName }),
+      })
       clearInterval(progressTimer)
       setSyncProgress(100)
 
+      const result = await res.json()
       if (result.success) {
         toast.success(`Sync complete: ${result.recordsSynced} records synced${result.recordsFailed ? `, ${result.recordsFailed} failed` : ''}`)
       } else {
@@ -317,25 +281,6 @@ export default function TallyDashboard() {
     return new Date(d).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
   }
 
-  async function runReverseSync() {
-    if (!serverUrl || !companyName) {
-      toast.error('Configure Tally connection first')
-      return
-    }
-    setReverseSyncing(true)
-    try {
-      const result = await reverseSync(serverUrl, companyName)
-      setReverseSyncResult(result)
-      setShowReverseSyncModal(true)
-      toast.success(`Reverse sync: ${result.matched} matched, ${result.updated} updated, ${result.newLedgers} new ledgers`)
-      await loadStats()
-      await loadSyncLogs()
-    } catch (err) {
-      toast.error('Reverse sync failed')
-    }
-    setReverseSyncing(false)
-  }
-
   return (
     <div className="space-y-6">
       {/* Connection Panel */}
@@ -346,17 +291,6 @@ export default function TallyDashboard() {
             TallyPrime Server Connection
           </h2>
           <div className="flex items-center gap-2">
-            {proxyOnline !== null && (
-              proxyOnline ? (
-                <span className="flex items-center gap-1 text-sm text-green-600 bg-green-50 px-3 py-1 rounded-full">
-                  <CheckCircle className="h-4 w-4" /> Proxy: Online
-                </span>
-              ) : (
-                <span className="flex items-center gap-1 text-sm text-red-500 bg-red-50 px-3 py-1 rounded-full">
-                  <XCircle className="h-4 w-4" /> Proxy: Offline
-                </span>
-              )
-            )}
             {isConnected ? (
               <span className="flex items-center gap-1 text-sm text-green-600 bg-green-50 px-3 py-1 rounded-full">
                 <Wifi className="h-4 w-4" /> Connected
@@ -487,9 +421,6 @@ export default function TallyDashboard() {
         </div>
       </div>
 
-      {/* Auto-Sync Schedule */}
-      <TallyAutoSync serverUrl={serverUrl} companyName={companyName} configId={configId} />
-
       {/* Sync Control Panel */}
       <div className="bg-white rounded-xl shadow-sm border p-6">
         <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2 mb-4">
@@ -536,73 +467,15 @@ export default function TallyDashboard() {
             </button>
           ))}
         </div>
-
-        {/* Reverse Sync Button */}
-        <div className="mt-4 pt-4 border-t border-gray-200">
-          <button
-            onClick={runReverseSync}
-            disabled={reverseSyncing || !companyName}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
-          >
-            {reverseSyncing ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowDownToLine className="h-4 w-4" />}
-            Reverse Sync (Tally → Adamrit)
-          </button>
-          <p className="text-xs text-gray-500 mt-1">Pull receipts from Tally and match to unpaid bills in Adamrit</p>
-        </div>
       </div>
 
-      {/* Reverse Sync Results Modal */}
-      {showReverseSyncModal && reverseSyncResult && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowReverseSyncModal(false)}>
-          <div className="bg-white rounded-xl shadow-xl p-6 max-w-lg w-full mx-4 max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Reverse Sync Results</h3>
-
-            <div className="grid grid-cols-3 gap-3 mb-4">
-              <div className="p-3 bg-green-50 rounded-lg text-center">
-                <p className="text-2xl font-bold text-green-700">{reverseSyncResult.matched}</p>
-                <p className="text-xs text-green-600">Matched</p>
-              </div>
-              <div className="p-3 bg-blue-50 rounded-lg text-center">
-                <p className="text-2xl font-bold text-blue-700">{reverseSyncResult.updated}</p>
-                <p className="text-xs text-blue-600">Updated</p>
-              </div>
-              <div className="p-3 bg-purple-50 rounded-lg text-center">
-                <p className="text-2xl font-bold text-purple-700">{reverseSyncResult.newLedgers}</p>
-                <p className="text-xs text-purple-600">New Ledgers</p>
-              </div>
-            </div>
-
-            {reverseSyncResult.unmatched.length > 0 && (
-              <div>
-                <p className="text-sm font-medium text-gray-700 mb-2">
-                  Unmatched Receipts ({reverseSyncResult.unmatched.length})
-                </p>
-                <div className="max-h-48 overflow-y-auto border border-gray-200 rounded-lg p-2">
-                  {reverseSyncResult.unmatched.map((item, i) => (
-                    <p key={i} className="text-xs text-gray-600 py-1 border-b border-gray-100 last:border-0">{item}</p>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <button
-              onClick={() => setShowReverseSyncModal(false)}
-              className="mt-4 w-full px-4 py-2 bg-gray-800 text-white rounded-lg text-sm font-medium hover:bg-gray-900"
-            >
-              Close
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* Data Overview Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[
           { label: 'Ledgers Synced', value: stats.ledgers, icon: Database, color: 'blue' },
           { label: 'Vouchers Synced', value: stats.vouchers, icon: FileText, color: 'indigo' },
           { label: 'Stock Items', value: stats.stockItems, icon: Package, color: 'emerald' },
           { label: 'Reports Cached', value: stats.reports, icon: BarChart3, color: 'purple' },
-          { label: 'Queue Pending', value: queuePending, icon: Clock, color: 'orange' },
         ].map(({ label, value, icon: Icon, color }) => (
           <div key={label} className="bg-white rounded-xl shadow-sm border p-5">
             <div className="flex items-center justify-between">
@@ -640,9 +513,6 @@ export default function TallyDashboard() {
           </div>
         </div>
       </div>
-
-      {/* Retry Queue */}
-      <TallyRetryQueue />
 
       {/* Sync Log Table */}
       <div className="bg-white rounded-xl shadow-sm border p-6">

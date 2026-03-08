@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react'
 import { supabase } from '@/integrations/supabase/client'
 import { toast } from 'sonner'
@@ -129,7 +130,7 @@ export default function TallyReports({ serverUrl, companyName }: { serverUrl: st
   }
 
   async function cacheReport(reportType: string, periodFrom: string, periodTo: string, data: any) {
-    await supabase.from('tally_reports').insert({
+    await ( supabase as any).from('tally_reports').insert({
       report_type: reportType,
       report_date: todayStr(),
       period_from: periodFrom,

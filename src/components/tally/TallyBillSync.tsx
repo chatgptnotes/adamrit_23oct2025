@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/integrations/supabase/client'
 import { toast } from 'sonner'
@@ -5,7 +6,6 @@ import {
   ArrowUpFromLine, CheckCircle, XCircle, Clock, Loader2,
   RefreshCw, Plus, Send, RotateCcw, FileText, X
 } from 'lucide-react'
-import { tallyPush } from '@/lib/tally-proxy'
 
 interface TallyBillSyncProps {
   serverUrl: string
@@ -63,15 +63,25 @@ export default function TallyBillSync({ serverUrl, companyName }: TallyBillSyncP
     setPushing(prev => new Set(prev).add(voucher.id))
     try {
       const action = voucher.voucher_type === 'Sales' ? 'create-sales-voucher' : 'create-voucher'
-      const result = await tallyPush(action, serverUrl, companyName, {
-        id: voucher.id,
-        voucher_type: voucher.voucher_type,
-        date: voucher.date,
-        party_ledger: voucher.party_ledger,
-        amount: voucher.amount,
-        narration: voucher.narration,
-        voucher_number: voucher.voucher_number,
+      const res = await fetch('/api/tally/push', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action,
+          serverUrl,
+          companyName,
+          voucher: {
+            id: voucher.id,
+            voucher_type: voucher.voucher_type,
+            date: voucher.date,
+            party_ledger: voucher.party_ledger,
+            amount: voucher.amount,
+            narration: voucher.narration,
+            voucher_number: voucher.voucher_number,
+          },
+        }),
       })
+      const result = await res.json()
       if (result.success) {
         await supabase
           .from('tally_vouchers')
@@ -115,7 +125,7 @@ export default function TallyBillSync({ serverUrl, companyName }: TallyBillSyncP
   async function retryFailed() {
     const failed = vouchers.filter(v => v.sync_status === 'failed')
     if (failed.length === 0) return toast.info('No failed items to retry')
-    await supabase.from('tally_vouchers').update({ sync_status: 'pending', error_message: null })
+    await ( supabase as any).from('tally_vouchers').update({ sync_status: 'pending', error_message: null })
       .eq('sync_direction', 'to_tally').eq('sync_status', 'failed')
     await loadVouchers()
     for (const v of failed) await pushVoucher({ ...v, sync_status: 'pending' })
@@ -124,7 +134,7 @@ export default function TallyBillSync({ serverUrl, companyName }: TallyBillSyncP
   async function handleCreateVoucher(e) {
     e.preventDefault()
     if (!formData.party_ledger || !formData.amount) return toast.error('Party ledger and amount are required')
-    const { data, error } = await supabase.from('tally_vouchers').insert({
+    const { data, error } = await ( supabase as any).from('tally_vouchers').insert({
       voucher_type: formData.voucher_type, date: formData.date, party_ledger: formData.party_ledger,
       amount: parseFloat(formData.amount), narration: formData.narration,
       sync_direction: 'to_tally', sync_status: 'pending',

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/integrations/supabase/client'
 import { toast } from 'sonner'
@@ -6,7 +7,6 @@ import {
   Clock, AlertTriangle, ChevronLeft, ChevronRight, X, Search, Filter,
   Loader2, Edit3, Trash2, AlertCircle
 } from 'lucide-react'
-import { tallyPush } from '@/lib/tally-proxy'
 
 const PAGE_SIZE = 25
 
@@ -103,17 +103,26 @@ function EditVoucherModal({ voucher, serverUrl, companyName, onClose, onSaved }:
     if (!serverUrl || !companyName) { toast.error('Tally connection required'); return }
     setSaving(true)
     try {
-      const result = await tallyPush('alter-voucher', serverUrl, companyName, {
-        originalVoucherNumber: voucher.voucher_number,
-        voucherType: voucher.voucher_type,
-        date: form.date,
-        partyLedger: form.partyLedger,
-        narration: form.narration,
-        ledgerEntries: form.ledgerEntries,
+      const res = await fetch('/api/tally/push', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'alter-voucher',
+          serverUrl, companyName,
+          data: {
+            originalVoucherNumber: voucher.voucher_number,
+            voucherType: voucher.voucher_type,
+            date: form.date,
+            partyLedger: form.partyLedger,
+            narration: form.narration,
+            ledgerEntries: form.ledgerEntries,
+          },
+        }),
       })
+      const result = await res.json()
       if (result.success) {
         // Update local record
-        await supabase.from('tally_vouchers').update({
+        await ( supabase as any).from('tally_vouchers').update({
           date: form.date,
           party_ledger: form.partyLedger,
           narration: form.narration,
@@ -208,12 +217,21 @@ function DeleteConfirmModal({ voucher, serverUrl, companyName, onClose, onDelete
     if (!serverUrl || !companyName) { toast.error('Tally connection required'); return }
     setDeleting(true)
     try {
-      const result = await tallyPush('cancel-voucher', serverUrl, companyName, {
-        voucherNumber: voucher.voucher_number,
-        voucherType: voucher.voucher_type,
+      const res = await fetch('/api/tally/push', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'cancel-voucher',
+          serverUrl, companyName,
+          data: {
+            voucherNumber: voucher.voucher_number,
+            voucherType: voucher.voucher_type,
+          },
+        }),
       })
+      const result = await res.json()
       if (result.success) {
-        await supabase.from('tally_vouchers').update({ is_cancelled: true }).eq('id', voucher.id)
+        await ( supabase as any).from('tally_vouchers').update({ is_cancelled: true }).eq('id', voucher.id)
         toast.success('Voucher cancelled in Tally')
         onDeleted()
       } else {

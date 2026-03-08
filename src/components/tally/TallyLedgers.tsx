@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from 'react'
 import { supabase } from '@/integrations/supabase/client'
 import { toast } from 'sonner'
@@ -5,7 +6,6 @@ import {
   Search, Filter, Plus, X, Loader2, Download,
   BookOpen, Link2, ChevronDown, Eye
 } from 'lucide-react'
-import { tallyPush } from '@/lib/tally-proxy'
 import TallyLedgerView from './TallyLedgerView'
 
 const GROUP_OPTIONS = [
@@ -137,15 +137,26 @@ export default function TallyLedgers({ serverUrl, companyName }) {
 
     setCreating(true)
     try {
-      const result = await tallyPush('create-ledger', serverUrl, companyName, {
-        name: form.name.trim(),
-        parentGroup: form.parentGroup,
-        openingBalance: form.openingBalance ? parseFloat(form.openingBalance) : 0,
-        address: form.address.trim(),
-        phone: form.phone.trim(),
-        email: form.email.trim(),
-        gstNumber: form.gstNumber.trim(),
+      const res = await fetch('/api/tally/push', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'create-ledger',
+          serverUrl,
+          companyName,
+          data: {
+            name: form.name.trim(),
+            parentGroup: form.parentGroup,
+            openingBalance: form.openingBalance ? parseFloat(form.openingBalance) : 0,
+            address: form.address.trim(),
+            phone: form.phone.trim(),
+            email: form.email.trim(),
+            gstNumber: form.gstNumber.trim(),
+          },
+        }),
       })
+
+      const result = await res.json()
 
       if (result.success) {
         toast.success(`Ledger "${form.name}" created in Tally`)

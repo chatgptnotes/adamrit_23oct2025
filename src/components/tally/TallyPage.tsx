@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react'
 import { supabase } from '@/integrations/supabase/client'
 import {
@@ -16,7 +17,6 @@ import TallyCashBook from '@/components/tally/TallyCashBook'
 import TallyBankBook from '@/components/tally/TallyBankBook'
 import TallyBankReconciliation from '@/components/tally/TallyBankReconciliation'
 import TallyGST from '@/components/tally/TallyGST'
-import TallyLedgerView from '@/components/tally/TallyLedgerView'
 
 const tabs = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -30,7 +30,6 @@ const tabs = [
   { id: 'gst', label: 'GST', icon: FileBarChart },
   { id: 'billsync', label: 'Bill Sync', icon: ArrowUpFromLine },
   { id: 'mapping', label: 'Mapping', icon: Link2 },
-  { id: 'ledgerview', label: 'Ledger View', icon: BookOpen },
 ]
 
 export default function TallyPage() {
@@ -109,7 +108,6 @@ export default function TallyPage() {
         {activeTab === 'gst' && <TallyGST serverUrl={serverUrl} companyName={companyName} />}
         {activeTab === 'billsync' && <TallyBillSync serverUrl={serverUrl} companyName={companyName} />}
         {activeTab === 'mapping' && <TallyMapping serverUrl={serverUrl} companyName={companyName} />}
-        {activeTab === 'ledgerview' && <TallyLedgerView serverUrl={serverUrl} companyName={companyName} />}
       </div>
     </div>
   )

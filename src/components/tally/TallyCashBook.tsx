@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import { supabase } from '@/integrations/supabase/client'
 import { toast } from 'sonner'
@@ -5,7 +6,6 @@ import {
   Banknote, RefreshCw, Loader2, Printer, Calendar,
   ArrowDownLeft, ArrowUpRight, Filter, ChevronLeft, ChevronRight
 } from 'lucide-react'
-import { tallySync } from '@/lib/tally-proxy'
 
 const PAGE_SIZE = 50
 
@@ -101,7 +101,11 @@ export default function TallyCashBook({ serverUrl, companyName }) {
     }
     setRefreshing(true)
     try {
-      await tallySync('vouchers', serverUrl, companyName)
+      await fetch('/api/tally/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'vouchers', serverUrl, companyName }),
+      })
       toast.success('Vouchers refreshed from Tally')
       await fetchData()
     } catch {

@@ -1,7 +1,5 @@
 // TallyPrime Server XML-over-HTTP API Service
-// Handles all XML communication with TallyPrime Server via proxy helper
-
-import { tallyProxyXml } from './tally-proxy';
+// Handles all XML communication with TallyPrime Server via API proxy routes
 
 export interface TallyLedgerData {
   name: string;
@@ -282,14 +280,20 @@ function getXmlAttr(xml: string, attr: string): string {
   return match ? match[1] : '';
 }
 
-// Send XML request via the proxy helper
+// Send XML request via our API proxy
 async function sendRequest(serverUrl: string, xmlBody: string): Promise<string> {
-  const data = await tallyProxyXml(serverUrl, xmlBody);
+  const response = await fetch('/api/tally/proxy', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ serverUrl, xmlBody }),
+  });
 
-  if (data.error) {
-    throw new Error(data.error);
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({ error: 'Request failed' }));
+    throw new Error(err.error || `HTTP ${response.status}`);
   }
 
+  const data = await response.json();
   return data.response;
 }
 

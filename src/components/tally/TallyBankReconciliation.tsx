@@ -1,5 +1,3 @@
-// @ts-nocheck
-"use client"
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import { supabase } from '@/integrations/supabase/client'
@@ -64,7 +62,7 @@ export default function TallyBankReconciliation({ serverUrl, companyName }) {
     setLoading(true)
     try {
       // Tally entries
-      let q = supabase.from('tally_vouchers').select('*').order('date', { ascending: true })
+      let q = ( supabase as any).from('tally_vouchers').select('*').order('date', { ascending: true })
       if (dateFrom) q = q.gte('date', dateFrom)
       if (dateTo) q = q.lte('date', dateTo)
       const { data: vData } = await q
@@ -126,7 +124,7 @@ export default function TallyBankReconciliation({ serverUrl, companyName }) {
       })
 
       if (match) {
-        await supabase.from('tally_bank_statements')
+        await ( supabase as any).from('tally_bank_statements')
           .update({ matched_voucher_id: match.id, match_status: 'matched' })
           .eq('id', stmt.id)
         matchCount++
@@ -141,7 +139,7 @@ export default function TallyBankReconciliation({ serverUrl, companyName }) {
   // Manual match
   async function manualMatch() {
     if (!selectedTally || !selectedBank_) return
-    await supabase.from('tally_bank_statements')
+    await ( supabase as any).from('tally_bank_statements')
       .update({ matched_voucher_id: selectedTally.id, match_status: 'matched' })
       .eq('id', selectedBank_.id)
     toast.success('Entries matched')
@@ -152,7 +150,7 @@ export default function TallyBankReconciliation({ serverUrl, companyName }) {
 
   // Unmatch
   async function unmatch(stmtId) {
-    await supabase.from('tally_bank_statements')
+    await ( supabase as any).from('tally_bank_statements')
       .update({ matched_voucher_id: null, match_status: 'unmatched' })
       .eq('id', stmtId)
     toast.success('Unmatched')
@@ -193,7 +191,7 @@ export default function TallyBankReconciliation({ serverUrl, companyName }) {
       }
       if (!parsedDate) continue
 
-      await supabase.from('tally_bank_statements').insert({
+      await ( supabase as any).from('tally_bank_statements').insert({
         bank_ledger: selectedBank,
         date: parsedDate,
         description: cols[descIdx] || null,
@@ -214,7 +212,7 @@ export default function TallyBankReconciliation({ serverUrl, companyName }) {
   // Manual entry
   async function handleManualAdd() {
     if (!manualEntry.date || !selectedBank) return
-    await supabase.from('tally_bank_statements').insert({
+    await ( supabase as any).from('tally_bank_statements').insert({
       bank_ledger: selectedBank,
       date: manualEntry.date,
       description: manualEntry.description || null,
