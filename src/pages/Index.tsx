@@ -403,10 +403,10 @@ const Index = () => {
       <div className="max-w-7xl mx-auto">
         <div className="text-center mb-8">
           <h1 className="text-4xl font-bold text-primary mb-4">
-            ESIC IPD Patient Management
+            Hospital Management Dashboard
           </h1>
           <p className="text-lg text-muted-foreground">
-            Manage and track patients across different medical specialties
+            All patients — IPD, OPD, ESIC, Corporate, Private and Panel
           </p>
         </div>
 
