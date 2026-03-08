@@ -15,6 +15,7 @@ import LoginPage from "@/components/LoginPage";
 import LandingPage from "@/components/LandingPage";
 import HospitalSelection from "@/components/HospitalSelection";
 import { FloatingCameraFAB } from "@/components/CameraUpload";
+import ChatWidget from '@/components/ChatWidget';
 import { useToast } from "@/hooks/use-toast";
 import { HospitalType, getHospitalConfig } from "@/types/hospital";
 
@@ -263,6 +264,7 @@ const AppContent = () => {
               </div>
               <AppRoutes />
               <FloatingCameraFAB />
+              <ChatWidget />
             </main>
           </div>
         </SidebarProvider>
