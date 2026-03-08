@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import { SearchAndControls } from '@/components/SearchAndControls';
 import { DiagnosisCard } from '@/components/DiagnosisCard';
 import { StatisticsCards } from '@/components/StatisticsCards';
+import { ClinicalKPIs } from '@/components/ClinicalKPIs';
 import { AddPatientDialog } from '@/components/AddPatientDialog';
 import { AddDiagnosisDialog } from '@/components/AddDiagnosisDialog';
 import { NoResultsCard } from '@/components/NoResultsCard';
@@ -409,6 +410,7 @@ const Index = () => {
           </p>
         </div>
 
+        <ClinicalKPIs />
         <StatisticsCards 
           totalPatients={totalPatients}
         />
