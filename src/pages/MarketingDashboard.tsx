@@ -13,6 +13,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useCorporateBulkPayments } from '@/hooks/useCorporateBulkPayments';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { ClinicalKPIs } from '@/components/ClinicalKPIs';
 
 const db = supabase as any;
 
@@ -725,6 +726,9 @@ Return JSON only:
 
   return (
     <div className="max-w-4xl mx-auto p-2 md:p-4 space-y-3 md:space-y-4">
+      {/* Clinical KPIs + Yesterday's Activity */}
+      <ClinicalKPIs />
+
       {/* AI Field Assistant Chat - FIRST on mobile */}
       <div className="bg-white border-2 border-blue-400 rounded-xl overflow-hidden shadow-lg md:order-none">
         <div className="p-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white font-semibold flex items-center gap-2">
