@@ -32,8 +32,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(500).json({ error: 'Twilio credentials not configured' });
   }
 
-  const { default: twilio } = await import('twilio');
-  const { createClient } = await import('@supabase/supabase-js');
+  let twilio: any, createClient: any;
+  try {
+    const twilioMod = await import('twilio');
+    twilio = twilioMod.default;
+    const sbMod = await import('@supabase/supabase-js');
+    createClient = sbMod.createClient;
+  } catch (importErr: any) {
+    return res.status(500).json({ error: 'Import failed', detail: importErr.message });
+  }
   const client = twilio(accountSid, authToken);
   const conferenceRoom = `HopeConf-${Date.now()}`;
 
