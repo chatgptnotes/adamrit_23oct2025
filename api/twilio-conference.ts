@@ -62,8 +62,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   // Initiate calls
-  const call1 = await client.calls.create({ url: twimlUrl, to: refPhone, from: twilioPhone });
-  const call2 = await client.calls.create({ url: twimlUrl, to: ourPhone, from: twilioPhone });
+  let call1: any, call2: any;
+  try {
+    call1 = await client.calls.create({ url: twimlUrl, to: refPhone, from: twilioPhone });
+    call2 = await client.calls.create({ url: twimlUrl, to: ourPhone, from: twilioPhone });
+  } catch (callErr: any) {
+    return res.status(500).json({ error: 'Twilio call failed', detail: callErr.message, code: callErr.code });
+  }
 
   // Log to Supabase
   try {
