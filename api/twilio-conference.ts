@@ -1,17 +1,11 @@
 // Vercel Serverless Function: Twilio Conference Call
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import twilio from 'twilio';
-import { createClient } from '@supabase/supabase-js';
 
 const SUPABASE_URL = 'https://xvkxccqaopbnkvwgyfjv.supabase.co';
 const TWIML_URL = 'https://adamrit.com/api/twilio-twiml';
 const WHATSAPP_FROM = process.env.TWILIO_WHATSAPP_FROM || 'whatsapp:+14155238886';
 
-function getSupabase() {
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!key) throw new Error('SUPABASE_SERVICE_ROLE_KEY not configured');
-  return createClient(SUPABASE_URL, key);
-}
+
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
@@ -38,6 +32,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(500).json({ error: 'Twilio credentials not configured' });
   }
 
+  const { default: twilio } = await import('twilio');
+  const { createClient } = await import('@supabase/supabase-js');
   const client = twilio(accountSid, authToken);
   const conferenceRoom = `HopeConf-${Date.now()}`;
 
@@ -71,7 +67,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // Log to Supabase
   try {
-    const sb = getSupabase();
+    const sbKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const sb = sbKey ? createClient(SUPABASE_URL, sbKey) : null;
+    if (!sb) throw new Error('No Supabase key');
     await sb.from('call_logs').insert({
       visit_id: visitId || null,
       patient_name: patientName || null,
