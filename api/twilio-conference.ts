@@ -4,7 +4,7 @@ import twilio from 'twilio';
 import { createClient } from '@supabase/supabase-js';
 
 const SUPABASE_URL = 'https://xvkxccqaopbnkvwgyfjv.supabase.co';
-const TWIML_URL = 'https://adamrit-com.vercel.app/api/twilio-twiml';
+const TWIML_URL = 'https://adamrit.com/api/twilio-twiml';
 const WHATSAPP_FROM = process.env.TWILIO_WHATSAPP_FROM || 'whatsapp:+14155238886';
 
 function getSupabase() {
