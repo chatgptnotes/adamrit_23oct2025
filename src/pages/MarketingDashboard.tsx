@@ -19,6 +19,7 @@ const db = supabase as any;
 
 const inr = (v: number) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(v);
 
+
 interface DayStats {
   id?: string;
   date: string;
@@ -582,60 +583,30 @@ Return JSON only:
     const photos = userMsg?.photos || [];
 
     try {
-      // Step 1: Use selected corporate ID from dropdown, or find/create by name
-      let corporateId = edits?.corporateId || null;
-      if (!corporateId && e.corporate) {
-        const { data: existingCorps } = await db.from('corporate_master')
-          .select('id, name')
-          .or(`name.ilike.%${e.corporate}%,name.ilike.${e.corporate}%`);
-
-        if (existingCorps && existingCorps.length > 0) {
-          corporateId = existingCorps[0].id;
-          console.log('Found existing corporate:', existingCorps[0].name);
-        } else {
-          const { data: newCorp } = await db.from('corporate_master')
-            .insert({ name: e.corporate, category: 'government' })
-            .select('id')
-            .single();
-          corporateId = newCorp?.id;
-          console.log('Created new corporate:', e.corporate);
-        }
+      // Step 1: Corporate must be selected from dropdown
+      const corporateId = edits?.corporateId || null;
+      if (!corporateId) {
+        toast({ title: 'Please select a Corporate from the dropdown before saving', variant: 'destructive' });
+        return;
       }
 
-      // Step 2: Use selected area ID from dropdown, or find/create by name
-      let areaId = edits?.areaId || null;
-      if (!areaId && e.area && corporateId) {
-        const { data: existingAreas } = await db.from('corporate_areas')
-          .select('id, area_name')
-          .eq('corporate_id', corporateId)
-          .or(`area_name.ilike.%${e.area}%,area_name.ilike.${e.area}%`);
-
-        if (existingAreas && existingAreas.length > 0) {
-          areaId = existingAreas[0].id;
-          console.log('Found existing area:', existingAreas[0].area_name);
-        } else {
-          const { data: newArea } = await db.from('corporate_areas')
-            .insert({
-              corporate_id: corporateId,
-              area_name: e.area,
-              status: 'active'
-            })
-            .select('id')
-            .single();
-          areaId = newArea?.id;
-          console.log('Created new area:', e.area);
-        }
+      // Step 2: Area must be selected from dropdown
+      const areaId = edits?.areaId || null;
+      if (!areaId) {
+        toast({ title: 'Please select an Area from the dropdown before saving', variant: 'destructive' });
+        return;
       }
 
       // Step 3: Find or create Contact under Area (e.g., Dr. Sharma)
       let contactId = null;
       const prefs = contactPrefs[idx] || { dietary_preference: 'unknown', drinks_alcohol: 'unknown', gratification_type: '', phone: '', email: '', gratification_details: '', personal_habits: '', family_details: '', birthday: '', anniversary: '' };
       if (e.contactName && areaId) {
-        const { data: existingContact } = await db.from('corporate_area_contacts')
+        let contactQuery = db.from('corporate_area_contacts')
           .select('id')
           .eq('area_id', areaId)
-          .ilike('name', e.contactName)
-          .maybeSingle();
+          .ilike('name', e.contactName);
+        if (user?.email) contactQuery = contactQuery.eq('created_by', user.email);
+        const { data: existingContact } = await contactQuery.maybeSingle();
 
         if (existingContact) {
           contactId = existingContact.id;
@@ -671,6 +642,7 @@ Return JSON only:
               family_details: prefs.family_details || null,
               birthday: prefs.birthday && prefs.birthday.match(/^\d{4}-\d{2}-\d{2}$/) ? prefs.birthday : null,
               anniversary: prefs.anniversary && prefs.anniversary.match(/^\d{4}-\d{2}-\d{2}$/) ? prefs.anniversary : null,
+              created_by: user?.email || null,
             })
             .select('id')
             .single();
@@ -691,6 +663,7 @@ Return JSON only:
           follow_up_needed: e.followUpNeeded === true,
           photos: photos,
           marketing_staff: e.marketingStaff || null,
+          created_by: user?.email || null,
         });
         
         if (meetingError) {
@@ -756,11 +729,14 @@ Return JSON only:
                 {msg.extracted && (
                   <div className="mt-2 space-y-2">
                     <div className="bg-blue-50 rounded-lg p-3 text-sm space-y-1">
-                      {/* Hierarchy: Corporate → Area - dropdown if unknown */}
+                      {/* Hierarchy: Corporate → Area - always show dropdowns before save */}
                       {!msg.saved ? (
-                        <div className="flex items-center gap-1 flex-wrap">
-                          <span>🏢</span>
-                          {(!msg.extracted.corporate || msg.extracted.corporate === 'null' || msg.extracted.corporate === 'Unknown') ? (
+                        <div className="space-y-2">
+                          {msg.extracted.corporate && msg.extracted.corporate !== 'null' && msg.extracted.corporate !== 'Unknown' && (
+                            <p className="text-xs text-gray-500">AI detected: <strong>{msg.extracted.corporate}</strong> → <strong>{msg.extracted.area || '?'}</strong></p>
+                          )}
+                          <div className="flex items-center gap-1 flex-wrap">
+                            <span>🏢</span>
                             <select
                               value={editedExtracted[idx]?.corporateId || ''}
                               onChange={e => {
@@ -768,26 +744,22 @@ Return JSON only:
                                 setEditedExtracted(prev => ({ ...prev, [idx]: { ...prev[idx], corporateId: e.target.value, corporate: corp?.name || '', areaId: '', area: '' } }));
                                 if (e.target.value) fetchAreasForCorporate(e.target.value, idx);
                               }}
-                              className="text-xs border border-orange-300 rounded px-2 py-1 bg-orange-50 text-orange-800 w-40"
+                              className="text-xs border border-blue-300 rounded px-2 py-1 bg-white text-gray-800 w-48"
                             >
                               <option value="">-- Select Corporate --</option>
                               {corporateList.map((c: any) => (
                                 <option key={c.id} value={c.id}>{c.name}</option>
                               ))}
                             </select>
-                          ) : (
-                            <span className="text-blue-700 font-medium">{msg.extracted.corporate}</span>
-                          )}
-                          <span>→ 📍</span>
-                          {(!msg.extracted.area || msg.extracted.area === 'null' || msg.extracted.area === 'Unknown') ? (
-                            areaListByIdx[idx] && areaListByIdx[idx].length > 0 ? (
+                            <span>→ 📍</span>
+                            {areaListByIdx[idx] && areaListByIdx[idx].length > 0 ? (
                               <select
                                 value={editedExtracted[idx]?.areaId || ''}
                                 onChange={e => {
                                   const ar = areaListByIdx[idx]?.find((a: any) => a.id === e.target.value);
                                   setEditedExtracted(prev => ({ ...prev, [idx]: { ...prev[idx], areaId: e.target.value, area: ar?.area_name || '' } }));
                                 }}
-                                className="text-xs border border-orange-300 rounded px-2 py-1 bg-orange-50 text-orange-800 w-40"
+                                className="text-xs border border-blue-300 rounded px-2 py-1 bg-white text-gray-800 w-48"
                               >
                                 <option value="">-- Select Area --</option>
                                 {areaListByIdx[idx].map((a: any) => (
@@ -796,15 +768,13 @@ Return JSON only:
                               </select>
                             ) : (
                               <span className="text-xs text-orange-500 italic">{editedExtracted[idx]?.corporateId ? 'No areas found' : 'Select corporate first'}</span>
-                            )
-                          ) : (
-                            <span className="text-blue-700 font-medium">{msg.extracted.area}</span>
-                          )}
+                            )}
+                          </div>
                         </div>
                       ) : (
                         (msg.extracted.corporate || msg.extracted.area) && (
                           <p className="text-blue-700 font-medium">
-                            🏢 {msg.extracted.corporate || 'Unknown'} → 📍 {msg.extracted.area || 'Unknown'}
+                            🏢 {editedExtracted[idx]?.corporate || msg.extracted.corporate || 'Unknown'} → 📍 {editedExtracted[idx]?.area || msg.extracted.area || 'Unknown'}
                           </p>
                         )
                       )}

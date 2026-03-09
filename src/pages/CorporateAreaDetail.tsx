@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
+import { useAuth } from '@/contexts/AuthContext';
 import { ArrowLeft, MapPin, Route, Users, Calendar, DollarSign, Bell, Plus, Trash2, Edit, Save, X, Phone, Mail, Building2, Camera } from 'lucide-react';
 
 const db = supabase as any;
@@ -27,6 +28,8 @@ const Field: React.FC<{ label: string; children: React.ReactNode }> = ({ label, 
 const CorporateAreaDetail: React.FC = () => {
   const { corporateId, areaId } = useParams<{ corporateId: string; areaId: string }>();
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'superadmin' || user?.role === 'super_admin' || user?.role === 'admin';
   const [corporate, setCorporate] = useState<any>(null);
   const [area, setArea] = useState<any>(null);
   const [contacts, setContacts] = useState<any[]>([]);
@@ -54,11 +57,18 @@ const CorporateAreaDetail: React.FC = () => {
 
   const fetchAll = async () => {
     setLoading(true);
+    let contactQuery = db.from('corporate_area_contacts').select('*').eq('area_id', areaId);
+    let meetingQuery = db.from('corporate_area_meetings').select('*').eq('area_id', areaId);
+    // Non-admin users only see their own contacts and meetings
+    if (!isAdmin && user?.email) {
+      contactQuery = contactQuery.eq('created_by', user.email);
+      meetingQuery = meetingQuery.eq('created_by', user.email);
+    }
     const [{ data: corp }, { data: areaData }, { data: contactData }, { data: meetingData }] = await Promise.all([
       db.from('corporate_master').select('id, name, category').eq('id', corporateId).single(),
       db.from('corporate_areas').select('*').eq('id', areaId).single(),
-      db.from('corporate_area_contacts').select('*').eq('area_id', areaId).order('is_primary', { ascending: false }),
-      db.from('corporate_area_meetings').select('*').eq('area_id', areaId).order('meeting_date', { ascending: false }),
+      contactQuery.order('is_primary', { ascending: false }),
+      meetingQuery.order('meeting_date', { ascending: false }),
     ]);
     setCorporate(corp);
     setArea(areaData);
@@ -97,7 +107,7 @@ const CorporateAreaDetail: React.FC = () => {
       await db.from('corporate_area_contacts').update(contactForm).eq('id', editingContactId);
       setEditingContactId(null);
     } else {
-      await db.from('corporate_area_contacts').insert({ ...contactForm, area_id: areaId });
+      await db.from('corporate_area_contacts').insert({ ...contactForm, area_id: areaId, created_by: user?.email || null });
     }
     toast.success('Contact saved');
     setContactForm({ name: '', designation: '', phone: '', email: '', is_primary: false, notes: '', dietary_preference: 'vegetarian', drinks_alcohol: 'no', personal_habits: '', gratification_type: '', gratification_details: '', family_details: '', birthday: '', anniversary: '', interests: '', photo_url: '', photos: [] });
@@ -120,7 +130,7 @@ const CorporateAreaDetail: React.FC = () => {
   // Meeting CRUD
   const addMeeting = async () => {
     if (!meetingForm.meeting_date) return;
-    await db.from('corporate_area_meetings').insert({ ...meetingForm, area_id: areaId, follow_up_date: meetingForm.follow_up_date || null });
+    await db.from('corporate_area_meetings').insert({ ...meetingForm, area_id: areaId, follow_up_date: meetingForm.follow_up_date || null, created_by: user?.email || null });
     toast.success('Meeting added');
     setMeetingForm({ meeting_date: '', person_met: '', location: '', conversation: '', action_taken: '', action_requested: '', follow_up_needed: false, follow_up_date: '' });
     setShowAddMeeting(false);
