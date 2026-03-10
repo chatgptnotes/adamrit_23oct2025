@@ -1,10 +1,12 @@
-// Vercel Serverless Function: Twilio Conference Call (CommonJS)
+import type { VercelRequest, VercelResponse } from '@vercel/node';
+import twilio from 'twilio';
+import { createClient } from '@supabase/supabase-js';
 
 const SUPABASE_URL = 'https://xvkxccqaopbnkvwgyfjv.supabase.co';
 const TWIML_URL = 'https://adamrit.com/api/twilio-twiml';
 const WHATSAPP_FROM = process.env.TWILIO_WHATSAPP_FROM || 'whatsapp:+14155238886';
 
-module.exports = async function handler(req, res) {
+export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   const {
@@ -29,18 +31,10 @@ module.exports = async function handler(req, res) {
     return res.status(500).json({ error: 'Twilio credentials not configured' });
   }
 
-  let twilio, createClient;
-  try {
-    twilio = require('twilio');
-    createClient = require('@supabase/supabase-js').createClient;
-  } catch (e) {
-    return res.status(500).json({ error: 'Module load failed', detail: e.message });
-  }
-
   const client = twilio(accountSid, authToken);
   const conferenceRoom = `HopeConf-${Date.now()}`;
 
-  const fmt = (phone) => phone.startsWith('+') ? phone : `+91${phone.replace(/\D/g, '')}`;
+  const fmt = (phone: string) => phone.startsWith('+') ? phone : `+91${phone.replace(/\D/g, '')}`;
   const refPhone = fmt(referringDoctorPhone);
   const ourPhone = fmt(ourDoctorPhone);
   const twimlUrl = `${TWIML_URL}?room=${encodeURIComponent(conferenceRoom)}`;
@@ -53,16 +47,16 @@ module.exports = async function handler(req, res) {
       : `Hello ${ourDoctorName}, connecting conference call with Dr. ${referringDoctorName} re: ${patientName || 'patient'} now. Please pick up. - Hope Hospital`;
     await client.messages.create({ from: WHATSAPP_FROM, to: `whatsapp:${ourPhone}`, body: msg });
     whatsappSent = true;
-  } catch (e) {
+  } catch (e: any) {
     console.error('WhatsApp failed (non-fatal):', e.message);
   }
 
   // Initiate calls
-  let call1, call2;
+  let call1: any, call2: any;
   try {
     call1 = await client.calls.create({ url: twimlUrl, to: refPhone, from: twilioPhone });
     call2 = await client.calls.create({ url: twimlUrl, to: ourPhone, from: twilioPhone });
-  } catch (e) {
+  } catch (e: any) {
     return res.status(500).json({ error: 'Twilio call failed', detail: e.message, code: e.code });
   }
 
@@ -84,7 +78,7 @@ module.exports = async function handler(req, res) {
         whatsapp_notified: whatsappSent,
       });
     }
-  } catch (e) {
+  } catch (e: any) {
     console.error('Failed to log call:', e.message);
   }
 
@@ -95,4 +89,4 @@ module.exports = async function handler(req, res) {
     whatsappNotified: whatsappSent,
     message: `Conference call initiated between ${ourDoctorName} and Dr. ${referringDoctorName}`,
   });
-};
+}
