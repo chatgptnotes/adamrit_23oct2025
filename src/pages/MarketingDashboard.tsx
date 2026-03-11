@@ -1054,7 +1054,7 @@ Return JSON only:
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2">
             <StatCard icon={Users} label="Doctors Today" value={today.doctors_contacted} color="blue" />
             <StatCard icon={Users} label="Doctors Month" value={monthSum('doctors_contacted')} color="indigo" />
-            <StatCard icon={TrendingUp} label="Admissions Yest." value={yesterdayRow?.admissions || 0} color="green" />
+            <StatCard icon={TrendingUp} label="Admissions Yesterday" value={yesterdayRow?.admissions || 0} color="green" />
             <StatCard icon={TrendingUp} label="Admissions Month" value={monthSum('admissions')} color="emerald" />
             <StatCard icon={Percent} label="Occupancy Today" value={currentlyAdmittedCount} color="orange" />
             <StatCard icon={Percent} label="Avg Occ. Month" value={`${monthAvg('occupancy_percent').toFixed(0)}%`} color="amber" />
@@ -1065,7 +1065,7 @@ Return JSON only:
             <StatCard icon={IndianRupee} label="Revenue Year" value={inr(yearSum('revenue'))} color="teal" />
           </div>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-            <StatCard icon={Building2} label="Discharges Yest." value={yesterdayRow?.discharges || 0} color="purple" />
+            <StatCard icon={Building2} label="Discharges Yesterday" value={yesterdayRow?.discharges || 0} color="purple" />
             <StatCard icon={Building2} label="Discharges Month" value={monthSum('discharges')} color="violet" />
             <Card className="bg-white border border-gray-100 shadow-sm col-span-2 md:col-span-1">
               <CardContent className="p-3">
