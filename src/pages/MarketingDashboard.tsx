@@ -747,9 +747,9 @@ Return JSON only:
   const StatCard = ({ icon: Icon, label, value, color = 'blue' }: { icon: any; label: string; value: string | number; color?: string }) => (
     <Card className="bg-white border border-gray-100 shadow-sm">
       <CardContent className="p-3">
-        <div className="flex items-center gap-2 mb-1">
-          <Icon className={`h-4 w-4 text-${color}-500`} />
-          <span className="text-xs text-gray-500 truncate">{label}</span>
+        <div className="flex items-start gap-2 mb-1">
+          <Icon className={`h-4 w-4 text-${color}-500 mt-0.5 shrink-0`} />
+          <span className="text-xs text-gray-500 leading-tight">{label}</span>
         </div>
         <div className="text-lg font-bold text-gray-900">{value}</div>
       </CardContent>
