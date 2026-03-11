@@ -7,6 +7,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { VisitDetailsSection } from '@/components/visit/VisitDetailsSection';
 import { VisitFormActions } from '@/components/visit/VisitFormActions';
+import { logActivity } from '@/lib/activity-logger';
 
 interface VisitRegistrationFormProps {
   isOpen: boolean;
@@ -283,6 +284,16 @@ export const VisitRegistrationForm: React.FC<VisitRegistrationFormProps> = ({
 
         console.log('Visit updated successfully:', updateData);
 
+        // Log visit edit activity
+        logActivity('visit_edit', {
+          patient_id: patient.id,
+          patients_id: patient.patients_id,
+          patient_name: patient.name,
+          visit_id: existingVisit.visit_id,
+          visit_type: formData.visitType,
+          patient_type: formData.patientType,
+        });
+
         toast({
           title: "Success",
           description: "Visit updated successfully",
@@ -359,6 +370,16 @@ export const VisitRegistrationForm: React.FC<VisitRegistrationFormProps> = ({
       console.log('Visit created successfully!');
       console.log('Visit TEXT ID:', visitData.visit_id);
       console.log('Visit UUID:', dbVisitUUID);
+
+      // Log visit creation activity
+      logActivity('visit_create', {
+        patient_id: patient.id,
+        patients_id: patient.patients_id,
+        patient_name: patient.name,
+        visit_id: visitData.visit_id,
+        visit_type: formData.visitType,
+        patient_type: formData.patientType,
+      });
 
       // Now fetch patient data from patients table using patient_id reference
       const { data: patientData, error: patientFetchError } = await supabase

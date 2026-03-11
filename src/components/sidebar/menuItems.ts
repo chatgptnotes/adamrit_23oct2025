@@ -262,4 +262,9 @@ export const menuItems = [
     url: "/activity-log",
     icon: ClipboardCheck,
   },
+  {
+    title: "Patient Journey Logs",
+    url: "/patient-journey-logs",
+    icon: ScrollText,
+  },
 ];

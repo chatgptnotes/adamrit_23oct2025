@@ -8,6 +8,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import { generatePatientId } from '@/utils/patientIdGenerator';
 import { useAuth } from '@/contexts/AuthContext';
+import { logActivity } from '@/lib/activity-logger';
 
 export const usePatientRegistration = (onClose: () => void) => {
   const [dateOfBirth, setDateOfBirth] = useState<Date>();
@@ -197,6 +198,13 @@ export const usePatientRegistration = (onClose: () => void) => {
       const { newPatient, customPatientId } = await createPatientWithRetry();
 
       console.log('Patient registered successfully in patients table:', newPatient);
+
+      // Log patient creation activity
+      logActivity('patient_create', {
+        patient_id: newPatient.id,
+        patients_id: customPatientId,
+        patient_name: formData.patientName,
+      });
 
       // IMPORTANT: Create initial record in patient_data table with proper patient_id
       try {
