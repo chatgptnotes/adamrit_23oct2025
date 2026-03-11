@@ -229,19 +229,23 @@ const CorporateBill = () => {
                   <td className="border border-gray-400 px-2 py-2 text-center">{index + 1}</td>
                   <td className="border border-gray-400 px-1 py-1">
                     <input type="text" value={row.item} onChange={(e) => updateRow(index, 'item', e.target.value)}
-                      className="w-full text-center text-sm outline-none border-none bg-transparent" placeholder="Item" />
+                      className="w-full text-center text-sm outline-none border-none bg-transparent print:hidden" placeholder="Item" />
+                    <span className="hidden print:block text-center text-sm">{row.item}</span>
                   </td>
                   <td className="border border-gray-400 px-1 py-1">
                     <input type="text" value={row.procedure} onChange={(e) => updateRow(index, 'procedure', e.target.value)}
-                      className="w-full text-center text-sm outline-none border-none bg-transparent" placeholder="Procedure" />
+                      className="w-full text-center text-sm outline-none border-none bg-transparent print:hidden" placeholder="Procedure" />
+                    <span className="hidden print:block text-center text-sm">{row.procedure}</span>
                   </td>
                   <td className="border border-gray-400 px-1 py-1">
                     <input type="number" value={row.rate} onChange={(e) => updateRow(index, 'rate', e.target.value)}
-                      className="w-full text-center text-sm outline-none border-none bg-transparent" placeholder="0" />
+                      className="w-full text-center text-sm outline-none border-none bg-transparent print:hidden" placeholder="0" />
+                    <span className="hidden print:block text-center text-sm">{row.rate}</span>
                   </td>
                   <td className="border border-gray-400 px-1 py-1">
                     <input type="number" value={row.qty} onChange={(e) => updateRow(index, 'qty', e.target.value)}
-                      className="w-full text-center text-sm outline-none border-none bg-transparent" placeholder="0" />
+                      className="w-full text-center text-sm outline-none border-none bg-transparent print:hidden" placeholder="0" />
+                    <span className="hidden print:block text-center text-sm">{row.qty}</span>
                   </td>
                   <td className="border border-gray-400 px-2 py-2 text-center font-bold">{row.amount || ''}</td>
                   <td className="border border-gray-400 px-1 py-1 text-center print:hidden whitespace-nowrap">
