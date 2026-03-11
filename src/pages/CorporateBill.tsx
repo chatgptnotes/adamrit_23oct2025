@@ -211,44 +211,51 @@ const CorporateBill = () => {
           </div>
 
           {/* Items Table */}
-          <table className="w-full text-sm border-collapse mt-0">
+          <style>{`
+            @media print {
+              .yojna-items-table { width: 100% !important; }
+              .yojna-items-table .print-hide { display: none !important; }
+              .yojna-items-table td, .yojna-items-table th { font-size: 11pt; padding: 6px 8px; }
+            }
+          `}</style>
+          <table className="yojna-items-table w-full text-sm border-collapse mt-0">
             <thead>
               <tr className="bg-green-50">
                 <th className="border border-gray-400 px-2 py-2 text-center w-[50px]">Sr. No.</th>
                 <th className="border border-gray-400 px-2 py-2 text-center w-[100px]">Item</th>
                 <th className="border border-gray-400 px-2 py-2 text-center">Procedure</th>
                 <th className="border border-gray-400 px-2 py-2 text-center w-[80px]">Rate</th>
-                <th className="border border-gray-400 px-2 py-2 text-center w-[50px]">Qty.</th>
+                <th className="border border-gray-400 px-2 py-2 text-center w-[60px]">Qty.</th>
                 <th className="border border-gray-400 px-2 py-2 text-center w-[90px]">Amount</th>
-                <th className="border border-gray-400 px-2 py-2 text-center w-[40px] print:hidden"></th>
+                <th className="print-hide border border-gray-400 px-2 py-2 text-center w-[40px]"></th>
               </tr>
             </thead>
             <tbody>
               {rows.map((row, index) => (
                 <tr key={index}>
                   <td className="border border-gray-400 px-2 py-2 text-center">{index + 1}</td>
-                  <td className="border border-gray-400 px-1 py-1">
+                  <td className="border border-gray-400 px-1 py-1 text-center">
                     <input type="text" value={row.item} onChange={(e) => updateRow(index, 'item', e.target.value)}
                       className="w-full text-center text-sm outline-none border-none bg-transparent print:hidden" placeholder="Item" />
-                    <span className="hidden print:block text-center text-sm">{row.item}</span>
+                    <span className="hidden print:block text-sm">{row.item}</span>
                   </td>
-                  <td className="border border-gray-400 px-1 py-1">
+                  <td className="border border-gray-400 px-1 py-1 text-center">
                     <input type="text" value={row.procedure} onChange={(e) => updateRow(index, 'procedure', e.target.value)}
                       className="w-full text-center text-sm outline-none border-none bg-transparent print:hidden" placeholder="Procedure" />
-                    <span className="hidden print:block text-center text-sm">{row.procedure}</span>
+                    <span className="hidden print:block text-sm">{row.procedure}</span>
                   </td>
-                  <td className="border border-gray-400 px-1 py-1">
+                  <td className="border border-gray-400 px-1 py-1 text-center">
                     <input type="number" value={row.rate} onChange={(e) => updateRow(index, 'rate', e.target.value)}
                       className="w-full text-center text-sm outline-none border-none bg-transparent print:hidden" placeholder="0" />
-                    <span className="hidden print:block text-center text-sm">{row.rate}</span>
+                    <span className="hidden print:block text-sm">{row.rate}</span>
                   </td>
-                  <td className="border border-gray-400 px-1 py-1">
+                  <td className="border border-gray-400 px-1 py-1 text-center">
                     <input type="number" value={row.qty} onChange={(e) => updateRow(index, 'qty', e.target.value)}
                       className="w-full text-center text-sm outline-none border-none bg-transparent print:hidden" placeholder="0" />
-                    <span className="hidden print:block text-center text-sm">{row.qty}</span>
+                    <span className="hidden print:block text-sm">{row.qty}</span>
                   </td>
                   <td className="border border-gray-400 px-2 py-2 text-center font-bold">{row.amount || ''}</td>
-                  <td className="border border-gray-400 px-1 py-1 text-center print:hidden whitespace-nowrap">
+                  <td className="print-hide border border-gray-400 px-1 py-1 text-center whitespace-nowrap">
                     <button onClick={addRow} className="text-green-600 hover:text-green-800 font-bold text-sm mr-1" title="Add Row">+</button>
                     {rows.length > 1 && (
                       <button onClick={() => removeRow(index)} className="text-red-500 hover:text-red-700 font-bold text-sm" title="Remove Row">-</button>
@@ -259,7 +266,7 @@ const CorporateBill = () => {
               <tr className="font-bold">
                 <td className="border border-gray-400 px-2 py-2 text-center" colSpan={5}>Total</td>
                 <td className="border border-gray-400 px-2 py-2 text-center">{getTotal()}</td>
-                <td className="border border-gray-400 print:hidden"></td>
+                <td className="print-hide border border-gray-400"></td>
               </tr>
             </tbody>
           </table>
