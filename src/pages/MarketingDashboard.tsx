@@ -1057,7 +1057,7 @@ Return JSON only:
             <StatCard icon={TrendingUp} label="Admissions Yesterday" value={yesterdayRow?.admissions || 0} color="green" />
             <StatCard icon={TrendingUp} label="Admissions Month" value={monthSum('admissions')} color="emerald" />
             <StatCard icon={Percent} label="Occupancy Today" value={currentlyAdmittedCount} color="orange" />
-            <StatCard icon={Percent} label="Avg Occ. Month" value={`${monthAvg('occupancy_percent').toFixed(0)}%`} color="amber" />
+            <StatCard icon={Percent} label="Avg Occupancy Month" value={`${monthAvg('occupancy_percent').toFixed(0)}%`} color="amber" />
           </div>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
             <StatCard icon={IndianRupee} label="Revenue Today" value={inr(today.revenue)} color="green" />
