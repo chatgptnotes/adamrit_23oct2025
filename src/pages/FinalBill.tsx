@@ -21,6 +21,7 @@ import { ChevronUp, ChevronDown, Trash2, Plus, ChevronLeft, ChevronRight, Edit, 
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from '@/contexts/AuthContext';
 import { pushBillToTally } from '@/lib/tally-auto-push';
+import { logActivity } from '@/lib/activity-logger';
 import { ScrollArea } from "@/components/ui/scroll-area"
 import {
   Table,
@@ -1526,6 +1527,16 @@ const FinalBill = () => {
         }
 
         console.log('Created new bill with ID:', newBill.id, 'Bill No:', billNo);
+
+        // Log bill creation activity
+        logActivity('bill_create', {
+          patient_id: visitData.patients?.id,
+          patients_id: visitData.patients?.patients_id,
+          patient_name: visitData.patients?.name,
+          bill_no: billNo,
+          visit_id: visitId,
+        });
+
         // Invalidate the query cache to refresh billData
         queryClient.invalidateQueries({ queryKey: ['final-bill', visitId] });
       } catch (error) {

@@ -27,6 +27,7 @@ import {
   Download
 } from 'lucide-react';
 import { GatePassModal } from './GatePassModal';
+import { logActivity } from '@/lib/activity-logger';
 
 interface Visit {
   id: string;
@@ -351,6 +352,14 @@ export const DischargeWorkflowPanel: React.FC<DischargeWorkflowPanelProps> = ({ 
       console.log('✅ Patient discharged successfully', nextDischargedSrNo ? `with Discharged Sr. No: ${nextDischargedSrNo}` : '');
     },
     onSuccess: () => {
+      // Log patient discharge activity
+      logActivity('patient_discharge', {
+        patient_id: visit.patients.id,
+        patients_id: visit.patients.patients_id,
+        patient_name: visit.patients.name,
+        visit_id: visit.visit_id,
+      });
+
       toast({
         title: "Patient Discharged",
         description: `${visit.patients.name} has been successfully discharged.`,

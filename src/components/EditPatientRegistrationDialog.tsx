@@ -9,6 +9,7 @@ import { format } from 'date-fns';
 import { PatientInfoSection } from './EditPatientRegistrationDialog/PatientInfoSection';
 import { EmergencyContactSection } from './EditPatientRegistrationDialog/EmergencyContactSection';
 import { AdditionalInfoSection } from './EditPatientRegistrationDialog/AdditionalInfoSection';
+import { logActivity } from '@/lib/activity-logger';
 
 
 interface EditPatientRegistrationDialogProps {
@@ -190,6 +191,13 @@ export const EditPatientRegistrationDialog: React.FC<EditPatientRegistrationDial
       }
 
       console.log('Patient updated successfully');
+
+      // Log patient edit activity
+      logActivity('patient_edit', {
+        patient_id: patient.id,
+        patients_id: patient.patients_id,
+        patient_name: formData.patientName,
+      });
 
       toast({
         title: "Success",

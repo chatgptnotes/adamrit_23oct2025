@@ -106,6 +106,7 @@ const NursingStation = lazy(() => import("../pages/NursingStation"));
 const CTMRIModule = lazy(() => import("../pages/CTMRIModule"));
 const UserManagement = lazy(() => import("../pages/UserManagement"));
 const ActivityLog = lazy(() => import("../pages/ActivityLog"));
+const PatientJourneyLogs = lazy(() => import("../pages/PatientJourneyLogs"));
 const CorporateMaster = lazy(() => import("../pages/CorporateMaster"));
 const MasterData = lazy(() => import('@/pages/MasterData'));
 const LocationMaster = lazy(() => import("../pages/LocationMaster"));
@@ -219,6 +220,7 @@ export const AppRoutes = () => {
         <Route path="/ct-mri" element={<Suspense fallback={<PageLoader />}><CTMRIModule /></Suspense>} />
         <Route path="/user-management" element={<Suspense fallback={<PageLoader />}><UserManagement /></Suspense>} />
         <Route path="/activity-log" element={<Suspense fallback={<PageLoader />}><ActivityLog /></Suspense>} />
+        <Route path="/patient-journey-logs" element={<Suspense fallback={<PageLoader />}><PatientJourneyLogs /></Suspense>} />
         <Route path="/marketing-dashboard" element={<Suspense fallback={<PageLoader />}><MarketingDashboard /></Suspense>} />
         <Route path="/conference-call" element={<Suspense fallback={<PageLoader />}><ConferenceCallPage /></Suspense>} />
         <Route path="/corporate-master" element={<Suspense fallback={<PageLoader />}><CorporateMaster /></Suspense>} />
