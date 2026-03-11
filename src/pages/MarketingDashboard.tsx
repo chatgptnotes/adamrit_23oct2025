@@ -79,6 +79,9 @@ export default function MarketingDashboard() {
   const [corporateVisitsData, setCorporateVisitsData] = useState<any[]>([]);
   const [areaWiseData, setAreaWiseData] = useState<any[]>([]);
   const [openDelayCard, setOpenDelayCard] = useState<string | null>(null);
+  const [selectedPanelName, setSelectedPanelName] = useState<string | null>(null);
+  const [panelPatients, setPanelPatients] = useState<any[]>([]);
+  const [panelPatientsLoading, setPanelPatientsLoading] = useState(false);
   const [chartFilter, setChartFilter] = useState<'daily' | 'monthly' | 'yearly'>('monthly');
   const [monthRows, setMonthRows] = useState<any[]>([]);
   const [yearRows, setYearRows] = useState<any[]>([]);
@@ -437,6 +440,37 @@ export default function MarketingDashboard() {
   useEffect(() => { fetchData(); }, []);
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
   useEffect(() => { if (allChartVisitsRef.current.length > 0) buildChartData(chartFilter); }, [chartFilter]);
+
+  const handleCorpBarClick = async (data: any) => {
+    const fullName = data?.fullName || data?.name;
+    if (!fullName) return;
+    setSelectedPanelName(fullName);
+    setPanelPatients([]);
+    setPanelPatientsLoading(true);
+    try {
+      let startDate = monthStart;
+      if (chartFilter === 'daily') startDate = todayStr;
+      else if (chartFilter === 'yearly') startDate = yearStart;
+      let q = supabase
+        .from('visits')
+        .select('visit_id, admission_date, discharge_date, patient_type, appointment_with, status, patients!inner(name, corporate, hospital_name, age, gender)')
+        .gte('admission_date', startDate)
+        .lte('admission_date', todayStr)
+        .order('admission_date', { ascending: false });
+      if (fullName === 'Private') {
+        q = q.or('patients.corporate.is.null,patients.corporate.eq.Private');
+      } else {
+        q = q.eq('patients.corporate', fullName);
+      }
+      if (hospitalConfig?.name) q = q.eq('patients.hospital_name', hospitalConfig.name);
+      const { data: visits } = await q;
+      setPanelPatients(visits || []);
+    } catch (e) {
+      setPanelPatients([]);
+    } finally {
+      setPanelPatientsLoading(false);
+    }
+  };
 
   const monthSum = (key: string) => monthRows.reduce((s: number, r: any) => s + (Number(r[key]) || 0), 0);
   const monthAvg = (key: string) => monthRows.length ? monthSum(key) / monthRows.length : 0;
@@ -1408,7 +1442,8 @@ Return JSON only:
                 <div className="text-center py-6 text-gray-500 text-sm">No visit data available.</div>
               ) : (
                 <ResponsiveContainer width="100%" height={320}>
-                  <BarChart data={corporateVisitsData} margin={{ top: 5, right: 10, left: 0, bottom: 5 }} layout="vertical">
+                  <BarChart data={corporateVisitsData} margin={{ top: 5, right: 10, left: 0, bottom: 5 }} layout="vertical"
+                    onClick={(chartData: any) => { if (chartData?.activePayload?.[0]?.payload) handleCorpBarClick(chartData.activePayload[0].payload); }}>
                     <CartesianGrid strokeDasharray="3 3" />
                     <YAxis dataKey="name" type="category" width={120} tick={{ fontSize: 11 }} />
                     <XAxis type="number" allowDecimals={false} />
@@ -1416,9 +1451,52 @@ Return JSON only:
                       const item = corporateVisitsData.find(d => d.name === label);
                       return item?.fullName || label;
                     }} />
-                    <Bar dataKey="visits" fill="#2563eb" radius={[0, 4, 4, 0]} />
+                    <Bar dataKey="visits" fill="#2563eb" radius={[0, 4, 4, 0]} cursor="pointer" />
                   </BarChart>
                 </ResponsiveContainer>
+              )}
+              {/* Drilldown patient list */}
+              {selectedPanelName && (
+                <div className="mt-4 border rounded-lg overflow-hidden">
+                  <div className="flex items-center justify-between bg-blue-600 text-white px-4 py-2">
+                    <span className="font-semibold text-sm">{selectedPanelName} — Patient List ({panelPatients.length} visits)</span>
+                    <button onClick={() => setSelectedPanelName(null)} className="text-white hover:text-gray-200 font-bold text-lg leading-none">x</button>
+                  </div>
+                  {panelPatientsLoading ? (
+                    <div className="text-center py-4 text-sm text-gray-500">Loading patients...</div>
+                  ) : panelPatients.length === 0 ? (
+                    <div className="text-center py-4 text-sm text-gray-500">No patients found.</div>
+                  ) : (
+                    <div className="overflow-x-auto max-h-64 overflow-y-auto">
+                      <table className="w-full text-xs">
+                        <thead className="bg-gray-50 sticky top-0">
+                          <tr>
+                            <th className="px-3 py-2 text-left border-b">#</th>
+                            <th className="px-3 py-2 text-left border-b">Patient Name</th>
+                            <th className="px-3 py-2 text-left border-b">Visit ID</th>
+                            <th className="px-3 py-2 text-left border-b">Type</th>
+                            <th className="px-3 py-2 text-left border-b">Admission</th>
+                            <th className="px-3 py-2 text-left border-b">Doctor</th>
+                            <th className="px-3 py-2 text-left border-b">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {panelPatients.map((v: any, i: number) => (
+                            <tr key={v.visit_id} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                              <td className="px-3 py-2 border-b text-gray-500">{i + 1}</td>
+                              <td className="px-3 py-2 border-b font-medium">{v.patients?.name || '-'}</td>
+                              <td className="px-3 py-2 border-b text-blue-600">{v.visit_id}</td>
+                              <td className="px-3 py-2 border-b">{v.patient_type}</td>
+                              <td className="px-3 py-2 border-b">{v.admission_date}</td>
+                              <td className="px-3 py-2 border-b">{v.appointment_with || '-'}</td>
+                              <td className="px-3 py-2 border-b capitalize">{v.status || '-'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
               )}
             </CardContent>
           </Card>
