@@ -488,8 +488,8 @@ const PharmacyBilling: React.FC = () => {
       const subtotal = newItem.unit_price * totalPieces;
       const discountAmount = (subtotal * newItem.discount_percentage) / 100;
       const taxableAmount = subtotal - discountAmount;
-      const taxAmount = (taxableAmount * newItem.tax_percentage) / 100;
-      const totalAmount = taxableAmount + taxAmount;
+      const taxAmount = 0;
+      const totalAmount = taxableAmount;
 
       newItem.discount_amount = discountAmount;
       newItem.tax_amount = taxAmount;
@@ -526,8 +526,8 @@ const PharmacyBilling: React.FC = () => {
         const subtotal = item.unit_price * newQuantity;
         const discountAmount = (subtotal * item.discount_percentage) / 100;
         const taxableAmount = subtotal - discountAmount;
-        const taxAmount = (taxableAmount * item.tax_percentage) / 100;
-        const totalAmount = taxableAmount + taxAmount;
+        const taxAmount = 0;
+        const totalAmount = taxableAmount;
         
         return {
           ...item,
@@ -547,8 +547,8 @@ const PharmacyBilling: React.FC = () => {
         const subtotal = item.unit_price * item.quantity;
         const discountAmount = (subtotal * discountPercentage) / 100;
         const taxableAmount = subtotal - discountAmount;
-        const taxAmount = (taxableAmount * item.tax_percentage) / 100;
-        const totalAmount = taxableAmount + taxAmount;
+        const taxAmount = 0;
+        const totalAmount = taxableAmount;
         
         return {
           ...item,
@@ -666,7 +666,7 @@ const PharmacyBilling: React.FC = () => {
       discount: totals.totalDiscount,
       discount_percentage: discountPercentage,
       tax_gst: totals.totalTax,
-      tax_percentage: 9,
+      tax_percentage: 0,
       total_amount: totals.totalAmount,
       payment_method: paymentMethod,
       payment_status: 'COMPLETED',
@@ -1373,8 +1373,8 @@ const PharmacyBilling: React.FC = () => {
                                     const subtotal = item.unit_price * totalQty;
                                     const discountAmount = (subtotal * item.discount_percentage) / 100;
                                     const taxableAmount = subtotal - discountAmount;
-                                    const taxAmount = (taxableAmount * item.tax_percentage) / 100;
-                                    const totalAmount = taxableAmount + taxAmount;
+                                    const taxAmount = 0;
+                                    const totalAmount = taxableAmount;
                                     setCart(prev => prev.map(i =>
                                       i.id === item.id ? { ...i, qty_strips: newStrips, quantity: totalQty, discount_amount: discountAmount, tax_amount: taxAmount, total_amount: totalAmount } : i
                                     ));
@@ -1395,8 +1395,8 @@ const PharmacyBilling: React.FC = () => {
                                     const subtotal = item.unit_price * totalQty;
                                     const discountAmount = (subtotal * item.discount_percentage) / 100;
                                     const taxableAmount = subtotal - discountAmount;
-                                    const taxAmount = (taxableAmount * item.tax_percentage) / 100;
-                                    const totalAmount = taxableAmount + taxAmount;
+                                    const taxAmount = 0;
+                                    const totalAmount = taxableAmount;
                                     setCart(prev => prev.map(i =>
                                       i.id === item.id ? { ...i, qty_strips: newStrips, quantity: totalQty, discount_amount: discountAmount, tax_amount: taxAmount, total_amount: totalAmount } : i
                                     ));
@@ -1415,8 +1415,8 @@ const PharmacyBilling: React.FC = () => {
                                     const subtotal = item.unit_price * totalQty;
                                     const discountAmount = (subtotal * item.discount_percentage) / 100;
                                     const taxableAmount = subtotal - discountAmount;
-                                    const taxAmount = (taxableAmount * item.tax_percentage) / 100;
-                                    const totalAmount = taxableAmount + taxAmount;
+                                    const taxAmount = 0;
+                                    const totalAmount = taxableAmount;
                                     setCart(prev => prev.map(i =>
                                       i.id === item.id ? { ...i, qty_strips: newStrips, quantity: totalQty, discount_amount: discountAmount, tax_amount: taxAmount, total_amount: totalAmount } : i
                                     ));
@@ -1443,8 +1443,8 @@ const PharmacyBilling: React.FC = () => {
                                   const subtotal = item.unit_price * totalQty;
                                   const discountAmount = (subtotal * item.discount_percentage) / 100;
                                   const taxableAmount = subtotal - discountAmount;
-                                  const taxAmount = (taxableAmount * item.tax_percentage) / 100;
-                                  const totalAmount = taxableAmount + taxAmount;
+                                  const taxAmount = 0;
+                                  const totalAmount = taxableAmount;
                                   setCart(prev => prev.map(i =>
                                     i.id === item.id ? { ...i, qty_tablets: newTablets, quantity: totalQty, discount_amount: discountAmount, tax_amount: taxAmount, total_amount: totalAmount } : i
                                   ));
@@ -1464,8 +1464,8 @@ const PharmacyBilling: React.FC = () => {
                                     const subtotal = item.unit_price * totalQty;
                                     const discountAmount = (subtotal * item.discount_percentage) / 100;
                                     const taxableAmount = subtotal - discountAmount;
-                                    const taxAmount = (taxableAmount * item.tax_percentage) / 100;
-                                    const totalAmount = taxableAmount + taxAmount;
+                                    const taxAmount = 0;
+                                    const totalAmount = taxableAmount;
                                     setCart(prev => prev.map(i =>
                                       i.id === item.id ? { ...i, qty_tablets: newTablets, quantity: totalQty, discount_amount: discountAmount, tax_amount: taxAmount, total_amount: totalAmount } : i
                                     ));
@@ -1484,8 +1484,8 @@ const PharmacyBilling: React.FC = () => {
                                     const subtotal = item.unit_price * totalQty;
                                     const discountAmount = (subtotal * item.discount_percentage) / 100;
                                     const taxableAmount = subtotal - discountAmount;
-                                    const taxAmount = (taxableAmount * item.tax_percentage) / 100;
-                                    const totalAmount = taxableAmount + taxAmount;
+                                    const taxAmount = 0;
+                                    const totalAmount = taxableAmount;
                                     setCart(prev => prev.map(i =>
                                       i.id === item.id ? { ...i, qty_tablets: newTablets, quantity: totalQty, discount_amount: discountAmount, tax_amount: taxAmount, total_amount: totalAmount } : i
                                     ));
@@ -1527,8 +1527,8 @@ const PharmacyBilling: React.FC = () => {
                                     const subtotal = newPrice * i.quantity;
                                     const discountAmount = (subtotal * i.discount_percentage) / 100;
                                     const taxableAmount = subtotal - discountAmount;
-                                    const taxAmount = (taxableAmount * i.tax_percentage) / 100;
-                                    const totalAmount = taxableAmount + taxAmount;
+                                    const taxAmount = 0;
+                                    const totalAmount = taxableAmount;
                                     return {
                                       ...i,
                                       unit_price: newPrice,

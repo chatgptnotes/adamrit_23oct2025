@@ -12261,6 +12261,38 @@ INSTRUCTIONS:
       // Refresh patient info to update OT Notes Surgery Details section
       await fetchPatientInfo();
 
+      // Also clean up cached surgery_details in ipd_discharge_summary
+      if (visitData?.id) {
+        const { data: summaryData } = await supabase
+          .from('ipd_discharge_summary')
+          .select('id, surgery_details')
+          .eq('visit_id', visitData.id)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .single();
+
+        if (summaryData?.surgery_details) {
+          try {
+            const surgeryData = JSON.parse(summaryData.surgery_details);
+            if (surgeryData.surgeryRows && Array.isArray(surgeryData.surgeryRows)) {
+              const deletedName = surgeryBeingDeleted?.name ||
+                                  surgeryBeingDeleted?.cghs_surgery?.name || '';
+
+              surgeryData.surgeryRows = surgeryData.surgeryRows.filter((row: any) =>
+                !row.procedurePerformed?.includes(deletedName)
+              );
+
+              await supabase
+                .from('ipd_discharge_summary')
+                .update({ surgery_details: JSON.stringify(surgeryData) })
+                .eq('id', summaryData.id);
+            }
+          } catch (e) {
+            console.log('Could not clean up discharge summary surgery cache:', e);
+          }
+        }
+      }
+
       // Clear OT Notes procedure field if the deleted surgery was populated there
       if (surgeryBeingDeleted) {
         const deletedSurgeryName = surgeryBeingDeleted.name ||

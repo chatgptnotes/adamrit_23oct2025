@@ -271,8 +271,8 @@ BEGIN
         v_total_discount := v_total_discount + COALESCE((v_item->>'discount')::DECIMAL, 0);
     END LOOP;
 
-    v_total_tax := v_subtotal * 0.09; -- Example: 9% GST
-    v_total_amount := v_subtotal - v_total_discount + v_total_tax;
+    v_total_tax := 0;
+    v_total_amount := v_subtotal - v_total_discount;
 
     -- Insert sale
     INSERT INTO pharmacy_sales (sale_type, patient_id, patient_name, visit_id, subtotal, discount, tax_gst, total_amount, payment_method)
