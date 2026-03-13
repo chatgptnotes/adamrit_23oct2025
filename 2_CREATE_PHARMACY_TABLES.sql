@@ -324,8 +324,8 @@ BEGIN
         v_total_discount := v_total_discount + COALESCE((v_item->>'discount')::DECIMAL, 0);
     END LOOP;
 
-    v_total_tax := v_subtotal * 0.09;
-    v_total_amount := v_subtotal - v_total_discount + v_total_tax;
+    v_total_tax := 0;
+    v_total_amount := v_subtotal - v_total_discount;
 
     -- Insert sale
     INSERT INTO public.pharmacy_sales (

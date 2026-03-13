@@ -16,12 +16,24 @@
       "Read(//c/Users/poona/OneDrive/Pictures/Screenshots/**)",
       "Read(/var/folders/2h/hkkt_6m5723fk6whtjx7pk_w0000gp/T/TemporaryItems/NSIRD_screencaptureui_eptdMR/**)",
       "Read(/var/folders/2h/hkkt_6m5723fk6whtjx7pk_w0000gp/T/TemporaryItems/NSIRD_screencaptureui_xBQDn9/**)",
-<<<<<<< HEAD
-      "Read(/var/folders/2h/hkkt_6m5723fk6whtjx7pk_w0000gp/T/TemporaryItems/NSIRD_screencaptureui_4TbdB5/**)"
-=======
+      "Read(/var/folders/2h/hkkt_6m5723fk6whtjx7pk_w0000gp/T/TemporaryItems/NSIRD_screencaptureui_4TbdB5/**)",
       "Bash(npm run typecheck:*)",
-      "Bash(npx tsc:*)"
->>>>>>> 53f82fcb2b69b10df0d818e73551f28eac27813a
+      "Bash(npx tsc:*)",
+      "Bash(git:*)",
+      "Bash(find /Users/apple/Desktop/Hope_projects/adamrit -type f -name \"*.env*\" 2>/dev/null | head -20)",
+      "Bash(grep -l \"Chart\\\\|Graph\\\\|Dashboard\" /Users/apple/Desktop/Hope_projects/adamrit/src/components/*.tsx 2>/dev/null | head -10)",
+      "Bash(find /Users/apple/Desktop/Hope_projects/adamrit/src -name \"*table*\" -o -name \"*chart*\" -o -name \"*card*\" | grep -E \"\\\\.\\(tsx|ts\\)$\" | head -20)",
+      "Bash(grep -r \"recharts\\\\|Chart\\\\|Graph\" /Users/apple/Desktop/Hope_projects/adamrit/src/pages/*.tsx 2>/dev/null | grep -E \"import|from\" | head -5)",
+      "Bash(find /Users/apple/Desktop/Hope_projects/adamrit -name \"*pharmacy*\" -type f 2>/dev/null | sort)",
+      "Bash(grep -l \"pharmacy_sales\\\\|pharmacy_sale_items\\\\|pharmacy_credit_payments\\\\|medicine_returns\" /Users/apple/Desktop/Hope_projects/adamrit/supabase/migrations/*.sql 2>/dev/null | head -5)",
+      "Bash(grep -r \"pharmacy_credit_payments\\\\|medicine_returns\" /Users/apple/Desktop/Hope_projects/adamrit/supabase/migrations --include=\"*.sql\" 2>/dev/null | head -20)",
+      "Bash(wc -l /Users/apple/Desktop/Hope_projects/adamrit/src/components/pharmacy/*.tsx | tail -1)",
+      "Bash(awk '/CREATE FUNCTION public.create_pharmacy_sale/,/^GRANT EXECUTE|^;/' /Users/apple/Desktop/Hope_projects/adamrit/supabase_pharmacy_migration.sql | head -100)",
+      "Bash(find /Users/apple/Desktop/Hope_projects/adamrit -name \"*schema*\" -o -name \"*supabase*\" -o -name \"*types*\" | grep -E \"\\\\.\\(ts|sql\\)$\" | head -20)",
+      "Bash(grep -n \"insert.*pharmacy_sales\\\\|\\\\.from.*pharmacy_sales.*insert\" /Users/apple/Desktop/Hope_projects/adamrit/src/components/pharmacy/*.tsx)",
+      "Bash(grep -n \"pharmacy_sales.*insert\\\\|insert.*pharmacy_sales\" /Users/apple/Desktop/Hope_projects/adamrit/src/components/pharmacy/*.tsx)",
+      "Bash(grep -r \"is_deleted\\\\|deleted_at\\\\|status.*=.*'deleted'\\\\|soft.delete\" /Users/apple/Desktop/Hope_projects/adamrit/src --include=\"*.tsx\" --include=\"*.ts\" 2>/dev/null | grep -v node_modules | head -30)",
+      "Bash(find /Users/apple/Desktop/Hope_projects/adamrit -name \"*IpdDischargeSummary*\" -o -name \"*DischargeSummary*\" | grep -E \"\\\\.\\(tsx|ts\\)$\")"
     ],
     "deny": [],
     "ask": []
