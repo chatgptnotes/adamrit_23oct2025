@@ -81,6 +81,7 @@ const AdvanceStatementReport = () => {
           ward_allotted,
           room_allotted,
           comments,
+          reason_for_visit,
           patients!inner (
             id,
             name,
@@ -363,9 +364,9 @@ const AdvanceStatementReport = () => {
                 `;
 
                 const diagnoses = item.visit_diagnoses?.map(vd => vd.diagnoses?.name).filter(Boolean) || [];
-                const diagnosisText = diagnoses.length > 0 ? 
-                  diagnoses.map(diagnosis => `<div class="diagnosis-item">${diagnosis}</div>`).join('') : 
-                  'No diagnosis recorded';
+                const diagnosisText = diagnoses.length > 0 ?
+                  diagnoses.map(diagnosis => `<div class="diagnosis-item">${diagnosis}</div>`).join('') :
+                  (item.reason_for_visit ? `<div class="diagnosis-item">${item.reason_for_visit}</div>` : 'No diagnosis recorded');
 
                 const surgeries = item.visit_surgeries?.map(vs => vs.cghs_surgery ? {
                   name: vs.cghs_surgery.name,
@@ -731,6 +732,8 @@ const AdvanceStatementReport = () => {
                           <div key={idx} className="text-sm bg-blue-50 px-2 py-1 rounded">{diagnosis}</div>
                         ))}
                       </div>
+                    ) : item.reason_for_visit ? (
+                      <div className="text-sm bg-blue-50 px-2 py-1 rounded">{item.reason_for_visit}</div>
                     ) : (
                       <span className="text-gray-500">No diagnosis recorded</span>
                     );
