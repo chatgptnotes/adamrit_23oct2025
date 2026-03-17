@@ -236,6 +236,7 @@ const TodaysIpdDashboard = () => {
 
   // URL-persisted state
   const searchTerm = searchParams.get('search') || '';
+  const [localSearchTerm, setLocalSearchTerm] = useState(searchTerm);
   const billingExecutiveFilter = searchParams.get('executive') || '';
   const billingStatusFilter = searchParams.get('billingStatus') || '';
   const bunchFilter = searchParams.get('bunch') || '';
@@ -264,6 +265,21 @@ const TodaysIpdDashboard = () => {
     });
     setSearchParams(newParams, { replace: true });
   };
+
+  // Debounce search input to avoid lag on every keystroke
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (localSearchTerm !== searchTerm) {
+        updateParams({ search: localSearchTerm, page: '1' });
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [localSearchTerm]);
+
+  // Sync URL → local state when URL changes externally (e.g., Clear Filters)
+  useEffect(() => {
+    setLocalSearchTerm(searchTerm);
+  }, [searchTerm]);
 
   // Setter functions for URL-persisted state
   const setSearchTerm = (value: string) => updateParams({ search: value, page: '1' });
@@ -1844,9 +1860,17 @@ const TodaysIpdDashboard = () => {
   const filteredVisits = useMemo(() => {
     // First, filter the visits
     const filtered = (todaysVisits || []).filter(visit => {
-      const matchesSearch = visit.patients?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        visit.visit_id?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        visit.appointment_with?.toLowerCase().includes(searchTerm.toLowerCase());
+      const searchLower = searchTerm.toLowerCase();
+      const matchesSearch = !searchTerm ||
+        visit.patients?.name?.toLowerCase().includes(searchLower) ||
+        visit.visit_id?.toLowerCase().includes(searchLower) ||
+        visit.appointment_with?.toLowerCase().includes(searchLower) ||
+        visit.patients?.patients_id?.toLowerCase().includes(searchLower) ||
+        visit.patients?.insurance_person_no?.toLowerCase().includes(searchLower) ||
+        visit.patients?.phone?.toLowerCase().includes(searchLower) ||
+        visit.patients?.corporate?.toLowerCase().includes(searchLower) ||
+        (visit.sr_no != null && String(visit.sr_no).includes(searchLower)) ||
+        (visit.bunch_no != null && String(visit.bunch_no).includes(searchLower));
 
       const matchesBillingExecutive = !billingExecutiveFilter ||
         visit.billing_executive?.toLowerCase().trim() === billingExecutiveFilter.toLowerCase().trim();
@@ -2668,8 +2692,8 @@ const TodaysIpdDashboard = () => {
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
               <Input
                 placeholder="Search visits..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                value={localSearchTerm}
+                onChange={(e) => setLocalSearchTerm(e.target.value)}
                 className="pl-10 w-48"
               />
             </div>
