@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -19,6 +19,7 @@ import '@/styles/print.css';
 
 const AdvanceStatementReport = () => {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { hospitalConfig, hospitalType } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -82,6 +83,8 @@ const AdvanceStatementReport = () => {
           room_allotted,
           comments,
           reason_for_visit,
+          package_days,
+          package_amount,
           patients!inner (
             id,
             name,
@@ -180,12 +183,92 @@ const AdvanceStatementReport = () => {
         }
       }
 
-      // Merge ward data with visits
+      // Fetch financial_summary for package days, lab, pharmacy
+      const visitIds = data?.map(visit => visit.visit_id).filter((id): id is string => id !== null && id !== undefined) || [];
+      const uniqueVisitIds = Array.from(new Set(visitIds));
+
+      let financialMapping: Record<string, { total_package_days: number; total_admission_days: number; total_amount_laboratory_services: number; total_amount_pharmacy: number }> = {};
+
+      if (uniqueVisitIds.length > 0) {
+        const { data: financialData, error: financialError } = await supabase
+          .from('financial_summary')
+          .select('visit_id, total_package_days, total_admission_days, total_amount_laboratory_services, total_amount_pharmacy')
+          .in('visit_id', uniqueVisitIds);
+
+        if (financialError) {
+          console.error('Error fetching financial summary data:', financialError);
+        } else if (financialData) {
+          financialMapping = financialData.reduce((acc, fs) => {
+            if (fs.visit_id) {
+              acc[fs.visit_id] = {
+                total_package_days: fs.total_package_days || 0,
+                total_admission_days: fs.total_admission_days || 0,
+                total_amount_laboratory_services: fs.total_amount_laboratory_services || 0,
+                total_amount_pharmacy: fs.total_amount_pharmacy || 0,
+              };
+            }
+            return acc;
+          }, {} as Record<string, { total_package_days: number; total_admission_days: number; total_amount_laboratory_services: number; total_amount_pharmacy: number }>);
+        }
+      }
+
+      // Fetch visit_labs for lab totals using UUID ids
+      const visitUUIDs = data?.map(visit => visit.id).filter(Boolean) || [];
+      const uniqueVisitUUIDs = Array.from(new Set(visitUUIDs));
+
+      let labTotalMapping: Record<string, number> = {};
+
+      if (uniqueVisitUUIDs.length > 0) {
+        const { data: labData, error: labError } = await supabase
+          .from('visit_labs')
+          .select('visit_id, cost')
+          .in('visit_id', uniqueVisitUUIDs);
+
+        if (labError) {
+          console.error('Error fetching visit_labs data:', labError);
+        } else if (labData) {
+          labData.forEach((lab: { visit_id: string; cost: string | number | null }) => {
+            if (lab.visit_id) {
+              labTotalMapping[lab.visit_id] = (labTotalMapping[lab.visit_id] || 0) + (parseFloat(String(lab.cost || '0')) || 0);
+            }
+          });
+        }
+      }
+
+      // Fetch pharmacy_sales for pharmacy totals using patient text IDs
+      const patientTextIds = data?.map(v => v.patients?.patients_id).filter(Boolean) as string[] || [];
+      const uniquePatientTextIds = Array.from(new Set(patientTextIds));
+
+      let pharmacyTotalMapping: Record<string, number> = {};
+
+      if (uniquePatientTextIds.length > 0) {
+        const { data: pharmacyData, error: pharmacyError } = await supabase
+          .from('pharmacy_sales')
+          .select('patient_id, total_amount')
+          .in('patient_id', uniquePatientTextIds);
+
+        if (pharmacyError) {
+          console.error('Error fetching pharmacy_sales data:', pharmacyError);
+        } else if (pharmacyData) {
+          pharmacyData.forEach((sale: { patient_id: string; total_amount: number | null }) => {
+            if (sale.patient_id) {
+              pharmacyTotalMapping[sale.patient_id] = (pharmacyTotalMapping[sale.patient_id] || 0) + (sale.total_amount || 0);
+            }
+          });
+        }
+      }
+
+      // Merge ward data, financial data, lab totals, and pharmacy totals with visits
       const visitsWithRoomInfo = data?.map(visit => ({
         ...visit,
         room_management: visit.ward_allotted && wardMapping[visit.ward_allotted]
           ? { ward_type: wardMapping[visit.ward_allotted] }
-          : null
+          : null,
+        financial_summary: visit.visit_id && financialMapping[visit.visit_id]
+          ? financialMapping[visit.visit_id]
+          : null,
+        lab_total: labTotalMapping[visit.id] || 0,
+        pharmacy_total: visit.patients?.patients_id ? (pharmacyTotalMapping[visit.patients.patients_id] || 0) : 0
       })) || [];
 
       return visitsWithRoomInfo;
@@ -270,6 +353,32 @@ const AdvanceStatementReport = () => {
     fetchFinancialData();
   }, [advanceData]);
 
+  const handlePackageDaysUpdate = async (visitId: string, value: number) => {
+    const { error } = await supabase
+      .from('visits')
+      .update({ package_days: value })
+      .eq('id', visitId);
+
+    if (error) {
+      console.error('Error updating package days:', error);
+    } else {
+      queryClient.invalidateQueries({ queryKey: ['advance-statement-report-currently-admitted'] });
+    }
+  };
+
+  const handlePackageAmountUpdate = async (visitId: string, value: string) => {
+    const { error } = await supabase
+      .from('visits')
+      .update({ package_amount: value })
+      .eq('id', visitId);
+
+    if (error) {
+      console.error('Error updating package amount:', error);
+    } else {
+      queryClient.invalidateQueries({ queryKey: ['advance-statement-report-currently-admitted'] });
+    }
+  };
+
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-IN', {
       style: 'currency',
@@ -342,8 +451,12 @@ const AdvanceStatementReport = () => {
                 ${hospitalType === 'hope' ? '<th style="width: 6%;">Corporate</th>' : ''}
                 <th style="width: 6%;">Room/Bed</th>
                 <th style="width: 6%;">Admission</th>
-                <th style="width: 10%;">Diagnosis</th>
-                <th style="width: 12%;">Surgery/Procedure</th>
+                <th style="width: 8%;">Diagnosis</th>
+                <th style="width: 4%;">Pkg Days</th>
+                <th style="width: 5%;">Pkg Amt</th>
+                <th style="width: 5%;">Lab Amt</th>
+                <th style="width: 5%;">Pharmacy</th>
+                <th style="width: 10%;">Surgery/Procedure</th>
                 <th style="width: 7%;">Total Bill</th>
                 <th style="width: 7%;">Advance</th>
                 <th style="width: 9%;">Last Payment</th>
@@ -429,6 +542,10 @@ const AdvanceStatementReport = () => {
                     <td>${roomBedText}</td>
                     <td style="text-align: center;">${admissionDateText}</td>
                     <td>${diagnosisText}</td>
+                    <td style="text-align: center;">${item.package_days || 0}</td>
+                    <td style="text-align: right;">₹${(parseFloat(item.package_amount || '0') || 0).toLocaleString('en-IN')}</td>
+                    <td style="text-align: right;">₹${(item.lab_total || 0).toLocaleString('en-IN')}</td>
+                    <td style="text-align: right;">₹${(item.pharmacy_total || 0).toLocaleString('en-IN')}</td>
                     <td>${surgeryText}</td>
                     <td style="text-align: right; font-weight: bold;">₹${totalBill.toLocaleString('en-IN')}</td>
                     <td style="text-align: right; color: #16a34a;">₹${advanceTillDate.toLocaleString('en-IN')}</td>
@@ -457,14 +574,13 @@ const AdvanceStatementReport = () => {
       // Wait for content to load then print
       setTimeout(() => {
         printWindow.print();
-        printWindow.close();
       }, 250);
     }
   };
 
   const handleExport = () => {
     // Create CSV content
-    const headers = ['Sr. No.', 'Patient Details', 'Corporate Type', 'Room/Bed', 'Admission Date', 'Diagnosis', 'Referral Letter', 'Planned Surgery or Procedure and Cost'];
+    const headers = ['Sr. No.', 'Patient Details', 'Corporate Type', 'Room/Bed', 'Admission Date', 'Diagnosis', 'Package Days', 'Package Amount', 'Lab Amount', 'Pharmacy', 'Referral Letter', 'Planned Surgery or Procedure and Cost'];
     const csvContent = [
       headers.join(','),
       ...advanceData.map((item, index) => {
@@ -508,6 +624,11 @@ const AdvanceStatementReport = () => {
 
         const referralLetter = getReferralLetterDisplay(item.file_status);
 
+        const packageDays = item.package_days || 0;
+        const packageAmount = item.package_amount || '0';
+        const labAmount = item.lab_total || 0;
+        const pharmacyAmount = item.pharmacy_total || 0;
+
         return [
           index + 1,
           `"${patientDetails}"`,
@@ -515,6 +636,10 @@ const AdvanceStatementReport = () => {
           `"${roomBed}"`,
           `"${admissionDate}"`,
           `"${diagnoses}"`,
+          `"${packageDays}"`,
+          packageAmount,
+          labAmount,
+          pharmacyAmount,
           `"${referralLetter}"`,
           `"${surgeries}"`
         ].join(',');
@@ -691,19 +816,23 @@ const AdvanceStatementReport = () => {
                   <TableHead className="min-w-[150px]">Room/Bed</TableHead>
                   <TableHead className="min-w-[120px]">Admission Date</TableHead>
                   <TableHead className="min-w-[200px]">Diagnosis</TableHead>
+                  <TableHead className="min-w-[100px]">Package Days</TableHead>
+                  <TableHead className="min-w-[120px]">Package Amount</TableHead>
+                  <TableHead className="min-w-[120px]">Lab Amount</TableHead>
+                  <TableHead className="min-w-[120px]">Pharmacy</TableHead>
                   <TableHead className="min-w-[300px]">Planned Surgery or Procedure and Cost</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {isLoading ? (
                   <TableRow>
-                    <TableCell colSpan={hospitalType === 'hope' ? 7 : 6} className="text-center py-8">
+                    <TableCell colSpan={hospitalType === 'hope' ? 11 : 10} className="text-center py-8">
                       Loading...
                     </TableCell>
                   </TableRow>
                 ) : advanceData.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={hospitalType === 'hope' ? 7 : 6} className="text-center py-8 text-gray-500">
+                    <TableCell colSpan={hospitalType === 'hope' ? 11 : 10} className="text-center py-8 text-gray-500">
                       No data found
                     </TableCell>
                   </TableRow>
@@ -803,6 +932,62 @@ const AdvanceStatementReport = () => {
                         <TableCell>{roomBedDisplay}</TableCell>
                         <TableCell>{admissionDateDisplay}</TableCell>
                         <TableCell>{diagnosisDisplay}</TableCell>
+                        <TableCell className="text-center">
+                          <Input
+                            type="number"
+                            className="w-20 text-center h-8 text-sm"
+                            defaultValue={item.package_days || 0}
+                            min={0}
+                            onBlur={(e) => {
+                              const val = parseInt(e.target.value) || 0;
+                              if (val !== (item.package_days || 0)) {
+                                handlePackageDaysUpdate(item.id, val);
+                              }
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                (e.target as HTMLInputElement).blur();
+                              }
+                            }}
+                          />
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <Input
+                            type="number"
+                            className="w-24 text-center h-8 text-sm"
+                            defaultValue={item.package_amount || ''}
+                            placeholder="0"
+                            onBlur={(e) => {
+                              const val = e.target.value;
+                              if (val !== (item.package_amount || '')) {
+                                handlePackageAmountUpdate(item.id, val);
+                              }
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                (e.target as HTMLInputElement).blur();
+                              }
+                            }}
+                          />
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {item.lab_total > 0 ? (
+                            <span className="text-sm font-medium text-blue-700">
+                              ₹{item.lab_total.toLocaleString('en-IN')}
+                            </span>
+                          ) : (
+                            <span className="text-gray-500">₹0</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {item.pharmacy_total > 0 ? (
+                            <span className="text-sm font-medium text-purple-700">
+                              ₹{item.pharmacy_total.toLocaleString('en-IN')}
+                            </span>
+                          ) : (
+                            <span className="text-gray-500">₹0</span>
+                          )}
+                        </TableCell>
                         <TableCell>{surgeryDisplay}</TableCell>
                       </TableRow>
                     );
