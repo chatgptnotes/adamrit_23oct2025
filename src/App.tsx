@@ -32,7 +32,7 @@ const getRoleDefaultRoute = (role: string): string => {
     case 'radiology':
       return '/radiology';
     case 'ot_tech':
-      return '/ot';
+      return '/todays-ipd';
     case 'cath_lab_tech':
       return '/cath-lab';
     case 'nurse':
@@ -46,6 +46,7 @@ const getRoleDefaultRoute = (role: string): string => {
     case 'billing':
       return '/bill-submission';
     case 'doctor':
+      return '/todays-ipd';
     case 'consultant':
       return '/patient-dashboard';
     case 'physiotherapist':

@@ -3201,6 +3201,129 @@ const FinalBill = () => {
     };
   }, [visitId, clinicalServicesInitialized, mandatoryServicesInitialized]); // Removed circular dependencies
 
+  // Auto-add daily clinical services (Doctor Charges & Nursing Charges)
+  const autoAddDailyServices = async () => {
+    if (!visitData?.id || !visitData?.admission_date || !visitId) return;
+
+    try {
+      const admissionDate = new Date(visitData.admission_date);
+      const dischargeDate = visitData.discharge_date
+        ? new Date(visitData.discharge_date)
+        : new Date();
+
+      // Calculate days (inclusive)
+      const days = Math.max(1, Math.ceil(
+        (dischargeDate.getTime() - admissionDate.getTime()) / (1000 * 60 * 60 * 24)
+      ) + 1);
+
+      // Determine rate type from patient info
+      const corporate = (patientInfo?.corporate || '').toLowerCase().trim();
+      const hasCorporate = corporate.length > 0 && corporate !== 'private';
+      const patientType = (visitData?.patient_type || patientInfo?.patient_type || '').toLowerCase().trim();
+
+      const usesPrivateRate = hasCorporate &&
+        (corporate.includes('icici lombard') || corporate.includes('icici'));
+
+      let rateType = 'private';
+      if (usesPrivateRate) {
+        rateType = 'private';
+      } else if (patientType.includes('tpa') || patientType.includes('insurance')) {
+        rateType = 'tpa';
+      } else if (patientType.includes('cghs') || corporate.includes('cghs') || corporate.includes('echs') || corporate.includes('esic')) {
+        rateType = 'cghs';
+      } else if (patientType.includes('non_cghs') || patientType.includes('non-cghs')) {
+        rateType = 'non_cghs';
+      } else if (hasCorporate && !usesPrivateRate) {
+        rateType = 'tpa';
+      }
+
+      // Query active clinical services
+      const { data: allActiveServices, error: fetchError } = await supabase
+        .from('clinical_services')
+        .select('*')
+        .eq('status', 'Active');
+
+      if (fetchError || !allActiveServices || allActiveServices.length === 0) {
+        console.log('⚠️ [AUTO-DAILY] No active clinical services found for hospital:', hospitalConfig.name);
+        return;
+      }
+
+      // Filter for daily services (Doctor Charges and Nursing Charges - case insensitive)
+      const dailyServices = allActiveServices.filter(s =>
+        s.service_name?.toLowerCase().includes('doctor charges') ||
+        s.service_name?.toLowerCase().includes('nursing')
+      );
+
+      if (dailyServices.length === 0) {
+        console.log('⚠️ [AUTO-DAILY] No Doctor Charges or Nursing services found');
+        return;
+      }
+
+      console.log('🔄 [AUTO-DAILY] Auto-adding daily services:', dailyServices.map(s => s.service_name), 'Days:', days);
+
+      for (const service of dailyServices) {
+        // Select correct rate based on patient type
+        let rate = 0;
+        if (usesPrivateRate) {
+          rate = service.private_rate || service.tpa_rate || service.amount || service.rate || service.cost || 0;
+        } else if (rateType === 'tpa') {
+          rate = service.tpa_rate || service.private_rate || service.amount || service.rate || service.cost || 0;
+        } else if (rateType === 'cghs') {
+          rate = service.nabh_rate || service.private_rate || service.amount || service.rate || service.cost || 0;
+        } else if (rateType === 'non_cghs') {
+          rate = service.non_nabh_rate || service.private_rate || service.amount || service.rate || service.cost || 0;
+        } else {
+          rate = service.private_rate || service.tpa_rate || service.amount || service.rate || service.cost || 0;
+        }
+
+        const numericRate = typeof rate === 'string' ? parseFloat(rate) : rate;
+
+        if (!numericRate || numericRate <= 0) {
+          console.warn(`⚠️ [AUTO-DAILY] Skipping ${service.service_name} - rate is 0 or null`);
+          continue;
+        }
+
+        const { error: upsertError } = await supabase
+          .from('visit_clinical_services')
+          .upsert({
+            visit_id: visitData.id,
+            clinical_service_id: service.id,
+            quantity: days,
+            rate_used: numericRate,
+            rate_type: rateType,
+            amount: numericRate * days,
+            start_date: visitData.admission_date,
+            end_date: visitData.discharge_date || new Date().toISOString().split('T')[0],
+          }, {
+            onConflict: 'visit_id,clinical_service_id',
+            ignoreDuplicates: false
+          })
+          .select();
+
+        if (upsertError) {
+          console.error(`❌ [AUTO-DAILY] Failed to upsert ${service.service_name}:`, upsertError);
+        } else {
+          console.log(`✅ [AUTO-DAILY] Upserted ${service.service_name}: ${days} days × ₹${numericRate} = ₹${numericRate * days}`);
+        }
+      }
+
+      // Refresh saved clinical services data and financial summary
+      await fetchSavedClinicalServicesData();
+      if (autoPopulateFinancialData) {
+        await autoPopulateFinancialData();
+      }
+    } catch (error) {
+      console.error('❌ [AUTO-DAILY] Error auto-adding daily services:', error);
+    }
+  };
+
+  // Trigger auto-add of daily services when visit data loads or discharge date changes
+  useEffect(() => {
+    if (visitData?.id && visitData?.admission_date && patientInfo) {
+      autoAddDailyServices();
+    }
+  }, [visitData?.id, visitData?.admission_date, visitData?.discharge_date, patientInfo]);
+
   // Function to refresh saved data
   const refreshSavedData = async () => {
     if (!visitId) return;
