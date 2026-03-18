@@ -3207,9 +3207,11 @@ const FinalBill = () => {
 
     try {
       const admissionDate = new Date(visitData.admission_date);
+      admissionDate.setHours(0, 0, 0, 0);
       const dischargeDate = visitData.discharge_date
         ? new Date(visitData.discharge_date)
         : new Date();
+      dischargeDate.setHours(0, 0, 0, 0);
 
       // Calculate days (inclusive)
       const days = Math.max(1, Math.ceil(
