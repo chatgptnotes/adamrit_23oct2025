@@ -716,7 +716,7 @@ const fetchAnesthetistTotal = async (): Promise<number> => {
 
   const fetchPharmacyTotal = async (): Promise<number> => {
     console.log('🚀 fetchPharmacyTotal called - using existing savedMedicationData');
-    
+
     // Use existing savedMedicationData instead of database query
     if (!savedMedicationData || savedMedicationData.length === 0) {
       console.log('📝 No savedMedicationData available');
@@ -729,7 +729,7 @@ const fetchAnesthetistTotal = async (): Promise<number> => {
       console.log(`💊 Medication: ${medication.medication_name}, Cost: ${cost}`);
       return sum + cost;
     }, 0);
-    
+
     console.log('💰 Pharmacy total calculated from savedMedicationData:', total, 'from', savedMedicationData.length, 'medications');
     return total;
   };

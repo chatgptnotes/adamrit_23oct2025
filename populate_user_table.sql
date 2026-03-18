@@ -33,7 +33,10 @@ INSERT INTO "User" (email, password, role, hospital_type) VALUES
 ('arpit@hopehospital.com', 'Arpit@123', 'marketing_manager', 'hope'),
 
 -- MRD Management
-('noor@hopehospital.com', 'Noor@123', 'admin', 'hope')
+('noor@hopehospital.com', 'Noor@123', 'admin', 'hope'),
+
+-- OT Tech Staff
+('ottech@hopehospital.com', 'Ottech@123', 'ot_tech', 'hope')
 
 ON CONFLICT (email) DO NOTHING;
 
