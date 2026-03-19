@@ -179,10 +179,11 @@ export default function TallyGST({ serverUrl, companyName }) {
     setSyncing(true)
     const actionMap = { gstr1: 'gst-r1', gstr3b: 'gst-r3b', gst_ledger: 'gst-ledger' }
     try {
-      await fetch('/api/tally/sync', {
+      await fetch('/api/tally-proxy', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          endpoint: 'sync',
           action: actionMap[activeTab],
           serverUrl, companyName,
           dateRange: { from: period.from, to: period.to },

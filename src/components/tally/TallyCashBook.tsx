@@ -101,10 +101,10 @@ export default function TallyCashBook({ serverUrl, companyName }) {
     }
     setRefreshing(true)
     try {
-      await fetch('/api/tally/sync', {
+      await fetch('/api/tally-proxy', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'vouchers', serverUrl, companyName }),
+        body: JSON.stringify({ endpoint: 'sync', action: 'vouchers', serverUrl, companyName }),
       })
       toast.success('Vouchers refreshed from Tally')
       await fetchData()

@@ -63,10 +63,11 @@ export default function TallyBillSync({ serverUrl, companyName }: TallyBillSyncP
     setPushing(prev => new Set(prev).add(voucher.id))
     try {
       const action = voucher.voucher_type === 'Sales' ? 'create-sales-voucher' : 'create-voucher'
-      const res = await fetch('/api/tally/push', {
+      const res = await fetch('/api/tally-proxy', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          endpoint: 'push',
           action,
           serverUrl,
           companyName,

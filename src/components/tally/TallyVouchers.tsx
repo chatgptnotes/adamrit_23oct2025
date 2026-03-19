@@ -103,10 +103,11 @@ function EditVoucherModal({ voucher, serverUrl, companyName, onClose, onSaved }:
     if (!serverUrl || !companyName) { toast.error('Tally connection required'); return }
     setSaving(true)
     try {
-      const res = await fetch('/api/tally/push', {
+      const res = await fetch('/api/tally-proxy', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          endpoint: 'push',
           action: 'alter-voucher',
           serverUrl, companyName,
           data: {
@@ -217,10 +218,11 @@ function DeleteConfirmModal({ voucher, serverUrl, companyName, onClose, onDelete
     if (!serverUrl || !companyName) { toast.error('Tally connection required'); return }
     setDeleting(true)
     try {
-      const res = await fetch('/api/tally/push', {
+      const res = await fetch('/api/tally-proxy', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          endpoint: 'push',
           action: 'cancel-voucher',
           serverUrl, companyName,
           data: {

@@ -102,10 +102,10 @@ export default function TallyBankBook({ serverUrl, companyName }) {
     if (!serverUrl || !companyName) return
     setRefreshing(true)
     try {
-      await fetch('/api/tally/sync', {
+      await fetch('/api/tally-proxy', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'vouchers', serverUrl, companyName }),
+        body: JSON.stringify({ endpoint: 'sync', action: 'vouchers', serverUrl, companyName }),
       })
       toast.success('Refreshed from Tally')
       await fetchVouchers()

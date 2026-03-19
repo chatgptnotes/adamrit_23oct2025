@@ -126,10 +126,10 @@ export default function TallyDashboard() {
   async function testConnection() {
     setIsTesting(true)
     try {
-      const res = await fetch('/api/tally/test-connection', {
+      const res = await fetch('/api/tally-proxy', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ serverUrl, companyName }),
+        body: JSON.stringify({ endpoint: 'test-connection', serverUrl, companyName }),
       })
       const result = await res.json()
 
@@ -185,10 +185,10 @@ export default function TallyDashboard() {
       setAutoSyncCurrent(syncTypes[i])
       setAutoSyncCompleted(i)
       try {
-        await fetch('/api/tally/sync', {
+        await fetch('/api/tally-proxy', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: syncTypes[i], serverUrl, companyName }),
+          body: JSON.stringify({ endpoint: 'sync', action: syncTypes[i], serverUrl, companyName }),
         })
       } catch {}
     }
@@ -248,10 +248,10 @@ export default function TallyDashboard() {
         setSyncProgress(prev => Math.min(prev + 10, 90))
       }, 1000)
 
-      const res = await fetch('/api/tally/sync', {
+      const res = await fetch('/api/tally-proxy', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action, serverUrl, companyName }),
+        body: JSON.stringify({ endpoint: 'sync', action, serverUrl, companyName }),
       })
       clearInterval(progressTimer)
       setSyncProgress(100)
