@@ -294,10 +294,22 @@ const AdvanceStatementReport = () => {
   // Fetch financial data for print report (bills and advance payments)
   useEffect(() => {
     const fetchFinancialData = async () => {
-      if (!advanceData || advanceData.length === 0) return;
+      // Filter inside useEffect to avoid dependency on unstable array reference
+      const filtered = allData.filter(item => {
+        if (!debouncedSearchTerm) return true;
+        const searchLower = debouncedSearchTerm.toLowerCase();
+        const patient = item.patients;
+        return (
+          item.visit_id?.toLowerCase().includes(searchLower) ||
+          patient?.name?.toLowerCase().includes(searchLower) ||
+          patient?.patients_id?.toLowerCase().includes(searchLower)
+        );
+      });
 
-      const visitIds = advanceData.map(v => v.visit_id).filter(Boolean) as string[];
-      const visitUUIDs = advanceData.map(v => v.id).filter(Boolean) as string[];
+      if (filtered.length === 0) return;
+
+      const visitIds = filtered.map(v => v.visit_id).filter(Boolean) as string[];
+      const visitUUIDs = filtered.map(v => v.id).filter(Boolean) as string[];
 
       if (visitIds.length === 0) return;
 
@@ -352,7 +364,7 @@ const AdvanceStatementReport = () => {
 
             if (!fsByVisitError && fsByVisit) {
               const uuidToPatientId: Record<string, string> = {};
-              advanceData.forEach(v => {
+              filtered.forEach(v => {
                 if (v.id && v.patients?.id) {
                   uuidToPatientId[v.id] = v.patients.id;
                 }
@@ -374,71 +386,74 @@ const AdvanceStatementReport = () => {
         if (Object.keys(billMap).length === 0 || Object.values(billMap).every(v => v === 0)) {
           Object.keys(billMap).forEach(k => delete billMap[k]);
 
-          console.log('📊 Calculating total from source service tables...');
+          try {
+            console.log('📊 Calculating total from source service tables...');
 
-          // Batch query all service tables using visit UUIDs
-          const [clinicalRes, mandatoryRes, radiologyRes, implantRes, accommodationRes, anesthetistRes] = await Promise.all([
-            supabase.from('visit_clinical_services').select('visit_id, amount').in('visit_id', visitUUIDs),
-            supabase.from('visit_mandatory_services').select('visit_id, amount').in('visit_id', visitUUIDs),
-            supabase.from('visit_radiology').select('visit_id, cost').in('visit_id', visitUUIDs),
-            supabase.from('visit_implants').select('visit_id, amount, status').in('visit_id', visitUUIDs),
-            supabase.from('visit_accommodations').select('visit_id, amount').in('visit_id', visitUUIDs),
-            supabase.from('visit_anesthetists').select('visit_id, rate').in('visit_id', visitUUIDs),
-          ]);
+            // Batch query all service tables using visit UUIDs
+            const [clinicalRes, mandatoryRes, radiologyRes, implantRes, accommodationRes, anesthetistRes] = await Promise.all([
+              supabase.from('visit_clinical_services').select('visit_id, amount').in('visit_id', visitUUIDs),
+              supabase.from('visit_mandatory_services').select('visit_id, amount').in('visit_id', visitUUIDs),
+              supabase.from('visit_radiology').select('visit_id, cost').in('visit_id', visitUUIDs),
+              supabase.from('visit_implants').select('visit_id, amount, status').in('visit_id', visitUUIDs),
+              supabase.from('visit_accommodations').select('visit_id, amount').in('visit_id', visitUUIDs),
+              supabase.from('visit_anesthetists').select('visit_id, rate').in('visit_id', visitUUIDs),
+            ]);
 
-          // Build per-visit-UUID totals for each service
-          const serviceTotals: Record<string, number> = {};
+            // Build per-visit-UUID totals for each service
+            const serviceTotals: Record<string, number> = {};
 
-          const addAmounts = (data: any[] | null, amountField: string, filterFn?: (item: any) => boolean) => {
-            if (!data) return;
-            data.forEach(item => {
-              if (filterFn && !filterFn(item)) return;
-              if (item.visit_id) {
-                serviceTotals[item.visit_id] = (serviceTotals[item.visit_id] || 0) + (parseFloat(String(item[amountField] || '0')) || 0);
-              }
-            });
-          };
-
-          addAmounts(clinicalRes.data, 'amount');
-          addAmounts(mandatoryRes.data, 'amount');
-          addAmounts(radiologyRes.data, 'cost');
-          addAmounts(implantRes.data, 'amount', item => item.status === 'Active');
-          addAmounts(accommodationRes.data, 'amount');
-          addAmounts(anesthetistRes.data, 'rate');
-
-          // Combine with already-available data (lab, pharmacy, surgery) per patient
-          advanceData.forEach(v => {
-            const patientId = v.patients?.id;
-            if (!patientId) return;
-
-            const serviceTotal = serviceTotals[v.id] || 0;
-            const labTotal = (v as any).lab_total || 0;
-            const pharmacyTotal = (v as any).pharmacy_total || 0;
-
-            // Calculate surgery total from visit_surgeries data
-            let surgeryTotal = 0;
-            if (v.visit_surgeries && Array.isArray(v.visit_surgeries)) {
-              v.visit_surgeries.forEach((vs: any) => {
-                const surgery = vs.cghs_surgery;
-                if (surgery) {
-                  surgeryTotal += parseFloat(String(surgery.NABH_NABL_Rate || surgery.cost || '0')) || 0;
+            const addAmounts = (data: any[] | null, amountField: string, filterFn?: (item: any) => boolean) => {
+              if (!data) return;
+              data.forEach(item => {
+                if (filterFn && !filterFn(item)) return;
+                if (item.visit_id) {
+                  serviceTotals[item.visit_id] = (serviceTotals[item.visit_id] || 0) + (parseFloat(String(item[amountField] || '0')) || 0);
                 }
               });
-            }
+            };
 
-            const total = serviceTotal + labTotal + pharmacyTotal + surgeryTotal;
-            if (total > 0) {
-              billMap[patientId] = total;
-            }
-          });
+            addAmounts(clinicalRes.data, 'amount');
+            addAmounts(mandatoryRes.data, 'amount');
+            addAmounts(radiologyRes.data, 'cost');
+            addAmounts(implantRes.data, 'amount', item => item.status === 'Active');
+            addAmounts(accommodationRes.data, 'amount');
+            addAmounts(anesthetistRes.data, 'rate');
 
-          console.log('📊 Calculated billMap from source tables:', billMap);
+            // Combine with already-available data (lab, surgery) per patient
+            filtered.forEach(v => {
+              const patientId = v.patients?.id;
+              if (!patientId) return;
+
+              const serviceTotal = serviceTotals[v.id] || 0;
+              const labTotal = (v as any).lab_total || 0;
+
+              // Calculate surgery total from visit_surgeries data
+              let surgeryTotal = 0;
+              if (v.visit_surgeries && Array.isArray(v.visit_surgeries)) {
+                v.visit_surgeries.forEach((vs: any) => {
+                  const surgery = vs.cghs_surgery;
+                  if (surgery) {
+                    surgeryTotal += parseFloat(String(surgery.NABH_NABL_Rate || surgery.cost || '0')) || 0;
+                  }
+                });
+              }
+
+              const total = serviceTotal + labTotal + surgeryTotal;
+              if (total > 0) {
+                billMap[patientId] = total;
+              }
+            });
+
+            console.log('📊 Calculated billMap from source tables:', billMap);
+          } catch (serviceError) {
+            console.error('Error calculating from service tables:', serviceError);
+          }
         }
 
         console.log('📊 Final billMap:', billMap);
-        setBillsData(billMap);
 
         // Fetch advance payments data
+        let advanceMap: Record<string, { totalAdvance: number; lastPayment: { amount: number; date: string | null } }> = {};
         const { data: advances, error: advancesError } = await supabase
           .from('advance_payment')
           .select('visit_id, advance_amount, payment_date')
@@ -448,8 +463,6 @@ const AdvanceStatementReport = () => {
         if (advancesError) {
           console.error('Error fetching advance payments:', advancesError);
         } else if (advances) {
-          const advanceMap: Record<string, { totalAdvance: number; lastPayment: { amount: number; date: string | null } }> = {};
-
           advances.forEach((payment: { visit_id: string; advance_amount: number; payment_date: string | null }) => {
             if (payment.visit_id) {
               if (!advanceMap[payment.visit_id]) {
@@ -461,15 +474,18 @@ const AdvanceStatementReport = () => {
               advanceMap[payment.visit_id].totalAdvance += (payment.advance_amount || 0);
             }
           });
-          setAdvancePaymentsData(advanceMap);
         }
+
+        // Set both states together to avoid race condition
+        setBillsData(billMap);
+        setAdvancePaymentsData(advanceMap);
       } catch (error) {
         console.error('Error fetching financial data:', error);
       }
     };
 
     fetchFinancialData();
-  }, [advanceData]);
+  }, [allData, debouncedSearchTerm]);
 
   const handlePackageDaysUpdate = async (visitId: string, value: number) => {
     const { error } = await supabase
@@ -504,7 +520,134 @@ const AdvanceStatementReport = () => {
     }).format(amount);
   };
 
-  const handlePrint = () => {
+  const handlePrint = async () => {
+    // Fetch financial data fresh before printing to guarantee availability
+    const visitIds = advanceData.map(v => v.visit_id).filter(Boolean) as string[];
+    const visitUUIDs = advanceData.map(v => v.id).filter(Boolean) as string[];
+
+    // Fetch total bill
+    let printBillsData: Record<string, number> = {};
+    try {
+      // Primary: bills → financial_summary
+      const { data: billsByVisit } = await supabase
+        .from('bills')
+        .select('id, patient_id, visit_id')
+        .in('visit_id', visitIds);
+
+      if (billsByVisit && billsByVisit.length > 0) {
+        const billIds = billsByVisit.map(b => b.id);
+        const billToPatient: Record<string, string> = {};
+        billsByVisit.forEach((b: any) => { if (b.patient_id) billToPatient[b.id] = b.patient_id; });
+
+        const { data: fsBills, error: fsError } = await supabase
+          .from('financial_summary')
+          .select('bill_id, total_amount_total')
+          .in('bill_id', billIds);
+
+        if (!fsError && fsBills) {
+          fsBills.forEach((fs: any) => {
+            const patientId = billToPatient[fs.bill_id];
+            if (patientId) {
+              printBillsData[patientId] = (printBillsData[patientId] || 0) + (fs.total_amount_total || 0);
+            }
+          });
+        }
+      }
+
+      // Fallback: financial_summary by visit UUID
+      if (Object.keys(printBillsData).length === 0 || Object.values(printBillsData).every(v => v === 0)) {
+        printBillsData = {};
+        const { data: fsByVisit } = await supabase
+          .from('financial_summary')
+          .select('visit_id, total_amount_total')
+          .in('visit_id', visitUUIDs);
+
+        if (fsByVisit) {
+          const uuidToPatientId: Record<string, string> = {};
+          advanceData.forEach(v => { if (v.id && v.patients?.id) uuidToPatientId[v.id] = v.patients.id; });
+          fsByVisit.forEach((fs: any) => {
+            if (fs.visit_id) {
+              const patientId = uuidToPatientId[fs.visit_id];
+              if (patientId) printBillsData[patientId] = (printBillsData[patientId] || 0) + (fs.total_amount_total || 0);
+            }
+          });
+        }
+      }
+
+      // Fallback: calculate from service tables
+      if (Object.keys(printBillsData).length === 0 || Object.values(printBillsData).every(v => v === 0)) {
+        printBillsData = {};
+        try {
+          const [clinicalRes, mandatoryRes, radiologyRes, implantRes, accommodationRes, anesthetistRes] = await Promise.all([
+            supabase.from('visit_clinical_services').select('visit_id, amount').in('visit_id', visitUUIDs),
+            supabase.from('visit_mandatory_services').select('visit_id, amount').in('visit_id', visitUUIDs),
+            supabase.from('visit_radiology').select('visit_id, cost').in('visit_id', visitUUIDs),
+            supabase.from('visit_implants').select('visit_id, amount, status').in('visit_id', visitUUIDs),
+            supabase.from('visit_accommodations').select('visit_id, amount').in('visit_id', visitUUIDs),
+            supabase.from('visit_anesthetists').select('visit_id, rate').in('visit_id', visitUUIDs),
+          ]);
+
+          const serviceTotals: Record<string, number> = {};
+          const addAmounts = (data: any[] | null, field: string, filterFn?: (item: any) => boolean) => {
+            if (!data) return;
+            data.forEach(item => {
+              if (filterFn && !filterFn(item)) return;
+              if (item.visit_id) serviceTotals[item.visit_id] = (serviceTotals[item.visit_id] || 0) + (parseFloat(String(item[field] || '0')) || 0);
+            });
+          };
+          addAmounts(clinicalRes.data, 'amount');
+          addAmounts(mandatoryRes.data, 'amount');
+          addAmounts(radiologyRes.data, 'cost');
+          addAmounts(implantRes.data, 'amount', item => item.status === 'Active');
+          addAmounts(accommodationRes.data, 'amount');
+          addAmounts(anesthetistRes.data, 'rate');
+
+          advanceData.forEach(v => {
+            const patientId = v.patients?.id;
+            if (!patientId) return;
+            const serviceTotal = serviceTotals[v.id] || 0;
+            const labTotal = (v as any).lab_total || 0;
+            let surgeryTotal = 0;
+            if (v.visit_surgeries && Array.isArray(v.visit_surgeries)) {
+              v.visit_surgeries.forEach((vs: any) => {
+                const surgery = vs.cghs_surgery;
+                if (surgery) surgeryTotal += parseFloat(String(surgery.NABH_NABL_Rate || surgery.cost || '0')) || 0;
+              });
+            }
+            const total = serviceTotal + labTotal + surgeryTotal;
+            if (total > 0) printBillsData[patientId] = total;
+          });
+        } catch (e) { console.error('Service tables error:', e); }
+      }
+    } catch (e) { console.error('Error fetching bills for print:', e); }
+
+    // Fetch advance payments
+    let printAdvanceData: Record<string, { totalAdvance: number; lastPayment: { amount: number; date: string | null } }> = {};
+    try {
+      const { data: advances } = await supabase
+        .from('advance_payment')
+        .select('visit_id, advance_amount, payment_date')
+        .in('visit_id', visitIds)
+        .order('payment_date', { ascending: false });
+
+      if (advances) {
+        advances.forEach((payment: any) => {
+          if (payment.visit_id) {
+            if (!printAdvanceData[payment.visit_id]) {
+              printAdvanceData[payment.visit_id] = {
+                totalAdvance: 0,
+                lastPayment: { amount: payment.advance_amount || 0, date: payment.payment_date }
+              };
+            }
+            printAdvanceData[payment.visit_id].totalAdvance += (payment.advance_amount || 0);
+          }
+        });
+      }
+    } catch (e) { console.error('Error fetching advance payments for print:', e); }
+
+    console.log('📊 Print billsData:', printBillsData);
+    console.log('📊 Print advanceData:', printAdvanceData);
+
     // Create a print container with only the data
     const printWindow = window.open('', '', 'width=800,height=600');
     
@@ -639,8 +782,8 @@ const AdvanceStatementReport = () => {
                 // Financial calculations
                 const patientId = patient?.id || '';
                 const visitId = item.visit_id || '';
-                const totalBill = billsData[patientId] || 0;
-                const advanceInfo = advancePaymentsData[visitId] || { totalAdvance: 0, lastPayment: { amount: 0, date: null } };
+                const totalBill = printBillsData[patientId] || 0;
+                const advanceInfo = printAdvanceData[visitId] || { totalAdvance: 0, lastPayment: { amount: 0, date: null } };
                 const advanceTillDate = advanceInfo.totalAdvance;
                 const lastPayment = advanceInfo.lastPayment;
                 const balance = totalBill - advanceTillDate;
