@@ -137,10 +137,11 @@ export default function TallyLedgers({ serverUrl, companyName }) {
 
     setCreating(true)
     try {
-      const res = await fetch('/api/tally/push', {
+      const res = await fetch('/api/tally-proxy', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          endpoint: 'push',
           action: 'create-ledger',
           serverUrl,
           companyName,
