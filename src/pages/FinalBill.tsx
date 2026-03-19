@@ -5682,10 +5682,9 @@ INSTRUCTIONS:
   }, [billData, isSavingBill]);
 
   // Update Pathology Charges with saved pathology date ranges
+  // NOTE: Do NOT skip when billDataLoadedRef.current is true - pathology subItems need
+  // correct database IDs (pathology_${uuid}) for date updates to work via updatePathologyField
   useEffect(() => {
-    // Skip if data was already restored from bill_items_json
-    if (billDataLoadedRef.current) return;
-
     console.log('🔬 Pathology Charges Debug:', {
       savedPathologyCharges,
       savedPathologyChargesLength: savedPathologyCharges?.length || 0,

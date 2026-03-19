@@ -503,6 +503,7 @@ export interface PaymentReceiptData {
   is_refund?: boolean;
   patient_id?: string;
   visit_id?: string;
+  patient_type?: string;
 }
 
 /**
@@ -615,6 +616,19 @@ export const usePaymentByVoucherNo = (voucherNo: string | undefined) => {
         throw new Error(`Payment record not found for voucher number: ${voucherNo}`);
       }
 
+      // Fetch patient_type from visits table using visit_id
+      let patientType = 'IPD';
+      if (matchingPayment.visit_id) {
+        const { data: visitData } = await supabase
+          .from('visits')
+          .select('patient_type')
+          .eq('visit_id', matchingPayment.visit_id)
+          .maybeSingle();
+        if (visitData?.patient_type) {
+          patientType = visitData.patient_type;
+        }
+      }
+
       // Format the payment data for receipt printing
       const receiptData: PaymentReceiptData = {
         id: matchingPayment.id,
@@ -630,6 +644,7 @@ export const usePaymentByVoucherNo = (voucherNo: string | undefined) => {
         is_refund: matchingPayment.is_refund,
         patient_id: matchingPayment.patient_id,
         visit_id: matchingPayment.visit_id,
+        patient_type: patientType,
       };
 
       return receiptData;
