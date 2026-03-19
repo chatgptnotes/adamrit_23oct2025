@@ -15,6 +15,7 @@ export interface ReceiptPaymentData {
   billing_executive?: string;
   voucher_no?: string;
   is_refund?: boolean;
+  patient_type?: string;
 }
 
 // Hospital configuration for receipt header
@@ -105,9 +106,10 @@ export const printReceipt = (
   const billingExecutive = payment.billing_executive || payment.created_by || 'System User';
 
   // Generate remarks if not provided
+  const advType = payment.patient_type === 'OPD' ? 'OPD ADV' : 'IPD ADV';
   const remarks = payment.remarks ||
     `Being ${payment.is_refund ? 'refund' : 'ONLINE'} received towards ${
-      payment.is_refund ? 'refund' : 'IPD ADV'
+      payment.is_refund ? 'refund' : advType
     } from pt. ${patientName} against R. No.:`;
 
   const printContent = `

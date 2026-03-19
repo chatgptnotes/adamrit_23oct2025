@@ -46,6 +46,7 @@ interface PatientInfo {
   billNo: string;
   registrationNo: string;
   dateOfAdmission: string;
+  patientType: string;
 }
 
 const paymentModes = [
@@ -132,7 +133,8 @@ export const AdvancePaymentModal: React.FC<AdvancePaymentModalProps> = ({
     name: '',
     billNo: '',
     registrationNo: '',
-    dateOfAdmission: ''
+    dateOfAdmission: '',
+    patientType: 'IPD'
   });
   const [bankAccounts, setBankAccounts] = useState<Array<{ id: string; account_name: string }>>([]);
 
@@ -233,7 +235,8 @@ export const AdvancePaymentModal: React.FC<AdvancePaymentModalProps> = ({
           name: patientData.name || 'N/A',
           billNo: patientData.billNo || 'N/A',
           registrationNo: patientData.registrationNo || 'N/A',
-          dateOfAdmission: patientData.dateOfAdmission || 'N/A'
+          dateOfAdmission: patientData.dateOfAdmission || 'N/A',
+          patientType: patientInfo.patientType || 'IPD'
         };
         
         console.log('🔧 Setting safe patient info:', safePatientInfo);
@@ -245,11 +248,11 @@ export const AdvancePaymentModal: React.FC<AdvancePaymentModalProps> = ({
           fetchRegistrationNumber(patientId);
         }
         
-        // Fetch payment history if we have valid patientId
-        if (patientId && isValidUUID(patientId)) {
-          fetchPaymentHistory(patientId);
+        // Fetch payment history for the current visit
+        if (visitId) {
+          fetchPaymentHistory(visitId);
         } else {
-          console.log('⚠️ Invalid or missing patient ID, skipping payment history fetch');
+          console.log('⚠️ No visit ID available, skipping payment history fetch');
           setPaymentHistory([]);
           setReturnedAmount(0);
         }
@@ -267,7 +270,8 @@ export const AdvancePaymentModal: React.FC<AdvancePaymentModalProps> = ({
         name: 'N/A',
         billNo: 'N/A',
         registrationNo: 'N/A',
-        dateOfAdmission: 'N/A'
+        dateOfAdmission: 'N/A',
+        patientType: 'IPD'
       });
     }
   }, [isOpen, visitId, patientData, patientId]);
@@ -308,24 +312,24 @@ export const AdvancePaymentModal: React.FC<AdvancePaymentModalProps> = ({
     }
   };
 
-  const fetchPaymentHistory = async (fetchedPatientId?: string) => {
+  const fetchPaymentHistory = async (fetchedVisitId?: string) => {
     try {
-      // Use passed patientId or the one from props
-      const currentPatientId = fetchedPatientId || patientId;
-      if (!currentPatientId || !isValidUUID(currentPatientId)) {
-        console.log('⚠️ No valid patient ID available for payment history:', currentPatientId);
+      // Use passed visitId or the one from props
+      const currentVisitId = fetchedVisitId || visitId;
+      if (!currentVisitId) {
+        console.log('⚠️ No visit ID available for payment history');
         setPaymentHistory([]);
         setReturnedAmount(0);
         return;
       }
 
-      console.log('💳 Fetching payment history for patient:', currentPatientId);
+      console.log('💳 Fetching payment history for visit:', currentVisitId);
       setIsLoading(true);
-      
+
       const { data, error } = await supabase
         .from('advance_payment')
         .select('*')
-        .eq('patient_id', currentPatientId)
+        .eq('visit_id', currentVisitId)
         .order('payment_date', { ascending: false });
 
       console.log('💳 Payment history query result:', { 
@@ -406,7 +410,8 @@ export const AdvancePaymentModal: React.FC<AdvancePaymentModalProps> = ({
           visit_id,
           admission_date,
           visit_date,
-          patient_id
+          patient_id,
+          patient_type
         `)
         .eq('visit_id', visitId)
         .single();
@@ -452,19 +457,20 @@ export const AdvancePaymentModal: React.FC<AdvancePaymentModalProps> = ({
         name: patientData?.name || 'N/A',
         billNo: billNo,
         registrationNo: patientData?.patients_id || 'N/A',
-        dateOfAdmission: visitData.admission_date 
+        dateOfAdmission: visitData.admission_date
           ? format(new Date(visitData.admission_date), 'dd/MM/yyyy')
           : visitData.visit_date
           ? format(new Date(visitData.visit_date), 'dd/MM/yyyy')
-          : 'N/A'
+          : 'N/A',
+        patientType: (visitData as any).patient_type || 'IPD'
       };
 
       console.log('✅ Setting patient info:', patientInfo);
       setPatientInfo(patientInfo);
 
-      // Also fetch payment history with the patient_id we just got
-      if (visitData.patient_id) {
-        await fetchPaymentHistory(visitData.patient_id);
+      // Also fetch payment history for this visit
+      if (visitId) {
+        await fetchPaymentHistory(visitId);
       }
 
     } catch (error) {
@@ -639,7 +645,7 @@ export const AdvancePaymentModal: React.FC<AdvancePaymentModalProps> = ({
     const printContent = `
       <html>
         <head>
-          <title>Advance Payment Receipt</title>
+          <title>${patientInfo.patientType === 'OPD' ? 'OPD' : 'IPD'} Advance Payment Receipt</title>
           <style>
             body {
               font-family: Arial, sans-serif;
@@ -806,7 +812,7 @@ export const AdvancePaymentModal: React.FC<AdvancePaymentModalProps> = ({
                 <div class="info-row">
                   <span class="info-label">Remarks</span>
                   <span class="info-colon">:</span>
-                  <span class="info-value">${payment.remarks || `Being ${payment.is_refund ? 'refund' : 'advance payment'} received towards ${payment.is_refund ? 'refund' : 'medical treatment'} from ${patientInfo.name || 'patient'} against R. No.: ${receiptNumber}`}</span>
+                  <span class="info-value">${payment.remarks || `Being ${payment.is_refund ? 'refund' : 'advance payment'} received towards ${payment.is_refund ? 'refund' : (patientInfo.patientType === 'OPD' ? 'OPD ADV' : 'IPD ADV')} from ${patientInfo.name || 'patient'} against R. No.: ${receiptNumber}`}</span>
                 </div>
                 <div class="info-row">
                   <span class="info-label">Date</span>
