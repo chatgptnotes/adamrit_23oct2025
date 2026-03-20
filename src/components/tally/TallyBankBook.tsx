@@ -102,12 +102,29 @@ export default function TallyBankBook({ serverUrl, companyName }) {
     if (!serverUrl || !companyName) return
     setRefreshing(true)
     try {
+      // Sync ledgers first (needed for bank account list)
+      await fetch('/api/tally-proxy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ endpoint: 'sync', action: 'ledgers', serverUrl, companyName }),
+      })
+      // Then sync vouchers
       await fetch('/api/tally-proxy', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ endpoint: 'sync', action: 'vouchers', serverUrl, companyName }),
       })
-      toast.success('Refreshed from Tally')
+      toast.success('Ledgers & vouchers refreshed from Tally')
+      // Reload banks list since ledgers were synced
+      const { data } = await supabase
+        .from('tally_ledgers')
+        .select('name, opening_balance, closing_balance, parent_group')
+        .or('parent_group.ilike.%bank account%,parent_group.ilike.%bank accounts%')
+        .order('name')
+      if (data && data.length > 0) {
+        setBanks(data)
+        if (!selectedBank) setSelectedBank(data[0].name)
+      }
       await fetchVouchers()
     } catch {
       toast.error('Failed to refresh')
