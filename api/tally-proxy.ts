@@ -264,9 +264,10 @@ async function handleSync(body: any) {
         const xml = buildExportXml('List of Ledgers', companyName)
         const response = await fetchFromTally(serverUrl, xml)
         let elements = getAll(response, 'LEDGER')
-        // Debug: if no elements found, log response info for troubleshooting
-        if (elements.length === 0 && response.length > 0) {
-          errors.push(`No LEDGER elements found in Tally response (${response.length} chars). Response preview: ${response.substring(0, 500)}`)
+        // ALWAYS log raw response for debugging (will be removed once parsing is fixed)
+        errors.push(`LEDGER_RAW_RESPONSE (${response.length} chars, ${elements.length} LEDGER elements): ${response.substring(0, 2000)}`)
+        if (elements.length > 0) {
+          errors.push(`FIRST_LEDGER: ${elements[0].substring(0, 500)}`)
         }
         for (const el of elements) {
           try {
@@ -345,6 +346,8 @@ async function handleSync(body: any) {
           `<SVFROMDATE>${from.replace(/-/g, '')}</SVFROMDATE><SVTODATE>${to.replace(/-/g, '')}</SVTODATE>`)
         const response = await fetchFromTally(serverUrl, xml)
         const elements = getAll(response, 'VOUCHER')
+        // ALWAYS log raw response for debugging
+        errors.push(`VOUCHER_RAW_RESPONSE (${response.length} chars, ${elements.length} VOUCHER elements): ${response.substring(0, 2000)}`)
         for (const el of elements) {
           try {
             const rawDate = getVal(el, 'DATE')
@@ -363,9 +366,14 @@ async function handleSync(body: any) {
             const creditTotal = ledgerEntries.filter(e => !e.is_debit).reduce((s, e) => s + e.amount, 0)
             const voucherLevelAmt = Math.abs(parseFloat(getVal(el, 'AMOUNT') || '0'))
             const totalAmount = debitTotal || creditTotal || voucherLevelAmt
-            // Debug: log if no entries found
-            if (entryElements.length === 0) {
-              errors.push(`Voucher ${getVal(el, 'VOUCHERNUMBER') || '?'}: no ledger entries found. XML preview: ${el.substring(0, 400)}`)
+            // Debug: log first voucher's full details
+            if (recordsSynced === 0 && recordsFailed === 0) {
+              errors.push(`FIRST_VOUCHER_XML: ${el.substring(0, 800)}`)
+              errors.push(`ENTRY_TAGS_TRIED: ALLLEDGERENTRIES.LIST=${getAll(el, 'ALLLEDGERENTRIES.LIST').length}, LEDGERENTRIES.LIST=${getAll(el, 'LEDGERENTRIES.LIST').length}, ALLLEDGERENTRIES=${getAll(el, 'ALLLEDGERENTRIES').length}, LEDGERENTRIES=${getAll(el, 'LEDGERENTRIES').length}`)
+              errors.push(`ENTRIES_FOUND: ${entryElements.length}, debitTotal=${debitTotal}, creditTotal=${creditTotal}, voucherAmt=${voucherLevelAmt}, finalAmount=${totalAmount}`)
+              if (entryElements.length > 0) {
+                errors.push(`FIRST_ENTRY_XML: ${entryElements[0]}`)
+              }
             }
             const guid = getVal(el, 'GUID') || getAttr(el, 'REMOTEID') || null
             await supabase.from('tally_vouchers').upsert({
