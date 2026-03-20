@@ -349,14 +349,27 @@ async function handleSync(body: any) {
           try {
             const rawDate = getVal(el, 'DATE')
             const date = rawDate ? `${rawDate.slice(0, 4)}-${rawDate.slice(4, 6)}-${rawDate.slice(6, 8)}` : to
-            const entryElements = getAll(el, 'ALLLEDGERENTRIES.LIST')
+            // Try multiple tag names for ledger entries (TallyPrime versions vary)
+            let entryElements = getAll(el, 'ALLLEDGERENTRIES.LIST')
+            if (entryElements.length === 0) entryElements = getAll(el, 'LEDGERENTRIES.LIST')
+            if (entryElements.length === 0) entryElements = getAll(el, 'ALLLEDGERENTRIES')
+            if (entryElements.length === 0) entryElements = getAll(el, 'LEDGERENTRIES')
             const ledgerEntries = entryElements.map(entryEl => {
               const amt = parseFloat(getVal(entryEl, 'AMOUNT') || '0')
               return { ledger: getVal(entryEl, 'LEDGERNAME'), amount: Math.abs(amt), is_debit: amt < 0 }
             })
-            const totalAmount = ledgerEntries.reduce((s, e) => e.is_debit ? s + e.amount : s, 0)
+            // Calculate total: use debit side, credit side, or voucher-level AMOUNT as fallback
+            const debitTotal = ledgerEntries.filter(e => e.is_debit).reduce((s, e) => s + e.amount, 0)
+            const creditTotal = ledgerEntries.filter(e => !e.is_debit).reduce((s, e) => s + e.amount, 0)
+            const voucherLevelAmt = Math.abs(parseFloat(getVal(el, 'AMOUNT') || '0'))
+            const totalAmount = debitTotal || creditTotal || voucherLevelAmt
+            // Debug: log if no entries found
+            if (entryElements.length === 0) {
+              errors.push(`Voucher ${getVal(el, 'VOUCHERNUMBER') || '?'}: no ledger entries found. XML preview: ${el.substring(0, 400)}`)
+            }
+            const guid = getVal(el, 'GUID') || getAttr(el, 'REMOTEID') || null
             await supabase.from('tally_vouchers').upsert({
-              tally_guid: getVal(el, 'GUID') || getAttr(el, 'REMOTEID') || null,
+              tally_guid: guid,
               voucher_number: getVal(el, 'VOUCHERNUMBER'),
               voucher_type: getVal(el, 'VOUCHERTYPENAME') || getAttr(el, 'VCHTYPE'),
               date, party_ledger: getVal(el, 'PARTYLEDGERNAME'),
