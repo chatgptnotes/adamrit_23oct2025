@@ -46,7 +46,20 @@
       "Bash(find /Users/apple/Desktop/Hope_projects/adamrit -name \"*.sql\" -exec grep -l \"CREATE TABLE.*pharmacy_sales\\\\|pharmacy_sales\" {})",
       "Bash(grep -r \"net_amount\\\\|payment_amount\\\\|net_amt\" /Users/apple/Desktop/Hope_projects/adamrit/*.sql)",
       "Bash(grep:*)",
-      "Bash(find /Users/apple/Desktop/Hope_projects/adamrit -name *AuthContext* -o -name *auth*context*)"
+      "Bash(find /Users/apple/Desktop/Hope_projects/adamrit -name *AuthContext* -o -name *auth*context*)",
+      "Bash(find /Users/apple/Desktop/Hope_projects/adamrit/src -name *Route* -o -name *router*)",
+      "Bash(find /Users/apple/Desktop/Hope_projects/adamrit/src -name *Auth* -o -name *auth*)",
+      "Bash(find /Users/apple/Desktop/Hope_projects/adamrit/src -name *supabase* -o -name *config*)",
+      "Bash(find /Users/apple/Desktop/Hope_projects/adamrit/supabase/migrations -name *ward_shifting* -o -name *shifting*)",
+      "Bash(xargs cat:*)",
+      "Bash(find /Users/apple/Desktop/Hope_projects/adamrit/src -name *.env* -o -name .env*)",
+      "Bash(find /Users/apple/Desktop/Hope_projects/adamrit -name .env* -o -name *.env*)",
+      "Bash(ls -lSh /Users/apple/Desktop/Hope_projects/adamrit/supabase/migrations/*.sql)",
+      "Bash(for file:*)",
+      "Bash(do grep:*)",
+      "Bash(echo \"Found in: $file\")",
+      "Bash(done)",
+      "Bash(sed 's/:[^:]*$//')"
     ],
     "deny": [],
     "ask": []

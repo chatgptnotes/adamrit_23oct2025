@@ -32,6 +32,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { useFinalBillData } from "@/hooks/useFinalBillData"
+import { useShiftingAccommodation } from "@/hooks/useShiftingAccommodation"
 import { useFinancialSummary } from "@/hooks/useFinancialSummary"
 import { toast } from "sonner"
 import { DateRangePicker } from "@/components/ui/date-range-picker"
@@ -536,6 +537,7 @@ const FinalBill = () => {
   const { visitId } = useParams<{ visitId: string }>();
   const navigate = useNavigate();
   const { billData, isLoading: isBillLoading, saveBill, isSaving } = useFinalBillData(visitId || '');
+  const { generateAccommodationsFromShiftings, isGenerating } = useShiftingAccommodation();
   const queryClient = useQueryClient();
   const { hospitalConfig, user } = useAuth();
   const [surgeons, setSurgeons] = useState<{ id: string; name: string }[]>([]);
@@ -8979,7 +8981,8 @@ INSTRUCTIONS:
         start_date: today,
         end_date: today,
         rate_used: rate,
-        rate_type: defaultRateType
+        rate_type: defaultRateType,
+        source: 'manual'
       };
 
       console.log('💾 [ACCOMMODATION ADD] Inserting with defaults:', accommodationData);
@@ -19757,7 +19760,23 @@ Dr. Murali B K
                         {savedDataTab === 'accommodation' && (
                           <div className="p-4">
                             <div className="flex justify-between items-center mb-4">
-                              <h4 className="font-semibold text-gray-800">Saved Accommodations ({savedAccommodationData.length})</h4>
+                              <div className="flex items-center gap-2">
+                                <h4 className="font-semibold text-gray-800">Saved Accommodations ({savedAccommodationData.length})</h4>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  disabled={isGenerating}
+                                  onClick={async () => {
+                                    if (!visitId) return;
+                                    const success = await generateAccommodationsFromShiftings(visitId);
+                                    if (success) {
+                                      await fetchSavedAccommodationData();
+                                    }
+                                  }}
+                                >
+                                  {isGenerating ? 'Generating...' : 'Generate from Shiftings'}
+                                </Button>
+                              </div>
                               <div className="text-right">
                                 <div className="text-sm text-gray-600">Total:</div>
                                 <div className="text-xl font-bold text-green-600">

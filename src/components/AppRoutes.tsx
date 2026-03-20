@@ -35,6 +35,7 @@ const PatientLedger = lazy(() => import("../pages/PatientLedger"));
 const DayBook = lazy(() => import("../pages/DayBook"));
 const LedgerStatement = lazy(() => import("../pages/LedgerStatement"));
 const Pharmacy = lazy(() => import("../pages/Pharmacy"));
+const Shifting = lazy(() => import("../pages/Shifting"));
 const Lab = lazy(() => import("../pages/Lab"));
 const Radiology = lazy(() => import("../pages/Radiology"));
 const FinalBill = lazy(() => import("../pages/FinalBill"));
@@ -188,6 +189,7 @@ export const AppRoutes = () => {
         <Route path="/pharmacy/product-purchase-report" element={<Suspense fallback={<PageLoader />}><Pharmacy /></Suspense>} />
         <Route path="/pharmacy/inventory-tracking" element={<Suspense fallback={<PageLoader />}><Pharmacy /></Suspense>} />
         <Route path="/pharmacy" element={<Suspense fallback={<PageLoader />}><Pharmacy /></Suspense>} />
+        <Route path="/shifting" element={<Suspense fallback={<PageLoader />}><Shifting /></Suspense>} />
         <Route path="/pharmacy/edit-sale/:saleId" element={<Suspense fallback={<PageLoader />}><EditSaleBill /></Suspense>} />
         <Route path="/reports" element={<Suspense fallback={<PageLoader />}><Reports /></Suspense>} />
         <Route path="/final-bill/:visitId" element={<Suspense fallback={<PageLoader />}><FinalBill /></Suspense>} />
