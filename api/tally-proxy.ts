@@ -263,7 +263,11 @@ async function handleSync(body: any) {
       case 'ledgers': {
         const xml = buildExportXml('List of Ledgers', companyName)
         const response = await fetchFromTally(serverUrl, xml)
-        const elements = getAll(response, 'LEDGER')
+        let elements = getAll(response, 'LEDGER')
+        // Debug: if no elements found, log response info for troubleshooting
+        if (elements.length === 0 && response.length > 0) {
+          errors.push(`No LEDGER elements found in Tally response (${response.length} chars). Response preview: ${response.substring(0, 500)}`)
+        }
         for (const el of elements) {
           try {
             const name = getVal(el, 'NAME') || getAttr(el, 'NAME')
@@ -279,7 +283,7 @@ async function handleSync(body: any) {
               gst_number: getVal(el, 'PARTYGSTIN') || null,
               pan_number: getVal(el, 'INCOMETAXNUMBER') || null,
               last_synced_at: new Date().toISOString(),
-            }, { onConflict: 'tally_guid', ignoreDuplicates: false })
+            }, { onConflict: 'name', ignoreDuplicates: false })
             recordsSynced++
           } catch (e: any) { recordsFailed++; errors.push(e.message) }
         }
@@ -308,7 +312,10 @@ async function handleSync(body: any) {
       case 'stock': {
         const xml = buildExportXml('List of Stock Items', companyName)
         const response = await fetchFromTally(serverUrl, xml)
-        const elements = getAll(response, 'STOCKITEM')
+        let elements = getAll(response, 'STOCKITEM')
+        if (elements.length === 0 && response.length > 0) {
+          errors.push(`No STOCKITEM elements found in Tally response (${response.length} chars). Response preview: ${response.substring(0, 500)}`)
+        }
         for (const el of elements) {
           try {
             const name = getVal(el, 'NAME') || getAttr(el, 'NAME')
@@ -325,7 +332,7 @@ async function handleSync(body: any) {
               gst_rate: parseFloat(getVal(el, 'GSTRATE') || '0'),
               hsn_code: getVal(el, 'HSNCODE') || getVal(el, 'HSNSACCODE') || null,
               last_synced_at: new Date().toISOString(),
-            }, { onConflict: 'tally_guid', ignoreDuplicates: false })
+            }, { onConflict: 'name', ignoreDuplicates: false })
             recordsSynced++
           } catch (e: any) { recordsFailed++; errors.push(e.message) }
         }
@@ -424,8 +431,15 @@ async function handleSync(body: any) {
 
   const durationMs = Date.now() - startTime
   if (logId) {
+    const status = recordsSynced === 0 && recordsFailed === 0 && action !== 'full'
+      ? 'no_data'
+      : recordsFailed > 0 && recordsSynced > 0
+        ? 'partial'
+        : recordsFailed > 0
+          ? 'failed'
+          : 'completed'
     await supabase.from('tally_sync_log').update({
-      status: recordsFailed > 0 && recordsSynced > 0 ? 'partial' : recordsFailed > 0 ? 'failed' : 'completed',
+      status,
       records_synced: recordsSynced, records_failed: recordsFailed,
       error_details: errors.length > 0 ? { errors } : null,
       completed_at: new Date().toISOString(), duration_ms: durationMs,

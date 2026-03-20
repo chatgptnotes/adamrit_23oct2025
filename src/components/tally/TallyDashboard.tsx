@@ -548,12 +548,13 @@ export default function TallyDashboard() {
                         log.status === 'completed' ? 'bg-green-100 text-green-700' :
                         log.status === 'failed' ? 'bg-red-100 text-red-700' :
                         log.status === 'partial' ? 'bg-yellow-100 text-yellow-700' :
+                        log.status === 'no_data' ? 'bg-orange-100 text-orange-700' :
                         'bg-blue-100 text-blue-700'
                       }`}>
                         {log.status === 'completed' ? <CheckCircle className="h-3 w-3" /> :
-                         log.status === 'failed' ? <XCircle className="h-3 w-3" /> :
+                         log.status === 'failed' || log.status === 'no_data' ? <XCircle className="h-3 w-3" /> :
                          <Clock className="h-3 w-3" />}
-                        {log.status}
+                        {log.status === 'no_data' ? 'no data' : log.status}
                       </span>
                     </td>
                     <td className="py-2 px-3 text-right text-gray-900">{log.records_synced || 0}</td>

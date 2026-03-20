@@ -101,12 +101,19 @@ export default function TallyCashBook({ serverUrl, companyName }) {
     }
     setRefreshing(true)
     try {
+      // Sync ledgers first (needed for cash opening balance)
+      await fetch('/api/tally-proxy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ endpoint: 'sync', action: 'ledgers', serverUrl, companyName }),
+      })
+      // Then sync vouchers
       await fetch('/api/tally-proxy', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ endpoint: 'sync', action: 'vouchers', serverUrl, companyName }),
       })
-      toast.success('Vouchers refreshed from Tally')
+      toast.success('Ledgers & vouchers refreshed from Tally')
       await fetchData()
     } catch {
       toast.error('Failed to refresh from Tally')
