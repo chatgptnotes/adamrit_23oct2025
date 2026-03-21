@@ -32,10 +32,8 @@ export default function TallyBankBook({ serverUrl, companyName, companyId }) {
   const [page, setPage] = useState(0)
 
   const now = new Date()
-  const [dateFrom, setDateFrom] = useState(
-    `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
-  )
-  const [dateTo, setDateTo] = useState(now.toISOString().split('T')[0])
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
 
   // Load bank ledgers
   useEffect(() => {
