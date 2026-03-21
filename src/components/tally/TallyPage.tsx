@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect } from 'react'
 import { supabase } from '@/integrations/supabase/client'
+import { useAuth } from '@/contexts/AuthContext'
 import {
   LayoutDashboard, BookOpen, FileText, Package,
   BarChart3, ArrowUpFromLine, Link2, Banknote, Landmark,
@@ -33,6 +34,7 @@ const tabs = [
 ]
 
 export default function TallyPage() {
+  const { hospitalType } = useAuth()
   const [activeTab, setActiveTab] = useState('dashboard')
   const [serverUrl, setServerUrl] = useState('http://localhost:9000')
   const [companyName, setCompanyName] = useState('')
@@ -44,6 +46,7 @@ export default function TallyPage() {
       .from('tally_config')
       .select('id, server_url, company_name')
       .eq('is_active', true)
+      .eq('hospital_id', hospitalType || 'hope')
       .order('company_name')
 
     if (data && data.length > 0) {

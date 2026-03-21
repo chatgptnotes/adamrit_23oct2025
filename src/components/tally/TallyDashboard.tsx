@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { supabase } from '@/integrations/supabase/client'
+import { useAuth } from '@/contexts/AuthContext'
 import { toast } from 'sonner'
 import {
   RefreshCw, Settings, Wifi, WifiOff, Database, FileText,
@@ -17,6 +18,7 @@ interface TallyDashboardProps {
 }
 
 export default function TallyDashboard({ serverUrl: propServerUrl, companyName: propCompanyName, companyId: propCompanyId, onConfigChange }: TallyDashboardProps) {
+  const { hospitalType } = useAuth()
   const [serverUrl, setServerUrl] = useState(propServerUrl || 'http://localhost:9000')
   const [companyName, setCompanyName] = useState(propCompanyName || '')
   const [isConnected, setIsConnected] = useState(false)
@@ -180,6 +182,7 @@ export default function TallyDashboard({ serverUrl: propServerUrl, companyName: 
         is_active: true,
         auto_sync_enabled: autoSync,
         sync_interval_minutes: syncInterval,
+        hospital_id: hospitalType || 'hope',
         updated_at: new Date().toISOString(),
       }
 
