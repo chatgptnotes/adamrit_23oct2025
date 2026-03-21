@@ -42,12 +42,27 @@ export default function TallyPage() {
   const [configs, setConfigs] = useState<{ id: string; server_url: string; company_name: string }[]>([])
 
   async function loadConfigs(selectId?: string) {
-    const { data } = await supabase
+    // Try with hospital filter first
+    let query = supabase
       .from('tally_config')
       .select('id, server_url, company_name')
       .eq('is_active', true)
-      .eq('hospital_id', hospitalType || 'hope')
-      .order('company_name')
+
+    if (hospitalType) {
+      query = query.eq('hospital_id', hospitalType)
+    }
+
+    let { data } = await query.order('company_name')
+
+    // Fallback: if no results with hospital filter, load all active configs
+    if ((!data || data.length === 0) && hospitalType) {
+      const fallback = await supabase
+        .from('tally_config')
+        .select('id, server_url, company_name')
+        .eq('is_active', true)
+        .order('company_name')
+      data = fallback.data
+    }
 
     if (data && data.length > 0) {
       setConfigs(data)
@@ -129,7 +144,7 @@ export default function TallyPage() {
 
       {/* Tab Content */}
       <div>
-        {activeTab === 'dashboard' && <TallyDashboard serverUrl={serverUrl} companyName={companyName} companyId={companyId} onConfigChange={(newId) => loadConfigs(newId)} />}
+        {activeTab === 'dashboard' && <TallyDashboard serverUrl={serverUrl} companyName={companyName} companyId={companyId} configs={configs} onConfigChange={(newId) => loadConfigs(newId)} />}
         {activeTab === 'ledgers' && <TallyLedgers serverUrl={serverUrl} companyName={companyName} companyId={companyId} />}
         {activeTab === 'vouchers' && <TallyVouchers serverUrl={serverUrl} companyName={companyName} companyId={companyId} />}
         {activeTab === 'cashbook' && <TallyCashBook serverUrl={serverUrl} companyName={companyName} companyId={companyId} />}
