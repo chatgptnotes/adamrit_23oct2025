@@ -113,7 +113,7 @@ export default function TallyAutoSync({ serverUrl, companyName, configId }: Prop
       setSyncProgress({ current: items[i], completed: i, total: items.length })
       try {
         if (items[i] === 'reverse-sync') {
-          const rsResult = await reverseSync(serverUrl, companyName)
+          const rsResult = await reverseSync(serverUrl, companyName, configId || '')
           results.push({
             item: items[i],
             success: true,

@@ -22,7 +22,7 @@ function formatDate(d) {
   })
 }
 
-export default function TallyCashBook({ serverUrl, companyName }) {
+export default function TallyCashBook({ serverUrl, companyName, companyId }) {
   const [vouchers, setVouchers] = useState([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -46,6 +46,7 @@ export default function TallyCashBook({ serverUrl, companyName }) {
       const { data: cashLedger } = await supabase
         .from('tally_ledgers')
         .select('opening_balance, closing_balance')
+        .eq('company_id', companyId)
         .or('name.ilike.%cash%,parent_group.ilike.%cash-in-hand%,parent_group.ilike.%cash in hand%')
         .limit(1)
         .single()
@@ -58,6 +59,7 @@ export default function TallyCashBook({ serverUrl, companyName }) {
       let query = supabase
         .from('tally_vouchers')
         .select('*')
+        .eq('company_id', companyId)
         .order('date', { ascending: true })
 
       if (dateFrom) query = query.gte('date', dateFrom)
@@ -84,7 +86,7 @@ export default function TallyCashBook({ serverUrl, companyName }) {
       toast.error('Failed to load cash book data')
     }
     setLoading(false)
-  }, [dateFrom, dateTo, typeFilter])
+  }, [dateFrom, dateTo, typeFilter, companyId])
 
   useEffect(() => {
     fetchData()
@@ -92,7 +94,7 @@ export default function TallyCashBook({ serverUrl, companyName }) {
 
   useEffect(() => {
     setPage(0)
-  }, [dateFrom, dateTo, typeFilter])
+  }, [dateFrom, dateTo, typeFilter, companyId])
 
   async function handleRefresh() {
     if (!serverUrl || !companyName) {
@@ -105,13 +107,13 @@ export default function TallyCashBook({ serverUrl, companyName }) {
       await fetch('/api/tally-proxy', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ endpoint: 'sync', action: 'ledgers', serverUrl, companyName }),
+        body: JSON.stringify({ endpoint: 'sync', action: 'ledgers', serverUrl, companyName, companyId }),
       })
       // Then sync vouchers
       await fetch('/api/tally-proxy', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ endpoint: 'sync', action: 'vouchers', serverUrl, companyName }),
+        body: JSON.stringify({ endpoint: 'sync', action: 'vouchers', serverUrl, companyName, companyId }),
       })
       toast.success('Ledgers & vouchers refreshed from Tally')
       await fetchData()

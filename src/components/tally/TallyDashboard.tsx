@@ -5,12 +5,20 @@ import { toast } from 'sonner'
 import {
   RefreshCw, Settings, Wifi, WifiOff, Database, FileText,
   Package, BarChart3, ArrowDownToLine, ArrowUpFromLine,
-  CheckCircle, XCircle, Clock, Loader2, Save, Play, Pause
+  CheckCircle, XCircle, Clock, Loader2, Save, Play, Pause,
+  PlusCircle, Trash2
 } from 'lucide-react'
 
-export default function TallyDashboard() {
-  const [serverUrl, setServerUrl] = useState('http://localhost:9000')
-  const [companyName, setCompanyName] = useState('')
+interface TallyDashboardProps {
+  serverUrl: string
+  companyName: string
+  companyId: string
+  onConfigChange?: (newId?: string) => void
+}
+
+export default function TallyDashboard({ serverUrl: propServerUrl, companyName: propCompanyName, companyId: propCompanyId, onConfigChange }: TallyDashboardProps) {
+  const [serverUrl, setServerUrl] = useState(propServerUrl || 'http://localhost:9000')
+  const [companyName, setCompanyName] = useState(propCompanyName || '')
   const [isConnected, setIsConnected] = useState(false)
   const [connectionInfo, setConnectionInfo] = useState(null)
   const [isTesting, setIsTesting] = useState(false)
@@ -44,17 +52,23 @@ export default function TallyDashboard() {
   const [countdown, setCountdown] = useState(0)
 
   useEffect(() => {
+    if (propServerUrl) setServerUrl(propServerUrl)
+    if (propCompanyName) setCompanyName(propCompanyName)
+    if (propCompanyId) setConfigId(propCompanyId)
+  }, [propServerUrl, propCompanyName, propCompanyId])
+
+  useEffect(() => {
     loadConfig()
     loadStats()
     loadSyncLogs()
-  }, [])
+  }, [configId])
 
   async function loadConfig() {
+    if (!configId) return
     const { data } = await supabase
       .from('tally_config')
       .select('*')
-      .eq('is_active', true)
-      .limit(1)
+      .eq('id', configId)
       .single()
 
     if (data) {
@@ -62,16 +76,16 @@ export default function TallyDashboard() {
       setCompanyName(data.company_name || '')
       setAutoSync(data.auto_sync_enabled || false)
       setSyncInterval(data.sync_interval_minutes || 30)
-      setConfigId(data.id)
     }
   }
 
   async function loadStats() {
+    if (!companyName) return
     const [ledgers, vouchers, stock, reports] = await Promise.all([
-      ( supabase as any).from('tally_ledgers').select('*', { count: 'exact', head: true }),
-      ( supabase as any).from('tally_vouchers').select('*', { count: 'exact', head: true }),
-      ( supabase as any).from('tally_stock_items').select('*', { count: 'exact', head: true }),
-      ( supabase as any).from('tally_reports').select('*', { count: 'exact', head: true }),
+      ( supabase as any).from('tally_ledgers').select('*', { count: 'exact', head: true }).eq('company_id', configId),
+      ( supabase as any).from('tally_vouchers').select('*', { count: 'exact', head: true }).eq('company_id', configId),
+      ( supabase as any).from('tally_stock_items').select('*', { count: 'exact', head: true }).eq('company_id', configId),
+      ( supabase as any).from('tally_reports').select('*', { count: 'exact', head: true }).eq('company_id', configId),
     ])
     setStats({
       ledgers: ledgers.count || 0,
@@ -84,6 +98,7 @@ export default function TallyDashboard() {
     const { data: cashLedgers } = await supabase
       .from('tally_ledgers')
       .select('name, closing_balance, parent_group')
+      .eq('company_id', configId)
       .or('parent_group.ilike.%cash%,parent_group.ilike.%bank%')
 
     if (cashLedgers) {
@@ -99,11 +114,13 @@ export default function TallyDashboard() {
     const { data: debtors } = await supabase
       .from('tally_ledgers')
       .select('closing_balance')
+      .eq('company_id', configId)
       .ilike('parent_group', '%sundry debtor%')
 
     const { data: creditors } = await supabase
       .from('tally_ledgers')
       .select('closing_balance')
+      .eq('company_id', configId)
       .ilike('parent_group', '%sundry creditor%')
 
     setFinancials(prev => ({
@@ -114,12 +131,17 @@ export default function TallyDashboard() {
   }
 
   async function loadSyncLogs() {
-    const { data } = await supabase
+    let query = supabase
       .from('tally_sync_log')
       .select('*')
       .order('started_at', { ascending: false })
       .limit(20)
 
+    if (companyName) {
+      query = query.eq('company_id', configId)
+    }
+
+    const { data } = await query
     setSyncLogs(data || [])
   }
 
@@ -163,15 +185,43 @@ export default function TallyDashboard() {
 
       if (configId) {
         await ( supabase as any).from('tally_config').update(payload).eq('id', configId)
+        toast.success('Configuration saved')
+        onConfigChange?.(configId)
       } else {
         const { data } = await ( supabase as any).from('tally_config').insert(payload).select().single()
-        if (data) setConfigId(data.id)
+        if (data) {
+          setConfigId(data.id)
+          toast.success('New company added')
+          onConfigChange?.(data.id)
+        }
       }
-      toast.success('Configuration saved')
     } catch (err) {
       toast.error('Failed to save configuration')
     }
     setIsSaving(false)
+  }
+
+  function handleAddCompany() {
+    setCompanyName('')
+    setConfigId(null)
+    setIsConnected(false)
+    setConnectionInfo(null)
+    setAutoSync(false)
+    toast.info('Enter the new company name and click Save Configuration')
+  }
+
+  async function handleDeleteCompany() {
+    if (!configId) return
+    if (!confirm(`Delete company "${companyName}" configuration? This only removes the config, not the synced data.`)) return
+    try {
+      await (supabase as any).from('tally_config').delete().eq('id', configId)
+      toast.success(`Company "${companyName}" removed`)
+      setConfigId(null)
+      setCompanyName('')
+      onConfigChange?.()
+    } catch {
+      toast.error('Failed to delete company')
+    }
   }
 
   // Auto-sync scheduler
@@ -188,7 +238,7 @@ export default function TallyDashboard() {
         await fetch('/api/tally-proxy', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ endpoint: 'sync', action: syncTypes[i], serverUrl, companyName }),
+          body: JSON.stringify({ endpoint: 'sync', action: syncTypes[i], serverUrl, companyName, companyId: configId }),
         })
       } catch {}
     }
@@ -251,7 +301,7 @@ export default function TallyDashboard() {
       const res = await fetch('/api/tally-proxy', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ endpoint: 'sync', action, serverUrl, companyName }),
+        body: JSON.stringify({ endpoint: 'sync', action, serverUrl, companyName, companyId: configId }),
       })
       clearInterval(progressTimer)
       setSyncProgress(100)
@@ -418,6 +468,22 @@ export default function TallyDashboard() {
             {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
             Save Configuration
           </button>
+          <button
+            onClick={handleAddCompany}
+            className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 flex items-center gap-2"
+          >
+            <PlusCircle className="h-4 w-4" />
+            Add Company
+          </button>
+          {configId && (
+            <button
+              onClick={handleDeleteCompany}
+              className="px-4 py-2 bg-red-100 text-red-700 rounded-lg text-sm font-medium hover:bg-red-200 flex items-center gap-2"
+            >
+              <Trash2 className="h-4 w-4" />
+              Delete
+            </button>
+          )}
         </div>
       </div>
 

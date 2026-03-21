@@ -36,22 +36,31 @@ export default function TallyPage() {
   const [activeTab, setActiveTab] = useState('dashboard')
   const [serverUrl, setServerUrl] = useState('http://localhost:9000')
   const [companyName, setCompanyName] = useState('')
+  const [companyId, setCompanyId] = useState('')
+  const [configs, setConfigs] = useState<{ id: string; server_url: string; company_name: string }[]>([])
+
+  async function loadConfigs(selectId?: string) {
+    const { data } = await supabase
+      .from('tally_config')
+      .select('id, server_url, company_name')
+      .eq('is_active', true)
+      .order('company_name')
+
+    if (data && data.length > 0) {
+      setConfigs(data)
+      const target = selectId
+        ? data.find(c => c.id === selectId) || data[0]
+        : data[0]
+      setServerUrl(target.server_url || 'http://localhost:9000')
+      setCompanyName(target.company_name || '')
+      setCompanyId(target.id)
+    } else {
+      setConfigs([])
+    }
+  }
 
   useEffect(() => {
-    async function loadConfig() {
-      const { data } = await supabase
-        .from('tally_config')
-        .select('server_url, company_name')
-        .eq('is_active', true)
-        .limit(1)
-        .single()
-
-      if (data) {
-        setServerUrl(data.server_url || 'http://localhost:9000')
-        setCompanyName(data.company_name || '')
-      }
-    }
-    loadConfig()
+    loadConfigs()
   }, [])
 
   return (
@@ -64,11 +73,31 @@ export default function TallyPage() {
             TallyPrime Server two-way sync for Adamrit HMS
           </p>
         </div>
-        {companyName && (
+        {configs.length > 1 ? (
+          <div className="flex items-center gap-2 text-sm text-gray-600 bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-200">
+            <span>Company:</span>
+            <select
+              value={companyId}
+              onChange={(e) => {
+                const config = configs.find(c => c.id === e.target.value)
+                if (config) {
+                  setCompanyId(config.id)
+                  setCompanyName(config.company_name)
+                  setServerUrl(config.server_url || 'http://localhost:9000')
+                }
+              }}
+              className="font-medium text-blue-700 bg-transparent border-none outline-none cursor-pointer"
+            >
+              {configs.map(c => (
+                <option key={c.id} value={c.id}>{c.company_name}</option>
+              ))}
+            </select>
+          </div>
+        ) : companyName ? (
           <div className="text-sm text-gray-600 bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-200">
             Company: <span className="font-medium text-blue-700">{companyName}</span>
           </div>
-        )}
+        ) : null}
       </div>
 
       {/* Tab Navigation */}
@@ -97,17 +126,17 @@ export default function TallyPage() {
 
       {/* Tab Content */}
       <div>
-        {activeTab === 'dashboard' && <TallyDashboard />}
-        {activeTab === 'ledgers' && <TallyLedgers serverUrl={serverUrl} companyName={companyName} />}
-        {activeTab === 'vouchers' && <TallyVouchers serverUrl={serverUrl} companyName={companyName} />}
-        {activeTab === 'cashbook' && <TallyCashBook serverUrl={serverUrl} companyName={companyName} />}
-        {activeTab === 'bankbook' && <TallyBankBook serverUrl={serverUrl} companyName={companyName} />}
-        {activeTab === 'reconciliation' && <TallyBankReconciliation serverUrl={serverUrl} companyName={companyName} />}
-        {activeTab === 'stock' && <TallyStockItems serverUrl={serverUrl} companyName={companyName} />}
-        {activeTab === 'reports' && <TallyReports serverUrl={serverUrl} companyName={companyName} />}
-        {activeTab === 'gst' && <TallyGST serverUrl={serverUrl} companyName={companyName} />}
-        {activeTab === 'billsync' && <TallyBillSync serverUrl={serverUrl} companyName={companyName} />}
-        {activeTab === 'mapping' && <TallyMapping serverUrl={serverUrl} companyName={companyName} />}
+        {activeTab === 'dashboard' && <TallyDashboard serverUrl={serverUrl} companyName={companyName} companyId={companyId} onConfigChange={(newId) => loadConfigs(newId)} />}
+        {activeTab === 'ledgers' && <TallyLedgers serverUrl={serverUrl} companyName={companyName} companyId={companyId} />}
+        {activeTab === 'vouchers' && <TallyVouchers serverUrl={serverUrl} companyName={companyName} companyId={companyId} />}
+        {activeTab === 'cashbook' && <TallyCashBook serverUrl={serverUrl} companyName={companyName} companyId={companyId} />}
+        {activeTab === 'bankbook' && <TallyBankBook serverUrl={serverUrl} companyName={companyName} companyId={companyId} />}
+        {activeTab === 'reconciliation' && <TallyBankReconciliation serverUrl={serverUrl} companyName={companyName} companyId={companyId} />}
+        {activeTab === 'stock' && <TallyStockItems serverUrl={serverUrl} companyName={companyName} companyId={companyId} />}
+        {activeTab === 'reports' && <TallyReports serverUrl={serverUrl} companyName={companyName} companyId={companyId} />}
+        {activeTab === 'gst' && <TallyGST serverUrl={serverUrl} companyName={companyName} companyId={companyId} />}
+        {activeTab === 'billsync' && <TallyBillSync serverUrl={serverUrl} companyName={companyName} companyId={companyId} />}
+        {activeTab === 'mapping' && <TallyMapping serverUrl={serverUrl} companyName={companyName} companyId={companyId} />}
       </div>
     </div>
   )

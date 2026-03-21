@@ -40,7 +40,7 @@ function getMonthOptions() {
   return options
 }
 
-export default function TallyGST({ serverUrl, companyName }) {
+export default function TallyGST({ serverUrl, companyName, companyId }) {
   const [activeTab, setActiveTab] = useState('gstr1')
   const [loading, setLoading] = useState(false)
   const [syncing, setSyncing] = useState(false)
@@ -64,6 +64,7 @@ export default function TallyGST({ serverUrl, companyName }) {
         .eq('report_type', activeTab === 'gst_ledger' ? 'gst_ledger' : activeTab)
         .gte('period_from', period.from)
         .lte('period_to', period.to)
+        .eq('company_id', companyId)
         .order('fetched_at', { ascending: false })
         .limit(1)
         .single()
@@ -80,7 +81,7 @@ export default function TallyGST({ serverUrl, companyName }) {
       await deriveFromVouchers()
     }
     setLoading(false)
-  }, [activeTab, selectedPeriod])
+  }, [activeTab, selectedPeriod, companyId])
 
   async function deriveFromVouchers() {
     // Get vouchers in date range
@@ -89,6 +90,7 @@ export default function TallyGST({ serverUrl, companyName }) {
       .select('*')
       .gte('date', period.from)
       .lte('date', period.to)
+      .eq('company_id', companyId)
       .order('date', { ascending: true })
 
     const vch = vouchers || []

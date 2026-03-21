@@ -5,7 +5,7 @@
 import { supabase } from "@/integrations/supabase/client";
 
 // Check if Tally integration is configured and active
-async function isTallyActive(): Promise<{ active: boolean; serverUrl: string; companyName: string }> {
+async function isTallyActive(): Promise<{ active: boolean; serverUrl: string; companyName: string; companyId: string }> {
   try {
     const { data } = await supabase
       .from("tally_config")
@@ -13,20 +13,22 @@ async function isTallyActive(): Promise<{ active: boolean; serverUrl: string; co
       .eq("is_active", true)
       .limit(1)
       .single();
-    if (!data) return { active: false, serverUrl: "", companyName: "" };
-    return { active: true, serverUrl: data.server_url, companyName: data.company_name };
+    if (!data) return { active: false, serverUrl: "", companyName: "", companyId: "" };
+    return { active: true, serverUrl: data.server_url, companyName: data.company_name, companyId: data.id };
   } catch {
-    return { active: false, serverUrl: "", companyName: "" };
+    return { active: false, serverUrl: "", companyName: "", companyId: "" };
   }
 }
 
 // Get ledger mapping from tally_ledger_mapping table or fall back to defaults
-async function getLedgerMapping() {
+async function getLedgerMapping(companyId?: string) {
   try {
-    const { data: mappings } = await supabase
+    let query = supabase
       .from("tally_ledger_mapping")
       .select("*")
       .eq("is_active", true);
+    if (companyId) query = query.eq("company_id", companyId);
+    const { data: mappings } = await query;
 
     if (mappings && mappings.length > 0) {
       const paymentModes: Record<string, string> = {};
@@ -85,7 +87,7 @@ async function getLedgerMapping() {
   };
 }
 
-async function logPush(syncType: string, success: boolean, errors?: any, ref?: string) {
+async function logPush(syncType: string, success: boolean, errors?: any, ref?: string, companyId?: string) {
   try {
     await supabase.from("tally_sync_log").insert({
       sync_type: syncType,
@@ -95,6 +97,7 @@ async function logPush(syncType: string, success: boolean, errors?: any, ref?: s
       records_failed: success ? 0 : 1,
       error_details: errors ? { errors, ref } : null,
       completed_at: new Date().toISOString(),
+      company_id: companyId || null,
     });
   } catch {
     // Logging failure should not propagate
@@ -107,7 +110,8 @@ async function enqueueForRetry(
   pushAction: string,
   payload: any,
   error: string,
-  referenceId?: string
+  referenceId?: string,
+  companyId?: string
 ) {
   try {
     await supabase.from("tally_push_queue").insert({
@@ -120,6 +124,7 @@ async function enqueueForRetry(
       max_retries: 5,
       last_error: error,
       next_retry_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+      company_id: companyId || null,
     });
   } catch {
     // Queue insertion failure should not propagate
@@ -137,7 +142,7 @@ export async function pushBillToTally(bill: {
   const config = await isTallyActive();
   if (!config.active) return;
 
-  const mapping = await getLedgerMapping();
+  const mapping = await getLedgerMapping(config.companyId);
   const tallyItems = bill.items.map((item) => ({
     ledgerName: item.ledgerName || mapping.defaultIncomeLedger || "Hospital Income",
     amount: item.amount,
@@ -162,21 +167,21 @@ export async function pushBillToTally(bill: {
       }),
     });
     const result = await response.json();
-    await logPush("auto_push_bill", !!result.success, result.errors, bill.billNumber);
+    await logPush("auto_push_bill", !!result.success, result.errors, bill.billNumber, config.companyId);
     if (!result.success) {
       await enqueueForRetry("bill", "create-sales-voucher", {
         billNumber: bill.billNumber, patientName: bill.patientName,
         date: bill.date, totalAmount: bill.totalAmount, items: tallyItems,
-      }, result.errors?.join("; ") || result.message || "Push failed", bill.billNumber);
+      }, result.errors?.join("; ") || result.message || "Push failed", bill.billNumber, config.companyId);
     }
     return result;
   } catch (err: any) {
     console.error("Tally auto-push bill failed:", err);
-    await logPush("auto_push_bill", false, String(err), bill.billNumber);
+    await logPush("auto_push_bill", false, String(err), bill.billNumber, config.companyId);
     await enqueueForRetry("bill", "create-sales-voucher", {
       billNumber: bill.billNumber, patientName: bill.patientName,
       date: bill.date, totalAmount: bill.totalAmount, items: tallyItems,
-    }, err.message || String(err), bill.billNumber);
+    }, err.message || String(err), bill.billNumber, config.companyId);
   }
 }
 
@@ -191,7 +196,7 @@ export async function pushPaymentToTally(payment: {
   const config = await isTallyActive();
   if (!config.active) return;
 
-  const mapping = await getLedgerMapping();
+  const mapping = await getLedgerMapping(config.companyId);
   const bankLedger =
     mapping.paymentModes?.[payment.paymentMode] ||
     (payment.paymentMode === "Cash" || payment.paymentMode === "CASH" ? "Cash" : "Bank Account");
@@ -216,21 +221,21 @@ export async function pushPaymentToTally(payment: {
       }),
     });
     const result = await response.json();
-    await logPush("auto_push_payment", !!result.success, result.errors, payment.receiptNumber);
+    await logPush("auto_push_payment", !!result.success, result.errors, payment.receiptNumber, config.companyId);
     if (!result.success) {
       await enqueueForRetry("payment", "create-receipt-voucher", {
         receiptNumber: payment.receiptNumber, patientName: payment.patientName,
         date: payment.date, amount: payment.amount, paymentMode: payment.paymentMode, bankLedger,
-      }, result.errors?.join("; ") || result.message || "Push failed", payment.receiptNumber);
+      }, result.errors?.join("; ") || result.message || "Push failed", payment.receiptNumber, config.companyId);
     }
     return result;
   } catch (err: any) {
     console.error("Tally payment push failed:", err);
-    await logPush("auto_push_payment", false, String(err), payment.receiptNumber);
+    await logPush("auto_push_payment", false, String(err), payment.receiptNumber, config.companyId);
     await enqueueForRetry("payment", "create-receipt-voucher", {
       receiptNumber: payment.receiptNumber, patientName: payment.patientName,
       date: payment.date, amount: payment.amount, paymentMode: payment.paymentMode, bankLedger,
-    }, err.message || String(err), payment.receiptNumber);
+    }, err.message || String(err), payment.receiptNumber, config.companyId);
   }
 }
 
@@ -252,11 +257,13 @@ export async function pushESICBillToTally(bill: {
   let esicIncomeLedger = "ESIC Income - IPD";
 
   try {
-    const { data: mappings } = await supabase
+    let esicQuery = supabase
       .from("tally_ledger_mapping")
       .select("*")
       .eq("is_active", true)
       .in("adamrit_entity_type", ["insurance", "esic_income"]);
+    if (config.companyId) esicQuery = esicQuery.eq("company_id", config.companyId);
+    const { data: mappings } = await esicQuery;
 
     if (mappings) {
       const esicMapping = mappings.find(
@@ -302,7 +309,7 @@ export async function pushESICBillToTally(bill: {
       }),
     });
     const result = await response.json();
-    await logPush("auto_push_esic_bill", !!result.success, result.errors, bill.billNumber);
+    await logPush("auto_push_esic_bill", !!result.success, result.errors, bill.billNumber, config.companyId);
     if (!result.success) {
       await enqueueForRetry("esic_bill", "create-voucher", {
         voucherType: "Sales", date: bill.date, narration,
@@ -311,12 +318,12 @@ export async function pushESICBillToTally(bill: {
           { ledgerName: esicReceivablesLedger, amount: bill.totalAmount, isDeemedPositive: true },
           ...bill.items.map((item) => ({ ledgerName: esicIncomeLedger, amount: item.amount, isDeemedPositive: false })),
         ],
-      }, result.errors?.join("; ") || result.message || "Push failed", bill.billNumber);
+      }, result.errors?.join("; ") || result.message || "Push failed", bill.billNumber, config.companyId);
     }
     return result;
   } catch (err: any) {
     console.error("Tally ESIC push failed:", err);
-    await logPush("auto_push_esic_bill", false, String(err), bill.billNumber);
+    await logPush("auto_push_esic_bill", false, String(err), bill.billNumber, config.companyId);
     await enqueueForRetry("esic_bill", "create-voucher", {
       voucherType: "Sales", date: bill.date, narration,
       partyLedger: esicReceivablesLedger,
@@ -324,7 +331,7 @@ export async function pushESICBillToTally(bill: {
         { ledgerName: esicReceivablesLedger, amount: bill.totalAmount, isDeemedPositive: true },
         ...bill.items.map((item) => ({ ledgerName: esicIncomeLedger, amount: item.amount, isDeemedPositive: false })),
       ],
-    }, err.message || String(err), bill.billNumber);
+    }, err.message || String(err), bill.billNumber, config.companyId);
   }
 }
 
@@ -349,21 +356,21 @@ export async function pushInsuranceBillToTally(bill: {
   const incomeLedger = "Hospital Income";
 
   try {
-    const { data: mappings } = await supabase
+    let insQuery = supabase
       .from("tally_ledger_mapping")
       .select("*")
       .eq("adamrit_entity_type", "insurance")
       .eq("adamrit_entity_name", bill.insuranceCompany)
-      .eq("is_active", true)
-      .limit(1)
-      .single();
+      .eq("is_active", true);
+    if (config.companyId) insQuery = insQuery.eq("company_id", config.companyId);
+    const { data: mappings } = await insQuery.limit(1).single();
 
     if (mappings) insuranceLedger = mappings.tally_ledger_name;
   } catch {
     // Use default
   }
 
-  const mapping = await getLedgerMapping();
+  const mapping = await getLedgerMapping(config.companyId);
   const narration = `Insurance Bill #${bill.billNumber} | ${bill.insuranceCompany}${bill.policyNumber ? ` | Policy# ${bill.policyNumber}` : ""} - ${bill.patientName}`;
 
   // Double-entry: Insurance company owes claimAmount, patient owes patientShare
@@ -405,19 +412,19 @@ export async function pushInsuranceBillToTally(bill: {
       }),
     });
     const result = await response.json();
-    await logPush("auto_push_insurance_bill", !!result.success, result.errors, bill.billNumber);
+    await logPush("auto_push_insurance_bill", !!result.success, result.errors, bill.billNumber, config.companyId);
     if (!result.success) {
       await enqueueForRetry("insurance_bill", "create-voucher", {
         voucherType: "Sales", date: bill.date, narration, partyLedger: insuranceLedger, ledgerEntries,
-      }, result.errors?.join("; ") || result.message || "Push failed", bill.billNumber);
+      }, result.errors?.join("; ") || result.message || "Push failed", bill.billNumber, config.companyId);
     }
     return result;
   } catch (err: any) {
     console.error("Tally insurance push failed:", err);
-    await logPush("auto_push_insurance_bill", false, String(err), bill.billNumber);
+    await logPush("auto_push_insurance_bill", false, String(err), bill.billNumber, config.companyId);
     await enqueueForRetry("insurance_bill", "create-voucher", {
       voucherType: "Sales", date: bill.date, narration, partyLedger: insuranceLedger, ledgerEntries,
-    }, err.message || String(err), bill.billNumber);
+    }, err.message || String(err), bill.billNumber, config.companyId);
   }
 }
 
@@ -438,14 +445,14 @@ export async function pushInsurancePaymentToTally(payment: {
   let insuranceLedger = `${payment.insuranceCompany} Insurance Receivables`;
 
   try {
-    const { data: mappings } = await supabase
+    let payInsQuery = supabase
       .from("tally_ledger_mapping")
       .select("*")
       .eq("adamrit_entity_type", "insurance")
       .eq("adamrit_entity_name", payment.insuranceCompany)
-      .eq("is_active", true)
-      .limit(1)
-      .single();
+      .eq("is_active", true);
+    if (config.companyId) payInsQuery = payInsQuery.eq("company_id", config.companyId);
+    const { data: mappings } = await payInsQuery.limit(1).single();
 
     if (mappings) insuranceLedger = mappings.tally_ledger_name;
   } catch {
@@ -494,19 +501,19 @@ export async function pushInsurancePaymentToTally(payment: {
       }),
     });
     const result = await response.json();
-    await logPush("auto_push_insurance_payment", !!result.success, result.errors, payment.receiptNumber);
+    await logPush("auto_push_insurance_payment", !!result.success, result.errors, payment.receiptNumber, config.companyId);
     if (!result.success) {
       await enqueueForRetry("insurance_payment", "create-voucher", {
         voucherType: "Receipt", date: payment.date, narration, partyLedger: insuranceLedger, ledgerEntries,
-      }, result.errors?.join("; ") || result.message || "Push failed", payment.receiptNumber);
+      }, result.errors?.join("; ") || result.message || "Push failed", payment.receiptNumber, config.companyId);
     }
     return result;
   } catch (err: any) {
     console.error("Tally insurance payment push failed:", err);
-    await logPush("auto_push_insurance_payment", false, String(err), payment.receiptNumber);
+    await logPush("auto_push_insurance_payment", false, String(err), payment.receiptNumber, config.companyId);
     await enqueueForRetry("insurance_payment", "create-voucher", {
       voucherType: "Receipt", date: payment.date, narration, partyLedger: insuranceLedger, ledgerEntries,
-    }, err.message || String(err), payment.receiptNumber);
+    }, err.message || String(err), payment.receiptNumber, config.companyId);
   }
 }
 
@@ -521,7 +528,7 @@ export async function pushPharmacySaleToTally(sale: {
   const config = await isTallyActive();
   if (!config.active) return;
 
-  const mapping = await getLedgerMapping();
+  const mapping = await getLedgerMapping(config.companyId);
 
   try {
     const response = await fetch("/api/tally-proxy", {
@@ -545,7 +552,7 @@ export async function pushPharmacySaleToTally(sale: {
       }),
     });
     const result = await response.json();
-    await logPush("auto_push_pharmacy", !!result.success, result.errors, sale.invoiceNumber);
+    await logPush("auto_push_pharmacy", !!result.success, result.errors, sale.invoiceNumber, config.companyId);
     if (!result.success) {
       await enqueueForRetry("pharmacy", "create-sales-voucher", {
         billNumber: sale.invoiceNumber, patientName: sale.patientName,
@@ -553,18 +560,18 @@ export async function pushPharmacySaleToTally(sale: {
         items: sale.items.map((item) => ({
           ledgerName: mapping.pharmacySalesLedger || "Pharmacy Sales", amount: item.amount,
         })),
-      }, result.errors?.join("; ") || result.message || "Push failed", sale.invoiceNumber);
+      }, result.errors?.join("; ") || result.message || "Push failed", sale.invoiceNumber, config.companyId);
     }
     return result;
   } catch (err: any) {
     console.error("Tally pharmacy push failed:", err);
-    await logPush("auto_push_pharmacy", false, String(err), sale.invoiceNumber);
+    await logPush("auto_push_pharmacy", false, String(err), sale.invoiceNumber, config.companyId);
     await enqueueForRetry("pharmacy", "create-sales-voucher", {
       billNumber: sale.invoiceNumber, patientName: sale.patientName,
       date: sale.date, totalAmount: sale.totalAmount,
       items: sale.items.map((item) => ({
         ledgerName: mapping.pharmacySalesLedger || "Pharmacy Sales", amount: item.amount,
       })),
-    }, err.message || String(err), sale.invoiceNumber);
+    }, err.message || String(err), sale.invoiceNumber, config.companyId);
   }
 }

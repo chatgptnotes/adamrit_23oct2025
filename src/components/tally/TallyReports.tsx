@@ -56,7 +56,7 @@ function fyStartStr(): string {
   return `${year}-04-01`
 }
 
-export default function TallyReports({ serverUrl, companyName }: { serverUrl: string; companyName: string }) {
+export default function TallyReports({ serverUrl, companyName, companyId }: { serverUrl: string; companyName: string; companyId: string }) {
   const [activeTab, setActiveTab] = useState<TabKey>('trial-balance')
   const [loading, setLoading] = useState(false)
   const [lastFetched, setLastFetched] = useState<Record<TabKey, string | null>>({
@@ -81,12 +81,13 @@ export default function TallyReports({ serverUrl, companyName }: { serverUrl: st
 
   useEffect(() => {
     loadCachedReports()
-  }, [])
+  }, [companyId])
 
   async function loadCachedReports() {
     const { data } = await supabase
       .from('tally_reports')
       .select('*')
+      .eq('company_id', companyId)
       .order('fetched_at', { ascending: false })
       .limit(10)
 

@@ -69,7 +69,8 @@ export async function matchReceiptToBill(receipt: TallyReceipt) {
 
 export async function reverseSync(
   serverUrl: string,
-  companyName: string
+  companyName: string,
+  companyId: string
 ): Promise<ReverseSyncResult> {
   const result: ReverseSyncResult = {
     matched: 0,
@@ -148,7 +149,7 @@ export async function reverseSync(
     }
   } catch (err) {
     console.error("Reverse sync: Failed to fetch receipts from Tally:", err);
-    await logReverseSync("reverse_sync_receipts", false, String(err));
+    await logReverseSync("reverse_sync_receipts", false, String(err), undefined, companyId);
     return result;
   }
 
@@ -210,7 +211,8 @@ export async function reverseSync(
     // Get existing ledger names
     const { data: existingLedgers } = await supabase
       .from("tally_ledgers")
-      .select("name");
+      .select("name")
+      .eq("company_id", companyId);
     const existingNames = new Set(
       (existingLedgers || []).map((l: any) => l.name)
     );
@@ -232,10 +234,12 @@ export async function reverseSync(
             closing_balance: closingBalance,
             last_synced_at: new Date().toISOString(),
           })
+          .eq("company_id", companyId)
           .eq("name", name);
       } else {
         // Insert new ledger
         await supabase.from("tally_ledgers").insert({
+          company_id: companyId,
           name,
           tally_guid: getVal(el, "GUID") || getAttr(el, "GUID") || null,
           parent_group: parentGroup,
@@ -253,7 +257,7 @@ export async function reverseSync(
   }
 
   // 4. Log results
-  await logReverseSync("reverse_sync", true, null, result);
+  await logReverseSync("reverse_sync", true, null, result, companyId);
 
   return result;
 }
@@ -273,7 +277,8 @@ async function logReverseSync(
   syncType: string,
   success: boolean,
   errorStr?: string | null,
-  result?: ReverseSyncResult
+  result?: ReverseSyncResult,
+  companyId?: string
 ) {
   try {
     await supabase.from("tally_sync_log").insert({
@@ -293,6 +298,7 @@ async function logReverseSync(
             }
           : null,
       completed_at: new Date().toISOString(),
+      company_id: companyId || null,
     });
   } catch {
     // Logging failure should not propagate

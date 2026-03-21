@@ -10,9 +10,10 @@ import {
 interface TallyBillSyncProps {
   serverUrl: string
   companyName: string
+  companyId: string
 }
 
-export default function TallyBillSync({ serverUrl, companyName }: TallyBillSyncProps) {
+export default function TallyBillSync({ serverUrl, companyName, companyId }: TallyBillSyncProps) {
   const [vouchers, setVouchers] = useState([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('all')
@@ -33,6 +34,7 @@ export default function TallyBillSync({ serverUrl, companyName }: TallyBillSyncP
       .from('tally_vouchers')
       .select('*')
       .eq('sync_direction', 'to_tally')
+      .eq('company_id', companyId)
       .order('date', { ascending: false })
 
     if (filter !== 'all') {
@@ -46,7 +48,7 @@ export default function TallyBillSync({ serverUrl, companyName }: TallyBillSyncP
       setVouchers(data || [])
     }
     setLoading(false)
-  }, [filter])
+  }, [filter, companyId])
 
   useEffect(() => {
     loadVouchers()
@@ -71,6 +73,7 @@ export default function TallyBillSync({ serverUrl, companyName }: TallyBillSyncP
           action,
           serverUrl,
           companyName,
+          companyId,
           voucher: {
             id: voucher.id,
             voucher_type: voucher.voucher_type,
@@ -127,7 +130,7 @@ export default function TallyBillSync({ serverUrl, companyName }: TallyBillSyncP
     const failed = vouchers.filter(v => v.sync_status === 'failed')
     if (failed.length === 0) return toast.info('No failed items to retry')
     await ( supabase as any).from('tally_vouchers').update({ sync_status: 'pending', error_message: null })
-      .eq('sync_direction', 'to_tally').eq('sync_status', 'failed')
+      .eq('sync_direction', 'to_tally').eq('company_id', companyId).eq('sync_status', 'failed')
     await loadVouchers()
     for (const v of failed) await pushVoucher({ ...v, sync_status: 'pending' })
   }

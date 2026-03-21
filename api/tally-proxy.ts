@@ -242,7 +242,7 @@ async function handlePush(body: any) {
 
 // ─── Endpoint: sync (pull from Tally → save to Supabase) ───
 async function handleSync(body: any) {
-  const { action, serverUrl, companyName, dateRange } = body
+  const { action, serverUrl, companyName, companyId, dateRange } = body
   if (!serverUrl || !companyName || !action) return { error: 'Missing required fields' }
 
   const supabase = getSupabase()
@@ -251,6 +251,7 @@ async function handleSync(body: any) {
   // Create sync log
   const { data: logData } = await supabase.from('tally_sync_log').insert({
     sync_type: action, direction: 'inward', status: 'started',
+    company_id: companyId,
   }).select().single()
   const logId = logData?.id
 
@@ -274,6 +275,7 @@ async function handleSync(body: any) {
             const name = getVal(el, 'NAME') || getAttr(el, 'NAME')
             if (!name) continue
             await supabase.from('tally_ledgers').upsert({
+              company_id: companyId,
               name, tally_guid: getVal(el, 'GUID') || getAttr(el, 'GUID') || null,
               parent_group: getVal(el, 'PARENT'),
               opening_balance: parseFloat(getVal(el, 'OPENINGBALANCE') || '0'),
@@ -284,7 +286,7 @@ async function handleSync(body: any) {
               gst_number: getVal(el, 'PARTYGSTIN') || null,
               pan_number: getVal(el, 'INCOMETAXNUMBER') || null,
               last_synced_at: new Date().toISOString(),
-            }, { onConflict: 'name', ignoreDuplicates: false })
+            }, { onConflict: 'company_id,name', ignoreDuplicates: false })
             recordsSynced++
           } catch (e: any) { recordsFailed++; errors.push(e.message) }
         }
@@ -299,12 +301,13 @@ async function handleSync(body: any) {
             const name = getVal(el, 'NAME') || getAttr(el, 'NAME')
             if (!name) continue
             await supabase.from('tally_groups').upsert({
+              company_id: companyId,
               name, parent_group: getVal(el, 'PARENT') || null,
               nature_of_group: getVal(el, 'NATUREOFGROUP') || null,
               is_revenue: (getVal(el, 'NATUREOFGROUP') || '').toLowerCase().includes('revenue'),
               is_deemed_positive: getVal(el, 'ISDEEMEDPOSITIVE') === 'Yes',
               last_synced_at: new Date().toISOString(),
-            }, { onConflict: 'name' })
+            }, { onConflict: 'company_id,name' })
             recordsSynced++
           } catch (e: any) { recordsFailed++; errors.push(e.message) }
         }
@@ -322,6 +325,7 @@ async function handleSync(body: any) {
             const name = getVal(el, 'NAME') || getAttr(el, 'NAME')
             if (!name) continue
             await supabase.from('tally_stock_items').upsert({
+              company_id: companyId,
               name, tally_guid: getVal(el, 'GUID') || getAttr(el, 'GUID') || null,
               stock_group: getVal(el, 'PARENT') || getVal(el, 'STOCKGROUP') || null,
               unit: getVal(el, 'BASEUNITS') || getVal(el, 'UNIT') || null,
@@ -333,7 +337,7 @@ async function handleSync(body: any) {
               gst_rate: parseFloat(getVal(el, 'GSTRATE') || '0'),
               hsn_code: getVal(el, 'HSNCODE') || getVal(el, 'HSNSACCODE') || null,
               last_synced_at: new Date().toISOString(),
-            }, { onConflict: 'name', ignoreDuplicates: false })
+            }, { onConflict: 'company_id,name', ignoreDuplicates: false })
             recordsSynced++
           } catch (e: any) { recordsFailed++; errors.push(e.message) }
         }
@@ -377,6 +381,7 @@ async function handleSync(body: any) {
             }
             const guid = getVal(el, 'GUID') || getAttr(el, 'REMOTEID') || null
             await supabase.from('tally_vouchers').upsert({
+              company_id: companyId,
               tally_guid: guid,
               voucher_number: getVal(el, 'VOUCHERNUMBER'),
               voucher_type: getVal(el, 'VOUCHERTYPENAME') || getAttr(el, 'VCHTYPE'),
@@ -385,7 +390,7 @@ async function handleSync(body: any) {
               is_cancelled: getVal(el, 'ISCANCELLED') === 'Yes',
               sync_direction: 'from_tally', sync_status: 'synced',
               ledger_entries: ledgerEntries, synced_at: new Date().toISOString(),
-            }, { onConflict: 'tally_guid', ignoreDuplicates: false })
+            }, { onConflict: 'company_id,tally_guid', ignoreDuplicates: false })
             recordsSynced++
           } catch (e: any) { recordsFailed++; errors.push(e.message) }
         }
@@ -408,6 +413,7 @@ async function handleSync(body: any) {
             const xml = buildExportXml(report.id, companyName, report.extra)
             const response = await fetchFromTally(serverUrl, xml)
             await supabase.from('tally_reports').insert({
+              company_id: companyId,
               report_type: report.type, report_date: today, period_from: fyStart, period_to: today,
               data: { raw: response }, fetched_at: new Date().toISOString(),
             })
@@ -428,6 +434,7 @@ async function handleSync(body: any) {
             `<SVFROMDATE>${gstFrom.replace(/-/g, '')}</SVFROMDATE><SVTODATE>${gstTo.replace(/-/g, '')}</SVTODATE>`)
           const response = await fetchFromTally(serverUrl, xml)
           await supabase.from('tally_gst_data').insert({
+            company_id: companyId,
             report_type: gstType, period_from: gstFrom, period_to: gstTo,
             data: { raw: response }, fetched_at: new Date().toISOString(),
           })
@@ -437,7 +444,7 @@ async function handleSync(body: any) {
       }
       case 'full': {
         for (const subAction of ['groups', 'ledgers', 'stock', 'vouchers', 'reports']) {
-          const subResult = await handleSync({ action: subAction, serverUrl, companyName, dateRange })
+          const subResult = await handleSync({ action: subAction, serverUrl, companyName, companyId, dateRange })
           recordsSynced += (subResult as any).recordsSynced || 0
           recordsFailed += (subResult as any).recordsFailed || 0
         }
@@ -466,7 +473,7 @@ async function handleSync(body: any) {
       completed_at: new Date().toISOString(), duration_ms: durationMs,
     }).eq('id', logId)
   }
-  await supabase.from('tally_config').update({ last_sync_at: new Date().toISOString() }).eq('is_active', true)
+  await supabase.from('tally_config').update({ last_sync_at: new Date().toISOString() }).eq('id', companyId)
 
   return { success: true, action, recordsSynced, recordsFailed, errors: errors.length > 0 ? errors : undefined, durationMs }
 }

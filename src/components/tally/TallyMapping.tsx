@@ -19,7 +19,7 @@ const DEFAULT_RULES = [
   { label: 'Supplier', arrow: 'Sundry Creditor ledger', color: 'orange' },
 ]
 
-export default function TallyMapping({ serverUrl, companyName }) {
+export default function TallyMapping({ serverUrl, companyName, companyId }) {
   const [tab, setTab] = useState('ledger')
   const [ledgers, setLedgers] = useState([])
   const [costCentres, setCostCentres] = useState([])
@@ -37,13 +37,13 @@ export default function TallyMapping({ serverUrl, companyName }) {
   const [saving, setSaving] = useState(false)
   const [autoMapping, setAutoMapping] = useState(false)
 
-  useEffect(() => { loadData() }, [])
+  useEffect(() => { loadData() }, [companyId])
 
   async function loadData() {
     setLoading(true)
     const [ledgerRes, ccRes] = await Promise.all([
-      ( supabase as any).from('tally_ledgers').select('*').order('name'),
-      ( supabase as any).from('tally_cost_centres').select('*').order('name'),
+      ( supabase as any).from('tally_ledgers').select('*').eq('company_id', companyId).order('name'),
+      ( supabase as any).from('tally_cost_centres').select('*').eq('company_id', companyId).order('name'),
     ])
     const l = ledgerRes.data || []
     const c = ccRes.data || []

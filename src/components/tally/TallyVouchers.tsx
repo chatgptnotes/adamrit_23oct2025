@@ -410,7 +410,7 @@ function DetailModal({ voucher, onClose, onEdit, onDelete }: { voucher: any; onC
   )
 }
 
-export default function TallyVouchers({ serverUrl, companyName }: { serverUrl?: string; companyName?: string }) {
+export default function TallyVouchers({ serverUrl, companyName, companyId }: { serverUrl?: string; companyName?: string; companyId?: string }) {
   const [vouchers, setVouchers] = useState<any[]>([])
   const [totalCount, setTotalCount] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -433,6 +433,7 @@ export default function TallyVouchers({ serverUrl, companyName }: { serverUrl?: 
       let query = supabase
         .from('tally_vouchers')
         .select('*', { count: 'exact' })
+        .eq('company_id', companyId)
         .order('date', { ascending: false })
         .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1)
 
@@ -455,7 +456,7 @@ export default function TallyVouchers({ serverUrl, companyName }: { serverUrl?: 
       toast.error('Failed to load vouchers')
     }
     setLoading(false)
-  }, [page, dateFrom, dateTo, typeFilter, statusFilter])
+  }, [page, dateFrom, dateTo, typeFilter, statusFilter, companyId])
 
   useEffect(() => {
     fetchVouchers()
