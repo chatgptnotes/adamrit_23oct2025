@@ -14,12 +14,14 @@ interface TallyDashboardProps {
   serverUrl: string
   companyName: string
   companyId: string
+  configs: { id: string; server_url: string; company_name: string }[]
   onConfigChange?: (newId?: string) => void
 }
 
-export default function TallyDashboard({ serverUrl: propServerUrl, companyName: propCompanyName, companyId: propCompanyId, onConfigChange }: TallyDashboardProps) {
+export default function TallyDashboard({ serverUrl: propServerUrl, companyName: propCompanyName, companyId: propCompanyId, configs = [], onConfigChange }: TallyDashboardProps) {
   const { hospitalType } = useAuth()
   const [serverUrl, setServerUrl] = useState(propServerUrl || 'http://localhost:9000')
+  const [isAddingCompany, setIsAddingCompany] = useState(false)
   const [companyName, setCompanyName] = useState(propCompanyName || '')
   const [isConnected, setIsConnected] = useState(false)
   const [connectionInfo, setConnectionInfo] = useState(null)
@@ -194,6 +196,7 @@ export default function TallyDashboard({ serverUrl: propServerUrl, companyName: 
         const { data } = await ( supabase as any).from('tally_config').insert(payload).select().single()
         if (data) {
           setConfigId(data.id)
+          setIsAddingCompany(false)
           toast.success('New company added')
           onConfigChange?.(data.id)
         }
@@ -205,6 +208,7 @@ export default function TallyDashboard({ serverUrl: propServerUrl, companyName: 
   }
 
   function handleAddCompany() {
+    setIsAddingCompany(true)
     setCompanyName('')
     setConfigId(null)
     setIsConnected(false)
@@ -369,13 +373,34 @@ export default function TallyDashboard({ serverUrl: propServerUrl, companyName: 
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Company Name</label>
-            <input
-              type="text"
-              value={companyName}
-              onChange={e => setCompanyName(e.target.value)}
-              placeholder="Your Company Name in Tally"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            />
+            {isAddingCompany || configs.length === 0 ? (
+              <input
+                type="text"
+                value={companyName}
+                onChange={e => setCompanyName(e.target.value)}
+                placeholder="Enter company name from Tally"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                autoFocus
+              />
+            ) : (
+              <select
+                value={configId || ''}
+                onChange={e => {
+                  const selected = configs.find(c => c.id === e.target.value)
+                  if (selected) {
+                    setConfigId(selected.id)
+                    setCompanyName(selected.company_name)
+                    setServerUrl(selected.server_url || 'http://localhost:9000')
+                    onConfigChange?.(selected.id)
+                  }
+                }}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                {configs.map(c => (
+                  <option key={c.id} value={c.id}>{c.company_name}</option>
+                ))}
+              </select>
+            )}
           </div>
         </div>
 
