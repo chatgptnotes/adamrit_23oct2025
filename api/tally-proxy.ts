@@ -262,7 +262,19 @@ async function handleSync(body: any) {
   try {
     switch (action) {
       case 'ledgers': {
-        const xml = buildExportXml('List of Ledgers', companyName)
+        // TallyPrime Collection-based export (report-based "List of Ledgers" not supported)
+        const xml = `<ENVELOPE>
+  <HEADER><VERSION>1</VERSION><TALLYREQUEST>Export</TALLYREQUEST><TYPE>Collection</TYPE><ID>Ledger Collection</ID></HEADER>
+  <BODY><DESC>
+    <STATICVARIABLES><SVCURRENTCOMPANY>${companyName}</SVCURRENTCOMPANY></STATICVARIABLES>
+    <TDL><TDLMESSAGE>
+      <COLLECTION NAME="Ledger Collection" ISMODIFY="No">
+        <TYPE>Ledger</TYPE>
+        <FETCH>NAME,PARENT,OPENINGBALANCE,CLOSINGBALANCE,ADDRESS,LEDGERPHONE,EMAIL,PARTYGSTIN,INCOMETAXNUMBER,GUID</FETCH>
+      </COLLECTION>
+    </TDLMESSAGE></TDL>
+  </DESC></BODY>
+</ENVELOPE>`
         const response = await fetchFromTally(serverUrl, xml)
         let elements = getAll(response, 'LEDGER')
         // ALWAYS log raw response for debugging (will be removed once parsing is fixed)
@@ -293,7 +305,18 @@ async function handleSync(body: any) {
         break
       }
       case 'groups': {
-        const xml = buildExportXml('List of Groups', companyName)
+        const xml = `<ENVELOPE>
+  <HEADER><VERSION>1</VERSION><TALLYREQUEST>Export</TALLYREQUEST><TYPE>Collection</TYPE><ID>Group Collection</ID></HEADER>
+  <BODY><DESC>
+    <STATICVARIABLES><SVCURRENTCOMPANY>${companyName}</SVCURRENTCOMPANY></STATICVARIABLES>
+    <TDL><TDLMESSAGE>
+      <COLLECTION NAME="Group Collection" ISMODIFY="No">
+        <TYPE>Group</TYPE>
+        <FETCH>NAME,PARENT,NATUREOFGROUP,ISDEEMEDPOSITIVE,GUID</FETCH>
+      </COLLECTION>
+    </TDLMESSAGE></TDL>
+  </DESC></BODY>
+</ENVELOPE>`
         const response = await fetchFromTally(serverUrl, xml)
         const elements = getAll(response, 'GROUP')
         for (const el of elements) {
@@ -314,7 +337,18 @@ async function handleSync(body: any) {
         break
       }
       case 'stock': {
-        const xml = buildExportXml('List of Stock Items', companyName)
+        const xml = `<ENVELOPE>
+  <HEADER><VERSION>1</VERSION><TALLYREQUEST>Export</TALLYREQUEST><TYPE>Collection</TYPE><ID>StockItem Collection</ID></HEADER>
+  <BODY><DESC>
+    <STATICVARIABLES><SVCURRENTCOMPANY>${companyName}</SVCURRENTCOMPANY></STATICVARIABLES>
+    <TDL><TDLMESSAGE>
+      <COLLECTION NAME="StockItem Collection" ISMODIFY="No">
+        <TYPE>StockItem</TYPE>
+        <FETCH>NAME,PARENT,BASEUNITS,OPENINGBALANCE,CLOSINGBALANCE,OPENINGVALUE,CLOSINGVALUE,CLOSINGRATE,GSTRATE,HSNCODE,GUID</FETCH>
+      </COLLECTION>
+    </TDLMESSAGE></TDL>
+  </DESC></BODY>
+</ENVELOPE>`
         const response = await fetchFromTally(serverUrl, xml)
         let elements = getAll(response, 'STOCKITEM')
         if (elements.length === 0 && response.length > 0) {
