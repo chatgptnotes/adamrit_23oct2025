@@ -20,7 +20,7 @@ function formatDate(d) {
   })
 }
 
-export default function TallyBankReconciliation({ serverUrl, companyName }) {
+export default function TallyBankReconciliation({ serverUrl, companyName, companyId }) {
   const [banks, setBanks] = useState([])
   const [selectedBank, setSelectedBank] = useState('')
   const [tallyEntries, setTallyEntries] = useState([])
@@ -45,6 +45,7 @@ export default function TallyBankReconciliation({ serverUrl, companyName }) {
       const { data } = await supabase
         .from('tally_ledgers')
         .select('name, closing_balance')
+        .eq('company_id', companyId)
         .or('parent_group.ilike.%bank account%,parent_group.ilike.%bank accounts%')
         .order('name')
       if (data && data.length > 0) {
@@ -54,7 +55,7 @@ export default function TallyBankReconciliation({ serverUrl, companyName }) {
       setLoading(false)
     }
     loadBanks()
-  }, [])
+  }, [companyId])
 
   // Fetch tally entries and bank statements
   const fetchData = useCallback(async () => {
@@ -62,7 +63,7 @@ export default function TallyBankReconciliation({ serverUrl, companyName }) {
     setLoading(true)
     try {
       // Tally entries
-      let q = ( supabase as any).from('tally_vouchers').select('*').order('date', { ascending: true })
+      let q = ( supabase as any).from('tally_vouchers').select('*').eq('company_id', companyId).order('date', { ascending: true })
       if (dateFrom) q = q.gte('date', dateFrom)
       if (dateTo) q = q.lte('date', dateTo)
       const { data: vData } = await q
@@ -88,6 +89,7 @@ export default function TallyBankReconciliation({ serverUrl, companyName }) {
       const { data: stmtData } = await supabase
         .from('tally_bank_statements')
         .select('*')
+        .eq('company_id', companyId)
         .eq('bank_ledger', selectedBank)
         .gte('date', dateFrom || '2000-01-01')
         .lte('date', dateTo || '2099-12-31')
@@ -98,7 +100,7 @@ export default function TallyBankReconciliation({ serverUrl, companyName }) {
       toast.error('Failed to load reconciliation data')
     }
     setLoading(false)
-  }, [selectedBank, dateFrom, dateTo])
+  }, [selectedBank, dateFrom, dateTo, companyId])
 
   useEffect(() => {
     if (selectedBank) fetchData()

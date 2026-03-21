@@ -17,7 +17,7 @@ function formatQty(val: number) {
   return new Intl.NumberFormat('en-IN', { maximumFractionDigits: 2 }).format(val)
 }
 
-export default function TallyStockItems({ serverUrl, companyName }: { serverUrl?: string; companyName?: string }) {
+export default function TallyStockItems({ serverUrl, companyName, companyId }: { serverUrl?: string; companyName?: string; companyId?: string }) {
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -27,7 +27,7 @@ export default function TallyStockItems({ serverUrl, companyName }: { serverUrl?
 
   useEffect(() => {
     loadItems()
-  }, [])
+  }, [companyId])
 
   async function loadItems() {
     setLoading(true)
@@ -35,6 +35,7 @@ export default function TallyStockItems({ serverUrl, companyName }: { serverUrl?
       const { data, error } = await supabase
         .from('tally_stock_items')
         .select('id, tally_guid, name, stock_group, unit, opening_balance, closing_balance, opening_value, closing_value, rate, gst_rate, hsn_code, last_synced_at')
+        .eq('company_id', companyId)
         .order('name', { ascending: true })
 
       if (error) {

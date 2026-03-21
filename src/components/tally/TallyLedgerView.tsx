@@ -21,7 +21,7 @@ function formatDate(d) {
   })
 }
 
-export default function TallyLedgerView({ ledgerName, onClose, serverUrl, companyName }) {
+export default function TallyLedgerView({ ledgerName, onClose, serverUrl, companyName, companyId }) {
   const [vouchers, setVouchers] = useState([])
   const [loading, setLoading] = useState(true)
   const [ledgerInfo, setLedgerInfo] = useState(null)
@@ -37,13 +37,14 @@ export default function TallyLedgerView({ ledgerName, onClose, serverUrl, compan
       const { data } = await supabase
         .from('tally_ledgers')
         .select('*')
+        .eq('company_id', companyId)
         .eq('name', ledgerName)
         .limit(1)
         .single()
       if (data) setLedgerInfo(data)
     }
     if (ledgerName) loadLedger()
-  }, [ledgerName])
+  }, [ledgerName, companyId])
 
   // Fetch vouchers for this ledger
   const fetchVouchers = useCallback(async () => {
@@ -53,6 +54,7 @@ export default function TallyLedgerView({ ledgerName, onClose, serverUrl, compan
       let query = supabase
         .from('tally_vouchers')
         .select('*')
+        .eq('company_id', companyId)
         .order('date', { ascending: true })
 
       if (dateFrom) query = query.gte('date', dateFrom)
@@ -77,7 +79,7 @@ export default function TallyLedgerView({ ledgerName, onClose, serverUrl, compan
       toast.error('Failed to load transactions')
     }
     setLoading(false)
-  }, [ledgerName, dateFrom, dateTo])
+  }, [ledgerName, dateFrom, dateTo, companyId])
 
   useEffect(() => {
     fetchVouchers()

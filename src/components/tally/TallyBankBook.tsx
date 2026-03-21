@@ -22,7 +22,7 @@ function formatDate(d) {
   })
 }
 
-export default function TallyBankBook({ serverUrl, companyName }) {
+export default function TallyBankBook({ serverUrl, companyName, companyId }) {
   const [banks, setBanks] = useState([])
   const [selectedBank, setSelectedBank] = useState('')
   const [vouchers, setVouchers] = useState([])
@@ -43,6 +43,7 @@ export default function TallyBankBook({ serverUrl, companyName }) {
       const { data } = await supabase
         .from('tally_ledgers')
         .select('name, opening_balance, closing_balance, parent_group')
+        .eq('company_id', companyId)
         .or('parent_group.ilike.%bank account%,parent_group.ilike.%bank accounts%')
         .order('name')
 
@@ -53,7 +54,7 @@ export default function TallyBankBook({ serverUrl, companyName }) {
       setLoading(false)
     }
     loadBanks()
-  }, [])
+  }, [companyId])
 
   // Fetch vouchers for selected bank
   const fetchVouchers = useCallback(async () => {
@@ -66,6 +67,7 @@ export default function TallyBankBook({ serverUrl, companyName }) {
       let query = supabase
         .from('tally_vouchers')
         .select('*')
+        .eq('company_id', companyId)
         .order('date', { ascending: true })
 
       if (dateFrom) query = query.gte('date', dateFrom)
@@ -88,7 +90,7 @@ export default function TallyBankBook({ serverUrl, companyName }) {
       toast.error('Failed to load bank book')
     }
     setLoading(false)
-  }, [selectedBank, dateFrom, dateTo, banks])
+  }, [selectedBank, dateFrom, dateTo, banks, companyId])
 
   useEffect(() => {
     if (selectedBank) fetchVouchers()
@@ -106,19 +108,20 @@ export default function TallyBankBook({ serverUrl, companyName }) {
       await fetch('/api/tally-proxy', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ endpoint: 'sync', action: 'ledgers', serverUrl, companyName }),
+        body: JSON.stringify({ endpoint: 'sync', action: 'ledgers', serverUrl, companyName, companyId }),
       })
       // Then sync vouchers
       await fetch('/api/tally-proxy', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ endpoint: 'sync', action: 'vouchers', serverUrl, companyName }),
+        body: JSON.stringify({ endpoint: 'sync', action: 'vouchers', serverUrl, companyName, companyId }),
       })
       toast.success('Ledgers & vouchers refreshed from Tally')
       // Reload banks list since ledgers were synced
       const { data } = await supabase
         .from('tally_ledgers')
         .select('name, opening_balance, closing_balance, parent_group')
+        .eq('company_id', companyId)
         .or('parent_group.ilike.%bank account%,parent_group.ilike.%bank accounts%')
         .order('name')
       if (data && data.length > 0) {

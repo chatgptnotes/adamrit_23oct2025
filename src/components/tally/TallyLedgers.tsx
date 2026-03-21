@@ -49,7 +49,7 @@ function formatCurrency(val) {
   }).format(val || 0)
 }
 
-export default function TallyLedgers({ serverUrl, companyName }) {
+export default function TallyLedgers({ serverUrl, companyName, companyId }) {
   const [ledgers, setLedgers] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -72,13 +72,14 @@ export default function TallyLedgers({ serverUrl, companyName }) {
 
   useEffect(() => {
     fetchLedgers()
-  }, [])
+  }, [companyId])
 
   async function fetchLedgers() {
     setLoading(true)
     const { data, error } = await supabase
       .from('tally_ledgers')
       .select('*')
+      .eq('company_id', companyId)
       .order('name', { ascending: true })
 
     if (error) {
@@ -349,6 +350,7 @@ export default function TallyLedgers({ serverUrl, companyName }) {
           onClose={() => setViewLedger(null)}
           serverUrl={serverUrl}
           companyName={companyName}
+          companyId={companyId}
         />
       )}
 

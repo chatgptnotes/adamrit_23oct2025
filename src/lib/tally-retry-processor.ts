@@ -2,14 +2,11 @@ import { supabase } from "@/integrations/supabase/client";
 
 async function isTallyActive() {
   const { data } = await supabase.from("tally_config").select("*").eq("is_active", true).limit(1).single();
-  if (!data) return { active: false, serverUrl: "", companyName: "" };
-  return { active: true, serverUrl: data.server_url, companyName: data.company_name };
+  if (!data) return { active: false, serverUrl: "", companyName: "", companyId: "" };
+  return { active: true, serverUrl: data.server_url, companyName: data.company_name, companyId: data.id };
 }
 
 export async function processRetryQueue(): Promise<{ processed: number; succeeded: number; failed: number }> {
-  const config = await isTallyActive();
-  if (!config.active) return { processed: 0, succeeded: 0, failed: 0 };
-
   const now = new Date().toISOString();
   const { data: items } = await supabase
     .from("tally_push_queue")
@@ -22,6 +19,23 @@ export async function processRetryQueue(): Promise<{ processed: number; succeede
   let processed = 0, succeeded = 0, failed = 0;
 
   for (const item of (items || [])) {
+    // Load config for this item's company
+    const itemCompany = item.company_id || "";
+    let itemConfig = await isTallyActive();
+    if (itemCompany) {
+      const { data: companyConfig } = await supabase
+        .from("tally_config")
+        .select("*")
+        .eq("id", itemCompany)
+        .eq("is_active", true)
+        .limit(1)
+        .single();
+      if (companyConfig) {
+        itemConfig = { active: true, serverUrl: companyConfig.server_url, companyName: companyConfig.company_name, companyId: companyConfig.id };
+      }
+    }
+    if (!itemConfig.active) { failed++; processed++; continue; }
+
     try {
       const response = await fetch("/api/tally-proxy", {
         method: "POST",
@@ -29,8 +43,8 @@ export async function processRetryQueue(): Promise<{ processed: number; succeede
         body: JSON.stringify({
           endpoint: "push",
           action: item.push_action,
-          serverUrl: config.serverUrl,
-          companyName: config.companyName,
+          serverUrl: itemConfig.serverUrl,
+          companyName: itemConfig.companyName,
           data: item.payload
         })
       });
