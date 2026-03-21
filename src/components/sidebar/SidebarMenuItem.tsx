@@ -37,7 +37,9 @@ export const SidebarMenuItem = ({ item }: SidebarMenuItemProps) => {
         <a
           href={item.route}
           className={`flex items-center justify-between w-full p-2 cursor-pointer hover:bg-accent rounded-md transition-colors gap-2 ${
-            location.pathname === item.route ? 'bg-accent' : ''
+            location.pathname === item.route
+              ? 'bg-primary/10 border-l-4 border-primary text-primary font-semibold'
+              : ''
           }`}
           onClick={(e) => handleItemClick(item.route, e)}
         >
