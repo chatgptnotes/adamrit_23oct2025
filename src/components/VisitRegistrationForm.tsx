@@ -47,6 +47,7 @@ export const VisitRegistrationForm: React.FC<VisitRegistrationFormProps> = ({
     patientType: '',
     wardAllotted: '',
     roomAllotted: '',
+    diagnosisId: '',
   });
 
   // Keep track of selected IDs for foreign keys
@@ -75,6 +76,7 @@ export const VisitRegistrationForm: React.FC<VisitRegistrationFormProps> = ({
         patientType: existingVisit.patient_type || 'OPD',
         wardAllotted: existingVisit.ward_allotted || '',
         roomAllotted: existingVisit.room_allotted || '',
+        diagnosisId: existingVisit.diagnosis_id || '',
       };
 
       console.log('Populated Form Data:', populatedData);
@@ -267,7 +269,8 @@ export const VisitRegistrationForm: React.FC<VisitRegistrationFormProps> = ({
             card_no: formData.cardNo || null,
             ward_allotted: formData.wardAllotted || null,
             room_allotted: formData.roomAllotted || null,
-            admission_date: admissionDate
+            admission_date: admissionDate,
+            diagnosis_id: formData.diagnosisId || null
           })
           .eq('visit_id', existingVisit.visit_id)
           .select();
@@ -350,7 +353,8 @@ export const VisitRegistrationForm: React.FC<VisitRegistrationFormProps> = ({
           card_no: formData.cardNo || null,
             ward_allotted: formData.wardAllotted || null,
             room_allotted: formData.roomAllotted || null,
-            admission_date: isIPDOrEmergency ? new Date().toISOString() : null
+            admission_date: isIPDOrEmergency ? new Date().toISOString() : null,
+            diagnosis_id: formData.diagnosisId || null
           })
           .select('id, visit_id')
           .single();

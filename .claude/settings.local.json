@@ -59,7 +59,10 @@
       "Bash(do grep:*)",
       "Bash(echo \"Found in: $file\")",
       "Bash(done)",
-      "Bash(sed 's/:[^:]*$//')"
+      "Bash(sed 's/:[^:]*$//')",
+      "Bash(npx vite:*)",
+      "Bash(find /Users/apple/Desktop/Hope_projects/adamrit -name *diagnosis* -type f)",
+      "Bash(find /Users/apple/Desktop/Hope_projects/adamrit/supabase/migrations -name *visits* -type f)"
     ],
     "deny": [],
     "ask": []

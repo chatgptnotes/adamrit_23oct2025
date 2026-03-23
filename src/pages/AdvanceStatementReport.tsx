@@ -95,6 +95,10 @@ const AdvanceStatementReport = () => {
             hospital_name,
             corporate
           ),
+          diagnoses!diagnosis_id (
+            id,
+            name
+          ),
           visit_diagnoses (
             diagnoses (
               id,
@@ -691,7 +695,7 @@ const AdvanceStatementReport = () => {
               <div class="stat-label">Currently Admitted</div>
             </div>
             <div class="stat-item">
-              <div class="stat-number">${advanceData.filter(item => item.visit_diagnoses && item.visit_diagnoses.length > 0).length}</div>
+              <div class="stat-number">${advanceData.filter(item => item.diagnoses || (item.visit_diagnoses && item.visit_diagnoses.length > 0)).length}</div>
               <div class="stat-label">Patients with Diagnosis</div>
             </div>
             <div class="stat-item">
@@ -737,10 +741,12 @@ const AdvanceStatementReport = () => {
                   </div>
                 `;
 
-                const diagnoses = item.visit_diagnoses?.map(vd => vd.diagnoses?.name).filter(Boolean) || [];
+                const directDiagnosis = item.diagnoses?.name;
+                const junctionDiagnoses = item.visit_diagnoses?.map(vd => vd.diagnoses?.name).filter(Boolean) || [];
+                const diagnoses = directDiagnosis ? [directDiagnosis, ...junctionDiagnoses] : junctionDiagnoses;
                 const diagnosisText = diagnoses.length > 0 ?
                   diagnoses.map(diagnosis => `<div class="diagnosis-item">${diagnosis}</div>`).join('') :
-                  (item.reason_for_visit ? `<div class="diagnosis-item">${item.reason_for_visit}</div>` : 'No diagnosis recorded');
+                  'No diagnosis recorded';
 
                 const surgeries = item.visit_surgeries?.map(vs => vs.cghs_surgery ? {
                   name: vs.cghs_surgery.name,
@@ -861,7 +867,7 @@ const AdvanceStatementReport = () => {
         // Corporate Type
         const corporate = patient?.corporate || 'N/A';
 
-        const diagnoses = item.visit_diagnoses?.map(vd => vd.diagnoses?.name).filter(Boolean).join(', ') || 'No diagnosis';
+        const diagnoses = item.diagnoses?.name || item.visit_diagnoses?.map(vd => vd.diagnoses?.name).filter(Boolean).join(', ') || 'No diagnosis';
         const surgeries = item.visit_surgeries?.map(vs => {
           if (!vs.cghs_surgery) return null;
           let surgeryInfo = `${vs.cghs_surgery.name} (Code: ${vs.cghs_surgery.code})`;
@@ -1036,7 +1042,7 @@ const AdvanceStatementReport = () => {
             <h3 className="text-sm font-medium text-gray-500">With Diagnosis</h3>
             <p className="text-2xl font-bold text-green-600">
               {advanceData.filter(item =>
-                item.visit_diagnoses && item.visit_diagnoses.length > 0
+                item.diagnoses || (item.visit_diagnoses && item.visit_diagnoses.length > 0)
               ).length}
             </p>
           </div>
@@ -1115,15 +1121,15 @@ const AdvanceStatementReport = () => {
                       </div>
                     );
 
-                    const diagnoses = item.visit_diagnoses?.map(vd => vd.diagnoses?.name).filter(Boolean) || [];
+                    const directDiagnosis = item.diagnoses?.name;
+                    const junctionDiagnoses = item.visit_diagnoses?.map(vd => vd.diagnoses?.name).filter(Boolean) || [];
+                    const diagnoses = directDiagnosis ? [directDiagnosis, ...junctionDiagnoses] : junctionDiagnoses;
                     const diagnosisDisplay = diagnoses.length > 0 ? (
                       <div className="space-y-1">
                         {diagnoses.map((diagnosis, idx) => (
                           <div key={idx} className="text-sm bg-blue-50 px-2 py-1 rounded">{diagnosis}</div>
                         ))}
                       </div>
-                    ) : item.reason_for_visit ? (
-                      <div className="text-sm bg-blue-50 px-2 py-1 rounded">{item.reason_for_visit}</div>
                     ) : (
                       <span className="text-gray-500">No diagnosis recorded</span>
                     );
