@@ -4,9 +4,11 @@ import { supabase } from '@/integrations/supabase/client'
 import { toast } from 'sonner'
 import {
   Search, Filter, X, Loader2,
-  BookOpen, Link2, ChevronDown
+  BookOpen, Link2, ChevronDown, ChevronLeft, ChevronRight
 } from 'lucide-react'
 import TallyLedgerView from './TallyLedgerView'
+
+const PAGE_SIZE = 50
 
 const GROUP_OPTIONS = [
   'All',
@@ -34,6 +36,7 @@ export default function TallyLedgers({ serverUrl, companyName, companyId }) {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [groupFilter, setGroupFilter] = useState('All')
+  const [page, setPage] = useState(0)
   const [viewLedger, setViewLedger] = useState(null)
 
   useEffect(() => {
@@ -79,6 +82,14 @@ export default function TallyLedgers({ serverUrl, companyName, companyId }) {
 
     return result
   }, [ledgers, search, groupFilter])
+
+  // Reset page when filters change
+  useEffect(() => {
+    setPage(0)
+  }, [search, groupFilter])
+
+  const paginatedRows = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
+  const totalPages = Math.ceil(filtered.length / PAGE_SIZE)
 
   function getMappedLabel(ledger) {
     if (!ledger.is_mapped || !ledger.adamrit_entity_type) return null
@@ -174,7 +185,7 @@ export default function TallyLedgers({ serverUrl, companyName, companyId }) {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((ledger, idx) => {
+                {paginatedRows.map((ledger, idx) => {
                   const mapped = getMappedLabel(ledger)
                   return (
                     <tr
@@ -229,15 +240,34 @@ export default function TallyLedgers({ serverUrl, companyName, companyId }) {
           </div>
         )}
 
-        {/* Footer with count */}
+        {/* Pagination */}
         {!loading && filtered.length > 0 && (
-          <div className="px-4 py-3 border-t border-gray-100 bg-gray-50 flex items-center justify-between">
+          <div className="flex items-center justify-between p-4 border-t border-gray-100 bg-gray-50">
             <p className="text-xs text-gray-500">
-              Showing {filtered.length} of {ledgers.length} ledgers
+              Showing {page * PAGE_SIZE + 1}-{Math.min((page + 1) * PAGE_SIZE, filtered.length)} of {filtered.length} ledgers
+              {groupFilter !== 'All' && <span className="text-gray-400 ml-2">Filtered by: {groupFilter}</span>}
             </p>
-            <p className="text-xs text-gray-400">
-              {groupFilter !== 'All' && `Filtered by: ${groupFilter}`}
-            </p>
+            {totalPages > 1 && (
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setPage(p => Math.max(0, p - 1))}
+                  disabled={page === 0}
+                  className="p-1.5 rounded-lg border border-gray-300 hover:bg-gray-50 disabled:opacity-40"
+                >
+                  <ChevronLeft className="h-4 w-4 text-gray-600" />
+                </button>
+                <span className="px-3 py-1 text-xs text-gray-700 font-medium">
+                  Page {page + 1} of {totalPages}
+                </span>
+                <button
+                  onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
+                  disabled={page >= totalPages - 1}
+                  className="p-1.5 rounded-lg border border-gray-300 hover:bg-gray-50 disabled:opacity-40"
+                >
+                  <ChevronRight className="h-4 w-4 text-gray-600" />
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>

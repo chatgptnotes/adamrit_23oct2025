@@ -35,6 +35,20 @@ function truncate(str: string | null, len = 40) {
   return str.length > len ? str.slice(0, len) + '...' : str
 }
 
+function getPartyName(v: any): string {
+  const partyLedger = (v.party_ledger || '').toLowerCase()
+  const isBankOrCash = partyLedger.includes('bank') || partyLedger === 'cash' || partyLedger.includes('cash-in-hand')
+
+  if (!isBankOrCash && v.party_ledger) return v.party_ledger
+
+  const entries = Array.isArray(v.ledger_entries) ? v.ledger_entries : []
+  const against = entries.find(e => {
+    const n = (e.ledger || '').toLowerCase()
+    return !n.includes('bank') && n !== 'cash' && !n.includes('cash-in-hand')
+  })
+  return against?.ledger || v.party_ledger || '-'
+}
+
 function StatusBadge({ status }: { status: string }) {
   const styles = {
     synced: 'bg-green-100 text-green-700',
@@ -314,7 +328,7 @@ function DetailModal({ voucher, onClose, onEdit, onDelete }: { voucher: any; onC
             </div>
             <div>
               <p className="text-gray-500">Party</p>
-              <p className="font-medium text-gray-900">{voucher.party_ledger || '-'}</p>
+              <p className="font-medium text-gray-900">{getPartyName(voucher)}</p>
             </div>
             <div>
               <p className="text-gray-500">Amount</p>
@@ -574,7 +588,7 @@ export default function TallyVouchers({ serverUrl, companyName, companyId }: { s
                       {v.voucher_type}
                     </span>
                   </td>
-                  <td className="py-2.5 px-3 text-gray-900 max-w-[180px] truncate">{v.party_ledger || '-'}</td>
+                  <td className="py-2.5 px-3 text-gray-900 max-w-[180px] truncate">{getPartyName(v)}</td>
                   <td className="py-2.5 px-3 text-right text-gray-900 font-medium whitespace-nowrap">
                     {formatCurrency(v.amount)}
                   </td>
