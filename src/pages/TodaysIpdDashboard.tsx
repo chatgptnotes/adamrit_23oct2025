@@ -1519,6 +1519,10 @@ const TodaysIpdDashboard = () => {
           relationship_managers (
             id,
             name
+          ),
+          diagnoses!diagnosis_id (
+            id,
+            name
           )
         `)
         .eq('patient_type', 'IPD')
@@ -2992,7 +2996,7 @@ const TodaysIpdDashboard = () => {
                     {visit.appointment_with}
                   </TableCell>
                   <TableCell>
-                    General
+                    {visit.diagnoses?.name || 'General'}
                   </TableCell>
                   <TableCell>
                     {(() => {
@@ -3679,7 +3683,7 @@ const TodaysIpdDashboard = () => {
                       </span>
                     </div>
                     <div>
-                      <span className="font-medium text-gray-600">Diagnosis:</span> {selectedPatientForView.diagnosis || 'General'}
+                      <span className="font-medium text-gray-600">Diagnosis:</span> {selectedPatientForView.diagnoses?.name || 'General'}
                     </div>
                     <div>
                       <span className="font-medium text-gray-600">Relation with Employee:</span> {selectedPatientForView.relation_with_employee || 'N/A'}

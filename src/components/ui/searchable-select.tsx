@@ -83,7 +83,12 @@ export function SearchableSelect({
             value={search}
             onValueChange={setSearch}
           />
-          <CommandList className="max-h-[300px] overflow-y-auto">
+          <CommandList
+            className="max-h-[300px] overflow-y-auto"
+            style={{ maxHeight: '300px', overflowY: 'auto' }}
+            onWheel={(e) => e.stopPropagation()}
+            onTouchMove={(e) => e.stopPropagation()}
+          >
             {filteredOptions.length === 0 ? (
               <div className="py-6 text-center text-sm text-muted-foreground">{emptyText}</div>
             ) : (

@@ -360,6 +360,10 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
               gender,
               address,
               phone
+            ),
+            diagnoses!diagnosis_id (
+              id,
+              name
             )
           `)
           .eq('visit_id', visitId)
@@ -1232,8 +1236,16 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
     }
   }, [visitSurgeryData, otNotesData, patientData, isOtNotesLoading]);
 
-  // Update diagnosis when data is loaded from visit_diagnoses table
+  // Update diagnosis when data is loaded from visit_diagnoses table or direct diagnosis_id
   useEffect(() => {
+    // Fallback: use direct diagnosis_id from visits table
+    if ((!visitDiagnosisData || visitDiagnosisData.length === 0) && patientData?.diagnoses?.name) {
+      if (!diagnosis || diagnosis.trim() === '' || diagnosis === 'Enter diagnosis details...') {
+        setDiagnosis(patientData.diagnoses.name);
+        console.log('✅ Diagnosis field updated from direct diagnosis_id:', patientData.diagnoses.name);
+      }
+      return;
+    }
     if (visitDiagnosisData && visitDiagnosisData.length > 0) {
       try {
         console.log('🔄 Processing diagnosis data:', visitDiagnosisData);
@@ -1295,7 +1307,7 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
         console.log('❌ Error formatting diagnosis data:', error);
       }
     }
-  }, [visitDiagnosisData, diagnosis]);
+  }, [visitDiagnosisData, diagnosis, patientData]);
 
   // Populate form fields when existing discharge summary is loaded
   useEffect(() => {
