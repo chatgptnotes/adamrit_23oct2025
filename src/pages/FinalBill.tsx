@@ -2839,9 +2839,31 @@ const FinalBill = () => {
   // Functions to update clinical services data
   const updateClinicalServiceField = async (junctionId: string, field: string, value: string) => {
     try {
+      // Build update object
+      const updateData: any = { [field]: value };
+
+      // If changing a date, recalculate quantity from the date pair
+      if (field === 'start_date' || field === 'end_date') {
+        const currentService = savedClinicalServicesData.find(s => s.junction_id === junctionId);
+        if (currentService) {
+          const startStr = field === 'start_date' ? value : currentService.start_date;
+          const endStr = field === 'end_date' ? value : currentService.end_date;
+          if (startStr && endStr) {
+            const start = new Date(startStr);
+            const end = new Date(endStr);
+            const days = Math.max(1, Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+            updateData.quantity = days;
+            // Recalculate amount
+            const rate = currentService.rate_used || currentService.selectedRate || 0;
+            const numericRate = typeof rate === 'string' ? parseFloat(rate) : rate;
+            updateData.amount = numericRate * days;
+          }
+        }
+      }
+
       const { error } = await supabase
         .from('visit_clinical_services')
-        .update({ [field]: value })
+        .update(updateData)
         .eq('id', junctionId);
 
       if (error) {
@@ -2852,10 +2874,10 @@ const FinalBill = () => {
 
       // Update local state
       setSavedClinicalServicesData(prev => prev.map(service =>
-        service.junction_id === junctionId ? { ...service, [field]: value } : service
+        service.junction_id === junctionId ? { ...service, ...updateData } : service
       ));
 
-      toast.success('Clinical service date updated successfully');
+      toast.success('Clinical service updated successfully');
     } catch (error) {
       console.error('Error updating clinical service field:', error);
       toast.error('Failed to update clinical service data');
@@ -3287,27 +3309,50 @@ const FinalBill = () => {
           continue;
         }
 
-        const { error: upsertError } = await supabase
+        // Check if service already exists to preserve manually set dates
+        const { data: existingRows } = await supabase
           .from('visit_clinical_services')
-          .upsert({
-            visit_id: visitData.id,
-            clinical_service_id: service.id,
-            quantity: days,
-            rate_used: numericRate,
-            rate_type: rateType,
-            amount: numericRate * days,
-            start_date: visitData.admission_date,
-            end_date: visitData.discharge_date || new Date().toISOString().split('T')[0],
-          }, {
-            onConflict: 'visit_id,clinical_service_id',
-            ignoreDuplicates: false
-          })
-          .select();
+          .select('id')
+          .eq('visit_id', visitData.id)
+          .eq('clinical_service_id', service.id)
+          .limit(1);
+
+        const existing = existingRows && existingRows.length > 0 ? existingRows[0] : null;
+
+        let upsertError = null;
+        if (existing) {
+          // Update only quantity, rate, amount — preserve existing start_date and end_date
+          const { error } = await supabase
+            .from('visit_clinical_services')
+            .update({
+              quantity: days,
+              rate_used: numericRate,
+              rate_type: rateType,
+              amount: numericRate * days,
+            })
+            .eq('id', existing.id);
+          upsertError = error;
+        } else {
+          // Insert new row with default admission/discharge dates
+          const { error } = await supabase
+            .from('visit_clinical_services')
+            .insert({
+              visit_id: visitData.id,
+              clinical_service_id: service.id,
+              quantity: days,
+              rate_used: numericRate,
+              rate_type: rateType,
+              amount: numericRate * days,
+              start_date: visitData.admission_date,
+              end_date: visitData.discharge_date || new Date().toISOString().split('T')[0],
+            });
+          upsertError = error;
+        }
 
         if (upsertError) {
           console.error(`❌ [AUTO-DAILY] Failed to upsert ${service.service_name}:`, upsertError);
         } else {
-          console.log(`✅ [AUTO-DAILY] Upserted ${service.service_name}: ${days} days × ₹${numericRate} = ₹${numericRate * days}`);
+          console.log(`✅ [AUTO-DAILY] ${existing ? 'Updated' : 'Inserted'} ${service.service_name}: ${days} days × ₹${numericRate} = ₹${numericRate * days}`);
         }
       }
 
@@ -7433,6 +7478,8 @@ INSTRUCTIONS:
           amount,
           external_requisition,
           selected_at,
+          start_date,
+          end_date,
           clinical_services!clinical_service_id (
             id,
             service_name,
@@ -7468,6 +7515,8 @@ INSTRUCTIONS:
           amount: item.amount,
           external_requisition: item.external_requisition,
           selected_at: item.selected_at,
+          start_date: item.start_date || '',
+          end_date: item.end_date || '',
           junction_id: item.id
         }));
       }
@@ -7494,6 +7543,8 @@ INSTRUCTIONS:
           amount: item.amount,
           external_requisition: item.external_requisition,
           selected_at: item.selected_at,
+          start_date: item.start_date || '',
+          end_date: item.end_date || '',
           junction_id: item.id,
           patientCategory: item.patient_category || 'Private', // Include patient category from database
           selectedRate: item.rate_used || item.amount || 0, // Include selected rate for consistency
@@ -8219,6 +8270,8 @@ INSTRUCTIONS:
               });
 
               return {
+                // Spread service detail first so explicit fields below take priority
+                ...serviceDetail,
                 id: serviceDetail?.id,
                 junction_id: rawService.id,  // Junction table primary key for updates
                 service_name: serviceDetail?.service_name,
@@ -8232,8 +8285,6 @@ INSTRUCTIONS:
                 end_date: rawService.end_date || '',
                 quantity: rawService.quantity || 1,
                 patientCategory: rawService.rate_type?.toUpperCase() || 'PRIVATE',
-                // Include all service detail fields
-                ...serviceDetail
               };
             });
 
@@ -17942,119 +17993,8 @@ Dr. Murali B K
                                   onClick={async () => {
                                     console.log('🏥 Mandatory service selected:', service);
 
-                                    // DUPLICATE PREVENTION: Check if service already exists
-                                    console.log('🔍 [DUPLICATE CHECK] Checking for existing service...');
-                                    const existingService = savedMandatoryServicesData.find(s =>
-                                      s.id === service.id || s.service_name === service.service_name
-                                    );
-
-                                    if (existingService) {
-                                      console.log('⚠️ [DUPLICATE DETECTED] Service already exists:', {
-                                        existingService,
-                                        attemptedService: service.service_name,
-                                        currentQuantity: existingService.quantity || 1
-                                      });
-
-                                      const currentQuantity = existingService.quantity || 1;
-                                      // Get unit rate from the new service being added, not from existing total
-                                      const unitRate = service.selectedRate || service.amount || service.cost || 0;
-                                      const currentTotalCost = unitRate * currentQuantity;
-                                      const newQuantity = currentQuantity + 1;
-                                      const newTotalAmount = unitRate * newQuantity;
-
-                                      // Show quantity-based duplicate message
-                                      const userChoice = confirm(
-                                        `"${service.service_name}" is already added to this visit.\n\n` +
-                                        `Current: Quantity ${currentQuantity} × ₹${unitRate} = ₹${currentTotalCost}\n` +
-                                        `New: Quantity ${newQuantity} × ₹${unitRate} = ₹${newTotalAmount}\n\n` +
-                                        `Click OK to increase quantity to ${newQuantity}, or Cancel to keep current quantity.`
-                                      );
-
-                                      if (!userChoice) {
-                                        toast.info(`"${service.service_name}" quantity unchanged (${currentQuantity}).`);
-                                        return; // User chose to keep existing quantity
-                                      }
-
-                                      // QUANTITY-BASED UPDATE: Update existing record instead of creating new one
-                                      console.log('🔢 [QUANTITY UPDATE] Updating existing service quantity...');
-                                      toast.info(`Updating "${service.service_name}" quantity to ${newQuantity}...`);
-
-                                      try {
-                                        // ENSURE visit exists before updating
-                                        const ensureResult = await ensureVisitExists(visitId);
-
-                                        if (!ensureResult.success) {
-                                          console.error('❌ [QUANTITY UPDATE] Failed to ensure visit exists:', ensureResult.error);
-                                          toast.error('Failed to update quantity - visit not available');
-                                          return;
-                                        }
-
-                                        // Get visit UUID for database update
-                                        const { data: visitData, error: visitError } = await supabase
-                                          .from('visits')
-                                          .select('id, visit_id')
-                                          .eq('visit_id', visitId)
-                                          .order('created_at', { ascending: false })
-                                          .limit(1)
-                                          .single();
-
-                                        if (visitError || !visitData) {
-                                          console.error('❌ [QUANTITY UPDATE] Failed to get visit data:', visitError);
-                                          toast.error('Failed to update quantity - visit not found');
-                                          return;
-                                        }
-
-                                        // Update the existing record in database
-                                        const { data: updateResult, error: updateError } = await supabase
-                                          .from('visit_mandatory_services')
-                                          .update({
-                                            quantity: newQuantity,
-                                            rate_used: unitRate,
-                                            amount: newTotalAmount
-                                          })
-                                          .eq('visit_id', visitData.id)
-                                          .eq('mandatory_service_id', service.id)
-                                          .select('*');
-
-                                        console.log('🔢 [QUANTITY UPDATE] Database update result:', {
-                                          updateResult,
-                                          updateError,
-                                          success: !updateError
-                                        });
-
-                                        if (updateError) {
-                                          console.error('❌ [QUANTITY UPDATE] Database update failed:', updateError);
-                                          toast.error('Failed to update service quantity');
-                                          return;
-                                        }
-
-                                        // Update local state
-                                        setSavedMandatoryServicesData(prev =>
-                                          prev.map(s => s.id === service.id ? {
-                                            ...s,
-                                            quantity: newQuantity,
-                                            amount: newTotalAmount,
-                                            selectedRate: unitRate,
-                                            cost: newTotalAmount
-                                          } : s)
-                                        );
-
-                                        // Force refresh
-                                        setMandatoryServicesRefreshKey(prev => prev + 1);
-
-                                        toast.success(`"${service.service_name}" quantity updated to ${newQuantity} (₹${newTotalAmount})`);
-                                        console.log('✅ [QUANTITY UPDATE] Successfully updated service quantity');
-                                        return; // Exit early - don't proceed with normal save
-
-                                      } catch (quantityUpdateError) {
-                                        console.error('❌ [QUANTITY UPDATE] Quantity update failed:', quantityUpdateError);
-                                        toast.error('Failed to update service quantity');
-                                        return;
-                                      }
-                                    } else {
-                                      // Show normal save feedback for new services
-                                      toast.info(`Saving mandatory service "${service.service_name}"...`);
-                                    }
+                                    // Save feedback
+                                    toast.info(`Saving mandatory service "${service.service_name}"...`);
 
                                     try {
                                       console.log('🚀 [MANDATORY SAVE] Starting mandatory service save process...');
@@ -18246,10 +18186,7 @@ Dr. Murali B K
 
                                       const { data: junctionResult, error: junctionError } = await supabase
                                         .from('visit_mandatory_services')
-                                        .upsert(junctionData, {
-                                          onConflict: 'visit_id,mandatory_service_id',
-                                          ignoreDuplicates: false
-                                        })
+                                        .insert(junctionData)
                                         .select('*'); // Select all fields to see what was actually inserted
 
                                       console.log('💾 [MANDATORY SAVE] Junction table result:', {
@@ -18768,10 +18705,7 @@ Dr. Murali B K
 
                                       const { data: junctionResult, error: junctionError } = await supabase
                                         .from('visit_clinical_services')
-                                        .upsert(junctionData, { 
-                                          onConflict: 'visit_id,clinical_service_id',
-                                          ignoreDuplicates: false 
-                                        })
+                                        .insert(junctionData)
                                         .select();
 
                                       console.log('💾 [CLINICAL SAVE] Junction table result:', {
@@ -18841,48 +18775,19 @@ Dr. Murali B K
                                         return;
                                       }
 
-                                      // Verify the save was successful by checking junction table (actual data source)
-                                      console.log('✅ [CLINICAL SAVE] Verifying save from junction table...');
-                                      const { data: verificationData, error: verificationError } = await supabase
-                                        .from('visit_clinical_services')
-                                        .select(`
-                                          id,
-                                          clinical_service_id,
-                                          quantity,
-                                          rate_used,
-                                          rate_type,
-                                          amount,
-                                          clinical_services!clinical_service_id (
-                                            id,
-                                            service_name,
-                                            tpa_rate,
-                                            private_rate,
-                                            nabh_rate,
-                                            non_nabh_rate
-                                          )
-                                        `)
-                                        .eq('visit_id', visitData.id)
-                                        .eq('clinical_service_id', service.id)
-                                        .maybeSingle();
-
-                                      if (verificationError) {
-                                        console.error('❌ [CLINICAL SAVE] Post-save verification query failed:', {
-                                          verificationError
-                                        });
-                                        toast.error('Save verification failed - please refresh page to verify');
-                                        return;
-                                      }
+                                      // Verify the save was successful by checking the inserted row from junction result
+                                      console.log('✅ [CLINICAL SAVE] Verifying save from insert result...');
+                                      const verificationData = junctionResult?.[0];
 
                                       if (!verificationData) {
-                                        console.error('❌ [CLINICAL SAVE] No data found in junction table after save');
+                                        console.error('❌ [CLINICAL SAVE] No data returned from insert');
                                         toast.error('Save verification failed - data not found. Please refresh page.');
                                         return;
                                       }
 
-                                      console.log('✅ [CLINICAL SAVE] Post-save verification successful from junction table:', {
+                                      console.log('✅ [CLINICAL SAVE] Post-save verification successful:', {
                                         junctionId: verificationData.id,
-                                        serviceFound: !!verificationData.clinical_services,
-                                        serviceName: verificationData.clinical_services?.service_name,
+                                        serviceId: verificationData.clinical_service_id,
                                         amount: verificationData.amount
                                       });
 
@@ -19533,7 +19438,14 @@ Dr. Murali B K
                                 Saved Clinical Services ({savedClinicalServicesData.length})
                               </h5>
                               <div className="text-lg font-bold text-blue-600">
-                                Total: ₹{savedClinicalServicesData.reduce((total, service) => total + ((parseFloat(service.selectedRate || service.amount) || 0) * (service.quantity || 1)), 0)}
+                                Total: ₹{savedClinicalServicesData.reduce((total, service) => {
+                                  if (!service.start_date || !service.end_date) return total;
+                                  const rate = parseFloat(service.selectedRate || service.rate_used || service.amount) || 0;
+                                  const start = new Date(service.start_date);
+                                  const end = new Date(service.end_date);
+                                  const qty = Math.max(1, Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+                                  return total + (rate * qty);
+                                }, 0).toLocaleString('en-IN')}
                               </div>
                             </div>
                             {savedClinicalServicesData.length > 0 ? (
@@ -19542,8 +19454,9 @@ Dr. Murali B K
                                   <thead>
                                     <tr className="bg-gray-100">
                                       <th className="border border-gray-300 px-4 py-2 text-left text-sm font-medium text-gray-900">Service Name</th>
-                                      <th className="border border-gray-300 px-4 py-2 text-left text-sm font-medium text-gray-900">Amount</th>
+                                      <th className="border border-gray-300 px-4 py-2 text-left text-sm font-medium text-gray-900">Rate</th>
                                       <th className="border border-gray-300 px-4 py-2 text-center text-sm font-medium text-gray-900">Qty</th>
+                                      <th className="border border-gray-300 px-4 py-2 text-left text-sm font-medium text-gray-900">Amount</th>
                                       <th className="border border-gray-300 px-4 py-2 text-left text-sm font-medium text-gray-900">Start Date</th>
                                       <th className="border border-gray-300 px-4 py-2 text-left text-sm font-medium text-gray-900">End Date</th>
                                       <th className="border border-gray-300 px-4 py-2 text-center text-sm font-medium text-gray-900">Action</th>
@@ -19555,17 +19468,26 @@ Dr. Murali B K
                                         <td className="border border-gray-300 px-4 py-2 text-sm text-gray-900 font-medium">
                                           {service.service_name}
                                         </td>
-                                        <td className="border border-gray-300 px-4 py-2 text-sm font-medium text-green-600">
-                                          ₹{service.selectedRate || service.amount}
+                                        <td className="border border-gray-300 px-4 py-2 text-sm font-medium text-blue-600">
+                                          ₹{parseFloat(service.selectedRate || service.rate_used || service.amount) || 0}
                                         </td>
-                                        <td className="border border-gray-300 px-2 py-2 text-sm text-center">
-                                          <input
-                                            type="number"
-                                            min="1"
-                                            value={service.quantity || 1}
-                                            onChange={(e) => updateClinicalServiceField(service.junction_id, 'quantity', parseInt(e.target.value) || 1)}
-                                            className="w-16 border border-gray-300 rounded text-center text-sm px-1 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                                          />
+                                        <td className="border border-gray-300 px-2 py-2 text-sm text-center font-medium">
+                                          {(() => {
+                                            if (!service.start_date || !service.end_date) return 0;
+                                            const start = new Date(service.start_date);
+                                            const end = new Date(service.end_date);
+                                            return Math.max(1, Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+                                          })()}
+                                        </td>
+                                        <td className="border border-gray-300 px-4 py-2 text-sm font-medium text-green-600">
+                                          ₹{(() => {
+                                            if (!service.start_date || !service.end_date) return 0;
+                                            const rate = parseFloat(service.selectedRate || service.rate_used || service.amount) || 0;
+                                            const start = new Date(service.start_date);
+                                            const end = new Date(service.end_date);
+                                            const qty = Math.max(1, Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+                                            return (rate * qty).toLocaleString('en-IN');
+                                          })()}
                                         </td>
                                         <td className="border border-gray-300 px-2 py-2 text-sm text-gray-600">
                                           <input
