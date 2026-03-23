@@ -143,18 +143,23 @@ export default function TallyCashBook({ serverUrl, companyName, companyId }) {
       cashOut += paid
       runningBalance = runningBalance + received - paid
 
-      // Determine "against" party - the non-cash ledger
-      const against = entries.find(e => {
-        const n = (e.ledger || '').toLowerCase()
-        return !n.includes('cash')
-      })
+      // Determine "against" party - prefer party_ledger if not cash, else first non-cash ledger entry
+      const nonCashParty = (v.party_ledger && !(v.party_ledger || '').toLowerCase().includes('cash'))
+        ? v.party_ledger
+        : null
+      const against = nonCashParty
+        || (entries.find(e => {
+            const n = (e.ledger || '').toLowerCase()
+            return !n.includes('cash')
+          }))?.ledger
+        || null
 
       return {
         ...v,
         received,
         paid,
         runningBalance,
-        againstLedger: against?.ledger || '-',
+        againstLedger: against || '-',
       }
     })
 
@@ -308,7 +313,7 @@ export default function TallyCashBook({ serverUrl, companyName, companyId }) {
                     </span>
                   </td>
                   <td className="py-2 px-3 text-gray-900 max-w-[200px] truncate">
-                    {row.party_ledger || row.againstLedger || '-'}
+                    {row.againstLedger && row.againstLedger !== '-' ? row.againstLedger : (row.party_ledger || '-')}
                   </td>
                   <td className="py-2 px-3 text-right text-green-700 font-medium whitespace-nowrap">
                     {row.received > 0 ? formatCurrency(row.received) : ''}

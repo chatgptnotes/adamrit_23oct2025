@@ -3,8 +3,8 @@ import React, { useState, useEffect, useMemo } from 'react'
 import { supabase } from '@/integrations/supabase/client'
 import { toast } from 'sonner'
 import {
-  Search, Filter, Plus, X, Loader2, Download,
-  BookOpen, Link2, ChevronDown, Eye
+  Search, Filter, X, Loader2,
+  BookOpen, Link2, ChevronDown
 } from 'lucide-react'
 import TallyLedgerView from './TallyLedgerView'
 
@@ -20,26 +20,6 @@ const GROUP_OPTIONS = [
   'Indirect Expenses',
 ]
 
-const PARENT_GROUP_OPTIONS = [
-  'Sundry Debtors',
-  'Sundry Creditors',
-  'Cash-in-Hand',
-  'Bank Accounts',
-  'Direct Incomes',
-  'Direct Expenses',
-  'Indirect Incomes',
-  'Indirect Expenses',
-  'Loans & Advances (Asset)',
-  'Loans (Liability)',
-  'Current Assets',
-  'Current Liabilities',
-  'Fixed Assets',
-  'Investments',
-  'Capital Account',
-  'Sales Accounts',
-  'Purchase Accounts',
-  'Duties & Taxes',
-]
 
 function formatCurrency(val) {
   return new Intl.NumberFormat('en-IN', {
@@ -54,21 +34,7 @@ export default function TallyLedgers({ serverUrl, companyName, companyId }) {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [groupFilter, setGroupFilter] = useState('All')
-  const [showCreateModal, setShowCreateModal] = useState(false)
-  const [creating, setCreating] = useState(false)
-
   const [viewLedger, setViewLedger] = useState(null)
-
-  // Create form state
-  const [form, setForm] = useState({
-    name: '',
-    parentGroup: 'Sundry Debtors',
-    openingBalance: '',
-    address: '',
-    phone: '',
-    email: '',
-    gstNumber: '',
-  })
 
   useEffect(() => {
     fetchLedgers()
@@ -114,66 +80,6 @@ export default function TallyLedgers({ serverUrl, companyName, companyId }) {
     return result
   }, [ledgers, search, groupFilter])
 
-  function resetForm() {
-    setForm({
-      name: '',
-      parentGroup: 'Sundry Debtors',
-      openingBalance: '',
-      address: '',
-      phone: '',
-      email: '',
-      gstNumber: '',
-    })
-  }
-
-  async function handleCreate() {
-    if (!form.name.trim()) {
-      toast.error('Ledger name is required')
-      return
-    }
-    if (!serverUrl || !companyName) {
-      toast.error('Tally server URL and company name are required')
-      return
-    }
-
-    setCreating(true)
-    try {
-      const res = await fetch('/api/tally-proxy', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          endpoint: 'push',
-          action: 'create-ledger',
-          serverUrl,
-          companyName,
-          data: {
-            name: form.name.trim(),
-            parentGroup: form.parentGroup,
-            openingBalance: form.openingBalance ? parseFloat(form.openingBalance) : 0,
-            address: form.address.trim(),
-            phone: form.phone.trim(),
-            email: form.email.trim(),
-            gstNumber: form.gstNumber.trim(),
-          },
-        }),
-      })
-
-      const result = await res.json()
-
-      if (result.success) {
-        toast.success(`Ledger "${form.name}" created in Tally`)
-        setShowCreateModal(false)
-        resetForm()
-        await fetchLedgers()
-      } else {
-        toast.error(result.error || 'Failed to create ledger in Tally')
-      }
-    } catch (err) {
-      toast.error('Failed to send request to Tally')
-    }
-    setCreating(false)
-  }
-
   function getMappedLabel(ledger) {
     if (!ledger.is_mapped || !ledger.adamrit_entity_type) return null
     return `${ledger.adamrit_entity_type} #${ledger.adamrit_entity_id || '?'}`
@@ -198,13 +104,6 @@ export default function TallyLedgers({ serverUrl, companyName, companyId }) {
               )}
             </p>
           </div>
-          <button
-            onClick={() => setShowCreateModal(true)}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
-          >
-            <Plus className="h-4 w-4" />
-            Create in Tally
-          </button>
         </div>
 
         {/* Search & Filter Bar */}
@@ -354,144 +253,6 @@ export default function TallyLedgers({ serverUrl, companyName, companyId }) {
         />
       )}
 
-      {/* Create Ledger Modal */}
-      {showCreateModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between p-6 border-b border-gray-200">
-              <h3 className="text-lg font-semibold text-gray-900">Create Ledger in Tally</h3>
-              <button
-                onClick={() => {
-                  setShowCreateModal(false)
-                  resetForm()
-                }}
-                className="text-gray-400 hover:text-gray-600 transition-colors"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-
-            <div className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Name <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={form.name}
-                  onChange={(e) => setForm({ ...form, name: e.target.value })}
-                  placeholder="Ledger name"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Parent Group
-                </label>
-                <select
-                  value={form.parentGroup}
-                  onChange={(e) => setForm({ ...form, parentGroup: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                >
-                  {PARENT_GROUP_OPTIONS.map((g) => (
-                    <option key={g} value={g}>
-                      {g}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Opening Balance
-                </label>
-                <input
-                  type="number"
-                  value={form.openingBalance}
-                  onChange={(e) => setForm({ ...form, openingBalance: e.target.value })}
-                  placeholder="0"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
-                <input
-                  type="text"
-                  value={form.address}
-                  onChange={(e) => setForm({ ...form, address: e.target.value })}
-                  placeholder="Address"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
-                  <input
-                    type="text"
-                    value={form.phone}
-                    onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                    placeholder="Phone number"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-                  <input
-                    type="email"
-                    value={form.email}
-                    onChange={(e) => setForm({ ...form, email: e.target.value })}
-                    placeholder="Email address"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">GST Number</label>
-                <input
-                  type="text"
-                  value={form.gstNumber}
-                  onChange={(e) => setForm({ ...form, gstNumber: e.target.value })}
-                  placeholder="e.g. 29ABCDE1234F1Z5"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
-              </div>
-
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-700">
-                This will push the ledger to <strong>{companyName || 'your company'}</strong> via
-                Tally server at <strong>{serverUrl || 'N/A'}</strong>.
-              </div>
-            </div>
-
-            <div className="flex items-center justify-end gap-3 p-6 border-t border-gray-200">
-              <button
-                onClick={() => {
-                  setShowCreateModal(false)
-                  resetForm()
-                }}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleCreate}
-                disabled={creating || !form.name.trim()}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
-              >
-                {creating ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Plus className="h-4 w-4" />
-                )}
-                Create Ledger
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }
