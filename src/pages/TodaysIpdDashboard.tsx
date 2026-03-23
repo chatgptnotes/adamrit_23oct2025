@@ -31,6 +31,7 @@ import {
 import { format } from 'date-fns';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { EditPatientDialog } from '@/components/EditPatientDialog';
+import { VisitRegistrationForm } from '@/components/VisitRegistrationForm';
 import { DocumentUploadDialog } from '@/components/DocumentUploadDialog';
 import { usePatients } from '@/hooks/usePatients';
 import { CascadingBillingStatusDropdown } from '@/components/shared/CascadingBillingStatusDropdown';
@@ -317,6 +318,8 @@ const TodaysIpdDashboard = () => {
   // Non-persisted state (UI state that shouldn't persist)
   const [showEditPatientDialog, setShowEditPatientDialog] = useState(false);
   const [selectedPatientForEdit, setSelectedPatientForEdit] = useState(null);
+  const [showVisitEditDialog, setShowVisitEditDialog] = useState(false);
+  const [selectedVisitForEdit, setSelectedVisitForEdit] = useState<any>(null);
   const [showDocumentUploadDialog, setShowDocumentUploadDialog] = useState(false);
   const [selectedVisitForDocument, setSelectedVisitForDocument] = useState<any>(null);
   const [selectedPatientForView, setSelectedPatientForView] = useState<any>(null);
@@ -2021,63 +2024,15 @@ const TodaysIpdDashboard = () => {
   const handleEditPatientClick = (visit) => {
     const patient = visit.patients;
     if (patient) {
-      // Parse remark2 to extract individual fields
-      let hopeSurgeon = '';
-      let hopeConsultants = '';
-      let surgeon = '';
-      let consultant = '';
-      let sanctionStatus = '';
-
-      console.log('🔍 Edit Patient - visit.remark2:', visit.remark2);
-
-      if (visit.remark2) {
-        const remarks = visit.remark2.split('; ');
-        remarks.forEach(remark => {
-          if (remark.startsWith('Hope Surgeon: ')) {
-            hopeSurgeon = remark.replace('Hope Surgeon: ', '');
-          } else if (remark.startsWith('Hope Consultants: ')) {
-            hopeConsultants = remark.replace('Hope Consultants: ', '');
-          } else if (remark.startsWith('ESIC Surgeons: ')) {
-            surgeon = remark.replace('ESIC Surgeons: ', '');
-          } else if (remark.startsWith('Referee: ')) {
-            consultant = remark.replace('Referee: ', '');
-          } else if (remark.startsWith('Surgery Status: ')) {
-            sanctionStatus = remark.replace('Surgery Status: ', '');
-          }
-        });
-      }
-
-      console.log('🔍 Extracted hopeSurgeon:', hopeSurgeon);
-      console.log('🔍 Extracted hopeConsultants:', hopeConsultants);
-      console.log('🔍 Extracted surgeon:', surgeon);
-      console.log('🔍 Extracted consultant:', consultant);
-
-      const patientForEdit = {
-        id: patient.id,
-        patientUuid: patient.id,
-        name: patient.name,
-        patients_id: patient.patients_id,
-        insurance_person_no: patient.insurance_person_no || '',
-        primaryDiagnosis: visit.reason_for_visit || '',
-        complications: visit.remark1 || '',
-        surgery: visit.sst_treatment || '',
-        labs: '',
-        radiology: '',
-        labsRadiology: '',
-        antibiotics: '',
-        otherMedications: '',
-        surgeon: surgeon,
-        consultant: consultant,
-        hopeSurgeon: hopeSurgeon,
-        hopeConsultants: hopeConsultants,
-        sanctionStatus: sanctionStatus,
-        admissionDate: visit.admission_date || '',
-        surgeryDate: visit.surgery_date || '',
-        dischargeDate: visit.discharge_date || '',
-        visitId: visit.id
-      };
-      setSelectedPatientForEdit(patientForEdit);
-      setShowEditPatientDialog(true);
+      setSelectedVisitForEdit({
+        patient: {
+          id: patient.id,
+          name: patient.name,
+          patients_id: patient.patients_id,
+        },
+        visit: visit,
+      });
+      setShowVisitEditDialog(true);
     }
   };
 
@@ -2904,10 +2859,11 @@ const TodaysIpdDashboard = () => {
                 {!hideColumns && <TableHead className="font-semibold">Bunch No.</TableHead>}
                 <TableHead className="font-semibold">Visit ID</TableHead>
                 <TableHead className="font-semibold">Patient Name</TableHead>
+                <TableHead className="font-semibold">Doctor</TableHead>
+                <TableHead className="font-semibold">Diagnosis</TableHead>
                 <TableHead className="font-semibold">Gender/Age</TableHead>
                 <TableHead className="font-semibold">Claim ID</TableHead>
                 <TableHead className="text-center font-semibold">Payment Received</TableHead>
-                <TableHead className="font-semibold">ESIC UHID</TableHead>
                 <TableHead className="font-semibold">Bill</TableHead>
                 <TableHead className="font-semibold">Admission Notes</TableHead>
                 <TableHead className="font-semibold">Corporate</TableHead>
@@ -2923,9 +2879,6 @@ const TodaysIpdDashboard = () => {
                 {!hideColumns && <TableHead className="font-semibold">Extension of Stay</TableHead>}
                 {!hideColumns && <TableHead className="font-semibold">Additional Approvals</TableHead>}
                 {!hideColumns && <TableHead className="font-semibold">Visit Type</TableHead>}
-                <TableHead className="font-semibold">Stickers</TableHead>
-                <TableHead className="font-semibold">Doctor</TableHead>
-                <TableHead className="font-semibold">Diagnosis</TableHead>
                 <TableHead className="font-semibold">Admission Date</TableHead>
                 <TableHead className="font-semibold">Days Admitted</TableHead>
                 {canSeeReferralColumn && <TableHead className="font-semibold">Referral Doctor/Relationship Manager</TableHead>}
@@ -2933,6 +2886,8 @@ const TodaysIpdDashboard = () => {
                 {isMarketingManager && <TableHead className="font-semibold">Referee DOA_Amt Paid</TableHead>}
                 {isMarketingManager && <TableHead className="font-semibold">Referral Payment</TableHead>}
                 <TableHead className="font-semibold">Discharge Date</TableHead>
+                <TableHead className="font-semibold">Stickers</TableHead>
+                <TableHead className="font-semibold">ESIC UHID</TableHead>
                 <TableHead className="font-semibold">Discharge Intimation</TableHead>
                 <TableHead className="font-semibold">Summaries and Certificates</TableHead>
                 <TableHead className="font-semibold">Getpass Notification</TableHead>
@@ -3034,6 +2989,12 @@ const TodaysIpdDashboard = () => {
                     {visit.discharge_date && <span className="text-red-500 text-xs ml-1">(discharged)</span>}
                   </TableCell>
                   <TableCell>
+                    {visit.appointment_with}
+                  </TableCell>
+                  <TableCell>
+                    General
+                  </TableCell>
+                  <TableCell>
                     {(() => {
                       const gender = visit.patients?.gender || 'Unknown';
                       const age = visit.patients?.age;
@@ -3045,9 +3006,6 @@ const TodaysIpdDashboard = () => {
                   </TableCell>
                   <TableCell className="text-center">
                     {renderAdvancePaymentStatus(visit)}
-                  </TableCell>
-                  <TableCell>
-                    <EsicUhidInput visit={visit} />
                   </TableCell>
                   <TableCell>
                     {(() => {
@@ -3234,30 +3192,6 @@ const TodaysIpdDashboard = () => {
                     </TableCell>
                   )}
                   <TableCell>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => printSticker({
-                        patientName: visit.patients?.name || 'N/A',
-                        uhid: visit.esic_uh_id || visit.patients?.patients_id || 'N/A',
-                        visitId: visit.visit_id || 'N/A',
-                        age: visit.patients?.age || 'N/A',
-                        gender: visit.patients?.gender || 'N/A',
-                        consultant: visit.appointment_with || 'N/A',
-                        department: visit.visit_type || 'General',
-                        tariff: visit.patients?.corporate || 'Private'
-                      })}
-                    >
-                      Print Sticker
-                    </Button>
-                  </TableCell>
-                  <TableCell>
-                    {visit.appointment_with}
-                  </TableCell>
-                  <TableCell>
-                    General
-                  </TableCell>
-                  <TableCell>
                     {visit.admission_date ? format(new Date(visit.admission_date), 'MMM dd, yyyy HH:mm') : '—'}
                   </TableCell>
                   <TableCell>
@@ -3296,6 +3230,27 @@ const TodaysIpdDashboard = () => {
                         }
                       })()
                     ) : '—'}
+                  </TableCell>
+                  <TableCell>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => printSticker({
+                        patientName: visit.patients?.name || 'N/A',
+                        uhid: visit.esic_uh_id || visit.patients?.patients_id || 'N/A',
+                        visitId: visit.visit_id || 'N/A',
+                        age: visit.patients?.age || 'N/A',
+                        gender: visit.patients?.gender || 'N/A',
+                        consultant: visit.appointment_with || 'N/A',
+                        department: visit.visit_type || 'General',
+                        tariff: visit.patients?.corporate || 'Private'
+                      })}
+                    >
+                      Print Sticker
+                    </Button>
+                  </TableCell>
+                  <TableCell>
+                    <EsicUhidInput visit={visit} />
                   </TableCell>
                   <TableCell className="text-center">
                     {visit.discharge_intimation_at ? (
@@ -3552,6 +3507,20 @@ const TodaysIpdDashboard = () => {
             }}
             patient={selectedPatientForEdit}
             onSave={handleSavePatient}
+          />
+        )}
+
+        {/* Visit Edit Dialog */}
+        {selectedVisitForEdit && (
+          <VisitRegistrationForm
+            isOpen={showVisitEditDialog}
+            onClose={() => {
+              setShowVisitEditDialog(false);
+              setSelectedVisitForEdit(null);
+            }}
+            patient={selectedVisitForEdit.patient}
+            existingVisit={selectedVisitForEdit.visit}
+            editMode={true}
           />
         )}
 
