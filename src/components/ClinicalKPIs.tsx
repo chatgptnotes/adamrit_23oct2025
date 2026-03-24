@@ -1,44 +1,8 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { Clock, BedDouble, RotateCcw, TrendingUp, Wallet, LogIn, RefreshCw, UserPlus, UserCheck, Scissors, Calendar } from 'lucide-react';
+import { Clock, BedDouble, RotateCcw, TrendingUp, Wallet, LogIn, RefreshCw } from 'lucide-react';
 
 const TOTAL_BEDS = 42;
-const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000; // UTC+5:30
-
-// Returns yesterday's midnight IST as UTC Date objects: { from, to }
-function getYesterdayISTWindow() {
-  const nowUTC = new Date();
-  const nowIST = new Date(nowUTC.getTime() + IST_OFFSET_MS);
-
-  // Today 00:00 IST = "to"
-  const todayMidnightIST = new Date(nowIST);
-  todayMidnightIST.setHours(0, 0, 0, 0);
-
-  // Yesterday 00:00 IST = "from"
-  const yesterdayMidnightIST = new Date(todayMidnightIST.getTime() - 24 * 60 * 60 * 1000);
-
-  // Convert back to UTC for Supabase queries
-  const from = new Date(yesterdayMidnightIST.getTime() - IST_OFFSET_MS);
-  const to   = new Date(todayMidnightIST.getTime()   - IST_OFFSET_MS);
-
-  return { from, to, fromIST: yesterdayMidnightIST, toIST: todayMidnightIST };
-}
-
-function fmtIST(d: Date) {
-  return d.toLocaleDateString('en-IN', {
-    day: 'numeric', month: 'long', year: 'numeric',
-    hour: '2-digit', minute: '2-digit', hour12: true,
-    timeZone: 'Asia/Kolkata',
-  });
-}
-
-interface DailyActivity {
-  admissions: number;
-  discharges: number;
-  surgeries: number;
-  opd: number;
-}
-
 interface KPIData {
   alos: string;
   bor: number;
@@ -51,7 +15,6 @@ interface KPIData {
   dischargeCount: number;
   totalRevenue: number;
   activeIpd: number;
-  daily: DailyActivity;
   loading: boolean;
   error: string | null;
 }
@@ -60,18 +23,12 @@ export const ClinicalKPIs = () => {
   const [kpi, setKpi] = useState<KPIData>({
     alos: '—', bor: 0, btr: '—', bti: '—', arpp: 0, admissionRate: 0,
     totalVisits: 0, ipdCount: 0, dischargeCount: 0, totalRevenue: 0, activeIpd: 0,
-    daily: { admissions: 0, discharges: 0, surgeries: 0, opd: 0 },
     loading: true, error: null,
   });
-
-  const window = getYesterdayISTWindow();
 
   const fetchKPIs = async () => {
     setKpi(prev => ({ ...prev, loading: true, error: null }));
     try {
-      const fromISO = window.from.toISOString();
-      const toISO   = window.to.toISOString();
-
       // ── All-time visits (for overall KPIs) ────────────────────────────────
       const { data: allVisits, error: vErr } = await supabase
         .from('visits')
@@ -85,25 +42,6 @@ export const ClinicalKPIs = () => {
       const ipdCount       = ipdAdmissions.length;
       const dischargeCount = allVisits?.filter(v => v.is_discharged).length || 0;
       const activeIpd      = ipdAdmissions.filter(v => !v.is_discharged).length;
-
-      // ── Yesterday's activity (midnight IST to midnight IST) ───────────────
-      const { data: dailyVisits, error: dvErr } = await supabase
-        .from('visits')
-        .select('visit_type, is_discharged, created_at')
-        .gte('created_at', fromISO)
-        .lt('created_at', toISO);
-      if (dvErr) throw dvErr;
-
-      const daily: DailyActivity = {
-        admissions: dailyVisits?.filter(v =>
-          ['patient-admission', 'ipd', 'IPD'].includes(v.visit_type)
-        ).length || 0,
-        discharges: dailyVisits?.filter(v => v.is_discharged).length || 0,
-        surgeries:  dailyVisits?.filter(v => v.visit_type === 'surgery').length || 0,
-        opd:        dailyVisits?.filter(v =>
-          ['consultation', 'follow-up', 'routine-checkup'].includes(v.visit_type)
-        ).length || 0,
-      };
 
       // ── ALOS from visit_accommodations (all-time) ─────────────────────────
       const { data: accommodations, error: aErr } = await supabase
@@ -133,7 +71,7 @@ export const ClinicalKPIs = () => {
       setKpi({
         alos, bor, btr, bti, arpp, admissionRate,
         totalVisits, ipdCount, dischargeCount, totalRevenue, activeIpd,
-        daily, loading: false, error: null,
+        loading: false, error: null,
       });
     } catch (err: any) {
       setKpi(prev => ({ ...prev, loading: false, error: err.message || 'Failed to load KPIs' }));
@@ -204,34 +142,6 @@ export const ClinicalKPIs = () => {
 
   return (
     <div className="mb-6 space-y-4">
-
-      {/* ── Yesterday's Activity Banner ─────────────────────────── */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-        <div className="bg-gradient-to-r from-slate-700 to-slate-800 px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Calendar className="w-4 h-4 text-white/70" />
-            <span className="text-white font-semibold text-sm">Yesterday's Activity</span>
-          </div>
-          <div className="text-white/60 text-xs text-right">
-            <div>{fmtIST(window.fromIST)}</div>
-            <div>to {fmtIST(window.toIST)}</div>
-          </div>
-        </div>
-        <div className="grid grid-cols-4 divide-x divide-gray-100">
-          {[
-            { label: 'Admissions',  value: kpi.daily.admissions, icon: UserPlus,  color: 'text-blue-600' },
-            { label: 'Discharges',  value: kpi.daily.discharges, icon: UserCheck, color: 'text-green-600' },
-            { label: 'Surgeries',   value: kpi.daily.surgeries,  icon: Scissors,  color: 'text-red-600' },
-            { label: 'OPD Visits',  value: kpi.daily.opd,        icon: Clock,     color: 'text-purple-600' },
-          ].map(({ label, value, icon: Icon, color }) => (
-            <div key={label} className="flex flex-col items-center justify-center py-4 gap-1">
-              <Icon className={`w-5 h-5 ${color}`} />
-              <div className={`text-2xl font-extrabold ${color}`}>{value}</div>
-              <div className="text-xs text-gray-500">{label}</div>
-            </div>
-          ))}
-        </div>
-      </div>
 
       {/* ── Clinical KPIs (all-time) ────────────────────────────── */}
       <div>
