@@ -547,7 +547,7 @@ export const AdvancePaymentModal: React.FC<AdvancePaymentModalProps> = ({
         remarks: formData.remarks && formData.remarks.trim() ? formData.remarks.trim() : null,
         bank_account_id: (formData.selectedBank && isValidUUID(formData.selectedBank)) ? formData.selectedBank : null,
         bank_account_name: bankAccounts.find(b => b.id === formData.selectedBank)?.account_name || null,
-        created_by: 'current_user' // You can replace this with actual user info
+        created_by: null
       };
 
       console.log('💾 Saving advance payment:', advancePaymentData);
