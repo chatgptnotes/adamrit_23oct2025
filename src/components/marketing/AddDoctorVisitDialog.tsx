@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -8,7 +8,6 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
@@ -17,12 +16,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Upload, Camera, Stethoscope, X } from 'lucide-react';
 import { useCreateDoctorVisit, useMarketingUsers } from '@/hooks/useMarketingData';
+import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
 interface AddDoctorVisitDialogProps {
   isOpen: boolean;
   onClose: () => void;
+}
+
+interface ImageItem {
+  file: File;
+  preview: string;
 }
 
 const AddDoctorVisitDialog: React.FC<AddDoctorVisitDialogProps> = ({
@@ -32,6 +38,8 @@ const AddDoctorVisitDialog: React.FC<AddDoctorVisitDialogProps> = ({
   const { toast } = useToast();
   const { data: marketingUsers = [] } = useMarketingUsers();
   const createVisit = useCreateDoctorVisit();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
 
   const [formData, setFormData] = useState({
     marketingUser_id: '',
@@ -40,30 +48,43 @@ const AddDoctorVisitDialog: React.FC<AddDoctorVisitDialogProps> = ({
     hospital_clinic_name: '',
     contact_number: '',
     email: '',
+    visit_date: '',
     location_address: '',
-    visit_date: new Date().toISOString().split('T')[0],
-    comments: '',
     disposition: '',
     follow_up_date: '',
+    comments: '',
   });
+
+  const [images, setImages] = useState<ImageItem[]>([]);
+  const [uploading, setUploading] = useState(false);
 
   const handleChange = (field: string, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+
+    Array.from(files).forEach((file) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setImages((prev) => [...prev, { file, preview: reader.result as string }]);
+      };
+      reader.readAsDataURL(file);
+    });
+
+    e.target.value = '';
+  };
+
+  const removeImage = (index: number) => {
+    setImages((prev) => prev.filter((_, i) => i !== index));
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!formData.marketingUser_id) {
-      toast({
-        title: 'Error',
-        description: 'Please select a marketing staff',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    if (!formData.doctor_name) {
+    if (!formData.doctor_name.trim()) {
       toast({
         title: 'Error',
         description: 'Please enter doctor name',
@@ -72,23 +93,90 @@ const AddDoctorVisitDialog: React.FC<AddDoctorVisitDialogProps> = ({
       return;
     }
 
+    setUploading(true);
     try {
-      await createVisit.mutateAsync({
-        ...formData,
-        disposition: formData.disposition || undefined,
-        follow_up_date: formData.follow_up_date || undefined,
-      });
+      // Upload all images
+      const uploadedUrls: string[] = [];
+
+      for (const img of images) {
+        const storagePath = `marketing-visits/${Date.now()}_${img.file.name}`;
+        const { error: storageError } = await (supabase as any).storage
+          .from('uploads')
+          .upload(storagePath, img.file);
+
+        if (storageError) {
+          toast({
+            title: 'Upload Failed',
+            description: storageError.message || 'Could not upload photo.',
+            variant: 'destructive',
+          });
+          setUploading(false);
+          return;
+        }
+
+        const { data: urlData } = (supabase as any).storage
+          .from('uploads')
+          .getPublicUrl(storagePath);
+
+        if (urlData?.publicUrl) {
+          uploadedUrls.push(urlData.publicUrl);
+        }
+      }
+
+      const visitData: any = {
+        doctor_name: formData.doctor_name,
+        visit_date: formData.visit_date || new Date().toISOString().split('T')[0],
+        // Default values for all NOT NULL columns in DB
+        area: formData.location_address || '',
+        location_city: '',
+        location_state: '',
+        interaction_type: 'In-Person',
+        sub_disposition: '',
+        visit_time: '00:00',
+        follow_up_notes: '',
+        comments: formData.comments || '',
+        specialty: formData.specialty || '',
+        hospital_clinic_name: formData.hospital_clinic_name || '',
+        contact_number: formData.contact_number || '',
+        email: formData.email || '',
+        location_address: formData.location_address || '',
+        disposition: formData.disposition || '',
+      };
+
+      // Only add optional UUID/date fields if they have values
+      if (formData.marketingUser_id) visitData.marketingUser_id = formData.marketingUser_id;
+      if (formData.follow_up_date) visitData.follow_up_date = formData.follow_up_date;
+
+      // Try saving with image_url first, if column doesn't exist retry without
+      if (uploadedUrls.length > 0) {
+        visitData.image_url = JSON.stringify(uploadedUrls);
+      }
+
+      try {
+        await createVisit.mutateAsync(visitData);
+      } catch (firstError: any) {
+        // If image_url column doesn't exist, retry without it
+        if (firstError?.message?.includes('image_url') || firstError?.code === '42703') {
+          delete visitData.image_url;
+          await createVisit.mutateAsync(visitData);
+        } else {
+          throw firstError;
+        }
+      }
       toast({
         title: 'Success',
         description: 'Doctor visit added successfully',
       });
       handleClose();
-    } catch (error) {
+    } catch (error: any) {
+      console.error('Visit save error:', error);
       toast({
         title: 'Error',
-        description: 'Failed to add doctor visit',
+        description: error?.message || 'Failed to add doctor visit',
         variant: 'destructive',
       });
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -100,122 +188,75 @@ const AddDoctorVisitDialog: React.FC<AddDoctorVisitDialogProps> = ({
       hospital_clinic_name: '',
       contact_number: '',
       email: '',
+      visit_date: '',
       location_address: '',
-      visit_date: new Date().toISOString().split('T')[0],
-      comments: '',
       disposition: '',
       follow_up_date: '',
+      comments: '',
     });
+    setImages([]);
     onClose();
   };
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Add Doctor Visit</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit}>
-          <div className="grid grid-cols-2 gap-4 py-4">
-            <div className="col-span-2">
-              <Label htmlFor="marketingUser_id">Marketing Staff *</Label>
-              <Select
-                value={formData.marketingUser_id}
-                onValueChange={(value) => handleChange('marketingUser_id', value)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select marketing staff" />
-                </SelectTrigger>
-                <SelectContent>
-                  {marketingUsers.map((user) => (
-                    <SelectItem key={user.id} value={user.id}>
-                      {user.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div>
-              <Label htmlFor="doctor_name">Doctor Name *</Label>
+          <div className="space-y-3 py-4">
+            {/* Row 1: Doctor Name | Specialty */}
+            <div className="grid grid-cols-2 gap-3">
               <Input
-                id="doctor_name"
                 value={formData.doctor_name}
                 onChange={(e) => handleChange('doctor_name', e.target.value)}
-                placeholder="Dr. Name"
+                placeholder="Doctor Name *"
               />
-            </div>
-
-            <div>
-              <Label htmlFor="specialty">Specialty</Label>
               <Input
-                id="specialty"
                 value={formData.specialty}
                 onChange={(e) => handleChange('specialty', e.target.value)}
-                placeholder="e.g., Cardiologist, General Physician"
+                placeholder="Specialty"
               />
             </div>
 
-            <div>
-              <Label htmlFor="hospital_clinic_name">Hospital/Clinic Name</Label>
+            {/* Row 2: Hospital/Clinic | Contact */}
+            <div className="grid grid-cols-2 gap-3">
               <Input
-                id="hospital_clinic_name"
                 value={formData.hospital_clinic_name}
                 onChange={(e) => handleChange('hospital_clinic_name', e.target.value)}
-                placeholder="Hospital or Clinic Name"
+                placeholder="Hospital / Clinic Name"
               />
-            </div>
-
-            <div>
-              <Label htmlFor="contact_number">Contact Number</Label>
               <Input
-                id="contact_number"
                 value={formData.contact_number}
                 onChange={(e) => handleChange('contact_number', e.target.value)}
-                placeholder="Phone number"
+                placeholder="Contact Number"
               />
             </div>
 
-            <div>
-              <Label htmlFor="email">Email</Label>
+            {/* Row 3: Email | Visit Date */}
+            <div className="grid grid-cols-2 gap-3">
               <Input
-                id="email"
                 type="email"
                 value={formData.email}
                 onChange={(e) => handleChange('email', e.target.value)}
-                placeholder="doctor@example.com"
+                placeholder="Email"
               />
-            </div>
-
-            <div>
-              <Label htmlFor="visit_date">Visit Date *</Label>
               <Input
-                id="visit_date"
                 type="date"
                 value={formData.visit_date}
                 onChange={(e) => handleChange('visit_date', e.target.value)}
               />
             </div>
 
-            <div className="col-span-2">
-              <Label htmlFor="location_address">Address</Label>
-              <Textarea
-                id="location_address"
-                value={formData.location_address}
-                onChange={(e) => handleChange('location_address', e.target.value)}
-                placeholder="Clinic/Hospital address"
-                rows={2}
-              />
-            </div>
-
-            <div>
-              <Label htmlFor="disposition">Outcome</Label>
+            {/* Row 4: Outcome | Follow-up Date */}
+            <div className="grid grid-cols-2 gap-3">
               <Select
                 value={formData.disposition}
                 onValueChange={(value) => handleChange('disposition', value)}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Select outcome" />
+                  <SelectValue placeholder="Select Outcome" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="Positive">Positive</SelectItem>
@@ -225,36 +266,112 @@ const AddDoctorVisitDialog: React.FC<AddDoctorVisitDialogProps> = ({
                   <SelectItem value="Not Available">Not Available</SelectItem>
                 </SelectContent>
               </Select>
-            </div>
-
-            <div>
-              <Label htmlFor="follow_up_date">Follow-up Date</Label>
               <Input
-                id="follow_up_date"
                 type="date"
                 value={formData.follow_up_date}
                 onChange={(e) => handleChange('follow_up_date', e.target.value)}
+                placeholder="Follow-up Date"
               />
             </div>
 
-            <div className="col-span-2">
-              <Label htmlFor="comments">Visit Notes</Label>
-              <Textarea
-                id="comments"
-                value={formData.comments}
-                onChange={(e) => handleChange('comments', e.target.value)}
-                placeholder="Notes about the visit..."
-                rows={3}
+
+
+            {/* Multi Photo Upload Area */}
+            <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 flex flex-col items-center gap-3">
+              {images.length > 0 ? (
+                <div className="grid grid-cols-4 gap-2 w-full">
+                  {images.map((img, index) => (
+                    <div key={index} className="relative">
+                      <img
+                        src={img.preview}
+                        alt={`Preview ${index + 1}`}
+                        className="w-full h-20 rounded-lg object-cover"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removeImage(index)}
+                        className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="w-20 h-20 rounded-lg bg-gray-100 flex items-center justify-center">
+                  <Stethoscope className="h-10 w-10 text-gray-400" />
+                </div>
+              )}
+              <div className="flex gap-3">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="text-purple-600 border-purple-300"
+                >
+                  <Upload className="h-4 w-4 mr-1" />
+                  Upload Photo
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => cameraInputRef.current?.click()}
+                  className="text-blue-600 border-blue-300"
+                >
+                  <Camera className="h-4 w-4 mr-1" />
+                  Take Photo
+                </Button>
+              </div>
+              {images.length > 0 && (
+                <p className="text-xs text-muted-foreground">{images.length} photo(s) selected</p>
+              )}
+              <input
+                type="file"
+                ref={fileInputRef}
+                className="hidden"
+                accept="image/*"
+                multiple
+                onChange={handleImageSelect}
+              />
+              <input
+                type="file"
+                ref={cameraInputRef}
+                className="hidden"
+                accept="image/*"
+                capture="environment"
+                onChange={handleImageSelect}
               />
             </div>
+
+            {/* Address */}
+            <Textarea
+              value={formData.location_address}
+              onChange={(e) => handleChange('location_address', e.target.value)}
+              placeholder="Full Address"
+              rows={2}
+            />
+
+            {/* Notes */}
+            <Textarea
+              value={formData.comments}
+              onChange={(e) => handleChange('comments', e.target.value)}
+              placeholder="Notes"
+              rows={2}
+            />
           </div>
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={handleClose}>
               Cancel
             </Button>
-            <Button type="submit" disabled={createVisit.isPending}>
-              {createVisit.isPending ? 'Adding...' : 'Add Visit'}
+            <Button
+              type="submit"
+              disabled={uploading || createVisit.isPending}
+              className="bg-purple-600 hover:bg-purple-700"
+            >
+              {uploading || createVisit.isPending ? 'Saving...' : 'Save'}
             </Button>
           </DialogFooter>
         </form>

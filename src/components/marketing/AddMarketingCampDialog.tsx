@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -8,7 +8,6 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
@@ -17,12 +16,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Upload, Camera, Tent, X } from 'lucide-react';
 import { useCreateMarketingCamp, useMarketingUsers } from '@/hooks/useMarketingData';
+import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
 interface AddMarketingCampDialogProps {
   isOpen: boolean;
   onClose: () => void;
+}
+
+interface ImageItem {
+  file: File;
+  preview: string;
 }
 
 const AddMarketingCampDialog: React.FC<AddMarketingCampDialogProps> = ({
@@ -32,72 +38,124 @@ const AddMarketingCampDialog: React.FC<AddMarketingCampDialogProps> = ({
   const { toast } = useToast();
   const { data: marketingUsers = [] } = useMarketingUsers();
   const createCamp = useCreateMarketingCamp();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
 
   const [formData, setFormData] = useState({
     marketing_user_id: '',
     camp_name: '',
-    location: '',
-    address: '',
-    camp_date: new Date().toISOString().split('T')[0],
     camp_type: '',
+    camp_date: '',
+    start_time: '',
+    location: '',
     expected_footfall: '',
+    actual_footfall: '',
+    budget: '',
+    actual_cost: '',
+    description: '',
     camp_notes: '',
-    status: 'Scheduled',
   });
+
+  const [images, setImages] = useState<ImageItem[]>([]);
+  const [uploading, setUploading] = useState(false);
 
   const handleChange = (field: string, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+
+    Array.from(files).forEach((file) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setImages((prev) => [...prev, { file, preview: reader.result as string }]);
+      };
+      reader.readAsDataURL(file);
+    });
+
+    // Reset input so same file can be selected again
+    e.target.value = '';
+  };
+
+  const removeImage = (index: number) => {
+    setImages((prev) => prev.filter((_, i) => i !== index));
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!formData.marketing_user_id) {
+    if (!formData.camp_name.trim()) {
       toast({
         title: 'Error',
-        description: 'Please select a marketing staff',
+        description: 'Please enter title',
         variant: 'destructive',
       });
       return;
     }
 
-    if (!formData.camp_name) {
-      toast({
-        title: 'Error',
-        description: 'Please enter camp name',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    if (!formData.location) {
-      toast({
-        title: 'Error',
-        description: 'Please enter location',
-        variant: 'destructive',
-      });
-      return;
-    }
-
+    setUploading(true);
     try {
+      // Upload all images
+      const uploadedUrls: string[] = [];
+
+      for (const img of images) {
+        const storagePath = `marketing-camps/${Date.now()}_${img.file.name}`;
+        const { error: storageError } = await (supabase as any).storage
+          .from('uploads')
+          .upload(storagePath, img.file);
+
+        if (storageError) {
+          toast({
+            title: 'Upload Failed',
+            description: storageError.message || 'Could not upload photo.',
+            variant: 'destructive',
+          });
+          setUploading(false);
+          return;
+        }
+
+        const { data: urlData } = (supabase as any).storage
+          .from('uploads')
+          .getPublicUrl(storagePath);
+
+        if (urlData?.publicUrl) {
+          uploadedUrls.push(urlData.publicUrl);
+        }
+      }
+
+      const image_url = uploadedUrls.length > 0 ? JSON.stringify(uploadedUrls) : undefined;
+
       await createCamp.mutateAsync({
-        ...formData,
-        expected_footfall: formData.expected_footfall
-          ? parseInt(formData.expected_footfall)
-          : undefined,
-        status: formData.status as 'Scheduled' | 'Completed' | 'Cancelled' | 'Postponed',
-      });
+        marketing_user_id: formData.marketing_user_id || undefined,
+        camp_name: formData.camp_name,
+        camp_type: formData.camp_type || undefined,
+        camp_date: formData.camp_date || new Date().toISOString().split('T')[0],
+        start_time: formData.start_time || undefined,
+        location: formData.location || '',
+        expected_footfall: formData.expected_footfall ? parseInt(formData.expected_footfall) : undefined,
+        actual_footfall: formData.actual_footfall ? parseInt(formData.actual_footfall) : undefined,
+        budget: formData.budget ? parseFloat(formData.budget) : undefined,
+        actual_cost: formData.actual_cost ? parseFloat(formData.actual_cost) : undefined,
+        description: formData.description || undefined,
+        camp_notes: formData.camp_notes || undefined,
+        image_url,
+        status: 'Scheduled',
+      } as any);
       toast({
         title: 'Success',
-        description: 'Marketing camp added successfully',
+        description: 'Camp added successfully',
       });
       handleClose();
     } catch (error) {
       toast({
         title: 'Error',
-        description: 'Failed to add marketing camp',
+        description: 'Failed to add camp',
         variant: 'destructive',
       });
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -105,153 +163,203 @@ const AddMarketingCampDialog: React.FC<AddMarketingCampDialogProps> = ({
     setFormData({
       marketing_user_id: '',
       camp_name: '',
-      location: '',
-      address: '',
-      camp_date: new Date().toISOString().split('T')[0],
       camp_type: '',
+      camp_date: '',
+      start_time: '',
+      location: '',
       expected_footfall: '',
+      actual_footfall: '',
+      budget: '',
+      actual_cost: '',
+      description: '',
       camp_notes: '',
-      status: 'Scheduled',
     });
+    setImages([]);
     onClose();
   };
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Add Marketing Camp</DialogTitle>
+          <DialogTitle>Add Camp</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit}>
-          <div className="grid grid-cols-2 gap-4 py-4">
-            <div className="col-span-2">
-              <Label htmlFor="marketing_user_id">Marketing Staff *</Label>
-              <Select
-                value={formData.marketing_user_id}
-                onValueChange={(value) => handleChange('marketing_user_id', value)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select marketing staff" />
-                </SelectTrigger>
-                <SelectContent>
-                  {marketingUsers.map((user) => (
-                    <SelectItem key={user.id} value={user.id}>
-                      {user.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div>
-              <Label htmlFor="camp_name">Camp Name *</Label>
+          <div className="space-y-3 py-4">
+            {/* Row 1: Title | Camp Type */}
+            <div className="grid grid-cols-2 gap-3">
               <Input
-                id="camp_name"
                 value={formData.camp_name}
                 onChange={(e) => handleChange('camp_name', e.target.value)}
-                placeholder="e.g., Free Health Checkup Camp"
+                placeholder="Title *"
               />
-            </div>
-
-            <div>
-              <Label htmlFor="location">Location *</Label>
-              <Input
-                id="location"
-                value={formData.location}
-                onChange={(e) => handleChange('location', e.target.value)}
-                placeholder="e.g., City Name, Area"
-              />
-            </div>
-
-            <div>
-              <Label htmlFor="camp_date">Camp Date *</Label>
-              <Input
-                id="camp_date"
-                type="date"
-                value={formData.camp_date}
-                onChange={(e) => handleChange('camp_date', e.target.value)}
-              />
-            </div>
-
-            <div>
-              <Label htmlFor="camp_type">Camp Type</Label>
               <Select
                 value={formData.camp_type}
                 onValueChange={(value) => handleChange('camp_type', value)}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Select camp type" />
+                  <SelectValue placeholder="Camp Type" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="Health Camp">Health Camp</SelectItem>
-                  <SelectItem value="Eye Camp">Eye Camp</SelectItem>
-                  <SelectItem value="Dental Camp">Dental Camp</SelectItem>
-                  <SelectItem value="Blood Donation">Blood Donation</SelectItem>
-                  <SelectItem value="Awareness Camp">Awareness Camp</SelectItem>
-                  <SelectItem value="Vaccination Camp">Vaccination Camp</SelectItem>
+                  <SelectItem value="First Aid Camp">First Aid Camp</SelectItem>
+                  <SelectItem value="Patient Education Event">Patient Education Event</SelectItem>
+                  <SelectItem value="Awareness Drive">Awareness Drive</SelectItem>
                   <SelectItem value="Other">Other</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
-            <div>
-              <Label htmlFor="expected_footfall">Expected Footfall</Label>
+            {/* Row 2: Date | Time */}
+            <div className="grid grid-cols-2 gap-3">
               <Input
-                id="expected_footfall"
+                type="date"
+                value={formData.camp_date}
+                onChange={(e) => handleChange('camp_date', e.target.value)}
+                placeholder="dd-mm-yyyy"
+              />
+              <Input
+                type="time"
+                value={formData.start_time}
+                onChange={(e) => handleChange('start_time', e.target.value)}
+              />
+            </div>
+
+            {/* Row 3: Location / Venue */}
+            <Input
+              value={formData.location}
+              onChange={(e) => handleChange('location', e.target.value)}
+              placeholder="Location / Venue"
+            />
+
+            {/* Row 4: Expected Attendees | Actual Attendees */}
+            <div className="grid grid-cols-2 gap-3">
+              <Input
                 type="number"
                 value={formData.expected_footfall}
                 onChange={(e) => handleChange('expected_footfall', e.target.value)}
-                placeholder="Expected number of patients"
+                placeholder="Expected Attendees"
+              />
+              <Input
+                type="number"
+                value={formData.actual_footfall}
+                onChange={(e) => handleChange('actual_footfall', e.target.value)}
+                placeholder="Actual Attendees"
               />
             </div>
 
-            <div>
-              <Label htmlFor="status">Status</Label>
-              <Select
-                value={formData.status}
-                onValueChange={(value) => handleChange('status', value)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Scheduled">Scheduled</SelectItem>
-                  <SelectItem value="Completed">Completed</SelectItem>
-                  <SelectItem value="Cancelled">Cancelled</SelectItem>
-                  <SelectItem value="Postponed">Postponed</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="col-span-2">
-              <Label htmlFor="address">Full Address</Label>
-              <Textarea
-                id="address"
-                value={formData.address}
-                onChange={(e) => handleChange('address', e.target.value)}
-                placeholder="Complete address of the camp venue"
-                rows={2}
+            {/* Row 5: Budget | Actual Cost */}
+            <div className="grid grid-cols-2 gap-3">
+              <Input
+                type="number"
+                value={formData.budget}
+                onChange={(e) => handleChange('budget', e.target.value)}
+                placeholder="Budget (₹)"
+              />
+              <Input
+                type="number"
+                value={formData.actual_cost}
+                onChange={(e) => handleChange('actual_cost', e.target.value)}
+                placeholder="Actual Cost (₹)"
               />
             </div>
 
-            <div className="col-span-2">
-              <Label htmlFor="camp_notes">Notes</Label>
-              <Textarea
-                id="camp_notes"
-                value={formData.camp_notes}
-                onChange={(e) => handleChange('camp_notes', e.target.value)}
-                placeholder="Additional notes about the camp..."
-                rows={3}
+            {/* Multi Photo Upload Area */}
+            <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 flex flex-col items-center gap-3">
+              {images.length > 0 ? (
+                <div className="grid grid-cols-4 gap-2 w-full">
+                  {images.map((img, index) => (
+                    <div key={index} className="relative">
+                      <img
+                        src={img.preview}
+                        alt={`Preview ${index + 1}`}
+                        className="w-full h-20 rounded-lg object-cover"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removeImage(index)}
+                        className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="w-20 h-20 rounded-lg bg-gray-100 flex items-center justify-center">
+                  <Tent className="h-10 w-10 text-gray-400" />
+                </div>
+              )}
+              <div className="flex gap-3">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="text-purple-600 border-purple-300"
+                >
+                  <Upload className="h-4 w-4 mr-1" />
+                  Upload Photo
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => cameraInputRef.current?.click()}
+                  className="text-blue-600 border-blue-300"
+                >
+                  <Camera className="h-4 w-4 mr-1" />
+                  Take Photo
+                </Button>
+              </div>
+              {images.length > 0 && (
+                <p className="text-xs text-muted-foreground">{images.length} photo(s) selected</p>
+              )}
+              <input
+                type="file"
+                ref={fileInputRef}
+                className="hidden"
+                accept="image/*"
+                multiple
+                onChange={handleImageSelect}
+              />
+              <input
+                type="file"
+                ref={cameraInputRef}
+                className="hidden"
+                accept="image/*"
+                capture="environment"
+                onChange={handleImageSelect}
               />
             </div>
+
+            {/* Description */}
+            <Textarea
+              value={formData.description}
+              onChange={(e) => handleChange('description', e.target.value)}
+              placeholder="Description"
+              rows={2}
+            />
+
+            {/* Notes */}
+            <Textarea
+              value={formData.camp_notes}
+              onChange={(e) => handleChange('camp_notes', e.target.value)}
+              placeholder="Notes"
+              rows={2}
+            />
           </div>
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={handleClose}>
               Cancel
             </Button>
-            <Button type="submit" disabled={createCamp.isPending}>
-              {createCamp.isPending ? 'Adding...' : 'Add Camp'}
+            <Button
+              type="submit"
+              disabled={uploading || createCamp.isPending}
+              className="bg-purple-600 hover:bg-purple-700"
+            >
+              {uploading || createCamp.isPending ? 'Saving...' : 'Save'}
             </Button>
           </DialogFooter>
         </form>
