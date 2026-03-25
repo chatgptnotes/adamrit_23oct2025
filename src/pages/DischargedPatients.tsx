@@ -1301,8 +1301,9 @@ const DischargedPatients = () => {
                   <th>Admission Date</th>
                   <th>Discharge Date</th>
                   <th>Days</th>
-                  <th>Billing Status</th>
                   <th>Corporate</th>
+                  <th>Bill Amount</th>
+                  <th>Bill Submission Date</th>
                 </tr>
               </thead>
               <tbody>
@@ -1315,10 +1316,11 @@ const DischargedPatients = () => {
                     <td>${visit.admission_date ? format(new Date(visit.admission_date), 'dd MMM yyyy') : '-'}</td>
                     <td>${visit.discharge_date ? format(new Date(visit.discharge_date), 'dd MMM yyyy') : '-'}</td>
                     <td class="text-center">${calculateDaysAdmitted(visit.admission_date, visit.discharge_date)}</td>
-                    <td>${visit.billing_status || '-'}</td>
                     <td>${getCorporateShortForm(visit.patients?.corporate)}</td>
+                    <td>${visit.bill_preparation?.bill_amount != null ? '₹' + Number(visit.bill_preparation.bill_amount).toLocaleString('en-IN') : '-'}</td>
+                    <td>${visit.bill_preparation?.date_of_submission ? new Date(visit.bill_preparation.date_of_submission).toLocaleDateString('en-IN') : '-'}</td>
                   </tr>
-                `).join('') || '<tr><td colspan="9" class="text-center">No data</td></tr>'}
+                `).join('') || '<tr><td colspan="10" class="text-center">No data</td></tr>'}
               </tbody>
             </table>
           </body>
