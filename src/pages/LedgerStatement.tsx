@@ -61,7 +61,7 @@ const LedgerStatement: React.FC = () => {
         const { data, error } = await supabase
           .from('chart_of_accounts')
           .select('id, account_name, account_code')
-          .in('account_code', ['1121', '1122', '1123'])
+          .in('account_code', ['1121', '1122', '1123', '1124'])
           .eq('is_active', true)
           .order('account_name');
 
