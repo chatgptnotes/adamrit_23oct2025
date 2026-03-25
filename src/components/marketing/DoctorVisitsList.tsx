@@ -27,9 +27,10 @@ import { useToast } from '@/hooks/use-toast';
 interface DoctorVisitsListProps {
   onAddNew: () => void;
   selectedMonth?: string;
+  filterOutcomes?: string[];
 }
 
-const DoctorVisitsList: React.FC<DoctorVisitsListProps> = ({ onAddNew, selectedMonth }) => {
+const DoctorVisitsList: React.FC<DoctorVisitsListProps> = ({ onAddNew, selectedMonth, filterOutcomes }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedUser, setSelectedUser] = useState<string>('all');
   const [isExecutiveSheetOpen, setIsExecutiveSheetOpen] = useState(false);
@@ -44,7 +45,11 @@ const DoctorVisitsList: React.FC<DoctorVisitsListProps> = ({ onAddNew, selectedM
   const { data: marketingUsers = [] } = useMarketingUsers();
   const deleteVisit = useDeleteDoctorVisit();
 
-  const filteredVisits = visits.filter(visit =>
+  const outcomeFiltered = filterOutcomes
+    ? visits.filter(visit => filterOutcomes.includes(visit.disposition || ''))
+    : visits;
+
+  const filteredVisits = outcomeFiltered.filter(visit =>
     visit.doctor_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     visit.hospital_clinic_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     visit.specialty?.toLowerCase().includes(searchTerm.toLowerCase())

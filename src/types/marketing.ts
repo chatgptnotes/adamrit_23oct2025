@@ -58,9 +58,34 @@ export interface MarketingCamp {
   patients_screened?: number;
   referrals_generated?: number;
   camp_notes?: string;
+  budget?: number;
+  actual_cost?: number;
+  description?: string;
+  image_url?: string;
   status: 'Scheduled' | 'Completed' | 'Cancelled' | 'Postponed';
   latitude?: number;
   longitude?: number;
+  created_at: string;
+  updated_at: string;
+  // Joined data
+  marketing_users?: MarketingUser;
+}
+
+export interface MarketingDoctor {
+  id: string;
+  doctor_name: string;
+  specialty?: string;
+  hospital_clinic_name?: string;
+  city?: string;
+  contact_number?: string;
+  email?: string;
+  priority?: string;
+  visit_frequency?: number;
+  image_url?: string;
+  location_address?: string;
+  notes?: string;
+  created_by?: string;
+  is_active: boolean;
   created_at: string;
   updated_at: string;
   // Joined data

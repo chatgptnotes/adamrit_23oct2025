@@ -4,6 +4,7 @@ import {
   MarketingUser,
   DoctorVisit,
   MarketingCamp,
+  MarketingDoctor,
   MarketingDashboardData,
   MarketingPerformance
 } from '@/types/marketing';
@@ -419,6 +420,93 @@ export const useDeleteMarketingCamp = () => {
       queryClient.invalidateQueries({ queryKey: ['marketing-camps'] });
       queryClient.invalidateQueries({ queryKey: ['all-marketing-camps'] });
       queryClient.invalidateQueries({ queryKey: ['marketing-dashboard'] });
+    }
+  });
+};
+
+// ============ Marketing Doctors ============
+
+// Hook for Marketing Doctors
+export const useMarketingDoctors = () => {
+  return useQuery({
+    queryKey: ['marketing-doctors'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('marketing_doctors')
+        .select(`
+          *,
+          marketing_users (
+            id,
+            name
+          )
+        `)
+        .eq('is_active', true)
+        .order('doctor_name');
+
+      if (error) throw error;
+      return data as MarketingDoctor[];
+    }
+  });
+};
+
+// Mutation for creating marketing doctor
+export const useCreateMarketingDoctor = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (doctor: Partial<MarketingDoctor>) => {
+      const { data, error } = await supabase
+        .from('marketing_doctors')
+        .insert(doctor)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['marketing-doctors'] });
+    }
+  });
+};
+
+// Mutation for updating marketing doctor
+export const useUpdateMarketingDoctor = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ id, ...doctor }: Partial<MarketingDoctor> & { id: string }) => {
+      const { data, error } = await supabase
+        .from('marketing_doctors')
+        .update(doctor)
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['marketing-doctors'] });
+    }
+  });
+};
+
+// Mutation for deleting marketing doctor
+export const useDeleteMarketingDoctor = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase
+        .from('marketing_doctors')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['marketing-doctors'] });
     }
   });
 };

@@ -26,16 +26,19 @@ import PerformanceOverview from './PerformanceOverview';
 import DoctorVisitsList from './DoctorVisitsList';
 import MarketingCampsList from './MarketingCampsList';
 import MarketingUsersList from './MarketingUsersList';
+import DoctorList from './DoctorList';
 import AddDoctorVisitDialog from './AddDoctorVisitDialog';
 import AddMarketingCampDialog from './AddMarketingCampDialog';
 import AddMarketingUserDialog from './AddMarketingUserDialog';
+import AddMarketingDoctorDialog from './AddMarketingDoctorDialog';
 
 const MarketingDashboard: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
-  const selectedTab = searchParams.get('tab') || 'overview';
+  const selectedTab = searchParams.get('tab') || 'visits';
   const [isAddVisitOpen, setIsAddVisitOpen] = useState(false);
   const [isAddCampOpen, setIsAddCampOpen] = useState(false);
   const [isAddUserOpen, setIsAddUserOpen] = useState(false);
+  const [isAddDoctorOpen, setIsAddDoctorOpen] = useState(false);
 
   // Month filter state
   const currentDate = new Date();
@@ -194,7 +197,7 @@ const MarketingDashboard: React.FC = () => {
           variant="outline"
           size="sm"
           className="col-span-1 h-full"
-          onClick={() => setSelectedTab('overview')}
+          onClick={() => setSelectedTab('visits')}
         >
           <TrendingUp className="h-4 w-4 mr-1" />
           <span className="text-xs">Stats</span>
@@ -204,15 +207,11 @@ const MarketingDashboard: React.FC = () => {
       {/* Tabs */}
       <Tabs value={selectedTab} onValueChange={setSelectedTab} className="space-y-3">
         <TabsList className="grid w-full grid-cols-4 bg-blue-50 rounded-md">
-          <TabsTrigger value="overview">Performance Overview</TabsTrigger>
-          <TabsTrigger value="visits">Referal</TabsTrigger>
+          <TabsTrigger value="visits">Visit</TabsTrigger>
           <TabsTrigger value="camps">Marketing Camps</TabsTrigger>
+          <TabsTrigger value="doctors">Doctor</TabsTrigger>
           <TabsTrigger value="users">Marketing Staff</TabsTrigger>
         </TabsList>
-
-        <TabsContent value="overview">
-          <PerformanceOverview data={dashboardData} isLoading={isLoading} selectedMonth={selectedMonth} />
-        </TabsContent>
 
         <TabsContent value="visits">
           <DoctorVisitsList onAddNew={() => setIsAddVisitOpen(true)} selectedMonth={selectedMonth} />
@@ -220,6 +219,10 @@ const MarketingDashboard: React.FC = () => {
 
         <TabsContent value="camps">
           <MarketingCampsList onAddNew={() => setIsAddCampOpen(true)} selectedMonth={selectedMonth} />
+        </TabsContent>
+
+        <TabsContent value="doctors">
+          <DoctorList onAddNew={() => setIsAddDoctorOpen(true)} />
         </TabsContent>
 
         <TabsContent value="users">
@@ -239,6 +242,10 @@ const MarketingDashboard: React.FC = () => {
       <AddMarketingUserDialog
         isOpen={isAddUserOpen}
         onClose={() => setIsAddUserOpen(false)}
+      />
+      <AddMarketingDoctorDialog
+        isOpen={isAddDoctorOpen}
+        onClose={() => setIsAddDoctorOpen(false)}
       />
     </div>
   );
