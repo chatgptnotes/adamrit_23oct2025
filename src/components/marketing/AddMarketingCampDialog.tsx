@@ -24,6 +24,7 @@ import { useToast } from '@/hooks/use-toast';
 interface AddMarketingCampDialogProps {
   isOpen: boolean;
   onClose: () => void;
+  currentMarketingUserId?: string;
 }
 
 interface ImageItem {
@@ -34,6 +35,7 @@ interface ImageItem {
 const AddMarketingCampDialog: React.FC<AddMarketingCampDialogProps> = ({
   isOpen,
   onClose,
+  currentMarketingUserId,
 }) => {
   const { toast } = useToast();
   const { data: marketingUsers = [] } = useMarketingUsers();
@@ -128,7 +130,7 @@ const AddMarketingCampDialog: React.FC<AddMarketingCampDialogProps> = ({
       const image_url = uploadedUrls.length > 0 ? JSON.stringify(uploadedUrls) : undefined;
 
       await createCamp.mutateAsync({
-        marketing_user_id: formData.marketing_user_id || undefined,
+        marketing_user_id: formData.marketing_user_id || currentMarketingUserId || undefined,
         camp_name: formData.camp_name,
         camp_type: formData.camp_type || undefined,
         camp_date: formData.camp_date || new Date().toISOString().split('T')[0],

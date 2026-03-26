@@ -25,16 +25,23 @@ import { useToast } from '@/hooks/use-toast';
 interface MarketingCampsListProps {
   onAddNew: () => void;
   selectedMonth?: string;
+  currentMarketingUserId?: string;
+  isAdmin?: boolean;
 }
 
-const MarketingCampsList: React.FC<MarketingCampsListProps> = ({ onAddNew, selectedMonth }) => {
+const MarketingCampsList: React.FC<MarketingCampsListProps> = ({ onAddNew, selectedMonth, currentMarketingUserId, isAdmin = true }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedUser, setSelectedUser] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const { toast } = useToast();
 
+  // For non-admins, always filter to their own data; for admins, use dropdown selection
+  const effectiveUserFilter = !isAdmin && currentMarketingUserId
+    ? currentMarketingUserId
+    : selectedUser !== 'all' ? selectedUser : undefined;
+
   const { data: camps = [], isLoading } = useMarketingCamps(
-    selectedUser !== 'all' ? selectedUser : undefined,
+    effectiveUserFilter,
     selectedMonth
   );
   const { data: marketingUsers = [] } = useMarketingUsers();
@@ -124,19 +131,21 @@ const MarketingCampsList: React.FC<MarketingCampsListProps> = ({ onAddNew, selec
               className="pl-10"
             />
           </div>
-          <Select value={selectedUser} onValueChange={setSelectedUser}>
-            <SelectTrigger className="w-[200px]">
-              <SelectValue placeholder="Filter by staff" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Staff</SelectItem>
-              {marketingUsers.map((user) => (
-                <SelectItem key={user.id} value={user.id}>
-                  {user.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          {isAdmin && (
+            <Select value={selectedUser} onValueChange={setSelectedUser}>
+              <SelectTrigger className="w-[200px]">
+                <SelectValue placeholder="Filter by staff" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Staff</SelectItem>
+                {marketingUsers.map((user) => (
+                  <SelectItem key={user.id} value={user.id}>
+                    {user.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
           <Select value={statusFilter} onValueChange={setStatusFilter}>
             <SelectTrigger className="w-[150px]">
               <SelectValue placeholder="Status" />

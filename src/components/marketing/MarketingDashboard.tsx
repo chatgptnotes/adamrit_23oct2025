@@ -21,7 +21,8 @@ import {
   RefreshCw,
 } from 'lucide-react';
 
-import { useMarketingDashboard } from '@/hooks/useMarketingData';
+import { useMarketingDashboard, useCurrentMarketingUser } from '@/hooks/useMarketingData';
+import { useAuth } from '@/contexts/AuthContext';
 import PerformanceOverview from './PerformanceOverview';
 import DoctorVisitsList from './DoctorVisitsList';
 import MarketingCampsList from './MarketingCampsList';
@@ -59,7 +60,15 @@ const MarketingDashboard: React.FC = () => {
     return options; // January to December
   }, []);
 
-  const { data: dashboardData, isLoading, refetch } = useMarketingDashboard(selectedMonth);
+  const { isAdmin } = useAuth();
+  const { marketingUserId } = useCurrentMarketingUser();
+
+  // Only admin/superadmin see all data; everyone else (including marketing_manager) sees only their own
+  // If a non-admin has no matching marketing_users record, use a dummy UUID so queries return empty (not everything)
+  const NO_MATCH_ID = '00000000-0000-0000-0000-000000000000';
+  const effectiveUserId = isAdmin ? undefined : (marketingUserId || NO_MATCH_ID);
+
+  const { data: dashboardData, isLoading, refetch } = useMarketingDashboard(selectedMonth, effectiveUserId);
 
   const setSelectedTab = (tab: string) => {
     setSearchParams({ tab });
@@ -184,15 +193,17 @@ const MarketingDashboard: React.FC = () => {
           <Tent className="h-4 w-4 mr-1" />
           <span className="text-xs">+ Camp</span>
         </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          className="col-span-1 h-full"
-          onClick={() => setIsAddUserOpen(true)}
-        >
-          <UserPlus className="h-4 w-4 mr-1" />
-          <span className="text-xs">+ Staff</span>
-        </Button>
+        {isAdmin && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="col-span-1 h-full"
+            onClick={() => setIsAddUserOpen(true)}
+          >
+            <UserPlus className="h-4 w-4 mr-1" />
+            <span className="text-xs">+ Staff</span>
+          </Button>
+        )}
         <Button
           variant="outline"
           size="sm"
@@ -206,38 +217,42 @@ const MarketingDashboard: React.FC = () => {
 
       {/* Tabs */}
       <Tabs value={selectedTab} onValueChange={setSelectedTab} className="space-y-3">
-        <TabsList className="grid w-full grid-cols-4 bg-blue-50 rounded-md">
+        <TabsList className={`grid w-full ${isAdmin ? 'grid-cols-4' : 'grid-cols-3'} bg-blue-50 rounded-md`}>
           <TabsTrigger value="visits">Visit</TabsTrigger>
           <TabsTrigger value="camps">Marketing Camps</TabsTrigger>
           <TabsTrigger value="doctors">Doctor</TabsTrigger>
-          <TabsTrigger value="users">Marketing Staff</TabsTrigger>
+          {isAdmin && <TabsTrigger value="users">Marketing Staff</TabsTrigger>}
         </TabsList>
 
         <TabsContent value="visits">
-          <DoctorVisitsList onAddNew={() => setIsAddVisitOpen(true)} selectedMonth={selectedMonth} />
+          <DoctorVisitsList onAddNew={() => setIsAddVisitOpen(true)} selectedMonth={selectedMonth} currentMarketingUserId={effectiveUserId} isAdmin={isAdmin} />
         </TabsContent>
 
         <TabsContent value="camps">
-          <MarketingCampsList onAddNew={() => setIsAddCampOpen(true)} selectedMonth={selectedMonth} />
+          <MarketingCampsList onAddNew={() => setIsAddCampOpen(true)} selectedMonth={selectedMonth} currentMarketingUserId={effectiveUserId} isAdmin={isAdmin} />
         </TabsContent>
 
         <TabsContent value="doctors">
-          <DoctorList onAddNew={() => setIsAddDoctorOpen(true)} />
+          <DoctorList onAddNew={() => setIsAddDoctorOpen(true)} currentMarketingUserId={effectiveUserId} isAdmin={isAdmin} />
         </TabsContent>
 
-        <TabsContent value="users">
-          <MarketingUsersList onAddNew={() => setIsAddUserOpen(true)} />
-        </TabsContent>
+        {isAdmin && (
+          <TabsContent value="users">
+            <MarketingUsersList onAddNew={() => setIsAddUserOpen(true)} />
+          </TabsContent>
+        )}
       </Tabs>
 
       {/* Dialogs */}
       <AddDoctorVisitDialog
         isOpen={isAddVisitOpen}
         onClose={() => setIsAddVisitOpen(false)}
+        currentMarketingUserId={marketingUserId}
       />
       <AddMarketingCampDialog
         isOpen={isAddCampOpen}
         onClose={() => setIsAddCampOpen(false)}
+        currentMarketingUserId={marketingUserId}
       />
       <AddMarketingUserDialog
         isOpen={isAddUserOpen}
@@ -246,6 +261,7 @@ const MarketingDashboard: React.FC = () => {
       <AddMarketingDoctorDialog
         isOpen={isAddDoctorOpen}
         onClose={() => setIsAddDoctorOpen(false)}
+        currentMarketingUserId={marketingUserId}
       />
     </div>
   );
