@@ -24,6 +24,7 @@ import { useToast } from '@/hooks/use-toast';
 interface AddDoctorVisitDialogProps {
   isOpen: boolean;
   onClose: () => void;
+  currentMarketingUserId?: string;
 }
 
 interface ImageItem {
@@ -34,6 +35,7 @@ interface ImageItem {
 const AddDoctorVisitDialog: React.FC<AddDoctorVisitDialogProps> = ({
   isOpen,
   onClose,
+  currentMarketingUserId,
 }) => {
   const { toast } = useToast();
   const { data: marketingUsers = [] } = useMarketingUsers();
@@ -144,7 +146,11 @@ const AddDoctorVisitDialog: React.FC<AddDoctorVisitDialogProps> = ({
       };
 
       // Only add optional UUID/date fields if they have values
-      if (formData.marketingUser_id) visitData.marketingUser_id = formData.marketingUser_id;
+      if (formData.marketingUser_id) {
+        visitData.marketingUser_id = formData.marketingUser_id;
+      } else if (currentMarketingUserId) {
+        visitData.marketingUser_id = currentMarketingUserId;
+      }
       if (formData.follow_up_date) visitData.follow_up_date = formData.follow_up_date;
 
       // Try saving with image_url first, if column doesn't exist retry without

@@ -4,4 +4,5 @@
 -- The trigger function create_receipt_voucher_for_payment() references NEW.created_by
 -- which crashes with "record new has no field created_by" without this column.
 
+
 ALTER TABLE public.final_payments ADD COLUMN IF NOT EXISTS created_by TEXT;

@@ -24,11 +24,13 @@ import { useToast } from '@/hooks/use-toast';
 interface AddMarketingDoctorDialogProps {
   isOpen: boolean;
   onClose: () => void;
+  currentMarketingUserId?: string;
 }
 
 const AddMarketingDoctorDialog: React.FC<AddMarketingDoctorDialogProps> = ({
   isOpen,
   onClose,
+  currentMarketingUserId,
 }) => {
   const { toast } = useToast();
   const createDoctor = useCreateMarketingDoctor();
@@ -109,6 +111,7 @@ const AddMarketingDoctorDialog: React.FC<AddMarketingDoctorDialogProps> = ({
       await createDoctor.mutateAsync({
         ...formData,
         image_url,
+        created_by: currentMarketingUserId || undefined,
       });
 
       toast({

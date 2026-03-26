@@ -19,16 +19,20 @@ import { useToast } from '@/hooks/use-toast';
 
 interface DoctorListProps {
   onAddNew: () => void;
+  currentMarketingUserId?: string;
+  isAdmin?: boolean;
 }
 
-const DoctorList: React.FC<DoctorListProps> = ({ onAddNew }) => {
+const DoctorList: React.FC<DoctorListProps> = ({ onAddNew, currentMarketingUserId, isAdmin = true }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [uploadingFor, setUploadingFor] = useState<string | null>(null);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
-  const { data: doctors = [], isLoading } = useMarketingDoctors();
+  // Non-admins only see doctors they created
+  const createdByFilter = !isAdmin ? currentMarketingUserId : undefined;
+  const { data: doctors = [], isLoading } = useMarketingDoctors(createdByFilter);
   const updateDoctor = useUpdateMarketingDoctor();
   const deleteDoctor = useDeleteMarketingDoctor();
 
