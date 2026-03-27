@@ -238,8 +238,10 @@ export default function TallyDashboard({ serverUrl: propServerUrl, companyName: 
     setAutoSyncQueue(syncTypes)
     setAutoSyncCompleted(0)
 
-    // Incremental: last 90 days for auto-sync
-    const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+    // Sync from financial year start (April 1)
+    const now = new Date()
+    const fyYear = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1
+    const fyStart = `${fyYear}-04-01`
     const today = new Date().toISOString().split('T')[0]
 
     for (let i = 0; i < syncTypes.length; i++) {
@@ -251,7 +253,7 @@ export default function TallyDashboard({ serverUrl: propServerUrl, companyName: 
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             endpoint: 'sync', action: syncTypes[i], serverUrl, companyName, companyId: configId,
-            dateRange: { from: ninetyDaysAgo, to: today },
+            dateRange: { from: fyStart, to: today },
           }),
         })
       } catch {}
@@ -315,8 +317,10 @@ export default function TallyDashboard({ serverUrl: propServerUrl, companyName: 
       const controller = new AbortController()
       const timeout = setTimeout(() => controller.abort(), 5 * 60 * 1000) // 5 min timeout
 
-      // Incremental sync: only fetch last 90 days of vouchers instead of full history
-      const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+      // Sync from financial year start (April 1)
+      const now = new Date()
+      const fyYear = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1
+      const fyStart = `${fyYear}-04-01`
       const today = new Date().toISOString().split('T')[0]
 
       const res = await fetch('/api/tally-proxy', {
@@ -324,7 +328,7 @@ export default function TallyDashboard({ serverUrl: propServerUrl, companyName: 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           endpoint: 'sync', action, serverUrl, companyName, companyId: configId,
-          dateRange: { from: ninetyDaysAgo, to: today },
+          dateRange: { from: fyStart, to: today },
         }),
         signal: controller.signal,
       })
