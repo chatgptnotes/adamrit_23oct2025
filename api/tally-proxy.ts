@@ -542,9 +542,11 @@ async function handleSync(body: any) {
       }
       case 'full': {
         for (const subAction of ['groups', 'ledgers', 'stock', 'vouchers', 'reports']) {
-          const subResult = await handleSync({ action: subAction, serverUrl, companyName, companyId, dateRange })
-          recordsSynced += (subResult as any).recordsSynced || 0
-          recordsFailed += (subResult as any).recordsFailed || 0
+          const subResult = await handleSync({ action: subAction, serverUrl, companyName, companyId, dateRange }) as any
+          recordsSynced += subResult.recordsSynced || 0
+          recordsFailed += subResult.recordsFailed || 0
+          if (subResult.errors?.length) errors.push(...subResult.errors)
+          if (subResult.error) errors.push(`${subAction}: ${subResult.error}`)
         }
         break
       }
