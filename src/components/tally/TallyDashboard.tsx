@@ -338,7 +338,11 @@ export default function TallyDashboard({ serverUrl: propServerUrl, companyName: 
 
       const result = await res.json()
       if (result.success) {
-        toast.success(`Sync complete: ${result.recordsSynced} records synced${result.recordsFailed ? `, ${result.recordsFailed} failed` : ''}`)
+        if (result.recordsFailed > 0 && result.errors?.length) {
+          toast.error(`Sync: ${result.recordsSynced} synced, ${result.recordsFailed} failed — ${result.errors[0]}`)
+        } else {
+          toast.success(`Sync complete: ${result.recordsSynced} records synced${result.recordsFailed ? `, ${result.recordsFailed} failed` : ''}`)
+        }
       } else {
         toast.error(result.error || 'Sync failed')
       }
