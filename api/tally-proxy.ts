@@ -97,19 +97,24 @@ async function handleTestConnection(body: any) {
   </STATICVARIABLES></DESC></BODY>
 </ENVELOPE>`
 
-  try {
-    const responseText = await fetchFromTally(serverUrl, xmlBody, 15000)
-    const companies: string[] = []
-    const companyMatches = responseText.match(/<NAME[^>]*>([^<]+)<\/NAME>/gi) || []
-    for (const match of companyMatches) {
-      const name = match.replace(/<\/?NAME[^>]*>/gi, '').trim()
-      if (name && !companies.includes(name)) companies.push(name)
+  // Try with 60s timeout, retry once on timeout
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const responseText = await fetchFromTally(serverUrl, xmlBody, 60000)
+      const companies: string[] = []
+      const companyMatches = responseText.match(/<NAME[^>]*>([^<]+)<\/NAME>/gi) || []
+      for (const match of companyMatches) {
+        const name = match.replace(/<\/?NAME[^>]*>/gi, '').trim()
+        if (name && !companies.includes(name)) companies.push(name)
+      }
+      const versionMatch = responseText.match(/<VERSION[^>]*>([^<]+)<\/VERSION>/i)
+      return { connected: true, companies, version: versionMatch ? versionMatch[1] : 'Connected' }
+    } catch (err: any) {
+      if (attempt === 0 && err.message.includes('timed out')) continue
+      return { connected: false, companies: [], version: '', error: err.message }
     }
-    const versionMatch = responseText.match(/<VERSION[^>]*>([^<]+)<\/VERSION>/i)
-    return { connected: true, companies, version: versionMatch ? versionMatch[1] : 'Connected' }
-  } catch (err: any) {
-    return { connected: false, companies: [], version: '', error: err.message }
   }
+  return { connected: false, companies: [], version: '', error: 'Connection timed out after retries' }
 }
 
 // ─── Endpoint: proxy (raw XML) ───
