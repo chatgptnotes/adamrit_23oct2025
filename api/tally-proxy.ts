@@ -393,7 +393,8 @@ async function handleSync(body: any) {
         break
       }
       case 'vouchers': {
-        const from = dateRange?.from || '2024-04-01'
+        const defaultFrom = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+        const from = dateRange?.from || defaultFrom
         const to = dateRange?.to || new Date().toISOString().split('T')[0]
         // Use Collection export instead of Day Book for better GUID support
         const xml = `<ENVELOPE>
