@@ -280,7 +280,7 @@ async function handleSync(body: any) {
     </TDLMESSAGE></TDL>
   </DESC></BODY>
 </ENVELOPE>`
-        const response = await fetchFromTally(serverUrl, xml)
+        const response = await fetchFromTally(serverUrl, xml, 120000)
         const elements = getAll(response, 'LEDGER')
         // Batch upsert for speed (50 at a time instead of 1-by-1)
         const BATCH_SIZE = 50
@@ -328,7 +328,7 @@ async function handleSync(body: any) {
     </TDLMESSAGE></TDL>
   </DESC></BODY>
 </ENVELOPE>`
-        const response = await fetchFromTally(serverUrl, xml)
+        const response = await fetchFromTally(serverUrl, xml, 120000)
         const elements = getAll(response, 'GROUP')
         const nowG = new Date().toISOString()
         const groupRows: any[] = []
@@ -369,7 +369,7 @@ async function handleSync(body: any) {
     </TDLMESSAGE></TDL>
   </DESC></BODY>
 </ENVELOPE>`
-        const response = await fetchFromTally(serverUrl, xml)
+        const response = await fetchFromTally(serverUrl, xml, 120000)
         const elements = getAll(response, 'STOCKITEM')
         if (elements.length === 0 && response.length > 0) {
           errors.push(`No STOCKITEM elements found in Tally response (${response.length} chars). Response preview: ${response.substring(0, 500)}`)
@@ -413,34 +413,30 @@ async function handleSync(body: any) {
         const defaultFrom = `${fyYear}-04-01`
         const from = dateRange?.from || defaultFrom
         const to = dateRange?.to || new Date().toISOString().split('T')[0]
-        // Use Collection export instead of Day Book for better GUID support
-        const xml = `<ENVELOPE>
+        // Use Day Book export (reliable with date range) as primary
+        const dayBookXml = buildExportXml('Day Book', companyName,
+          `<SVFROMDATE>${from.replace(/-/g, '')}</SVFROMDATE><SVTODATE>${to.replace(/-/g, '')}</SVTODATE>`)
+        let response: string
+        try {
+          response = await fetchFromTally(serverUrl, dayBookXml, 120000)
+        } catch {
+          // Fallback to Collection export without CHILDOF filter
+          const collectionXml = `<ENVELOPE>
   <HEADER><VERSION>1</VERSION><TALLYREQUEST>Export</TALLYREQUEST><TYPE>Collection</TYPE><ID>Voucher Collection</ID></HEADER>
   <BODY><DESC>
     <STATICVARIABLES>
       <SVCURRENTCOMPANY>${companyName}</SVCURRENTCOMPANY>
-      <SVFROMDATE>${from.replace(/-/g, '')}</SVFROMDATE>
-      <SVTODATE>${to.replace(/-/g, '')}</SVTODATE>
     </STATICVARIABLES>
     <TDL><TDLMESSAGE>
       <COLLECTION NAME="Voucher Collection" ISMODIFY="No">
         <TYPE>Voucher</TYPE>
-        <CHILDOF>$$VchTypeSales,$$VchTypePurchase,$$VchTypeReceipt,$$VchTypePayment,$$VchTypeJournal,$$VchTypeContra,$$VchTypeDebitNote,$$VchTypeCreditNote</CHILDOF>
-        <BELONGSTO>Yes</BELONGSTO>
         <FETCH>DATE,VOUCHERTYPENAME,VOUCHERNUMBER,PARTYLEDGERNAME,AMOUNT,NARRATION,ISCANCELLED,GUID</FETCH>
         <FETCH>ALLLEDGERENTRIES.LIST</FETCH>
       </COLLECTION>
     </TDLMESSAGE></TDL>
   </DESC></BODY>
 </ENVELOPE>`
-        let response: string
-        try {
-          response = await fetchFromTally(serverUrl, xml, 60000)
-        } catch {
-          // Fallback to Day Book export if Collection fails
-          const fallbackXml = buildExportXml('Day Book', companyName,
-            `<SVFROMDATE>${from.replace(/-/g, '')}</SVFROMDATE><SVTODATE>${to.replace(/-/g, '')}</SVTODATE>`)
-          response = await fetchFromTally(serverUrl, fallbackXml, 60000)
+          response = await fetchFromTally(serverUrl, collectionXml, 120000)
         }
         const elements = getAll(response, 'VOUCHER')
         // Batch upsert vouchers for speed
@@ -509,7 +505,7 @@ async function handleSync(body: any) {
         for (const report of reportIds) {
           try {
             const xml = buildExportXml(report.id, companyName, report.extra)
-            const response = await fetchFromTally(serverUrl, xml)
+            const response = await fetchFromTally(serverUrl, xml, 120000)
             await supabase.from('tally_reports').insert({
               company_id: companyId,
               report_type: report.type, report_date: today, period_from: fyStart, period_to: today,
@@ -530,7 +526,7 @@ async function handleSync(body: any) {
         try {
           const xml = buildExportXml(gstReportId, companyName,
             `<SVFROMDATE>${gstFrom.replace(/-/g, '')}</SVFROMDATE><SVTODATE>${gstTo.replace(/-/g, '')}</SVTODATE>`)
-          const response = await fetchFromTally(serverUrl, xml)
+          const response = await fetchFromTally(serverUrl, xml, 120000)
           await supabase.from('tally_gst_data').insert({
             company_id: companyId,
             report_type: gstType, period_from: gstFrom, period_to: gstTo,
