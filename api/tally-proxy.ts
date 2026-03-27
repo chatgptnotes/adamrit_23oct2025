@@ -398,7 +398,10 @@ async function handleSync(body: any) {
         break
       }
       case 'vouchers': {
-        const defaultFrom = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+        // Default to financial year start (April 1)
+        const now = new Date()
+        const fyYear = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1
+        const defaultFrom = `${fyYear}-04-01`
         const from = dateRange?.from || defaultFrom
         const to = dateRange?.to || new Date().toISOString().split('T')[0]
         // Use Collection export instead of Day Book for better GUID support
