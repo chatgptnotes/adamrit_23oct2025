@@ -305,10 +305,13 @@ async function handleSync(body: any) {
         }
         for (let i = 0; i < allRows.length; i += BATCH_SIZE) {
           const batch = allRows.slice(i, i + BATCH_SIZE)
-          try {
-            await supabase.from('tally_ledgers').upsert(batch, { onConflict: 'company_id,name', ignoreDuplicates: false })
+          const { error: upsertError } = await supabase.from('tally_ledgers').upsert(batch, { onConflict: 'company_id,name', ignoreDuplicates: false })
+          if (upsertError) {
+            recordsFailed += batch.length
+            errors.push(`Ledger batch ${i}-${i + batch.length}: ${upsertError.message}`)
+          } else {
             recordsSynced += batch.length
-          } catch (e: any) { recordsFailed += batch.length; errors.push(e.message) }
+          }
         }
         break
       }
@@ -343,10 +346,13 @@ async function handleSync(body: any) {
         }
         for (let i = 0; i < groupRows.length; i += 50) {
           const batch = groupRows.slice(i, i + 50)
-          try {
-            await supabase.from('tally_groups').upsert(batch, { onConflict: 'company_id,name' })
+          const { error: upsertError } = await supabase.from('tally_groups').upsert(batch, { onConflict: 'company_id,name' })
+          if (upsertError) {
+            recordsFailed += batch.length
+            errors.push(`Groups batch ${i}: ${upsertError.message}`)
+          } else {
             recordsSynced += batch.length
-          } catch (e: any) { recordsFailed += batch.length; errors.push(e.message) }
+          }
         }
         break
       }
@@ -390,10 +396,13 @@ async function handleSync(body: any) {
         }
         for (let i = 0; i < stockRows.length; i += 50) {
           const batch = stockRows.slice(i, i + 50)
-          try {
-            await supabase.from('tally_stock_items').upsert(batch, { onConflict: 'company_id,name', ignoreDuplicates: false })
+          const { error: upsertError } = await supabase.from('tally_stock_items').upsert(batch, { onConflict: 'company_id,name', ignoreDuplicates: false })
+          if (upsertError) {
+            recordsFailed += batch.length
+            errors.push(`Stock batch ${i}: ${upsertError.message}`)
+          } else {
             recordsSynced += batch.length
-          } catch (e: any) { recordsFailed += batch.length; errors.push(e.message) }
+          }
         }
         break
       }
@@ -475,10 +484,13 @@ async function handleSync(body: any) {
         }
         for (let i = 0; i < voucherRows.length; i += VBATCH) {
           const batch = voucherRows.slice(i, i + VBATCH)
-          try {
-            await supabase.from('tally_vouchers').upsert(batch, { onConflict: 'company_id,tally_guid', ignoreDuplicates: false })
+          const { error: upsertError } = await supabase.from('tally_vouchers').upsert(batch, { onConflict: 'company_id,tally_guid', ignoreDuplicates: false })
+          if (upsertError) {
+            recordsFailed += batch.length
+            errors.push(`Voucher batch ${i}: ${upsertError.message}`)
+          } else {
             recordsSynced += batch.length
-          } catch (e: any) { recordsFailed += batch.length; errors.push(e.message) }
+          }
         }
         break
       }
