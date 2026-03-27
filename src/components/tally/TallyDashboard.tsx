@@ -299,17 +299,22 @@ export default function TallyDashboard({ serverUrl: propServerUrl, companyName: 
 
   async function runSync(action) {
     setSyncing(action)
-    setSyncProgress(10)
+    setSyncProgress(5)
     try {
       const progressTimer = setInterval(() => {
-        setSyncProgress(prev => Math.min(prev + 10, 90))
-      }, 1000)
+        setSyncProgress(prev => Math.min(prev + 3, 90))
+      }, 2000)
+
+      const controller = new AbortController()
+      const timeout = setTimeout(() => controller.abort(), 5 * 60 * 1000) // 5 min timeout
 
       const res = await fetch('/api/tally-proxy', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ endpoint: 'sync', action, serverUrl, companyName, companyId: configId }),
+        signal: controller.signal,
       })
+      clearTimeout(timeout)
       clearInterval(progressTimer)
       setSyncProgress(100)
 
@@ -322,8 +327,12 @@ export default function TallyDashboard({ serverUrl: propServerUrl, companyName: 
 
       await loadStats()
       await loadSyncLogs()
-    } catch (err) {
-      toast.error('Sync request failed')
+    } catch (err: any) {
+      if (err.name === 'AbortError') {
+        toast.error('Sync timed out - server took too long. Try syncing individual types (Ledgers, Vouchers) instead of Sync All.')
+      } else {
+        toast.error('Sync request failed - check if Tally server is reachable')
+      }
     }
     setSyncing(null)
     setSyncProgress(0)
