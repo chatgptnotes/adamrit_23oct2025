@@ -393,16 +393,44 @@ async function handleSync(body: any) {
         break
       }
       case 'vouchers': {
-        const from = dateRange?.from || '2024-04-01'
+        const defaultFrom = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+        const from = dateRange?.from || defaultFrom
         const to = dateRange?.to || new Date().toISOString().split('T')[0]
-        const xml = buildExportXml('Day Book', companyName,
-          `<SVFROMDATE>${from.replace(/-/g, '')}</SVFROMDATE><SVTODATE>${to.replace(/-/g, '')}</SVTODATE>`)
-        const response = await fetchFromTally(serverUrl, xml)
+        // Use Collection export instead of Day Book for better GUID support
+        const xml = `<ENVELOPE>
+  <HEADER><VERSION>1</VERSION><TALLYREQUEST>Export</TALLYREQUEST><TYPE>Collection</TYPE><ID>Voucher Collection</ID></HEADER>
+  <BODY><DESC>
+    <STATICVARIABLES>
+      <SVCURRENTCOMPANY>${companyName}</SVCURRENTCOMPANY>
+      <SVFROMDATE>${from.replace(/-/g, '')}</SVFROMDATE>
+      <SVTODATE>${to.replace(/-/g, '')}</SVTODATE>
+    </STATICVARIABLES>
+    <TDL><TDLMESSAGE>
+      <COLLECTION NAME="Voucher Collection" ISMODIFY="No">
+        <TYPE>Voucher</TYPE>
+        <CHILDOF>$$VchTypeSales,$$VchTypePurchase,$$VchTypeReceipt,$$VchTypePayment,$$VchTypeJournal,$$VchTypeContra,$$VchTypeDebitNote,$$VchTypeCreditNote</CHILDOF>
+        <BELONGSTO>Yes</BELONGSTO>
+        <FETCH>DATE,VOUCHERTYPENAME,VOUCHERNUMBER,PARTYLEDGERNAME,AMOUNT,NARRATION,ISCANCELLED,GUID</FETCH>
+        <FETCH>ALLLEDGERENTRIES.LIST</FETCH>
+      </COLLECTION>
+    </TDLMESSAGE></TDL>
+  </DESC></BODY>
+</ENVELOPE>`
+        let response: string
+        try {
+          response = await fetchFromTally(serverUrl, xml, 60000)
+        } catch {
+          // Fallback to Day Book export if Collection fails
+          const fallbackXml = buildExportXml('Day Book', companyName,
+            `<SVFROMDATE>${from.replace(/-/g, '')}</SVFROMDATE><SVTODATE>${to.replace(/-/g, '')}</SVTODATE>`)
+          response = await fetchFromTally(serverUrl, fallbackXml, 60000)
+        }
         const elements = getAll(response, 'VOUCHER')
         // Batch upsert vouchers for speed
         const VBATCH = 50
         const voucherRows: any[] = []
         const nowV = new Date().toISOString()
+        let vIdx = 0
         for (const el of elements) {
           try {
             const rawDate = getVal(el, 'DATE')
@@ -419,20 +447,22 @@ async function handleSync(body: any) {
             const creditTotal = ledgerEntries.filter(e => !e.is_debit).reduce((s, e) => s + e.amount, 0)
             const voucherLevelAmt = Math.abs(parseFloat(getVal(el, 'AMOUNT') || '0'))
             const totalAmount = debitTotal || creditTotal || voucherLevelAmt
-            const guid = getVal(el, 'GUID') || getAttr(el, 'REMOTEID') || null
-            if (guid) {
-              voucherRows.push({
-                company_id: companyId,
-                tally_guid: guid,
-                voucher_number: getVal(el, 'VOUCHERNUMBER'),
-                voucher_type: getVal(el, 'VOUCHERTYPENAME') || getAttr(el, 'VCHTYPE'),
-                date, party_ledger: getVal(el, 'PARTYLEDGERNAME'),
-                amount: totalAmount, narration: getVal(el, 'NARRATION') || null,
-                is_cancelled: getVal(el, 'ISCANCELLED') === 'Yes',
-                sync_direction: 'from_tally', sync_status: 'synced',
-                ledger_entries: ledgerEntries, synced_at: nowV,
-              })
-            }
+            const vchNum = getVal(el, 'VOUCHERNUMBER')
+            const vchType = getVal(el, 'VOUCHERTYPENAME') || getAttr(el, 'VCHTYPE')
+            // Use GUID if available, otherwise generate a deterministic key from voucher details
+            const guid = getVal(el, 'GUID') || getAttr(el, 'REMOTEID') || `${vchType}-${vchNum}-${date}-${vIdx}`
+            vIdx++
+            voucherRows.push({
+              company_id: companyId,
+              tally_guid: guid,
+              voucher_number: vchNum,
+              voucher_type: vchType,
+              date, party_ledger: getVal(el, 'PARTYLEDGERNAME'),
+              amount: totalAmount, narration: getVal(el, 'NARRATION') || null,
+              is_cancelled: getVal(el, 'ISCANCELLED') === 'Yes',
+              sync_direction: 'from_tally', sync_status: 'synced',
+              ledger_entries: ledgerEntries, synced_at: nowV,
+            })
           } catch (e: any) { recordsFailed++; errors.push(e.message) }
         }
         for (let i = 0; i < voucherRows.length; i += VBATCH) {
