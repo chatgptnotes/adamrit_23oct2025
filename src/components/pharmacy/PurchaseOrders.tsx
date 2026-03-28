@@ -490,6 +490,25 @@ const PurchaseOrders: React.FC<PurchaseOrdersProps> = ({ onAddClick, onEditClick
                             <button
                               title="Delete"
                               className="p-2 text-red-600 hover:bg-red-100 rounded-lg transition-colors"
+                              onClick={async () => {
+                                if (confirm('Are you sure you want to delete this purchase order?')) {
+                                  try {
+                                    await PurchaseOrderService.delete(order.id);
+                                    toast({
+                                      title: 'Success',
+                                      description: 'Purchase order deleted successfully',
+                                    });
+                                    fetchData();
+                                  } catch (error) {
+                                    console.error('Error deleting purchase order:', error);
+                                    toast({
+                                      title: 'Error',
+                                      description: 'Failed to delete purchase order',
+                                      variant: 'destructive',
+                                    });
+                                  }
+                                }
+                              }}
                             >
                               <Trash2 className="h-4 w-4" />
                             </button>
