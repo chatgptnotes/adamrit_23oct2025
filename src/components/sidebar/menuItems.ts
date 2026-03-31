@@ -1,6 +1,16 @@
 import { BarChart3, Calendar, PhoneCall, Users, UserPlus, Database, Activity, FileText, TestTube, Camera, Pill, MapPin, Stethoscope, UserCog, ScrollText, Calculator, Syringe, Shield, Building2, ClipboardList, ShieldCheck, Receipt, HeartHandshake, ExternalLink, UserCheck, Bed, DoorOpen, LayoutDashboard, BookOpen, Clock, TrendingUp, Scissors, Heart, Cross, ClipboardCheck, ArrowLeftRight } from 'lucide-react';
 
-export const menuItems = [
+export type MenuSection = 'main' | 'masters';
+
+export interface MenuItemDef {
+  title: string;
+  url: string;
+  icon: any;
+  section?: MenuSection;
+}
+
+export const menuItems: MenuItemDef[] = [
+  // ── Main section ──
   {
     title: "Dashboard",
     url: "/",
@@ -61,36 +71,10 @@ export const menuItems = [
     url: "/discharged-patients",
     icon: UserCheck,
   },
-
-  {
-    title: "Mandatory Service",
-    url: "/mandatory-service",
-    icon: ShieldCheck,
-  },
-  {
-    title: "Clinical Services",
-    url: "/clinical-services",
-    icon: HeartHandshake,
-  },
   {
     title: "External Requisition",
     url: "/external-requisition",
     icon: ExternalLink,
-  },
-  {
-    title: "Surgery",
-    url: "/cghs-surgery-master",
-    icon: Syringe,
-  },
-  {
-    title: "Implant Master",
-    url: "/implant-master",
-    icon: Syringe,
-  },
-  {
-    title: "Diagnoses",
-    url: "/diagnoses",
-    icon: Activity,
   },
   {
     title: "Patients",
@@ -101,61 +85,6 @@ export const menuItems = [
     title: "Users",
     url: "/users",
     icon: UserCog,
-  },
-  {
-    title: "Complications",
-    url: "/complications",
-    icon: Database,
-  },
-  {
-    title: "Lab",
-    url: "/lab",
-    icon: TestTube,
-  },
-  {
-    title: "Radiology",
-    url: "/radiology", 
-    icon: Camera,
-  },
-  {
-    title: "Referees",
-    url: "/referees",
-    icon: MapPin,
-  },
-  {
-    title: "Relationship Manager",
-    url: "/relationship-manager",
-    icon: HeartHandshake,
-  },
-  {
-    title: "Hope Surgeons",
-    url: "/hope-surgeons",
-    icon: Stethoscope,
-  },
-  {
-    title: "Hope Consultants",
-    url: "/hope-consultants",
-    icon: UserCog,
-  },
-  {
-    title: "Hope Anaesthetists",
-    url: "/hope-anaesthetists",
-    icon: Syringe,
-  },
-  {
-    title: "Ayushman Surgeons",
-    url: "/ayushman-surgeons",
-    icon: Stethoscope,
-  },
-  {
-    title: "Ayushman Consultants",
-    url: "/ayushman-consultants",
-    icon: UserCog,
-  },
-  {
-    title: "Ayushman Anaesthetists",
-    url: "/ayushman-anaesthetists",
-    icon: Syringe,
   },
   {
     title: "Operation Theatre",
@@ -233,36 +162,6 @@ export const menuItems = [
     icon: ArrowLeftRight,
   },
   {
-    title: "Operation Theatre",
-    url: "/ot",
-    icon: Scissors,
-  },
-  {
-    title: "Cath Lab",
-    url: "/cath-lab",
-    icon: Heart,
-  },
-  {
-    title: "Nursing Station",
-    url: "/nursing",
-    icon: Stethoscope,
-  },
-  {
-    title: "User Management",
-    url: "/user-management",
-    icon: UserCog,
-  },
-  {
-    title: "Corporate Master",
-    url: "/corporate-master",
-    icon: Building2,
-  },
-  {
-    title: "Location Master",
-    url: "/location-master",
-    icon: MapPin,
-  },
-  {
     title: "Activity Log",
     url: "/activity-log",
     icon: ClipboardCheck,
@@ -271,5 +170,121 @@ export const menuItems = [
     title: "Patient Journey Logs",
     url: "/patient-journey-logs",
     icon: ScrollText,
+  },
+
+  // ── Masters section ──
+  {
+    title: "Lab",
+    url: "/lab",
+    icon: TestTube,
+    section: 'masters',
+  },
+  {
+    title: "Radiology",
+    url: "/radiology",
+    icon: Camera,
+    section: 'masters',
+  },
+  {
+    title: "Surgery",
+    url: "/cghs-surgery-master",
+    icon: Syringe,
+    section: 'masters',
+  },
+  {
+    title: "Implant Master",
+    url: "/implant-master",
+    icon: Syringe,
+    section: 'masters',
+  },
+  {
+    title: "Diagnoses",
+    url: "/diagnoses",
+    icon: Activity,
+    section: 'masters',
+  },
+  {
+    title: "Complications",
+    url: "/complications",
+    icon: Database,
+    section: 'masters',
+  },
+  {
+    title: "Mandatory Service",
+    url: "/mandatory-service",
+    icon: ShieldCheck,
+    section: 'masters',
+  },
+  {
+    title: "Clinical Services",
+    url: "/clinical-services",
+    icon: HeartHandshake,
+    section: 'masters',
+  },
+  {
+    title: "Referees",
+    url: "/referees",
+    icon: MapPin,
+    section: 'masters',
+  },
+  {
+    title: "Relationship Manager",
+    url: "/relationship-manager",
+    icon: HeartHandshake,
+    section: 'masters',
+  },
+  {
+    title: "Hope Surgeons",
+    url: "/hope-surgeons",
+    icon: Stethoscope,
+    section: 'masters',
+  },
+  {
+    title: "Hope Consultants",
+    url: "/hope-consultants",
+    icon: UserCog,
+    section: 'masters',
+  },
+  {
+    title: "Hope Anaesthetists",
+    url: "/hope-anaesthetists",
+    icon: Syringe,
+    section: 'masters',
+  },
+  {
+    title: "Ayushman Surgeons",
+    url: "/ayushman-surgeons",
+    icon: Stethoscope,
+    section: 'masters',
+  },
+  {
+    title: "Ayushman Consultants",
+    url: "/ayushman-consultants",
+    icon: UserCog,
+    section: 'masters',
+  },
+  {
+    title: "Ayushman Anaesthetists",
+    url: "/ayushman-anaesthetists",
+    icon: Syringe,
+    section: 'masters',
+  },
+  {
+    title: "Corporate Master",
+    url: "/corporate-master",
+    icon: Building2,
+    section: 'masters',
+  },
+  {
+    title: "Location Master",
+    url: "/location-master",
+    icon: MapPin,
+    section: 'masters',
+  },
+  {
+    title: "User Management",
+    url: "/user-management",
+    icon: UserCog,
+    section: 'masters',
   },
 ];

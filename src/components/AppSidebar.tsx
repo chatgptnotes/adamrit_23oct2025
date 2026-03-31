@@ -5,7 +5,9 @@ import {
   SidebarContent,
   SidebarGroup,
   SidebarGroupContent,
+  SidebarGroupLabel,
   SidebarMenu,
+  SidebarSeparator,
 } from '@/components/ui/sidebar';
 import { Input } from '@/components/ui/input';
 import { Search } from 'lucide-react';
@@ -15,10 +17,14 @@ import { SidebarMenuItem } from './sidebar/SidebarMenuItem';
 import { SidebarHeaderComponent } from './sidebar/SidebarHeaderComponent';
 
 export function AppSidebar(props: AppSidebarProps) {
-  const menuItems = useMenuItems(props);
+  const { mainItems, masterItems } = useMenuItems(props);
   const [search, setSearch] = useState('');
 
-  const filteredItems = menuItems.filter(item =>
+  const filteredMain = mainItems.filter(item =>
+    item.title.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const filteredMasters = masterItems.filter(item =>
     item.title.toLowerCase().includes(search.toLowerCase())
   );
 
@@ -40,12 +46,30 @@ export function AppSidebar(props: AppSidebarProps) {
           </div>
           <SidebarGroupContent>
             <SidebarMenu>
-              {filteredItems.map((item) => (
+              {filteredMain.map((item) => (
                 <SidebarMenuItem key={item.title} item={item} />
               ))}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+
+        {filteredMasters.length > 0 && (
+          <>
+            <SidebarSeparator />
+            <SidebarGroup>
+              <SidebarGroupLabel className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Masters
+              </SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {filteredMasters.map((item) => (
+                    <SidebarMenuItem key={item.title} item={item} />
+                  ))}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          </>
+        )}
       </SidebarContent>
     </Sidebar>
   );

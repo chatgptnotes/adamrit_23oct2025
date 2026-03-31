@@ -7,6 +7,7 @@ export interface MenuItem {
   description: string;
   route: string;
   count: number;
+  section?: string;
 }
 
 export interface AppSidebarProps {
