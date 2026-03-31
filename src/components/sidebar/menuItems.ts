@@ -152,6 +152,16 @@ export const menuItems: MenuItemDef[] = [
     icon: BookOpen,
   },
   {
+    title: "Lab",
+    url: "/lab",
+    icon: TestTube,
+  },
+  {
+    title: "Radiology",
+    url: "/radiology",
+    icon: Camera,
+  },
+  {
     title: "Pharmacy",
     url: "/pharmacy",
     icon: Pill,
@@ -174,14 +184,14 @@ export const menuItems: MenuItemDef[] = [
 
   // ── Masters section ──
   {
-    title: "Lab",
-    url: "/lab",
+    title: "Lab Master",
+    url: "/lab-master",
     icon: TestTube,
     section: 'masters',
   },
   {
-    title: "Radiology",
-    url: "/radiology",
+    title: "Radiology Master",
+    url: "/radiology-master",
     icon: Camera,
     section: 'masters',
   },

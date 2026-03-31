@@ -50,8 +50,10 @@ export const useMenuItems = (props: AppSidebarProps): { mainItems: MenuItem[]; m
           case "Pharmacy":
             return isFeatureEnabled(hospitalType, 'hasPharmacy');
           case "Lab":
+          case "Lab Master":
             return isFeatureEnabled(hospitalType, 'hasLab');
           case "Radiology":
+          case "Radiology Master":
             return isFeatureEnabled(hospitalType, 'hasRadiology');
           case "Accounting":
             return isFeatureEnabled(hospitalType, 'hasAccounting');
@@ -85,8 +87,8 @@ export const useMenuItems = (props: AppSidebarProps): { mainItems: MenuItem[]; m
                item.title === "Users" ? usersCount :
                item.title === "Complications" ? complicationsCount :
                item.title === "Surgery" ? cghsSurgeryCount :
-               item.title === "Lab" ? labCount :
-               item.title === "Radiology" ? radiologyCount :
+               item.title === "Lab" || item.title === "Lab Master" ? labCount :
+               item.title === "Radiology" || item.title === "Radiology Master" ? radiologyCount :
                item.title === "Medications" ? medicationCount :
                item.title === "Referees" ? refereesCount :
                item.title === "Hope Surgeons" ? hopeSurgeonsCount :
