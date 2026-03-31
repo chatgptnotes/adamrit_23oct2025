@@ -167,10 +167,14 @@ interface RadiologyTest {
   bhopal_non_nabh?: number;
 }
 
-const RadiologyManagement: React.FC = () => {
+interface RadiologyManagementProps {
+  masterOnly?: boolean;
+}
+
+const RadiologyManagement: React.FC<RadiologyManagementProps> = ({ masterOnly = false }) => {
   const { hospitalConfig } = useAuth();
   const { canEditMasters } = usePermissions();
-  const [activeView, setActiveView] = useState<string>('orders');
+  const [activeView, setActiveView] = useState<string>(masterOnly ? 'addTest' : 'orders');
   const [radiologyTests, setRadiologyTests] = useState<RadiologyTest[]>([]);
   const [loading, setLoading] = useState(false);
   const [editingTest, setEditingTest] = useState<RadiologyTest | null>(null);
@@ -1060,6 +1064,7 @@ const RadiologyManagement: React.FC = () => {
           </div>
 
           {/* Navigation Tabs */}
+          {!masterOnly && (
           <div className="flex space-x-1 mb-6 bg-gray-100 p-1 rounded-lg w-fit">
             <Button
               variant="ghost"
@@ -1086,6 +1091,7 @@ const RadiologyManagement: React.FC = () => {
               X-Ray Tracking
             </Button>
           </div>
+          )}
 
           {/* Search Bar */}
           <div className="flex items-center gap-4 mb-6">
@@ -1312,6 +1318,7 @@ const RadiologyManagement: React.FC = () => {
           </div>
 
           {/* Navigation Tabs */}
+          {!masterOnly && (
           <div className="flex space-x-1 mb-6 bg-gray-100 p-1 rounded-lg w-fit">
             <Button
               variant="ghost"
@@ -1338,6 +1345,7 @@ const RadiologyManagement: React.FC = () => {
               X-Ray Tracking
             </Button>
           </div>
+          )}
 
           <XRayTracking />
         </div>
@@ -1357,6 +1365,7 @@ const RadiologyManagement: React.FC = () => {
           </div>
 
           {/* Navigation Tabs */}
+          {!masterOnly && (
           <div className="flex space-x-1 mb-6 bg-gray-100 p-1 rounded-lg w-fit">
             <Button
               variant="ghost"
@@ -1383,6 +1392,7 @@ const RadiologyManagement: React.FC = () => {
               X-Ray Tracking
             </Button>
           </div>
+          )}
 
           {activeView === 'orders' && <RadiologyDashboard />}
         </div>
