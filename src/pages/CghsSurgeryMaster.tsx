@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams, Navigate } from 'react-router-dom';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { FileText, AlertCircle, Plus, Edit, Eye, Trash2, X, ChevronLeft, ChevronRight, Download, Upload } from 'lucide-react';
@@ -13,6 +13,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+
+const MASTER_ADMIN_EMAILS = [
+  'admin@hopehospital.com',
+  'admin@ayushmanhospital.com',
+  'admin@test.com',
+];
 
 interface CghsSurgery {
   id: string;
@@ -34,8 +40,15 @@ interface CghsSurgery {
 
 const CghsSurgeryMaster = () => {
   const navigate = useNavigate();
-  const { hospitalConfig } = useAuth();
+  const { hospitalConfig, user } = useAuth();
   const { canEditMasters } = usePermissions();
+
+  // Route-level protection: only specific admins and superadmins
+  const userEmail = user?.email?.toLowerCase() || '';
+  const userRole = user?.role;
+  if (userRole !== 'superadmin' && !MASTER_ADMIN_EMAILS.includes(userEmail)) {
+    return <Navigate to="/" replace />;
+  }
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
 

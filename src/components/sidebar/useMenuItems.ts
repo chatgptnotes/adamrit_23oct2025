@@ -44,7 +44,7 @@ export const useMenuItems = (props: AppSidebarProps): { mainItems: MenuItem[]; m
         }
 
         // Hide Lab Master & Radiology Master for all users except specific admins
-        if (item.title === "Lab Master" || item.title === "Radiology Master") {
+        if (item.title === "Lab Master" || item.title === "Radiology Master" || item.title === "Surgery") {
           const MASTER_ADMIN_EMAILS = [
             'admin@hopehospital.com',
             'admin@ayushmanhospital.com',
