@@ -43,6 +43,20 @@ export const useMenuItems = (props: AppSidebarProps): { mainItems: MenuItem[]; m
           }
         }
 
+        // Hide Lab Master & Radiology Master for all users except specific admins
+        if (item.title === "Lab Master" || item.title === "Radiology Master") {
+          const MASTER_ADMIN_EMAILS = [
+            'admin@hopehospital.com',
+            'admin@ayushmanhospital.com',
+            'admin@test.com',
+          ];
+          const userEmail = user?.email?.toLowerCase() || '';
+          const userRole = user?.role;
+          if (userRole !== 'superadmin' && !MASTER_ADMIN_EMAILS.includes(userEmail)) {
+            return false;
+          }
+        }
+
         if (!hospitalType) return true; // Show all items if no hospital type
 
         // Filter menu items based on hospital features
