@@ -21,11 +21,21 @@ export interface ScheduleEntry {
   hospital_name: string;
 }
 
-export interface TallyBalance {
-  hopeCash: number;
-  hopeBank: number;
-  ayushmanCash: number;
-  ayushmanBank: number;
+export interface BankAccount {
+  id: string; // tally ledger id or manual id
+  name: string;
+  type: 'bank' | 'cash';
+  hospital: string; // hope / ayushman
+  ledger_balance: number; // from Tally
+  actual_balance: number | null; // manually entered
+  notes: string;
+  last_synced: string | null;
+}
+
+export interface FundSummary {
+  accounts: BankAccount[];
+  totalLedger: number;
+  totalActual: number;
   lastSyncAt: string | null;
 }
 
@@ -43,11 +53,9 @@ const generateSchedule = async (date: string, hospital: string) => {
 export const useDailyPaymentSchedule = (date: string, hospital: string = 'hope') => {
   const queryClient = useQueryClient();
 
-  // Auto-generate schedule on query, then fetch
   const schedule = useQuery({
     queryKey: ['daily-payment-schedule', date, hospital],
     queryFn: async () => {
-      // Lazily generate schedule for the selected date
       await generateSchedule(date, hospital);
 
       const { data, error } = await (supabase as any)
@@ -63,7 +71,6 @@ export const useDailyPaymentSchedule = (date: string, hospital: string = 'hope')
     },
   });
 
-  // Mark as paid mutation
   const markPaid = useMutation({
     mutationFn: async ({ scheduleId, amount, userId }: { scheduleId: string; amount: number; userId: string }) => {
       const { data, error } = await (supabase as any).rpc('mark_obligation_paid', {
@@ -72,7 +79,7 @@ export const useDailyPaymentSchedule = (date: string, hospital: string = 'hope')
         p_user_id: userId,
       });
       if (error) throw error;
-      return data; // voucher_id
+      return data;
     },
     onSuccess: (_voucherId: string, variables: any) => {
       queryClient.invalidateQueries({ queryKey: ['daily-payment-schedule'] });
@@ -94,65 +101,164 @@ export const useDailyPaymentSchedule = (date: string, hospital: string = 'hope')
   };
 };
 
-// Fetch Tally bank/cash balances for both hospitals
-export const useTallyBalances = () => {
-  return useQuery({
-    queryKey: ['tally-balances-allocation'],
-    queryFn: async () => {
-      // Get all tally configs to find company IDs
+// Fetch individual bank/cash accounts from Tally + manual overrides
+export const useFundAccounts = (date: string) => {
+  const queryClient = useQueryClient();
+
+  const query = useQuery({
+    queryKey: ['fund-accounts', date],
+    queryFn: async (): Promise<FundSummary> => {
+      const accounts: BankAccount[] = [];
+      let lastSyncAt: string | null = null;
+
+      // Get all tally configs
       const { data: configs } = await (supabase as any)
         .from('tally_config')
         .select('id, company_name');
 
-      const result: TallyBalance = {
-        hopeCash: 0,
-        hopeBank: 0,
-        ayushmanCash: 0,
-        ayushmanBank: 0,
-        lastSyncAt: null,
-      };
+      if (configs && configs.length > 0) {
+        for (const config of configs) {
+          const companyLower = (config.company_name || '').toLowerCase();
+          let hospital = 'other';
+          if (companyLower.includes('hope')) hospital = 'hope';
+          else if (companyLower.includes('ayushman') || companyLower.includes('aishman')) hospital = 'ayushman';
 
-      if (!configs || configs.length === 0) return result;
+          const { data: ledgers } = await (supabase as any)
+            .from('tally_ledgers')
+            .select('id, name, closing_balance, parent_group, updated_at')
+            .eq('company_id', config.id)
+            .or('parent_group.ilike.%cash%,parent_group.ilike.%bank%');
 
-      // For each config, fetch cash and bank ledgers
-      for (const config of configs) {
-        const companyLower = (config.company_name || '').toLowerCase();
-        const isHope = companyLower.includes('hope');
-        const isAyushman = companyLower.includes('ayushman') || companyLower.includes('aishman');
+          if (ledgers) {
+            for (const l of ledgers) {
+              const pg = (l.parent_group || '').toLowerCase();
+              const type = pg.includes('cash') ? 'cash' as const : 'bank' as const;
 
-        const { data: ledgers } = await (supabase as any)
-          .from('tally_ledgers')
-          .select('name, closing_balance, parent_group, updated_at')
-          .eq('company_id', config.id)
-          .or('parent_group.ilike.%cash%,parent_group.ilike.%bank%');
+              accounts.push({
+                id: l.id,
+                name: l.name,
+                type,
+                hospital,
+                ledger_balance: Math.abs(l.closing_balance || 0),
+                actual_balance: null,
+                notes: '',
+                last_synced: l.updated_at || null,
+              });
 
-        if (ledgers) {
-          for (const l of ledgers) {
-            const pg = (l.parent_group || '').toLowerCase();
-            const bal = Math.abs(l.closing_balance || 0);
-
-            if (isHope) {
-              if (pg.includes('cash')) result.hopeCash += bal;
-              else if (pg.includes('bank')) result.hopeBank += bal;
-            } else if (isAyushman) {
-              if (pg.includes('cash')) result.ayushmanCash += bal;
-              else if (pg.includes('bank')) result.ayushmanBank += bal;
-            }
-
-            // Track latest sync time
-            if (l.updated_at) {
-              if (!result.lastSyncAt || l.updated_at > result.lastSyncAt) {
-                result.lastSyncAt = l.updated_at;
+              if (l.updated_at && (!lastSyncAt || l.updated_at > lastSyncAt)) {
+                lastSyncAt = l.updated_at;
               }
             }
           }
         }
       }
 
-      return result;
+      // Fetch manual overrides for this date
+      const { data: overrides } = await (supabase as any)
+        .from('daily_fund_balances')
+        .select('*')
+        .eq('balance_date', date);
+
+      if (overrides) {
+        for (const ov of overrides) {
+          const existing = accounts.find(a => a.id === ov.account_ref_id);
+          if (existing) {
+            existing.actual_balance = ov.actual_balance;
+            existing.notes = ov.notes || '';
+          } else {
+            // Manual-only account (not from Tally)
+            accounts.push({
+              id: ov.id,
+              name: ov.account_name,
+              type: ov.account_type || 'bank',
+              hospital: ov.hospital_name || 'hope',
+              ledger_balance: 0,
+              actual_balance: ov.actual_balance,
+              notes: ov.notes || '',
+              last_synced: null,
+            });
+          }
+        }
+      }
+
+      const totalLedger = accounts.reduce((s, a) => s + a.ledger_balance, 0);
+      const totalActual = accounts.reduce((s, a) => s + (a.actual_balance ?? a.ledger_balance), 0);
+
+      return { accounts, totalLedger, totalActual, lastSyncAt };
     },
-    refetchInterval: 60000, // refresh every minute
+    refetchInterval: 60000,
   });
+
+  // Save actual balance for an account
+  const saveActualBalance = useMutation({
+    mutationFn: async ({
+      accountRefId, accountName, accountType, hospital, actualBalance, notes,
+    }: {
+      accountRefId: string; accountName: string; accountType: string;
+      hospital: string; actualBalance: number; notes: string;
+    }) => {
+      // Upsert into daily_fund_balances
+      const { error } = await (supabase as any)
+        .from('daily_fund_balances')
+        .upsert({
+          balance_date: date,
+          account_ref_id: accountRefId,
+          account_name: accountName,
+          account_type: accountType,
+          hospital_name: hospital,
+          actual_balance: actualBalance,
+          notes: notes || '',
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'balance_date,account_ref_id' });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['fund-accounts'] });
+      toast.success('Actual balance saved');
+    },
+    onError: (err: any) => {
+      toast.error('Failed to save: ' + err.message);
+    },
+  });
+
+  // Add a manual account (not from Tally)
+  const addManualAccount = useMutation({
+    mutationFn: async ({
+      accountName, accountType, hospital, actualBalance, notes,
+    }: {
+      accountName: string; accountType: string;
+      hospital: string; actualBalance: number; notes: string;
+    }) => {
+      const manualId = crypto.randomUUID();
+      const { error } = await (supabase as any)
+        .from('daily_fund_balances')
+        .insert({
+          balance_date: date,
+          account_ref_id: manualId,
+          account_name: accountName,
+          account_type: accountType,
+          hospital_name: hospital,
+          actual_balance: actualBalance,
+          notes: notes || '',
+        });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['fund-accounts'] });
+      toast.success('Account added');
+    },
+    onError: (err: any) => {
+      toast.error('Failed to add account: ' + err.message);
+    },
+  });
+
+  return {
+    funds: query.data || { accounts: [], totalLedger: 0, totalActual: 0, lastSyncAt: null },
+    isLoading: query.isLoading,
+    refetch: query.refetch,
+    saveActualBalance,
+    addManualAccount,
+  };
 };
 
 // Fetch today's cash collections from voucher entries
@@ -160,7 +266,6 @@ export const useTodayCashCollections = (date: string) => {
   return useQuery({
     queryKey: ['today-cash-collections', date],
     queryFn: async () => {
-      // Get Cash in Hand account
       const { data: cashAccount } = await supabase
         .from('chart_of_accounts')
         .select('id')
@@ -169,7 +274,6 @@ export const useTodayCashCollections = (date: string) => {
 
       if (!cashAccount) return 0;
 
-      // Sum debit entries to Cash in Hand for today (receipts)
       const { data: entries } = await supabase
         .from('voucher_entries')
         .select(`
@@ -180,7 +284,6 @@ export const useTodayCashCollections = (date: string) => {
 
       if (!entries) return 0;
 
-      // Filter for today's date and sum debits (cash received)
       const todayTotal = entries
         .filter((e: any) => e.voucher?.voucher_date === date && e.voucher?.status !== 'cancelled')
         .reduce((sum: number, e: any) => sum + (e.debit_amount || 0), 0);

@@ -13,6 +13,8 @@ export interface PaymentObligation {
   is_active: boolean;
   notes: string | null;
   hospital_name: string;
+  payee_name: string | null; // specific payee e.g. "Dr Pramod Gandhi" for rent
+  payee_search_table: string | null; // e.g. hope_consultants, staff_members
   created_at: string;
   updated_at: string;
 }
@@ -49,6 +51,8 @@ export const usePaymentObligations = (hospital: string = 'hope') => {
           is_active: true,
           notes: obligation.notes || null,
           hospital_name: obligation.hospital_name || hospital,
+          payee_name: obligation.payee_name || null,
+          payee_search_table: obligation.payee_search_table || null,
         })
         .select()
         .single();
@@ -77,10 +81,28 @@ export const usePaymentObligations = (hospital: string = 'hope') => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['payment-obligations'] });
+      queryClient.invalidateQueries({ queryKey: ['daily-payment-schedule'] });
       toast.success('Obligation updated');
     },
     onError: (err: any) => {
       toast.error('Failed to update: ' + err.message);
+    },
+  });
+
+  const deleteObligation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await (supabase as any)
+        .from('payment_obligations')
+        .delete()
+        .eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['payment-obligations'] });
+      toast.success('Obligation deleted');
+    },
+    onError: (err: any) => {
+      toast.error('Failed to delete: ' + err.message);
     },
   });
 
@@ -107,6 +129,30 @@ export const usePaymentObligations = (hospital: string = 'hope') => {
     error: obligations.error,
     createObligation,
     updateObligation,
+    deleteObligation,
     toggleActive,
   };
+};
+
+// Search consultants/surgeons/anaesthetists/staff for sub-payment payee
+export const usePayeeSearch = (searchTable: string, searchTerm: string) => {
+  return useQuery({
+    queryKey: ['payee-search', searchTable, searchTerm],
+    queryFn: async () => {
+      if (!searchTable || !searchTerm || searchTerm.length < 2) return [];
+
+      const { data, error } = await (supabase as any)
+        .from(searchTable)
+        .select('id, name, specialty, department')
+        .ilike('name', `%${searchTerm}%`)
+        .limit(20);
+
+      if (error) {
+        console.error('Payee search error:', error);
+        return [];
+      }
+      return (data || []) as { id: string; name: string; specialty?: string; department?: string }[];
+    },
+    enabled: !!searchTable && searchTerm.length >= 2,
+  });
 };
