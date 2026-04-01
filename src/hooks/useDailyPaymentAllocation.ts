@@ -92,12 +92,75 @@ export const useDailyPaymentSchedule = (date: string, hospital: string = 'hope')
     },
   });
 
+  // Inline edit a schedule entry (daily_amount, notes, or skip)
+  const updateScheduleEntry = useMutation({
+    mutationFn: async ({ id, ...updates }: { id: string; daily_amount?: number; notes?: string; status?: string }) => {
+      const { error } = await (supabase as any)
+        .from('daily_payment_schedule')
+        .update({ ...updates, updated_at: new Date().toISOString() })
+        .eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['daily-payment-schedule'] });
+      toast.success('Schedule updated');
+    },
+    onError: (err: any) => {
+      toast.error('Update failed: ' + err.message);
+    },
+  });
+
+  // Skip/remove an entry from today's schedule
+  const skipEntry = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await (supabase as any)
+        .from('daily_payment_schedule')
+        .update({ status: 'skipped', daily_amount: 0, updated_at: new Date().toISOString() })
+        .eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['daily-payment-schedule'] });
+      toast.success('Obligation skipped for today');
+    },
+    onError: (err: any) => {
+      toast.error('Skip failed: ' + err.message);
+    },
+  });
+
+  // Batch update sort order after drag-and-drop
+  const reorderSchedule = useMutation({
+    mutationFn: async (entries: { id: string; priority: number }[]) => {
+      // Update the priority on the underlying obligations so the order persists
+      for (const entry of entries) {
+        const scheduleRow = (schedule.data || []).find(s => s.id === entry.id);
+        if (scheduleRow) {
+          await (supabase as any)
+            .from('payment_obligations')
+            .update({ priority: entry.priority, updated_at: new Date().toISOString() })
+            .eq('id', scheduleRow.obligation_id);
+        }
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['daily-payment-schedule'] });
+      queryClient.invalidateQueries({ queryKey: ['payment-obligations'] });
+      toast.success('Priority order saved');
+    },
+    onError: (err: any) => {
+      toast.error('Reorder failed: ' + err.message);
+    },
+  });
+
   return {
     schedule: schedule.data || [],
     isLoading: schedule.isLoading,
     error: schedule.error,
     refetch: schedule.refetch,
     markPaid,
+    updateScheduleEntry,
+    skipEntry,
+    reorderSchedule,
   };
 };
 

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -14,8 +14,26 @@ import { toast } from 'sonner';
 import {
   Wallet, Building2, IndianRupee, TrendingUp, TrendingDown,
   Clock, CheckCircle, AlertTriangle, Plus, Edit2, ToggleLeft,
-  ToggleRight, Banknote, Calendar, RefreshCw, Save, PenLine
+  ToggleRight, Banknote, Calendar, RefreshCw, Save, PenLine,
+  GripVertical, X, SkipForward
 } from 'lucide-react';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import {
   useDailyPaymentSchedule,
   useFundAccounts,
@@ -45,6 +63,210 @@ const getAgingBorder = (days: number) => {
 
 const today = new Date().toISOString().split('T')[0];
 
+// ── Sortable row for Today's Allocation table ──
+interface SortableScheduleRowProps {
+  entry: ScheduleEntry;
+  idx: number;
+  isEditing: boolean;
+  editAmount: string;
+  editNotes: string;
+  skipConfirmId: string | null;
+  onStartEdit: () => void;
+  onSaveEdit: () => void;
+  onCancelEdit: () => void;
+  onEditAmountChange: (v: string) => void;
+  onEditNotesChange: (v: string) => void;
+  onPay: () => void;
+  onSkipConfirm: () => void;
+  onSkipCancel: () => void;
+  onSkip: () => void;
+}
+
+const SortableScheduleRow = ({
+  entry, idx, isEditing, editAmount, editNotes, skipConfirmId,
+  onStartEdit, onSaveEdit, onCancelEdit, onEditAmountChange, onEditNotesChange,
+  onPay, onSkipConfirm, onSkipCancel, onSkip,
+}: SortableScheduleRowProps) => {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: entry.id });
+  const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 };
+  const totalDue = entry.daily_amount + entry.carryforward_amount;
+  const isSkipped = entry.status === 'skipped';
+
+  return (
+    <TableRow ref={setNodeRef} style={style} className={`border-l-4 ${getAgingBorder(entry.days_overdue)} ${isSkipped ? 'opacity-40 line-through' : ''}`}>
+      {/* Drag handle */}
+      <TableCell className="w-8 px-1">
+        <button {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing p-1 hover:bg-gray-100 rounded">
+          <GripVertical className="h-4 w-4 text-gray-400" />
+        </button>
+      </TableCell>
+      <TableCell className="text-center text-xs text-muted-foreground">{idx + 1}</TableCell>
+      <TableCell>
+        <div className="font-medium">{entry.party_name}</div>
+        {isEditing && (
+          <Input
+            value={editNotes}
+            onChange={(e) => onEditNotesChange(e.target.value)}
+            placeholder="Add notes..."
+            className="mt-1 h-7 text-xs"
+          />
+        )}
+        {!isEditing && entry.notes && (
+          <div className="text-xs text-muted-foreground">{entry.notes}</div>
+        )}
+      </TableCell>
+      <TableCell className="text-right">
+        {isEditing ? (
+          <Input
+            type="number"
+            value={editAmount}
+            onChange={(e) => onEditAmountChange(e.target.value)}
+            className="w-28 h-8 text-right font-mono ml-auto"
+            autoFocus
+            onKeyDown={(e) => { if (e.key === 'Enter') onSaveEdit(); if (e.key === 'Escape') onCancelEdit(); }}
+          />
+        ) : (
+          <span className="font-mono">{formatINR(entry.daily_amount)}</span>
+        )}
+      </TableCell>
+      <TableCell className="text-right font-mono">
+        {entry.carryforward_amount > 0 ? (
+          <span className="text-red-600">{formatINR(entry.carryforward_amount)}</span>
+        ) : '-'}
+      </TableCell>
+      <TableCell className="text-right font-mono font-bold">{formatINR(totalDue)}</TableCell>
+      <TableCell className="text-right font-mono">
+        {entry.paid_amount > 0 ? (
+          <span className="text-green-600">{formatINR(entry.paid_amount)}</span>
+        ) : '-'}
+      </TableCell>
+      <TableCell className="text-center">
+        <Badge className={`${getAgingColor(entry.days_overdue)} font-mono`}>{entry.days_overdue}d</Badge>
+      </TableCell>
+      <TableCell>
+        <Badge className={
+          entry.status === 'paid' ? 'bg-green-100 text-green-800' :
+          entry.status === 'partial' ? 'bg-yellow-100 text-yellow-800' :
+          entry.status === 'skipped' ? 'bg-gray-100 text-gray-500' :
+          entry.status === 'carried_forward' ? 'bg-orange-100 text-orange-800' :
+          'bg-gray-100 text-gray-800'
+        }>
+          {entry.status === 'carried_forward' ? 'Carried' : entry.status}
+        </Badge>
+      </TableCell>
+      <TableCell>
+        <div className="flex items-center justify-center gap-1">
+          {isEditing ? (
+            <>
+              <Button size="sm" variant="ghost" onClick={onSaveEdit} title="Save">
+                <Save className="h-4 w-4 text-green-600" />
+              </Button>
+              <Button size="sm" variant="ghost" onClick={onCancelEdit} title="Cancel">
+                <X className="h-4 w-4 text-gray-400" />
+              </Button>
+            </>
+          ) : skipConfirmId === entry.id ? (
+            <div className="flex items-center gap-1 text-xs">
+              <span className="text-muted-foreground">Skip?</span>
+              <Button size="sm" variant="ghost" onClick={onSkip} className="text-red-600 h-7 px-2">Yes</Button>
+              <Button size="sm" variant="ghost" onClick={onSkipCancel} className="h-7 px-2">No</Button>
+            </div>
+          ) : (
+            <>
+              {entry.status !== 'paid' && entry.status !== 'skipped' && (
+                <Button size="sm" className="bg-green-600 hover:bg-green-700 h-7 px-2 text-xs" onClick={onPay}>
+                  Pay
+                </Button>
+              )}
+              <Button size="sm" variant="ghost" onClick={onStartEdit} title="Edit amount">
+                <Edit2 className="h-3.5 w-3.5 text-blue-600" />
+              </Button>
+              {entry.status !== 'paid' && entry.status !== 'skipped' && (
+                <Button size="sm" variant="ghost" onClick={onSkipConfirm} title="Skip for today">
+                  <SkipForward className="h-3.5 w-3.5 text-orange-500" />
+                </Button>
+              )}
+            </>
+          )}
+        </div>
+      </TableCell>
+    </TableRow>
+  );
+};
+
+// ── Sortable row for Obligations Master table ──
+interface SortableObligationRowProps {
+  ob: PaymentObligation;
+  deleteConfirmId: string | null;
+  onEdit: () => void;
+  onDeleteConfirm: () => void;
+  onDeleteCancel: () => void;
+  onDelete: () => void;
+  onToggleActive: () => void;
+}
+
+const SortableObligationRow = ({
+  ob, deleteConfirmId, onEdit, onDeleteConfirm, onDeleteCancel, onDelete, onToggleActive,
+}: SortableObligationRowProps) => {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: ob.id });
+  const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 };
+
+  return (
+    <TableRow ref={setNodeRef} style={style} className={ob.is_active ? '' : 'opacity-50'}>
+      <TableCell className="w-8 px-1">
+        <button {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing p-1 hover:bg-gray-100 rounded">
+          <GripVertical className="h-4 w-4 text-gray-400" />
+        </button>
+      </TableCell>
+      <TableCell>
+        <div className="font-medium">{ob.party_name}</div>
+        <div className="text-xs text-muted-foreground capitalize">{ob.sub_category || '-'}</div>
+      </TableCell>
+      <TableCell>
+        {ob.payee_name ? (
+          <span className="text-sm">{ob.payee_name}</span>
+        ) : ob.payee_search_table ? (
+          <Badge variant="outline" className="text-xs">Search from master</Badge>
+        ) : (
+          <span className="text-xs text-muted-foreground">—</span>
+        )}
+      </TableCell>
+      <TableCell>
+        <Badge variant={ob.category === 'fixed' ? 'default' : 'outline'} className="capitalize">
+          {ob.category}
+        </Badge>
+      </TableCell>
+      <TableCell className="text-right font-mono">{formatINR(ob.default_daily_amount)}</TableCell>
+      <TableCell className="text-center">{ob.priority}</TableCell>
+      <TableCell className="text-center">
+        <Button variant="ghost" size="sm" onClick={onToggleActive}>
+          {ob.is_active
+            ? <ToggleRight className="h-5 w-5 text-green-600" />
+            : <ToggleLeft className="h-5 w-5 text-gray-400" />}
+        </Button>
+      </TableCell>
+      <TableCell className="text-sm text-muted-foreground max-w-[150px] truncate">{ob.notes || '-'}</TableCell>
+      <TableCell className="text-center">
+        <div className="flex items-center justify-center gap-1">
+          <Button size="sm" variant="ghost" onClick={onEdit} title="Edit">
+            <Edit2 className="h-4 w-4 text-blue-600" />
+          </Button>
+          {deleteConfirmId === ob.id ? (
+            <div className="flex gap-1">
+              <Button size="sm" variant="ghost" onClick={onDelete} className="text-red-600 text-xs">Yes</Button>
+              <Button size="sm" variant="ghost" onClick={onDeleteCancel} className="text-xs">No</Button>
+            </div>
+          ) : (
+            <Button size="sm" variant="ghost" onClick={onDeleteConfirm} title="Delete">
+              <span className="text-red-500 text-sm">x</span>
+            </Button>
+          )}
+        </div>
+      </TableCell>
+    </TableRow>
+  );
+};
+
 const DailyPaymentAllocation = () => {
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin' || user?.role === 'super_admin';
@@ -71,8 +293,20 @@ const DailyPaymentAllocation = () => {
   const [payeeSearchTerm, setPayeeSearchTerm] = useState('');
   const [selectedPayeeName, setSelectedPayeeName] = useState('');
 
+  // Inline edit for schedule entries (Today's Allocation)
+  const [editingScheduleId, setEditingScheduleId] = useState<string | null>(null);
+  const [editScheduleAmount, setEditScheduleAmount] = useState('');
+  const [editScheduleNotes, setEditScheduleNotes] = useState('');
+
+  // Skip confirmation for schedule
+  const [skipConfirmId, setSkipConfirmId] = useState<string | null>(null);
+
   // Delete confirmation
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+
+  // Drag-and-drop local order for schedule and obligations
+  const [localScheduleOrder, setLocalScheduleOrder] = useState<string[] | null>(null);
+  const [localObligationOrder, setLocalObligationOrder] = useState<string[] | null>(null);
 
   // Add manual account dialog
   const [addAccountOpen, setAddAccountOpen] = useState(false);
@@ -93,7 +327,7 @@ const DailyPaymentAllocation = () => {
   const [historyTo, setHistoryTo] = useState(today);
 
   // Queries
-  const { schedule, isLoading, markPaid, refetch } = useDailyPaymentSchedule(selectedDate, selectedHospital);
+  const { schedule, isLoading, markPaid, updateScheduleEntry, skipEntry, reorderSchedule, refetch } = useDailyPaymentSchedule(selectedDate, selectedHospital);
   const { funds, refetch: refetchFunds, saveActualBalance, addManualAccount } = useFundAccounts(selectedDate);
   const { data: cashCollections = 0 } = useTodayCashCollections(selectedDate);
   const { obligations, createObligation, updateObligation, deleteObligation, toggleActive } = usePaymentObligations(selectedHospital);
@@ -124,6 +358,80 @@ const DailyPaymentAllocation = () => {
   const tallyStale = funds.lastSyncAt
     ? (Date.now() - new Date(funds.lastSyncAt).getTime()) > 24 * 60 * 60 * 1000
     : true;
+
+  // DnD sensors
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
+  // Sorted schedule: use local drag order if available, else original
+  const sortedSchedule = useMemo(() => {
+    if (!localScheduleOrder) return schedule;
+    const map = new Map(schedule.map(s => [s.id, s]));
+    return localScheduleOrder.map(id => map.get(id)).filter(Boolean) as ScheduleEntry[];
+  }, [schedule, localScheduleOrder]);
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const currentOrder = localScheduleOrder || schedule.map(s => s.id);
+    const oldIndex = currentOrder.indexOf(String(active.id));
+    const newIndex = currentOrder.indexOf(String(over.id));
+    const newOrder = arrayMove(currentOrder, oldIndex, newIndex);
+    setLocalScheduleOrder(newOrder);
+
+    // Persist priorities: position in array = priority number
+    const priorityUpdates = newOrder.map((id, idx) => ({ id, priority: idx + 1 }));
+    reorderSchedule.mutate(priorityUpdates);
+  };
+
+  const startEditSchedule = (entry: ScheduleEntry) => {
+    setEditingScheduleId(entry.id);
+    setEditScheduleAmount(String(entry.daily_amount));
+    setEditScheduleNotes(entry.notes || '');
+  };
+
+  const saveEditSchedule = () => {
+    if (!editingScheduleId) return;
+    const amount = parseFloat(editScheduleAmount);
+    if (isNaN(amount) || amount < 0) { toast.error('Enter a valid amount'); return; }
+    updateScheduleEntry.mutate({
+      id: editingScheduleId,
+      daily_amount: amount,
+      notes: editScheduleNotes || undefined,
+    });
+    setEditingScheduleId(null);
+  };
+
+  const handleSkipEntry = (id: string) => {
+    skipEntry.mutate(id);
+    setSkipConfirmId(null);
+  };
+
+  // Sorted obligations: use local drag order if available, else original
+  const sortedObligations = useMemo(() => {
+    if (!localObligationOrder) return obligations;
+    const map = new Map(obligations.map(o => [o.id, o]));
+    return localObligationOrder.map(id => map.get(id)).filter(Boolean) as PaymentObligation[];
+  }, [obligations, localObligationOrder]);
+
+  const handleObligationDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const currentOrder = localObligationOrder || obligations.map(o => o.id);
+    const oldIndex = currentOrder.indexOf(String(active.id));
+    const newIndex = currentOrder.indexOf(String(over.id));
+    const newOrder = arrayMove(currentOrder, oldIndex, newIndex);
+    setLocalObligationOrder(newOrder);
+
+    // Persist priority for each obligation
+    for (let i = 0; i < newOrder.length; i++) {
+      updateObligation.mutate({ id: newOrder[i], priority: i + 1 });
+    }
+  };
 
   if (!isAdmin) {
     return (
@@ -511,7 +819,7 @@ const DailyPaymentAllocation = () => {
           <TabsTrigger value="history">Payment History</TabsTrigger>
         </TabsList>
 
-        {/* TAB 1: Today's Allocation */}
+        {/* TAB 1: Today's Allocation — drag-and-drop, inline edit, skip */}
         <TabsContent value="allocation" className="mt-4">
           {isLoading ? (
             <div className="text-center py-8 text-muted-foreground">Loading schedule...</div>
@@ -521,78 +829,59 @@ const DailyPaymentAllocation = () => {
             </div>
           ) : (
             <Card>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-10">#</TableHead>
-                    <TableHead>Party</TableHead>
-                    <TableHead className="text-right">Daily Amount</TableHead>
-                    <TableHead className="text-right">Carry Forward</TableHead>
-                    <TableHead className="text-right">Total Due</TableHead>
-                    <TableHead className="text-right">Paid</TableHead>
-                    <TableHead className="text-center">Aging</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-center">Action</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {schedule.map((entry, idx) => (
-                    <TableRow key={entry.id} className={`border-l-4 ${getAgingBorder(entry.days_overdue)}`}>
-                      <TableCell className="font-medium">{idx + 1}</TableCell>
-                      <TableCell>
-                        <div className="font-medium">{entry.party_name}</div>
-                        <div className="text-xs text-muted-foreground capitalize">{entry.category}</div>
-                      </TableCell>
-                      <TableCell className="text-right font-mono">{formatINR(entry.daily_amount)}</TableCell>
-                      <TableCell className="text-right font-mono">
-                        {entry.carryforward_amount > 0
-                          ? <span className="text-red-600">{formatINR(entry.carryforward_amount)}</span>
-                          : '-'}
-                      </TableCell>
-                      <TableCell className="text-right font-mono font-bold">
-                        {formatINR(entry.daily_amount + entry.carryforward_amount)}
-                      </TableCell>
-                      <TableCell className="text-right font-mono">
-                        {entry.paid_amount > 0 ? <span className="text-green-600">{formatINR(entry.paid_amount)}</span> : '-'}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <Badge className={`${getAgingColor(entry.days_overdue)} font-mono`}>
-                          {entry.days_overdue}d
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        {entry.status === 'paid' && (
-                          <Badge className="bg-green-100 text-green-800"><CheckCircle className="h-3 w-3 mr-1" />Paid</Badge>
-                        )}
-                        {entry.status === 'partial' && (
-                          <Badge className="bg-yellow-100 text-yellow-800"><Clock className="h-3 w-3 mr-1" />Partial</Badge>
-                        )}
-                        {entry.status === 'pending' && (
-                          <Badge className="bg-gray-100 text-gray-800"><Clock className="h-3 w-3 mr-1" />Pending</Badge>
-                        )}
-                        {entry.status === 'carried_forward' && (
-                          <Badge className="bg-orange-100 text-orange-800">Carried</Badge>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        {entry.status !== 'paid' && (
-                          <Button size="sm" onClick={() => handlePay(entry)} className="bg-green-600 hover:bg-green-700">
-                            <IndianRupee className="h-3 w-3 mr-1" /> Pay
-                          </Button>
-                        )}
-                      </TableCell>
+              <div className="px-4 py-2 border-b bg-gray-50 flex items-center justify-between">
+                <p className="text-xs text-muted-foreground">Drag rows to reorder priority. Click pencil to edit amount. Click X to skip.</p>
+              </div>
+              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-8"></TableHead>
+                      <TableHead className="w-10">#</TableHead>
+                      <TableHead>Party</TableHead>
+                      <TableHead className="text-right">Daily Amount</TableHead>
+                      <TableHead className="text-right">Carry Forward</TableHead>
+                      <TableHead className="text-right">Total Due</TableHead>
+                      <TableHead className="text-right">Paid</TableHead>
+                      <TableHead className="text-center">Aging</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-center">Actions</TableHead>
                     </TableRow>
-                  ))}
-                  <TableRow className="bg-gray-50 font-bold">
-                    <TableCell colSpan={2}>TOTAL</TableCell>
-                    <TableCell className="text-right font-mono">{formatINR(schedule.reduce((s, e) => s + e.daily_amount, 0))}</TableCell>
-                    <TableCell className="text-right font-mono text-red-600">{formatINR(schedule.reduce((s, e) => s + e.carryforward_amount, 0))}</TableCell>
-                    <TableCell className="text-right font-mono">{formatINR(totalDue)}</TableCell>
-                    <TableCell className="text-right font-mono text-green-600">{formatINR(totalPaid)}</TableCell>
-                    <TableCell colSpan={3}></TableCell>
-                  </TableRow>
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <SortableContext items={sortedSchedule.map(s => s.id)} strategy={verticalListSortingStrategy}>
+                    <TableBody>
+                      {sortedSchedule.map((entry, idx) => (
+                        <SortableScheduleRow
+                          key={entry.id}
+                          entry={entry}
+                          idx={idx}
+                          isEditing={editingScheduleId === entry.id}
+                          editAmount={editScheduleAmount}
+                          editNotes={editScheduleNotes}
+                          skipConfirmId={skipConfirmId}
+                          onStartEdit={() => startEditSchedule(entry)}
+                          onSaveEdit={saveEditSchedule}
+                          onCancelEdit={() => setEditingScheduleId(null)}
+                          onEditAmountChange={setEditScheduleAmount}
+                          onEditNotesChange={setEditScheduleNotes}
+                          onPay={() => handlePay(entry)}
+                          onSkipConfirm={() => setSkipConfirmId(entry.id)}
+                          onSkipCancel={() => setSkipConfirmId(null)}
+                          onSkip={() => handleSkipEntry(entry.id)}
+                        />
+                      ))}
+                      <TableRow className="bg-gray-50 font-bold">
+                        <TableCell colSpan={3}>TOTAL</TableCell>
+                        <TableCell className="text-right font-mono">{formatINR(sortedSchedule.reduce((s, e) => s + e.daily_amount, 0))}</TableCell>
+                        <TableCell className="text-right font-mono text-red-600">{formatINR(sortedSchedule.reduce((s, e) => s + e.carryforward_amount, 0))}</TableCell>
+                        <TableCell className="text-right font-mono">{formatINR(totalDue)}</TableCell>
+                        <TableCell className="text-right font-mono text-green-600">{formatINR(totalPaid)}</TableCell>
+                        <TableCell colSpan={3}></TableCell>
+                      </TableRow>
+                    </TableBody>
+                  </SortableContext>
+                </Table>
+              </DndContext>
             </Card>
           )}
         </TabsContent>
@@ -606,83 +895,50 @@ const DailyPaymentAllocation = () => {
             </Button>
           </div>
           <Card>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Party Name</TableHead>
-                  <TableHead>Payee</TableHead>
-                  <TableHead>Category</TableHead>
-                  <TableHead className="text-right">Daily Amount</TableHead>
-                  <TableHead className="text-center">Priority</TableHead>
-                  <TableHead className="text-center">Active</TableHead>
-                  <TableHead>Notes</TableHead>
-                  <TableHead className="text-center">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {obligations.length === 0 ? (
+            <div className="px-4 py-2 border-b bg-gray-50">
+              <p className="text-xs text-muted-foreground">Drag rows to reorder priority. Lower position = lower priority number = paid first.</p>
+            </div>
+            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleObligationDragEnd}>
+              <Table>
+                <TableHeader>
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
-                      No obligations configured. Click "Add Obligation" to get started.
-                    </TableCell>
+                    <TableHead className="w-8"></TableHead>
+                    <TableHead>Party Name</TableHead>
+                    <TableHead>Payee</TableHead>
+                    <TableHead>Category</TableHead>
+                    <TableHead className="text-right">Daily Amount</TableHead>
+                    <TableHead className="text-center">Priority</TableHead>
+                    <TableHead className="text-center">Active</TableHead>
+                    <TableHead>Notes</TableHead>
+                    <TableHead className="text-center">Actions</TableHead>
                   </TableRow>
-                ) : (
-                  obligations.map((ob: PaymentObligation) => (
-                    <TableRow key={ob.id} className={ob.is_active ? '' : 'opacity-50'}>
-                      <TableCell>
-                        <div className="font-medium">{ob.party_name}</div>
-                        <div className="text-xs text-muted-foreground capitalize">{ob.sub_category || '-'}</div>
-                      </TableCell>
-                      <TableCell>
-                        {ob.payee_name ? (
-                          <span className="text-sm">{ob.payee_name}</span>
-                        ) : ob.payee_search_table ? (
-                          <Badge variant="outline" className="text-xs">Search from master</Badge>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">—</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={ob.category === 'fixed' ? 'default' : 'outline'} className="capitalize">
-                          {ob.category}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right font-mono">{formatINR(ob.default_daily_amount)}</TableCell>
-                      <TableCell className="text-center">{ob.priority}</TableCell>
-                      <TableCell className="text-center">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => toggleActive.mutate({ id: ob.id, is_active: !ob.is_active })}
-                        >
-                          {ob.is_active
-                            ? <ToggleRight className="h-5 w-5 text-green-600" />
-                            : <ToggleLeft className="h-5 w-5 text-gray-400" />}
-                        </Button>
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground max-w-[150px] truncate">{ob.notes || '-'}</TableCell>
-                      <TableCell className="text-center">
-                        <div className="flex items-center justify-center gap-1">
-                          <Button size="sm" variant="ghost" onClick={() => handleEditObligation(ob)} title="Edit">
-                            <Edit2 className="h-4 w-4 text-blue-600" />
-                          </Button>
-                          {deleteConfirmId === ob.id ? (
-                            <div className="flex gap-1">
-                              <Button size="sm" variant="ghost" onClick={() => handleDeleteObligation(ob.id)} className="text-red-600 text-xs">Yes</Button>
-                              <Button size="sm" variant="ghost" onClick={() => setDeleteConfirmId(null)} className="text-xs">No</Button>
-                            </div>
-                          ) : (
-                            <Button size="sm" variant="ghost" onClick={() => setDeleteConfirmId(ob.id)} title="Delete">
-                              <span className="text-red-500 text-sm">x</span>
-                            </Button>
-                          )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <SortableContext items={sortedObligations.map(o => o.id)} strategy={verticalListSortingStrategy}>
+                  <TableBody>
+                    {sortedObligations.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
+                          No obligations configured. Click "Add Obligation" to get started.
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      sortedObligations.map((ob: PaymentObligation) => (
+                        <SortableObligationRow
+                          key={ob.id}
+                          ob={ob}
+                          deleteConfirmId={deleteConfirmId}
+                          onEdit={() => handleEditObligation(ob)}
+                          onDeleteConfirm={() => setDeleteConfirmId(ob.id)}
+                          onDeleteCancel={() => setDeleteConfirmId(null)}
+                          onDelete={() => handleDeleteObligation(ob.id)}
+                          onToggleActive={() => toggleActive.mutate({ id: ob.id, is_active: !ob.is_active })}
+                        />
+                      ))
+                    )}
+                  </TableBody>
+                </SortableContext>
+              </Table>
+            </DndContext>
           </Card>
         </TabsContent>
 

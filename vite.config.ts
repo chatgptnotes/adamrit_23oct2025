@@ -20,7 +20,7 @@ export default defineConfig(({ mode }) => ({
     global: 'globalThis',
   },
   optimizeDeps: {
-    exclude: ['jspdf']
+    exclude: ['jspdf', '@ckeditor/ckeditor5-build-classic']
   },
   build: {
     target: 'es2015',
