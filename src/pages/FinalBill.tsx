@@ -825,7 +825,7 @@ const FinalBill = () => {
       if (visitId) {
         const { data, error: visitError } = await supabase
           .from('visits')
-          .select('id, patient_type, insurance_type')
+          .select('id, patient_type, insurance_type, corporate')
           .eq('visit_id', visitId)
           .single();
 
@@ -843,7 +843,10 @@ const FinalBill = () => {
 
         // Determine patient type to select appropriate rate
         const patientType = (visitDataResult?.patient_type || patientInfo?.patient_type || '').toLowerCase().trim();
-        const corporate = (patientInfo?.corporate || '').toLowerCase().trim();
+        // Check visit-level billing override first, then fall back to patient corporate
+        const visitCorporateOverride = (visitDataResult?.corporate || '').toLowerCase().trim();
+        const patientCorporateVal = (patientInfo?.corporate || '').toLowerCase().trim();
+        const corporate = visitCorporateOverride || patientCorporateVal;
 
         // Corporate field takes priority - check if patient has a corporate panel first
         const hasCorporate = corporate.length > 0 && corporate !== 'private';
@@ -933,7 +936,7 @@ const FinalBill = () => {
         if (visitId) {
           const { data: visitData, error: visitError } = await supabase
             .from('visits')
-            .select('id, patient_type, insurance_type')
+            .select('id, patient_type, insurance_type, corporate')
             .eq('visit_id', visitId)
             .single();
 
@@ -961,7 +964,10 @@ const FinalBill = () => {
 
           // Determine patient type to select appropriate rate
           const patientType = (visitDataResult?.patient_type || patientInfo?.patient_type || '').toLowerCase().trim();
-          const corporate = (patientInfo?.corporate || '').toLowerCase().trim();
+          // Check visit-level billing override first, then fall back to patient corporate
+          const visitCorporateOverride = (visitDataResult?.corporate || '').toLowerCase().trim();
+          const patientCorporateVal = (patientInfo?.corporate || '').toLowerCase().trim();
+          const corporate = visitCorporateOverride || patientCorporateVal;
 
           // Corporate field takes priority - check if patient has a corporate panel first
           const hasCorporate = corporate.length > 0 && corporate !== 'private';
@@ -1100,7 +1106,7 @@ const FinalBill = () => {
         if (visitId) {
           const { data, error: visitError } = await supabase
             .from('visits')
-            .select('id, patient_type, insurance_type')
+            .select('id, patient_type, insurance_type, corporate')
             .eq('visit_id', visitId)
             .single();
 
@@ -1127,7 +1133,10 @@ const FinalBill = () => {
 
           // Determine patient type to select appropriate rate
           const patientType = (visitDataResult?.patient_type || patientInfo?.patient_type || '').toLowerCase().trim();
-          const corporate = (patientInfo?.corporate || '').toLowerCase().trim();
+          // Check visit-level billing override first, then fall back to patient corporate
+          const visitCorporateOverride = (visitDataResult?.corporate || '').toLowerCase().trim();
+          const patientCorporateVal = (patientInfo?.corporate || '').toLowerCase().trim();
+          const corporate = visitCorporateOverride || patientCorporateVal;
 
           // Corporate field takes priority - check if patient has a corporate panel first
           const hasCorporate = corporate.length > 0 && corporate !== 'private';
@@ -2106,14 +2115,15 @@ const FinalBill = () => {
   const [finalDischargeSummary, setFinalDischargeSummary] = useState('');
   const [isGeneratingDischargeSummary, setIsGeneratingDischargeSummary] = useState(false);
   const [patientInfo, setPatientInfo] = useState<any>(null);
+  const [visitCorporateOverride, setVisitCorporateOverride] = useState<string>('');
 
-  // Refetch services when patient info changes (especially corporate panel)
+  // Refetch services when patient info or visit corporate override changes
   useEffect(() => {
-    if (patientInfo?.corporate) {
-      console.log('🔄 Patient info loaded, triggering services refetch. Corporate:', patientInfo.corporate);
+    if (patientInfo?.corporate || visitCorporateOverride) {
+      console.log('🔄 Patient info loaded, triggering services refetch. Corporate:', patientInfo?.corporate, 'Override:', visitCorporateOverride);
       setServicesRefetchTrigger(prev => prev + 1);
     }
-  }, [patientInfo?.corporate]);
+  }, [patientInfo?.corporate, visitCorporateOverride]);
 
   // Fetch available implant services from database
   useEffect(() => {
@@ -2127,7 +2137,7 @@ const FinalBill = () => {
         if (visitId) {
           const { data, error: visitError } = await supabase
             .from('visits')
-            .select('id, patient_type, insurance_type')
+            .select('id, patient_type, insurance_type, corporate')
             .eq('visit_id', visitId)
             .single();
 
@@ -2154,7 +2164,10 @@ const FinalBill = () => {
 
           // Determine patient type to select appropriate rate
           const patientType = (visitDataResult?.patient_type || patientInfo?.patient_type || '').toLowerCase().trim();
-          const corporate = (patientInfo?.corporate || '').toLowerCase().trim();
+          // Check visit-level billing override first, then fall back to patient corporate
+          const visitCorporateOverride = (visitDataResult?.corporate || '').toLowerCase().trim();
+          const patientCorporateVal = (patientInfo?.corporate || '').toLowerCase().trim();
+          const corporate = visitCorporateOverride || patientCorporateVal;
 
           // Corporate field takes priority - check if patient has a corporate panel first
           const hasCorporate = corporate.length > 0 && corporate !== 'private';
@@ -3879,6 +3892,9 @@ const FinalBill = () => {
       if (surgeryError) {
         console.error('Error fetching surgery data:', surgeryError);
       }
+
+      // Store visit-level billing override (corporate column on visits table)
+      setVisitCorporateOverride((visitData.corporate || '').toLowerCase().trim());
 
       // Combine patient info with surgery details
       const combinedInfo = {
@@ -21557,6 +21573,13 @@ Dr. Murali B K
                 </div>
                 <div className="border-2 border-black p-2 mb-2">
                   <h2 className="text-xl font-bold tracking-wider print:text-xl">{patientInfo?.corporate ? patientInfo.corporate.toUpperCase() : 'PRIVATE'}</h2>
+                  {visitCorporateOverride && visitCorporateOverride !== (patientInfo?.corporate || '').toLowerCase().trim() && (
+                    <div className="screen-only mt-1">
+                      <Badge className="bg-orange-100 text-orange-800 border border-orange-300 text-xs font-semibold">
+                        Billing Override: {visitCorporateOverride.toUpperCase()}
+                      </Badge>
+                    </div>
+                  )}
                 </div>
                 {!hiddenFields.includes('claimId') && (
                 <div className="border-2 border-black p-2 relative">

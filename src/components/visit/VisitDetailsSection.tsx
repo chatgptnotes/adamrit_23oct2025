@@ -25,9 +25,11 @@ interface VisitDetailsSectionProps {
     claimId?: string;
     cardNo?: string;
     diagnosisId?: string;
+    billingCategoryOverride?: string;
   };
   handleInputChange: (field: string, value: string) => void;
   existingVisit?: any; // Optional existing visit data for edit mode
+  patientCorporate?: string; // Patient's original corporate/yojna category
 }
 
 export const VisitDetailsSection: React.FC<VisitDetailsSectionProps> = ({
@@ -35,7 +37,8 @@ export const VisitDetailsSection: React.FC<VisitDetailsSectionProps> = ({
   setVisitDate,
   formData,
   handleInputChange,
-  existingVisit
+  existingVisit,
+  patientCorporate
 }) => {
   const { hospitalConfig } = useAuth();
   const { diagnoses, isLoading: isLoadingDiagnoses } = useDiagnoses();
@@ -340,6 +343,35 @@ export const VisitDetailsSection: React.FC<VisitDetailsSectionProps> = ({
             </SelectContent>
           </Select>
         </div>
+
+        {/* Billing Category Override - only for Yojna/corporate patients */}
+        {patientCorporate && patientCorporate.toLowerCase().trim() !== 'private' && (
+          <div className="space-y-2 md:col-span-2">
+            <Label htmlFor="billingCategoryOverride" className="text-sm font-medium">
+              Billing Category
+            </Label>
+            <p className="text-xs text-gray-500">
+              Patient registered as: <span className="font-semibold text-blue-700">{patientCorporate}</span>
+            </p>
+            {(formData.visitType === 'follow-up' || formData.visitType === 'routine-checkup') && (
+              <div className="bg-yellow-50 border border-yellow-300 rounded p-2 text-xs text-yellow-800">
+                Review visits for Yojna patients are typically billed at private rates
+              </div>
+            )}
+            <Select
+              value={formData.billingCategoryOverride || ''}
+              onValueChange={(value) => handleInputChange('billingCategoryOverride', value)}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Same as registration" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">Same as registration</SelectItem>
+                <SelectItem value="private">Private</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        )}
 
         <div className="space-y-2">
           <Label htmlFor="appointmentWith" className="text-sm font-medium">

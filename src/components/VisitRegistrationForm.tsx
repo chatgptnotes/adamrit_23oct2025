@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { format } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
@@ -48,7 +48,10 @@ export const VisitRegistrationForm: React.FC<VisitRegistrationFormProps> = ({
     wardAllotted: '',
     roomAllotted: '',
     diagnosisId: '',
+    billingCategoryOverride: '',
   });
+
+  const [patientCorporate, setPatientCorporate] = useState('');
 
   // Keep track of selected IDs for foreign keys
   const [selectedIds, setSelectedIds] = useState({
@@ -77,6 +80,7 @@ export const VisitRegistrationForm: React.FC<VisitRegistrationFormProps> = ({
         wardAllotted: existingVisit.ward_allotted || '',
         roomAllotted: existingVisit.room_allotted || '',
         diagnosisId: existingVisit.diagnosis_id || '',
+        billingCategoryOverride: existingVisit.billing_category_override || existingVisit.corporate || '',
       };
 
       console.log('Populated Form Data:', populatedData);
@@ -88,6 +92,15 @@ export const VisitRegistrationForm: React.FC<VisitRegistrationFormProps> = ({
       }
     }
   }, [editMode, existingVisit]);
+
+  // Fetch patient's corporate/yojna category to enable billing override
+  useEffect(() => {
+    const fetchPatientCorporate = async () => {
+      const { data } = await (supabase as any).from('patients').select('corporate').eq('id', patient.id).maybeSingle();
+      if (data?.corporate) setPatientCorporate(data.corporate);
+    };
+    fetchPatientCorporate();
+  }, [patient.id]);
 
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -270,7 +283,8 @@ export const VisitRegistrationForm: React.FC<VisitRegistrationFormProps> = ({
             ward_allotted: formData.wardAllotted || null,
             room_allotted: formData.roomAllotted || null,
             admission_date: admissionDate,
-            diagnosis_id: formData.diagnosisId || null
+            diagnosis_id: formData.diagnosisId || null,
+            corporate: formData.billingCategoryOverride || null
           })
           .eq('visit_id', existingVisit.visit_id)
           .select();
@@ -354,7 +368,8 @@ export const VisitRegistrationForm: React.FC<VisitRegistrationFormProps> = ({
             ward_allotted: formData.wardAllotted || null,
             room_allotted: formData.roomAllotted || null,
             admission_date: isIPDOrEmergency ? new Date().toISOString() : null,
-            diagnosis_id: formData.diagnosisId || null
+            diagnosis_id: formData.diagnosisId || null,
+            corporate: formData.billingCategoryOverride || null
           })
           .select('id, visit_id')
           .single();
@@ -565,9 +580,12 @@ export const VisitRegistrationForm: React.FC<VisitRegistrationFormProps> = ({
       referringDoctor: '',
       relationshipManager: '',
       claimId: '',
+      cardNo: '',
       patientType: '',
       wardAllotted: '',
       roomAllotted: '',
+      diagnosisId: '',
+      billingCategoryOverride: '',
     });
     setSelectedIds({
       referringDoctorId: '',
@@ -596,6 +614,7 @@ export const VisitRegistrationForm: React.FC<VisitRegistrationFormProps> = ({
             formData={formData}
             handleInputChange={handleInputChange}
             existingVisit={existingVisit}
+            patientCorporate={patientCorporate}
           />
 
           <VisitFormActions
