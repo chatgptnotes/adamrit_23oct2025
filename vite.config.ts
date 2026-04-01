@@ -29,12 +29,63 @@ export default defineConfig(({ mode }) => ({
     chunkSizeWarningLimit: 1600,
     rollupOptions: {
       output: {
-        manualChunks: {
-          'react-vendor': ['react', 'react-dom'],
-          'ui-vendor': ['@radix-ui/react-dialog', '@radix-ui/react-select', '@radix-ui/react-tabs'],
-          'chart-vendor': ['recharts'],
-          'pdf-vendor': ['jspdf', 'html2canvas'],
-          'supabase-vendor': ['@supabase/supabase-js'],
+        manualChunks(id) {
+          // Vendor chunks - split heavy node_modules
+          if (id.includes('node_modules')) {
+            if (id.includes('react-dom') || id.includes('react/')) {
+              return 'react-vendor';
+            }
+            if (id.includes('@radix-ui')) {
+              return 'ui-vendor';
+            }
+            // NOTE: recharts + d3 are NOT manually chunked because their circular
+            // internal imports cause "Cannot access 'S' before initialization" at runtime.
+            // Rollup handles their dependency order correctly when left to auto-chunk.
+            if (id.includes('jspdf') || id.includes('html2canvas')) {
+              return 'pdf-vendor';
+            }
+            if (id.includes('@supabase')) {
+              return 'supabase-vendor';
+            }
+            if (id.includes('lucide-react')) {
+              return 'icons-vendor';
+            }
+            if (id.includes('date-fns')) {
+              return 'date-vendor';
+            }
+            if (id.includes('react-hook-form') || id.includes('@hookform') || id.includes('zod')) {
+              return 'form-vendor';
+            }
+            if (id.includes('xlsx')) {
+              return 'xlsx-vendor';
+            }
+            if (id.includes('dompurify') || id.includes('isomorphic-dompurify')) {
+              return 'purify-vendor';
+            }
+            if (id.includes('react-router') || id.includes('@remix-run')) {
+              return 'router-vendor';
+            }
+            if (id.includes('cmdk') || id.includes('react-day-picker') || id.includes('sonner') || id.includes('react-to-print')) {
+              return 'ui-extras-vendor';
+            }
+          }
+
+          // App code chunks - group smaller shared modules
+          if (id.includes('/components/accounting/') || id.includes('/components/tally/')) {
+            return 'accounting-components';
+          }
+          if (id.includes('/components/radiology/')) {
+            return 'radiology-components';
+          }
+          if (id.includes('/components/operation-room/')) {
+            return 'ot-components';
+          }
+          if (id.includes('/components/marketing/')) {
+            return 'marketing-components';
+          }
+          if (id.includes('/components/ui/')) {
+            return 'ui-components';
+          }
         },
       },
       onwarn(warning, warn) {

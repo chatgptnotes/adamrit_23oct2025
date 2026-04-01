@@ -14,16 +14,17 @@ import { toast } from 'sonner';
 import {
   Wallet, Building2, IndianRupee, TrendingUp, TrendingDown,
   Clock, CheckCircle, AlertTriangle, Plus, Edit2, ToggleLeft,
-  ToggleRight, Banknote, Calendar, RefreshCw
+  ToggleRight, Banknote, Calendar, RefreshCw, Save, PenLine
 } from 'lucide-react';
 import {
   useDailyPaymentSchedule,
-  useTallyBalances,
+  useFundAccounts,
   useTodayCashCollections,
   usePaymentHistory,
   type ScheduleEntry,
+  type BankAccount,
 } from '@/hooks/useDailyPaymentAllocation';
-import { usePaymentObligations, type PaymentObligation } from '@/hooks/usePaymentObligations';
+import { usePaymentObligations, usePayeeSearch, type PaymentObligation } from '@/hooks/usePaymentObligations';
 
 const formatINR = (n: number) =>
   new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(n);
@@ -57,13 +58,32 @@ const DailyPaymentAllocation = () => {
   const [payingEntry, setPayingEntry] = useState<ScheduleEntry | null>(null);
   const [payAmount, setPayAmount] = useState('');
 
-  // Add obligation dialog
+  // Add/Edit obligation dialog
   const [addDialogOpen, setAddDialogOpen] = useState(false);
+  const [editingObligationId, setEditingObligationId] = useState<string | null>(null);
   const [newObligation, setNewObligation] = useState({
     party_name: '', category: 'variable' as 'fixed' | 'variable',
     sub_category: 'other', default_daily_amount: '',
-    priority: '10', notes: '',
+    priority: '10', notes: '', payee_name: '', payee_search_table: '',
   });
+
+  // Payee search for sub-payments (consultant, RMO, staff)
+  const [payeeSearchTerm, setPayeeSearchTerm] = useState('');
+  const [selectedPayeeName, setSelectedPayeeName] = useState('');
+
+  // Delete confirmation
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+
+  // Add manual account dialog
+  const [addAccountOpen, setAddAccountOpen] = useState(false);
+  const [newAccount, setNewAccount] = useState({
+    name: '', type: 'bank' as 'bank' | 'cash', hospital: 'hope', balance: '', notes: '',
+  });
+
+  // Editable actual balances (local state before save)
+  const [editingBalances, setEditingBalances] = useState<Record<string, { balance: string; notes: string }>>({});
+  const [editingCashCollection, setEditingCashCollection] = useState<string | null>(null);
+  const [actualCashCollection, setActualCashCollection] = useState('');
 
   // History date range
   const [historyFrom, setHistoryFrom] = useState(() => {
@@ -74,21 +94,35 @@ const DailyPaymentAllocation = () => {
 
   // Queries
   const { schedule, isLoading, markPaid, refetch } = useDailyPaymentSchedule(selectedDate, selectedHospital);
-  const { data: tallyBalances } = useTallyBalances();
+  const { funds, refetch: refetchFunds, saveActualBalance, addManualAccount } = useFundAccounts(selectedDate);
   const { data: cashCollections = 0 } = useTodayCashCollections(selectedDate);
-  const { obligations, createObligation, toggleActive } = usePaymentObligations(selectedHospital);
+  const { obligations, createObligation, updateObligation, deleteObligation, toggleActive } = usePaymentObligations(selectedHospital);
+
+  // Determine which table to search for sub-payment payee
+  const payingSubCategory = payingEntry
+    ? obligations.find(o => o.id === payingEntry.obligation_id)?.sub_category || ''
+    : '';
+  const payeeTable = payingSubCategory === 'consultant' || payingSubCategory === 'rmo'
+    ? (selectedHospital === 'hope' ? 'hope_consultants' : 'ayushman_consultants')
+    : payingSubCategory === 'salary'
+    ? 'staff_members'
+    : '';
+  const { data: payeeResults = [] } = usePayeeSearch(payeeTable, payeeSearchTerm);
   const { data: history = [] } = usePaymentHistory(historyFrom, historyTo, selectedHospital);
+
+  // Use actual cash if manually entered, else system value
+  const effectiveCash = actualCashCollection !== '' ? parseFloat(actualCashCollection) || 0 : cashCollections;
 
   // Calculations
   const totalDue = schedule.reduce((s, e) => s + (e.daily_amount + e.carryforward_amount), 0);
   const totalPaid = schedule.reduce((s, e) => s + e.paid_amount, 0);
-  const totalAvailable = cashCollections + (tallyBalances?.hopeCash || 0) + (tallyBalances?.hopeBank || 0);
+  const totalAvailable = effectiveCash + funds.totalActual;
   const surplus = totalAvailable - totalDue;
   const coveragePercent = totalDue > 0 ? Math.min(Math.round((totalAvailable / totalDue) * 100), 100) : 100;
 
-  // Tally stale check (>24h)
-  const tallyStale = tallyBalances?.lastSyncAt
-    ? (Date.now() - new Date(tallyBalances.lastSyncAt).getTime()) > 24 * 60 * 60 * 1000
+  // Tally stale check
+  const tallyStale = funds.lastSyncAt
+    ? (Date.now() - new Date(funds.lastSyncAt).getTime()) > 24 * 60 * 60 * 1000
     : true;
 
   if (!isAdmin) {
@@ -108,6 +142,8 @@ const DailyPaymentAllocation = () => {
   const handlePay = (entry: ScheduleEntry) => {
     setPayingEntry(entry);
     setPayAmount(String(entry.daily_amount + entry.carryforward_amount - entry.paid_amount));
+    setPayeeSearchTerm('');
+    setSelectedPayeeName('');
     setPayDialogOpen(true);
   };
 
@@ -131,7 +167,7 @@ const DailyPaymentAllocation = () => {
       toast.error('Party name and daily amount are required');
       return;
     }
-    createObligation.mutate({
+    const payload = {
       party_name: newObligation.party_name,
       category: newObligation.category,
       sub_category: newObligation.sub_category,
@@ -139,9 +175,91 @@ const DailyPaymentAllocation = () => {
       priority: parseInt(newObligation.priority) || 10,
       notes: newObligation.notes || null,
       hospital_name: selectedHospital,
-    });
+      payee_name: newObligation.payee_name || null,
+      payee_search_table: newObligation.payee_search_table || null,
+    };
+    if (editingObligationId) {
+      updateObligation.mutate({ id: editingObligationId, ...payload });
+    } else {
+      createObligation.mutate(payload);
+    }
     setAddDialogOpen(false);
-    setNewObligation({ party_name: '', category: 'variable', sub_category: 'other', default_daily_amount: '', priority: '10', notes: '' });
+    setEditingObligationId(null);
+    setNewObligation({ party_name: '', category: 'variable', sub_category: 'other', default_daily_amount: '', priority: '10', notes: '', payee_name: '', payee_search_table: '' });
+  };
+
+  const handleEditObligation = (ob: PaymentObligation) => {
+    setEditingObligationId(ob.id);
+    setNewObligation({
+      party_name: ob.party_name,
+      category: ob.category,
+      sub_category: ob.sub_category || 'other',
+      default_daily_amount: String(ob.default_daily_amount),
+      priority: String(ob.priority),
+      notes: ob.notes || '',
+      payee_name: ob.payee_name || '',
+      payee_search_table: ob.payee_search_table || '',
+    });
+    setAddDialogOpen(true);
+  };
+
+  const handleDeleteObligation = (id: string) => {
+    deleteObligation.mutate(id);
+    setDeleteConfirmId(null);
+  };
+
+  const startEditBalance = (acc: BankAccount) => {
+    setEditingBalances(prev => ({
+      ...prev,
+      [acc.id]: {
+        balance: acc.actual_balance !== null ? String(acc.actual_balance) : String(acc.ledger_balance),
+        notes: acc.notes || '',
+      },
+    }));
+  };
+
+  const saveBalance = (acc: BankAccount) => {
+    const edit = editingBalances[acc.id];
+    if (!edit) return;
+    const bal = parseFloat(edit.balance);
+    if (isNaN(bal)) {
+      toast.error('Enter a valid amount');
+      return;
+    }
+    saveActualBalance.mutate({
+      accountRefId: acc.id,
+      accountName: acc.name,
+      accountType: acc.type,
+      hospital: acc.hospital,
+      actualBalance: bal,
+      notes: edit.notes,
+    });
+    setEditingBalances(prev => {
+      const next = { ...prev };
+      delete next[acc.id];
+      return next;
+    });
+  };
+
+  const handleAddAccount = () => {
+    if (!newAccount.name || !newAccount.balance) {
+      toast.error('Account name and balance are required');
+      return;
+    }
+    addManualAccount.mutate({
+      accountName: newAccount.name,
+      accountType: newAccount.type,
+      hospital: newAccount.hospital,
+      actualBalance: parseFloat(newAccount.balance) || 0,
+      notes: newAccount.notes,
+    });
+    setAddAccountOpen(false);
+    setNewAccount({ name: '', type: 'bank', hospital: 'hope', balance: '', notes: '' });
+  };
+
+  const handleRefreshAll = () => {
+    refetch();
+    refetchFunds();
   };
 
   return (
@@ -168,58 +286,199 @@ const DailyPaymentAllocation = () => {
               <SelectItem value="ayushman">Ayushman Hospital</SelectItem>
             </SelectContent>
           </Select>
-          <Button variant="outline" size="icon" onClick={() => refetch()}>
+          <Button variant="outline" size="icon" onClick={handleRefreshAll} title="Reload all data">
             <RefreshCw className="h-4 w-4" />
           </Button>
         </div>
       </div>
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      {/* ──── AVAILABLE FUNDS SECTION ──── */}
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Wallet className="h-5 w-5" /> Available Funds
+              {tallyStale && (
+                <Badge variant="outline" className="text-xs text-orange-600 ml-2">
+                  {funds.lastSyncAt
+                    ? `Tally synced: ${new Date(funds.lastSyncAt).toLocaleDateString('en-IN')}`
+                    : 'No Tally sync'}
+                </Badge>
+              )}
+            </CardTitle>
+            <Button variant="outline" size="sm" onClick={() => setAddAccountOpen(true)}>
+              <Plus className="h-3 w-3 mr-1" /> Add Account
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="pt-0">
+          {/* Cash Collections Row */}
+          <div className="bg-green-50 border border-green-200 rounded-lg p-3 mb-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Banknote className="h-4 w-4 text-green-700" />
+                <span className="font-medium text-green-900">Today's Cash Collections</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="text-right">
+                  <p className="text-xs text-green-700">As per System</p>
+                  <p className="font-mono font-bold text-green-800">{formatINR(cashCollections)}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-xs text-blue-700">Actual Amount</p>
+                  {editingCashCollection !== null ? (
+                    <div className="flex items-center gap-1">
+                      <Input
+                        type="number"
+                        value={actualCashCollection}
+                        onChange={(e) => setActualCashCollection(e.target.value)}
+                        className="w-28 h-8 text-right font-mono"
+                        placeholder={String(cashCollections)}
+                      />
+                      <Button size="sm" variant="ghost" className="h-8 px-2" onClick={() => setEditingCashCollection(null)}>
+                        <CheckCircle className="h-4 w-4 text-green-600" />
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1">
+                      <span className="font-mono font-bold text-blue-800">
+                        {actualCashCollection !== '' ? formatINR(parseFloat(actualCashCollection) || 0) : formatINR(cashCollections)}
+                      </span>
+                      <Button size="sm" variant="ghost" className="h-6 px-1" onClick={() => setEditingCashCollection('editing')}>
+                        <PenLine className="h-3 w-3 text-gray-500" />
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Bank/Cash Accounts Table */}
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Account Name</TableHead>
+                <TableHead className="text-center">Type</TableHead>
+                <TableHead className="text-center">Hospital</TableHead>
+                <TableHead className="text-right">As per Ledger</TableHead>
+                <TableHead className="text-right">Actual Balance</TableHead>
+                <TableHead>Notes</TableHead>
+                <TableHead className="text-center w-20">Action</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {funds.accounts.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={7} className="text-center py-6 text-muted-foreground">
+                    No bank/cash accounts found. Sync Tally or add accounts manually.
+                  </TableCell>
+                </TableRow>
+              ) : (
+                funds.accounts.map((acc) => {
+                  const isEditing = !!editingBalances[acc.id];
+                  return (
+                    <TableRow key={acc.id}>
+                      <TableCell>
+                        <div className="font-medium">{acc.name}</div>
+                        {acc.last_synced && (
+                          <div className="text-xs text-muted-foreground">
+                            Synced: {new Date(acc.last_synced).toLocaleDateString('en-IN')}
+                          </div>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <Badge variant={acc.type === 'bank' ? 'default' : 'outline'} className="capitalize">
+                          {acc.type}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-center capitalize">{acc.hospital}</TableCell>
+                      <TableCell className="text-right font-mono text-gray-600">
+                        {formatINR(acc.ledger_balance)}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {isEditing ? (
+                          <Input
+                            type="number"
+                            value={editingBalances[acc.id].balance}
+                            onChange={(e) => setEditingBalances(prev => ({
+                              ...prev,
+                              [acc.id]: { ...prev[acc.id], balance: e.target.value },
+                            }))}
+                            className="w-32 h-8 text-right font-mono ml-auto"
+                          />
+                        ) : (
+                          <span className={`font-mono font-bold ${acc.actual_balance !== null ? 'text-blue-700' : 'text-gray-400'}`}>
+                            {acc.actual_balance !== null ? formatINR(acc.actual_balance) : '—'}
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {isEditing ? (
+                          <Input
+                            value={editingBalances[acc.id].notes}
+                            onChange={(e) => setEditingBalances(prev => ({
+                              ...prev,
+                              [acc.id]: { ...prev[acc.id], notes: e.target.value },
+                            }))}
+                            className="h-8 text-sm"
+                            placeholder="Add notes..."
+                          />
+                        ) : (
+                          <span className="text-sm text-muted-foreground">{acc.notes || '—'}</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        {isEditing ? (
+                          <Button size="sm" variant="ghost" onClick={() => saveBalance(acc)}>
+                            <Save className="h-4 w-4 text-green-600" />
+                          </Button>
+                        ) : (
+                          <Button size="sm" variant="ghost" onClick={() => startEditBalance(acc)}>
+                            <PenLine className="h-4 w-4 text-gray-500" />
+                          </Button>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
+              )}
+              {/* Totals */}
+              <TableRow className="bg-gray-50 font-bold">
+                <TableCell colSpan={3}>TOTAL (All Accounts)</TableCell>
+                <TableCell className="text-right font-mono">{formatINR(funds.totalLedger)}</TableCell>
+                <TableCell className="text-right font-mono text-blue-700">{formatINR(funds.totalActual)}</TableCell>
+                <TableCell colSpan={2}></TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      {/* Summary Row: Total Available vs Total Due */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card>
           <CardContent className="p-4">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
-              <Banknote className="h-4 w-4" />
-              Today's Cash Collections
-            </div>
-            <p className="text-2xl font-bold text-green-700">{formatINR(cashCollections)}</p>
+            <div className="text-sm text-muted-foreground mb-1">Total Available (Cash + Banks)</div>
+            <p className="text-2xl font-bold text-green-700">{formatINR(totalAvailable)}</p>
           </CardContent>
         </Card>
-
         <Card>
           <CardContent className="p-4">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
-              <Building2 className="h-4 w-4" />
-              Hope Bank Balance
-              {tallyStale && <Badge variant="outline" className="text-xs text-orange-600">Stale</Badge>}
-            </div>
-            <p className="text-2xl font-bold text-blue-700">{formatINR(tallyBalances?.hopeBank || 0)}</p>
-            <p className="text-xs text-muted-foreground mt-1">Cash: {formatINR(tallyBalances?.hopeCash || 0)}</p>
+            <div className="text-sm text-muted-foreground mb-1">Total Obligations Due</div>
+            <p className="text-2xl font-bold text-red-700">{formatINR(totalDue)}</p>
+            <p className="text-xs text-muted-foreground mt-1">Paid: {formatINR(totalPaid)}</p>
           </CardContent>
         </Card>
-
         <Card>
           <CardContent className="p-4">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
-              <Building2 className="h-4 w-4" />
-              Ayushman Bank Balance
-              {tallyStale && <Badge variant="outline" className="text-xs text-orange-600">Stale</Badge>}
-            </div>
-            <p className="text-2xl font-bold text-purple-700">{formatINR(tallyBalances?.ayushmanBank || 0)}</p>
-            <p className="text-xs text-muted-foreground mt-1">Cash: {formatINR(tallyBalances?.ayushmanCash || 0)}</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
+            <div className="flex items-center gap-1 text-sm text-muted-foreground mb-1">
               {surplus >= 0 ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
               {surplus >= 0 ? 'Surplus' : 'Deficit'}
             </div>
             <p className={`text-2xl font-bold ${surplus >= 0 ? 'text-green-700' : 'text-red-700'}`}>
               {formatINR(Math.abs(surplus))}
             </p>
-            <p className="text-xs text-muted-foreground mt-1">Total Due: {formatINR(totalDue)}</p>
           </CardContent>
         </Card>
       </div>
@@ -238,18 +497,6 @@ const DailyPaymentAllocation = () => {
           </div>
         </CardContent>
       </Card>
-
-      {tallyStale && (
-        <div className="bg-orange-50 border border-orange-200 rounded-lg p-3 flex items-center gap-2">
-          <AlertTriangle className="h-4 w-4 text-orange-600" />
-          <span className="text-sm text-orange-800">
-            Tally data may be stale.
-            {tallyBalances?.lastSyncAt
-              ? ` Last synced: ${new Date(tallyBalances.lastSyncAt).toLocaleString('en-IN')}`
-              : ' No sync data available.'}
-          </span>
-        </div>
-      )}
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
@@ -336,7 +583,6 @@ const DailyPaymentAllocation = () => {
                       </TableCell>
                     </TableRow>
                   ))}
-                  {/* Totals row */}
                   <TableRow className="bg-gray-50 font-bold">
                     <TableCell colSpan={2}>TOTAL</TableCell>
                     <TableCell className="text-right font-mono">{formatINR(schedule.reduce((s, e) => s + e.daily_amount, 0))}</TableCell>
@@ -355,7 +601,7 @@ const DailyPaymentAllocation = () => {
         <TabsContent value="master" className="mt-4 space-y-4">
           <div className="flex justify-between items-center">
             <h3 className="text-lg font-semibold">Payment Obligations</h3>
-            <Button onClick={() => setAddDialogOpen(true)}>
+            <Button onClick={() => { setEditingObligationId(null); setNewObligation({ party_name: '', category: 'variable', sub_category: 'other', default_daily_amount: '', priority: '10', notes: '', payee_name: '', payee_search_table: '' }); setAddDialogOpen(true); }}>
               <Plus className="h-4 w-4 mr-1" /> Add Obligation
             </Button>
           </div>
@@ -364,31 +610,43 @@ const DailyPaymentAllocation = () => {
               <TableHeader>
                 <TableRow>
                   <TableHead>Party Name</TableHead>
+                  <TableHead>Payee</TableHead>
                   <TableHead>Category</TableHead>
-                  <TableHead>Sub-Category</TableHead>
                   <TableHead className="text-right">Daily Amount</TableHead>
                   <TableHead className="text-center">Priority</TableHead>
                   <TableHead className="text-center">Active</TableHead>
                   <TableHead>Notes</TableHead>
+                  <TableHead className="text-center">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {obligations.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
                       No obligations configured. Click "Add Obligation" to get started.
                     </TableCell>
                   </TableRow>
                 ) : (
                   obligations.map((ob: PaymentObligation) => (
                     <TableRow key={ob.id} className={ob.is_active ? '' : 'opacity-50'}>
-                      <TableCell className="font-medium">{ob.party_name}</TableCell>
+                      <TableCell>
+                        <div className="font-medium">{ob.party_name}</div>
+                        <div className="text-xs text-muted-foreground capitalize">{ob.sub_category || '-'}</div>
+                      </TableCell>
+                      <TableCell>
+                        {ob.payee_name ? (
+                          <span className="text-sm">{ob.payee_name}</span>
+                        ) : ob.payee_search_table ? (
+                          <Badge variant="outline" className="text-xs">Search from master</Badge>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
                       <TableCell>
                         <Badge variant={ob.category === 'fixed' ? 'default' : 'outline'} className="capitalize">
                           {ob.category}
                         </Badge>
                       </TableCell>
-                      <TableCell className="capitalize">{ob.sub_category || '-'}</TableCell>
                       <TableCell className="text-right font-mono">{formatINR(ob.default_daily_amount)}</TableCell>
                       <TableCell className="text-center">{ob.priority}</TableCell>
                       <TableCell className="text-center">
@@ -402,7 +660,24 @@ const DailyPaymentAllocation = () => {
                             : <ToggleLeft className="h-5 w-5 text-gray-400" />}
                         </Button>
                       </TableCell>
-                      <TableCell className="text-sm text-muted-foreground max-w-[200px] truncate">{ob.notes || '-'}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground max-w-[150px] truncate">{ob.notes || '-'}</TableCell>
+                      <TableCell className="text-center">
+                        <div className="flex items-center justify-center gap-1">
+                          <Button size="sm" variant="ghost" onClick={() => handleEditObligation(ob)} title="Edit">
+                            <Edit2 className="h-4 w-4 text-blue-600" />
+                          </Button>
+                          {deleteConfirmId === ob.id ? (
+                            <div className="flex gap-1">
+                              <Button size="sm" variant="ghost" onClick={() => handleDeleteObligation(ob.id)} className="text-red-600 text-xs">Yes</Button>
+                              <Button size="sm" variant="ghost" onClick={() => setDeleteConfirmId(null)} className="text-xs">No</Button>
+                            </div>
+                          ) : (
+                            <Button size="sm" variant="ghost" onClick={() => setDeleteConfirmId(ob.id)} title="Delete">
+                              <span className="text-red-500 text-sm">x</span>
+                            </Button>
+                          )}
+                        </div>
+                      </TableCell>
                     </TableRow>
                   ))
                 )}
@@ -515,6 +790,49 @@ const DailyPaymentAllocation = () => {
                   </div>
                 )}
               </div>
+              {/* Payee search for consultant/staff/RMO sub-payments */}
+              {payeeTable && (
+                <div>
+                  <Label>Pay To (search {payingSubCategory === 'consultant' ? 'consultant' : payingSubCategory === 'rmo' ? 'RMO/doctor' : 'staff'} by name)</Label>
+                  <Input
+                    value={payeeSearchTerm}
+                    onChange={(e) => { setPayeeSearchTerm(e.target.value); setSelectedPayeeName(''); }}
+                    placeholder="Type name to search..."
+                    className="mt-1"
+                  />
+                  {payeeResults.length > 0 && !selectedPayeeName && (
+                    <div className="border rounded-md mt-1 max-h-40 overflow-y-auto bg-white shadow-sm">
+                      {payeeResults.map((p: any) => (
+                        <div
+                          key={p.id}
+                          className="px-3 py-2 hover:bg-blue-50 cursor-pointer text-sm"
+                          onClick={() => { setSelectedPayeeName(p.name); setPayeeSearchTerm(p.name); }}
+                        >
+                          <span className="font-medium">{p.name}</span>
+                          {p.specialty && <span className="text-muted-foreground ml-2">({p.specialty})</span>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {selectedPayeeName && (
+                    <p className="text-xs text-green-700 mt-1">Paying: {selectedPayeeName}</p>
+                  )}
+                </div>
+              )}
+
+              {/* Fixed payee (like rent → Dr Pramod Gandhi) */}
+              {!payeeTable && payingEntry && (
+                (() => {
+                  const ob = obligations.find(o => o.id === payingEntry.obligation_id);
+                  return ob?.payee_name ? (
+                    <div className="bg-blue-50 rounded p-2 text-sm">
+                      <span className="text-muted-foreground">Paying to: </span>
+                      <span className="font-semibold">{ob.payee_name}</span>
+                    </div>
+                  ) : null;
+                })()
+              )}
+
               <div>
                 <Label>Payment Amount (Rs.)</Label>
                 <Input
@@ -527,6 +845,7 @@ const DailyPaymentAllocation = () => {
               </div>
               <p className="text-xs text-muted-foreground">
                 A payment voucher will be automatically created in the accounting system.
+                {selectedPayeeName && ` Voucher narration: "Payment to ${selectedPayeeName}"`}
               </p>
             </div>
           )}
@@ -539,20 +858,31 @@ const DailyPaymentAllocation = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Add Obligation Dialog */}
-      <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
-        <DialogContent>
+      {/* Add/Edit Obligation Dialog */}
+      <Dialog open={addDialogOpen} onOpenChange={(open) => { setAddDialogOpen(open); if (!open) setEditingObligationId(null); }}>
+        <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Add Payment Obligation</DialogTitle>
+            <DialogTitle>{editingObligationId ? 'Edit' : 'Add'} Payment Obligation</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label>Party Name *</Label>
+              <Label>Obligation Name *</Label>
               <Input
                 value={newObligation.party_name}
                 onChange={(e) => setNewObligation({ ...newObligation, party_name: e.target.value })}
-                placeholder="e.g., NefroPlus, Rent, Vendor name"
+                placeholder="e.g., Rent, NephroPlus, Staff Salary"
               />
+            </div>
+            <div>
+              <Label>Payee Name (who gets paid)</Label>
+              <Input
+                value={newObligation.payee_name}
+                onChange={(e) => setNewObligation({ ...newObligation, payee_name: e.target.value })}
+                placeholder="e.g., Dr Pramod Gandhi (for rent)"
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                For fixed payees like rent. Leave blank if payee is selected at payment time.
+              </p>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -604,6 +934,25 @@ const DailyPaymentAllocation = () => {
               </div>
             </div>
             <div>
+              <Label>Payee Search Table</Label>
+              <Select value={newObligation.payee_search_table || 'none'} onValueChange={(v) => setNewObligation({ ...newObligation, payee_search_table: v === 'none' ? '' : v })}>
+                <SelectTrigger><SelectValue placeholder="None (manual entry)" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">None (manual / fixed payee)</SelectItem>
+                  <SelectItem value="hope_consultants">Hope Consultants</SelectItem>
+                  <SelectItem value="ayushman_consultants">Ayushman Consultants</SelectItem>
+                  <SelectItem value="hope_anaesthetists">Hope Anaesthetists</SelectItem>
+                  <SelectItem value="ayushman_anaesthetists">Ayushman Anaesthetists</SelectItem>
+                  <SelectItem value="staff_members">Staff Members</SelectItem>
+                  <SelectItem value="hope_surgeons">Hope Surgeons</SelectItem>
+                  <SelectItem value="ayushman_surgeons">Ayushman Surgeons</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground mt-1">
+                When paying, user can search this table to pick the specific person.
+              </p>
+            </div>
+            <div>
               <Label>Notes</Label>
               <Input
                 value={newObligation.notes}
@@ -613,9 +962,73 @@ const DailyPaymentAllocation = () => {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setAddDialogOpen(false)}>Cancel</Button>
-            <Button onClick={handleAddObligation} disabled={createObligation.isPending}>
-              {createObligation.isPending ? 'Adding...' : 'Add Obligation'}
+            <Button variant="outline" onClick={() => { setAddDialogOpen(false); setEditingObligationId(null); }}>Cancel</Button>
+            <Button onClick={handleAddObligation} disabled={createObligation.isPending || updateObligation.isPending}>
+              {editingObligationId ? 'Save Changes' : 'Add Obligation'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Manual Account Dialog */}
+      <Dialog open={addAccountOpen} onOpenChange={setAddAccountOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add Bank / Cash Account</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Account Name *</Label>
+              <Input
+                value={newAccount.name}
+                onChange={(e) => setNewAccount({ ...newAccount, name: e.target.value })}
+                placeholder="e.g., Canara Bank Current A/c, SBI Savings"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Type</Label>
+                <Select value={newAccount.type} onValueChange={(v: 'bank' | 'cash') => setNewAccount({ ...newAccount, type: v })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="bank">Bank Account</SelectItem>
+                    <SelectItem value="cash">Cash</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Hospital</Label>
+                <Select value={newAccount.hospital} onValueChange={(v) => setNewAccount({ ...newAccount, hospital: v })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="hope">Hope Hospital</SelectItem>
+                    <SelectItem value="ayushman">Ayushman Hospital</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div>
+              <Label>Current Balance (Rs.) *</Label>
+              <Input
+                type="number"
+                value={newAccount.balance}
+                onChange={(e) => setNewAccount({ ...newAccount, balance: e.target.value })}
+                placeholder="Enter actual balance"
+              />
+            </div>
+            <div>
+              <Label>Notes</Label>
+              <Input
+                value={newAccount.notes}
+                onChange={(e) => setNewAccount({ ...newAccount, notes: e.target.value })}
+                placeholder="Account number, branch, or other details"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAddAccountOpen(false)}>Cancel</Button>
+            <Button onClick={handleAddAccount} disabled={addManualAccount.isPending}>
+              {addManualAccount.isPending ? 'Adding...' : 'Add Account'}
             </Button>
           </DialogFooter>
         </DialogContent>
