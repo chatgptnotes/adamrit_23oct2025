@@ -1,4 +1,4 @@
-import { BarChart3, Calendar, PhoneCall, Users, UserPlus, Database, Activity, FileText, TestTube, Camera, Pill, MapPin, Stethoscope, UserCog, ScrollText, Calculator, Syringe, Shield, Building2, ClipboardList, ShieldCheck, Receipt, HeartHandshake, ExternalLink, UserCheck, Bed, DoorOpen, LayoutDashboard, BookOpen, Clock, TrendingUp, Scissors, Heart, Cross, ClipboardCheck, ArrowLeftRight } from 'lucide-react';
+import { BarChart3, Calendar, PhoneCall, Users, UserPlus, Database, Activity, FileText, TestTube, Camera, Pill, MapPin, Stethoscope, UserCog, ScrollText, Calculator, Syringe, Shield, Building2, ClipboardList, ShieldCheck, Receipt, HeartHandshake, ExternalLink, UserCheck, Bed, DoorOpen, LayoutDashboard, BookOpen, Clock, TrendingUp, Scissors, Heart, Cross, ClipboardCheck, ArrowLeftRight, Wallet } from 'lucide-react';
 
 export type MenuSection = 'main' | 'masters';
 
@@ -117,6 +117,11 @@ export const menuItems: MenuItemDef[] = [
     icon: BookOpen,
   },
   {
+    title: "Payment Allocation",
+    url: "/daily-payment-allocation",
+    icon: Wallet,
+  },
+  {
     title: "Ledger Statement",
     url: "/ledger-statement",
     icon: FileText,
@@ -135,6 +140,11 @@ export const menuItems: MenuItemDef[] = [
     title: "Bill Submission",
     url: "/bill-submission",
     icon: Receipt,
+  },
+  {
+    title: "Bill Approvals",
+    url: "/bill-approvals",
+    icon: ClipboardCheck,
   },
   {
     title: "Aging Statement",
