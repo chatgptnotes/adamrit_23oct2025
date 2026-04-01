@@ -320,6 +320,20 @@ export const useFinalBillData = (visitId: string) => {
       console.log('✅ Bill saved successfully with ID:', bill.id);
       console.log('✅ Saved total_amount:', bill.total_amount);
 
+      // WhatsApp alert for invoices > Rs. 1,00,000
+      if (bill.total_amount >= 100000) {
+        import('@/lib/payment-alert-service').then(({ sendPaymentAlert }) => {
+          sendPaymentAlert({
+            alert_type: 'invoice',
+            amount: bill.total_amount,
+            patient_name: bill.bill_patient_data?.name || 'Patient',
+            patient_id: bill.patient_id,
+            visit_id: bill.visit_id || visitId,
+            additional_info: `Bill No: ${bill.bill_no || 'N/A'}, Category: ${bill.category || 'N/A'}`,
+          });
+        });
+      }
+
       return bill;
     },
     onSuccess: () => {

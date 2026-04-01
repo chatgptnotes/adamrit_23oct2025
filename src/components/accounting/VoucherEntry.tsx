@@ -4,6 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { Plus, X, Loader2 } from 'lucide-react';
+import { sendPaymentAlert } from '@/lib/payment-alert-service';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -253,6 +254,18 @@ const VoucherEntry: React.FC = () => {
         .eq('id', selectedVoucherType);
 
       toast.success(`Voucher ${generatedNumber} saved as ${status}.`);
+
+      // WhatsApp alert for receipts > Rs. 10,000
+      const voucherTypeName = (voucherType?.voucher_type_name || '').toLowerCase();
+      if ((voucherTypeName.includes('receipt') || voucherTypeName.includes('receive')) && debitSum >= 10000) {
+        sendPaymentAlert({
+          alert_type: 'receipt',
+          amount: debitSum,
+          patient_name: narration || 'Voucher Entry',
+          hospital_name: 'Hope',
+          additional_info: `Voucher: ${generatedNumber}, Type: ${voucherType?.voucher_type_name || 'N/A'}`,
+        });
+      }
 
       // Invalidate relevant queries and reset the form
       queryClient.invalidateQueries({ queryKey: ['vouchers'] });

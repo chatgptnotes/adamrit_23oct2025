@@ -99,11 +99,11 @@ export const usePatientOperations = (diagnoses: Diagnosis[]) => {
     mutationFn: async (patientId: string) => {
       const { error } = await supabase
         .from('patients')
-        .delete()
+        .update({ status: 'inactive', updated_at: new Date().toISOString() })
         .eq('id', patientId);
 
       if (error) {
-        console.error('Error deleting patient:', error);
+        console.error('Error deactivating patient:', error);
         throw error;
       }
     },
@@ -111,14 +111,14 @@ export const usePatientOperations = (diagnoses: Diagnosis[]) => {
       queryClient.invalidateQueries({ queryKey: ['patients', hospitalConfig.name] });
       toast({
         title: "Success",
-        description: "Patient deleted successfully",
+        description: "Patient marked as inactive",
       });
     },
     onError: (error) => {
-      console.error('Delete patient error:', error);
+      console.error('Deactivate patient error:', error);
       toast({
         title: "Error",
-        description: "Failed to delete patient",
+        description: "Failed to deactivate patient",
         variant: "destructive"
       });
     }

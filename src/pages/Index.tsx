@@ -333,7 +333,9 @@ const Index = () => {
   };
 
   const handleDeletePatient = (patientId: string) => {
-    deletePatient(patientId);
+    if (window.confirm('Mark this patient as inactive? The record will be preserved for audit purposes.')) {
+      deletePatient(patientId);
+    }
   };
 
   const handleAddPatientClick = (surgery?: string) => {

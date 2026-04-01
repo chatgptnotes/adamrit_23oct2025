@@ -153,8 +153,8 @@ export const PatientsTable: React.FC<PatientsTableProps> = ({
                       variant="ghost"
                       size="sm"
                       onClick={() => onDeletePatient({ id: patient.id, name: patient.name })}
-                      className="h-8 w-8 p-0 text-red-600 hover:text-red-800"
-                      title="Delete patient"
+                      className="h-8 w-8 p-0 text-orange-600 hover:text-orange-800"
+                      title="Mark patient inactive"
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>

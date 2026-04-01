@@ -161,6 +161,19 @@ export const DiscountTab: React.FC<DiscountTabProps> = ({
       }
 
       toast.success('Discount saved successfully!');
+
+      // WhatsApp alert for discounts > Rs. 33,000
+      if (discountData.discount_amount >= 33000) {
+        import('@/lib/payment-alert-service').then(({ sendPaymentAlert }) => {
+          sendPaymentAlert({
+            alert_type: 'discount',
+            amount: discountData.discount_amount,
+            patient_name: `Visit: ${visitId}`,
+            visit_id: visitId,
+            additional_info: `Reason: ${discountData.discount_reason || 'Not specified'}`,
+          });
+        });
+      }
     } catch (error) {
       console.error('Exception saving discount:', error);
       toast.error('Failed to save discount');

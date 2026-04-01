@@ -540,7 +540,7 @@ export const AdvancePaymentModal: React.FC<AdvancePaymentModalProps> = ({
         returned_amount: returnedAmount || 0.00,
         is_refund: formData.isRefund || false,
         refund_reason: formData.isRefund && formData.refundReason ? formData.refundReason.trim() : null,
-        payment_date: format(formData.paymentDate, 'yyyy-MM-dd'),
+        payment_date: formData.paymentDate.toISOString(),
         payment_mode: formData.paymentMode?.trim() || 'CASH',
         billing_executive: formData.billingExecutive && formData.billingExecutive.trim() ? formData.billingExecutive.trim() : null,
         reference_number: formData.referenceNumber && formData.referenceNumber.trim() ? formData.referenceNumber.trim() : null,
@@ -584,6 +584,20 @@ export const AdvancePaymentModal: React.FC<AdvancePaymentModalProps> = ({
       }).catch(console.error);
 
       toast.success('Advance payment saved successfully');
+
+      // WhatsApp alert for receipts > Rs. 10,000
+      const paymentAmount = parseFloat(formData.advanceAmount) || 0;
+      if (paymentAmount >= 10000 && !formData.isRefund) {
+        const { sendPaymentAlert } = await import('@/lib/payment-alert-service');
+        sendPaymentAlert({
+          alert_type: 'receipt',
+          amount: paymentAmount,
+          patient_name: patientInfo.name || patientData?.name || 'Patient',
+          patient_id: patientInfo.patient_id || '',
+          hospital_name: 'Hope',
+          additional_info: `Advance Payment, Mode: ${formData.paymentMode}`,
+        });
+      }
 
       // Reset form
       setFormData({
