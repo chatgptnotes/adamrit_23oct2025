@@ -15,7 +15,7 @@ import {
   Wallet, Building2, IndianRupee, TrendingUp, TrendingDown,
   Clock, CheckCircle, AlertTriangle, Plus, Edit2, ToggleLeft,
   ToggleRight, Banknote, Calendar, RefreshCw, Save, PenLine,
-  GripVertical, X, SkipForward
+  GripVertical, X, SkipForward, Users
 } from 'lucide-react';
 import {
   DndContext,
@@ -39,8 +39,11 @@ import {
   useFundAccounts,
   useTodayCashCollections,
   usePaymentHistory,
+  useSubAllocations,
+  useSubAllocationsForSchedule,
   type ScheduleEntry,
   type BankAccount,
+  type SubAllocation,
 } from '@/hooks/useDailyPaymentAllocation';
 import { usePaymentObligations, usePayeeSearch, type PaymentObligation } from '@/hooks/usePaymentObligations';
 
@@ -71,6 +74,7 @@ interface SortableScheduleRowProps {
   editAmount: string;
   editNotes: string;
   skipConfirmId: string | null;
+  subAllocations: SubAllocation[];
   onStartEdit: () => void;
   onSaveEdit: () => void;
   onCancelEdit: () => void;
@@ -84,6 +88,7 @@ interface SortableScheduleRowProps {
 
 const SortableScheduleRow = ({
   entry, idx, isEditing, editAmount, editNotes, skipConfirmId,
+  subAllocations,
   onStartEdit, onSaveEdit, onCancelEdit, onEditAmountChange, onEditNotesChange,
   onPay, onSkipConfirm, onSkipCancel, onSkip,
 }: SortableScheduleRowProps) => {
@@ -113,6 +118,23 @@ const SortableScheduleRow = ({
         )}
         {!isEditing && entry.notes && (
           <div className="text-xs text-muted-foreground">{entry.notes}</div>
+        )}
+        {subAllocations.length > 0 && (
+          <div className="flex flex-wrap gap-1 mt-1">
+            {subAllocations.map((sa) => (
+              <span
+                key={sa.id}
+                className={`inline-flex items-center gap-0.5 text-xs px-1.5 py-0.5 rounded-full border ${
+                  sa.is_paid
+                    ? 'bg-green-50 border-green-300 text-green-700'
+                    : 'bg-gray-50 border-gray-300 text-gray-600'
+                }`}
+              >
+                {sa.is_paid && <CheckCircle className="h-3 w-3" />}
+                {sa.payee_name} ({formatINR(sa.amount)})
+              </span>
+            ))}
+          </div>
         )}
       </TableCell>
       <TableCell className="text-right">
@@ -280,6 +302,17 @@ const DailyPaymentAllocation = () => {
   const [payingEntry, setPayingEntry] = useState<ScheduleEntry | null>(null);
   const [payAmount, setPayAmount] = useState('');
 
+  // Sub-allocation dialog mode: 'plan' = manage payees, 'confirm' = confirm payment for one payee
+  const [subAllocDialogMode, setSubAllocDialogMode] = useState<'plan' | 'confirm'>('plan');
+  // When confirming a single sub-allocation payment
+  const [confirmingSubAlloc, setConfirmingSubAlloc] = useState<SubAllocation | null>(null);
+  // New payee row inputs (in plan mode)
+  const [newPayeeName, setNewPayeeName] = useState('');
+  const [newPayeeAmount, setNewPayeeAmount] = useState('');
+  // Whether the paying entry has a payee search table (determines if plan mode is active)
+  const [subPayeeSearchTerm, setSubPayeeSearchTerm] = useState('');
+  const [subSelectedPayeeName, setSubSelectedPayeeName] = useState('');
+
   // Add/Edit obligation dialog
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [editingObligationId, setEditingObligationId] = useState<string | null>(null);
@@ -332,6 +365,18 @@ const DailyPaymentAllocation = () => {
   const { data: cashCollections = 0 } = useTodayCashCollections(selectedDate);
   const { obligations, createObligation, updateObligation, deleteObligation, toggleActive } = usePaymentObligations(selectedHospital);
 
+  // Batch sub-allocations for all schedule entries (for table display)
+  const scheduleIds = schedule.map(s => s.id);
+  const { data: allSubAllocations = [] } = useSubAllocationsForSchedule(scheduleIds);
+
+  // Sub-allocations for the currently open pay dialog entry
+  const {
+    subAllocations: dialogSubAllocations,
+    addPayee,
+    removePayee,
+    markPayeePaid,
+  } = useSubAllocations(payingEntry?.id || null);
+
   // Determine which table to search for sub-payment payee
   const payingSubCategory = payingEntry
     ? obligations.find(o => o.id === payingEntry.obligation_id)?.sub_category || ''
@@ -341,7 +386,10 @@ const DailyPaymentAllocation = () => {
     : payingSubCategory === 'salary'
     ? 'staff_members'
     : '';
+  // payeeResults for the original single-payee flow (the add-obligation dialog search term)
   const { data: payeeResults = [] } = usePayeeSearch(payeeTable, payeeSearchTerm);
+  // payeeResults for the sub-allocation payee search in plan mode
+  const { data: subPayeeResults = [] } = usePayeeSearch(payeeTable, subPayeeSearchTerm);
   const { data: history = [] } = usePaymentHistory(historyFrom, historyTo, selectedHospital);
 
   // Use actual cash if manually entered, else system value
@@ -452,9 +500,45 @@ const DailyPaymentAllocation = () => {
     setPayAmount(String(entry.daily_amount + entry.carryforward_amount - entry.paid_amount));
     setPayeeSearchTerm('');
     setSelectedPayeeName('');
+    setSubAllocDialogMode('plan');
+    setConfirmingSubAlloc(null);
+    setNewPayeeName('');
+    setNewPayeeAmount('');
+    setSubPayeeSearchTerm('');
+    setSubSelectedPayeeName('');
     setPayDialogOpen(true);
   };
 
+  // Add a new payee row in plan mode
+  const handleAddSubPayee = () => {
+    const name = subSelectedPayeeName || newPayeeName.trim();
+    const amount = parseFloat(newPayeeAmount);
+    if (!name) { toast.error('Enter a payee name'); return; }
+    if (isNaN(amount) || amount <= 0) { toast.error('Enter a valid amount'); return; }
+    addPayee.mutate({ payeeName: name, amount });
+    setNewPayeeName('');
+    setNewPayeeAmount('');
+    setSubPayeeSearchTerm('');
+    setSubSelectedPayeeName('');
+  };
+
+  // Confirm payment for a single sub-allocation
+  const handleConfirmSubPayment = (sa: SubAllocation) => {
+    setConfirmingSubAlloc(sa);
+    setPayAmount(String(sa.amount));
+    setSubAllocDialogMode('confirm');
+  };
+
+  // Pay all unpaid sub-allocations at once (full obligation amount)
+  const handlePayAll = () => {
+    if (!payingEntry) return;
+    const balance = payingEntry.daily_amount + payingEntry.carryforward_amount - payingEntry.paid_amount;
+    setPayAmount(String(balance));
+    setConfirmingSubAlloc(null);
+    setSubAllocDialogMode('confirm');
+  };
+
+  // Confirm the actual voucher creation
   const confirmPay = () => {
     if (!payingEntry || !payAmount) return;
     const amount = parseFloat(payAmount);
@@ -467,6 +551,10 @@ const DailyPaymentAllocation = () => {
       amount,
       userId: user?.username || 'admin',
     });
+    // If confirming a specific sub-allocation, mark it paid too
+    if (confirmingSubAlloc) {
+      markPayeePaid.mutate({ id: confirmingSubAlloc.id, paidBy: user?.username || 'admin' });
+    }
     setPayDialogOpen(false);
   };
 
@@ -859,6 +947,7 @@ const DailyPaymentAllocation = () => {
                           editAmount={editScheduleAmount}
                           editNotes={editScheduleNotes}
                           skipConfirmId={skipConfirmId}
+                          subAllocations={allSubAllocations.filter(sa => sa.schedule_id === entry.id)}
                           onStartEdit={() => startEditSchedule(entry)}
                           onSaveEdit={saveEditSchedule}
                           onCancelEdit={() => setEditingScheduleId(null)}
@@ -1012,72 +1101,126 @@ const DailyPaymentAllocation = () => {
         </TabsContent>
       </Tabs>
 
-      {/* Pay Dialog */}
-      <Dialog open={payDialogOpen} onOpenChange={setPayDialogOpen}>
-        <DialogContent>
+      {/* Pay Dialog — two-mode: Plan Payees / Confirm Payment */}
+      <Dialog open={payDialogOpen} onOpenChange={(open) => { setPayDialogOpen(open); }}>
+        <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Record Payment</DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              {subAllocDialogMode === 'plan' ? (
+                <><Users className="h-5 w-5" /> Plan Payees — {payingEntry?.party_name}</>
+              ) : (
+                <><CheckCircle className="h-5 w-5 text-green-600" /> Confirm Payment</>
+              )}
+            </DialogTitle>
           </DialogHeader>
-          {payingEntry && (
+
+          {payingEntry && subAllocDialogMode === 'plan' && (
             <div className="space-y-4">
-              <div className="bg-gray-50 rounded-lg p-4 space-y-2">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Party:</span>
-                  <span className="font-semibold">{payingEntry.party_name}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Total Due:</span>
+              {/* Summary bar */}
+              <div className="bg-gray-50 rounded-lg p-3 flex flex-wrap gap-4 text-sm">
+                <div>
+                  <span className="text-muted-foreground">Total Due: </span>
                   <span className="font-semibold">{formatINR(payingEntry.daily_amount + payingEntry.carryforward_amount)}</span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Already Paid:</span>
-                  <span>{formatINR(payingEntry.paid_amount)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Balance:</span>
-                  <span className="font-bold text-red-600">
-                    {formatINR(payingEntry.daily_amount + payingEntry.carryforward_amount - payingEntry.paid_amount)}
+                <div>
+                  <span className="text-muted-foreground">Allocated: </span>
+                  <span className={`font-semibold ${
+                    dialogSubAllocations.reduce((s, sa) => s + sa.amount, 0) > (payingEntry.daily_amount + payingEntry.carryforward_amount)
+                      ? 'text-red-600' : 'text-blue-700'
+                  }`}>
+                    {formatINR(dialogSubAllocations.reduce((s, sa) => s + sa.amount, 0))}
                   </span>
                 </div>
                 {payingEntry.days_overdue > 0 && (
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Overdue:</span>
-                    <Badge className={getAgingColor(payingEntry.days_overdue)}>{payingEntry.days_overdue} days</Badge>
-                  </div>
+                  <Badge className={getAgingColor(payingEntry.days_overdue)}>{payingEntry.days_overdue}d overdue</Badge>
                 )}
               </div>
-              {/* Payee search for consultant/staff/RMO sub-payments */}
-              {payeeTable && (
-                <div>
-                  <Label>Pay To (search {payingSubCategory === 'consultant' ? 'consultant' : payingSubCategory === 'rmo' ? 'RMO/doctor' : 'staff'} by name)</Label>
-                  <Input
-                    value={payeeSearchTerm}
-                    onChange={(e) => { setPayeeSearchTerm(e.target.value); setSelectedPayeeName(''); }}
-                    placeholder="Type name to search..."
-                    className="mt-1"
-                  />
-                  {payeeResults.length > 0 && !selectedPayeeName && (
-                    <div className="border rounded-md mt-1 max-h-40 overflow-y-auto bg-white shadow-sm">
-                      {payeeResults.map((p: any) => (
-                        <div
-                          key={p.id}
-                          className="px-3 py-2 hover:bg-blue-50 cursor-pointer text-sm"
-                          onClick={() => { setSelectedPayeeName(p.name); setPayeeSearchTerm(p.name); }}
+
+              {/* Existing sub-allocations list */}
+              {dialogSubAllocations.length > 0 && (
+                <div className="border rounded-md divide-y">
+                  {dialogSubAllocations.map((sa) => (
+                    <div key={sa.id} className="flex items-center gap-2 px-3 py-2">
+                      <div className={`w-2 h-2 rounded-full flex-shrink-0 ${sa.is_paid ? 'bg-green-500' : 'bg-gray-300'}`} />
+                      <span className="flex-1 text-sm font-medium">{sa.payee_name}</span>
+                      <span className="font-mono text-sm text-gray-700">{formatINR(sa.amount)}</span>
+                      {sa.is_paid ? (
+                        <Badge className="bg-green-100 text-green-700 text-xs">Paid</Badge>
+                      ) : (
+                        <Button
+                          size="sm"
+                          className="h-6 px-2 text-xs bg-green-600 hover:bg-green-700"
+                          onClick={() => handleConfirmSubPayment(sa)}
                         >
-                          <span className="font-medium">{p.name}</span>
-                          {p.specialty && <span className="text-muted-foreground ml-2">({p.specialty})</span>}
-                        </div>
-                      ))}
+                          Pay
+                        </Button>
+                      )}
+                      {!sa.is_paid && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-6 w-6 p-0 text-red-400 hover:text-red-600"
+                          onClick={() => removePayee.mutate(sa.id)}
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
                     </div>
-                  )}
-                  {selectedPayeeName && (
-                    <p className="text-xs text-green-700 mt-1">Paying: {selectedPayeeName}</p>
-                  )}
+                  ))}
                 </div>
               )}
 
-              {/* Fixed payee (like rent → Dr Pramod Gandhi) */}
-              {!payeeTable && payingEntry && (
+              {/* Add new payee row */}
+              <div className="border rounded-md p-3 space-y-2 bg-blue-50/40">
+                <p className="text-xs font-medium text-muted-foreground">Add Payee</p>
+                {payeeTable ? (
+                  <div>
+                    <Input
+                      value={subPayeeSearchTerm}
+                      onChange={(e) => { setSubPayeeSearchTerm(e.target.value); setSubSelectedPayeeName(''); setNewPayeeName(''); }}
+                      placeholder={`Search ${payingSubCategory === 'consultant' ? 'consultant' : payingSubCategory === 'rmo' ? 'RMO/doctor' : 'staff'}...`}
+                      className="h-8 text-sm"
+                    />
+                    {subPayeeResults.length > 0 && !subSelectedPayeeName && (
+                      <div className="border rounded-md mt-1 max-h-32 overflow-y-auto bg-white shadow-sm">
+                        {subPayeeResults.map((p: any) => (
+                          <div
+                            key={p.id}
+                            className="px-3 py-1.5 hover:bg-blue-50 cursor-pointer text-sm"
+                            onClick={() => { setSubSelectedPayeeName(p.name); setSubPayeeSearchTerm(p.name); setNewPayeeName(p.name); }}
+                          >
+                            <span className="font-medium">{p.name}</span>
+                            {p.specialty && <span className="text-muted-foreground ml-2 text-xs">({p.specialty})</span>}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <Input
+                    value={newPayeeName}
+                    onChange={(e) => setNewPayeeName(e.target.value)}
+                    placeholder="Payee name"
+                    className="h-8 text-sm"
+                  />
+                )}
+                <div className="flex gap-2">
+                  <Input
+                    type="number"
+                    value={newPayeeAmount}
+                    onChange={(e) => setNewPayeeAmount(e.target.value)}
+                    placeholder="Amount"
+                    className="h-8 text-sm flex-1"
+                    onKeyDown={(e) => { if (e.key === 'Enter') handleAddSubPayee(); }}
+                  />
+                  <Button size="sm" className="h-8" onClick={handleAddSubPayee} disabled={addPayee.isPending}>
+                    <Plus className="h-3.5 w-3.5 mr-1" /> Add
+                  </Button>
+                </div>
+              </div>
+
+              {/* No sub-allocations — show single-payee fallback info */}
+              {dialogSubAllocations.length === 0 && !payeeTable && (
                 (() => {
                   const ob = obligations.find(o => o.id === payingEntry.obligation_id);
                   return ob?.payee_name ? (
@@ -1088,7 +1231,37 @@ const DailyPaymentAllocation = () => {
                   ) : null;
                 })()
               )}
+            </div>
+          )}
 
+          {payingEntry && subAllocDialogMode === 'confirm' && (
+            <div className="space-y-4">
+              <div className="bg-gray-50 rounded-lg p-4 space-y-2">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Party:</span>
+                  <span className="font-semibold">{payingEntry.party_name}</span>
+                </div>
+                {confirmingSubAlloc && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Payee:</span>
+                    <span className="font-semibold text-blue-700">{confirmingSubAlloc.payee_name}</span>
+                  </div>
+                )}
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Total Due:</span>
+                  <span className="font-semibold">{formatINR(payingEntry.daily_amount + payingEntry.carryforward_amount)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Already Paid:</span>
+                  <span>{formatINR(payingEntry.paid_amount)}</span>
+                </div>
+                {payingEntry.days_overdue > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Overdue:</span>
+                    <Badge className={getAgingColor(payingEntry.days_overdue)}>{payingEntry.days_overdue} days</Badge>
+                  </div>
+                )}
+              </div>
               <div>
                 <Label>Payment Amount (Rs.)</Label>
                 <Input
@@ -1101,15 +1274,40 @@ const DailyPaymentAllocation = () => {
               </div>
               <p className="text-xs text-muted-foreground">
                 A payment voucher will be automatically created in the accounting system.
-                {selectedPayeeName && ` Voucher narration: "Payment to ${selectedPayeeName}"`}
               </p>
             </div>
           )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setPayDialogOpen(false)}>Cancel</Button>
-            <Button onClick={confirmPay} disabled={markPaid.isPending} className="bg-green-600 hover:bg-green-700">
-              {markPaid.isPending ? 'Processing...' : 'Confirm Payment'}
-            </Button>
+
+          <DialogFooter className="flex-wrap gap-2">
+            {subAllocDialogMode === 'plan' ? (
+              <>
+                <Button variant="outline" onClick={() => setPayDialogOpen(false)}>Close</Button>
+                {dialogSubAllocations.length > 0 && (
+                  <Button
+                    className="bg-green-600 hover:bg-green-700"
+                    onClick={handlePayAll}
+                    disabled={markPaid.isPending}
+                  >
+                    Pay All ({formatINR(payingEntry ? payingEntry.daily_amount + payingEntry.carryforward_amount - payingEntry.paid_amount : 0)})
+                  </Button>
+                )}
+                {dialogSubAllocations.length === 0 && (
+                  <Button
+                    className="bg-green-600 hover:bg-green-700"
+                    onClick={() => setSubAllocDialogMode('confirm')}
+                  >
+                    Proceed to Pay
+                  </Button>
+                )}
+              </>
+            ) : (
+              <>
+                <Button variant="outline" onClick={() => setSubAllocDialogMode('plan')}>Back</Button>
+                <Button onClick={confirmPay} disabled={markPaid.isPending} className="bg-green-600 hover:bg-green-700">
+                  {markPaid.isPending ? 'Processing...' : 'Confirm Payment'}
+                </Button>
+              </>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

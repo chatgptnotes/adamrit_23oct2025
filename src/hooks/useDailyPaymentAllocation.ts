@@ -356,6 +356,134 @@ export const useTodayCashCollections = (date: string) => {
   });
 };
 
+// Sub-allocations for a schedule entry (break one obligation into named payees)
+export interface SubAllocation {
+  id: string;
+  schedule_id: string;
+  payee_name: string;
+  amount: number;
+  is_paid: boolean;
+  paid_at: string | null;
+  paid_by: string | null;
+  voucher_id: string | null;
+  notes: string | null;
+}
+
+export const useSubAllocations = (scheduleId: string | null) => {
+  const queryClient = useQueryClient();
+
+  const query = useQuery({
+    queryKey: ['sub-allocations', scheduleId],
+    queryFn: async (): Promise<SubAllocation[]> => {
+      if (!scheduleId) return [];
+      const { data, error } = await (supabase as any)
+        .from('payment_sub_allocations')
+        .select('*')
+        .eq('schedule_id', scheduleId)
+        .order('created_at', { ascending: true });
+      if (error) throw error;
+      return (data || []) as SubAllocation[];
+    },
+    enabled: !!scheduleId,
+  });
+
+  const addPayee = useMutation({
+    mutationFn: async ({ payeeName, amount }: { payeeName: string; amount: number }) => {
+      if (!scheduleId) throw new Error('No schedule ID');
+      const { error } = await (supabase as any)
+        .from('payment_sub_allocations')
+        .insert({ schedule_id: scheduleId, payee_name: payeeName, amount });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['sub-allocations', scheduleId] });
+    },
+    onError: (err: any) => {
+      toast.error('Failed to add payee: ' + err.message);
+    },
+  });
+
+  const removePayee = useMutation({
+    mutationFn: async (subId: string) => {
+      const { error } = await (supabase as any)
+        .from('payment_sub_allocations')
+        .delete()
+        .eq('id', subId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['sub-allocations', scheduleId] });
+    },
+    onError: (err: any) => {
+      toast.error('Failed to remove payee: ' + err.message);
+    },
+  });
+
+  const updatePayee = useMutation({
+    mutationFn: async ({ id, payeeName, amount, notes }: { id: string; payeeName?: string; amount?: number; notes?: string }) => {
+      const updates: Record<string, any> = { updated_at: new Date().toISOString() };
+      if (payeeName !== undefined) updates.payee_name = payeeName;
+      if (amount !== undefined) updates.amount = amount;
+      if (notes !== undefined) updates.notes = notes;
+      const { error } = await (supabase as any)
+        .from('payment_sub_allocations')
+        .update(updates)
+        .eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['sub-allocations', scheduleId] });
+    },
+    onError: (err: any) => {
+      toast.error('Failed to update payee: ' + err.message);
+    },
+  });
+
+  const markPayeePaid = useMutation({
+    mutationFn: async ({ id, paidBy }: { id: string; paidBy: string }) => {
+      const { error } = await (supabase as any)
+        .from('payment_sub_allocations')
+        .update({ is_paid: true, paid_at: new Date().toISOString(), paid_by: paidBy, updated_at: new Date().toISOString() })
+        .eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['sub-allocations', scheduleId] });
+      toast.success('Payee marked as paid');
+    },
+    onError: (err: any) => {
+      toast.error('Failed to mark paid: ' + err.message);
+    },
+  });
+
+  return {
+    subAllocations: query.data || [],
+    isLoading: query.isLoading,
+    addPayee,
+    removePayee,
+    updatePayee,
+    markPayeePaid,
+  };
+};
+
+// Fetch sub-allocations for multiple schedule IDs in one query (for the table display)
+export const useSubAllocationsForSchedule = (scheduleIds: string[]) => {
+  return useQuery({
+    queryKey: ['sub-allocations-batch', scheduleIds.join(',')],
+    queryFn: async (): Promise<SubAllocation[]> => {
+      if (!scheduleIds.length) return [];
+      const { data, error } = await (supabase as any)
+        .from('payment_sub_allocations')
+        .select('*')
+        .in('schedule_id', scheduleIds)
+        .order('created_at', { ascending: true });
+      if (error) throw error;
+      return (data || []) as SubAllocation[];
+    },
+    enabled: scheduleIds.length > 0,
+  });
+};
+
 // Payment history query (date range)
 export const usePaymentHistory = (fromDate: string, toDate: string, hospital: string = 'hope') => {
   return useQuery({
