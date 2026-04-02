@@ -52,9 +52,25 @@ export const useBillSubmissions = (hospitalName?: string) => {
 
       if (error) throw error;
 
-      // Map data to include patient_name and dates from join
+      // Fetch bill numbers for all visit_ids
+      const visitIds = (data || []).map((item: any) => item.visit_id).filter(Boolean);
+      let billNoMap: Record<string, string> = {};
+      if (visitIds.length > 0) {
+        const { data: billsData } = await (supabase as any)
+          .from('bills')
+          .select('visit_id, bill_no')
+          .in('visit_id', visitIds);
+        if (billsData) {
+          for (const b of billsData) {
+            if (b.visit_id && b.bill_no) billNoMap[b.visit_id] = b.bill_no;
+          }
+        }
+      }
+
+      // Map data to include patient_name, dates, and bill_no from join
       return (data || []).map((item: any) => ({
         ...item,
+        bill_no: billNoMap[item.visit_id] || '',
         patient_name: item.visits?.patients?.name || '',
         patient_corporate: item.visits?.patients?.corporate || '',
         admission_date: item.visits?.admission_date || '',

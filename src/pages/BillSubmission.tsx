@@ -146,6 +146,7 @@ const BillSubmissionPage: React.FC = () => {
   // Export to Excel function
   const handleExportExcel = () => {
     const exportData = filteredSubmissions.map((s: any) => ({
+      'Bill No.': s.bill_no || '-',
       'Visit ID': s.visit_id,
       'Patient Name': s.patient_name,
       'Corporate': s.patient_corporate || '-',
@@ -642,6 +643,7 @@ const BillSubmissionPage: React.FC = () => {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead>Bill No.</TableHead>
                   <TableHead>Visit ID</TableHead>
                   <TableHead>Patient Name</TableHead>
                   <TableHead>Corporate</TableHead>
@@ -661,13 +663,13 @@ const BillSubmissionPage: React.FC = () => {
               <TableBody>
                 {isLoading ? (
                   <TableRow>
-                    <TableCell colSpan={14} className="text-center py-8">
+                    <TableCell colSpan={15} className="text-center py-8">
                       <Loader2 className="h-6 w-6 animate-spin mx-auto" />
                     </TableCell>
                   </TableRow>
                 ) : filteredSubmissions.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={14} className="text-center py-8 text-gray-500">
+                    <TableCell colSpan={15} className="text-center py-8 text-gray-500">
                       {submissions.length === 0
                         ? 'No bill submissions yet. Search for a patient above to create one.'
                         : 'No records match the selected filters.'}
@@ -676,6 +678,7 @@ const BillSubmissionPage: React.FC = () => {
                 ) : (
                   paginatedSubmissions.map((submission: any) => (
                     <TableRow key={submission.id}>
+                      <TableCell className="font-medium text-blue-600">{submission.bill_no || '-'}</TableCell>
                       <TableCell className="font-medium">{submission.visit_id}</TableCell>
                       <TableCell>{submission.patient_name}</TableCell>
                       <TableCell>{submission.patient_corporate || '-'}</TableCell>
