@@ -290,6 +290,18 @@ export const menuItems: MenuItemDef[] = [
     section: 'masters',
   },
   {
+    title: "Hope RMOs",
+    url: "/hope-rmos",
+    icon: UserCog,
+    section: 'masters',
+  },
+  {
+    title: "Ayushman RMOs",
+    url: "/ayushman-rmos",
+    icon: UserCog,
+    section: 'masters',
+  },
+  {
     title: "Corporate Master",
     url: "/corporate-master",
     icon: Building2,

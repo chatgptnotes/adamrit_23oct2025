@@ -15,6 +15,8 @@ export interface PaymentObligation {
   hospital_name: string;
   payee_name: string | null; // specific payee e.g. "Dr Pramod Gandhi" for rent
   payee_search_table: string | null; // e.g. hope_consultants, staff_members
+  attachment_url: string | null; // uploaded Excel/Doc file URL
+  google_sheet_link: string | null; // Google Sheets link for outstanding payments
   created_at: string;
   updated_at: string;
 }
@@ -53,6 +55,8 @@ export const usePaymentObligations = (hospital: string = 'hope') => {
           hospital_name: obligation.hospital_name || hospital,
           payee_name: obligation.payee_name || null,
           payee_search_table: obligation.payee_search_table || null,
+          attachment_url: obligation.attachment_url || null,
+          google_sheet_link: obligation.google_sheet_link || null,
         })
         .select()
         .single();
@@ -195,6 +199,21 @@ export const useMultiPayeeSearch = (searchTerm: string, hospital: string = 'hope
         }
       }
 
+      // Search RMOs
+      const rmoTable = hospital === 'hope' ? 'hope_rmos' : 'ayushman_rmos';
+      const { data: rmos } = await (supabase as any)
+        .from(rmoTable)
+        .select('id, name, specialty')
+        .ilike('name', `%${searchTerm}%`)
+        .limit(10);
+      if (rmos) {
+        for (const r of rmos) {
+          if (!results.find(x => x.name === r.name)) {
+            results.push({ id: r.id, name: r.name, specialty: r.specialty, source: 'RMO' });
+          }
+        }
+      }
+
       // Search Tally ledgers (vendors, expenses)
       const { data: ledgers } = await (supabase as any)
         .from('tally_ledgers')
@@ -213,4 +232,90 @@ export const useMultiPayeeSearch = (searchTerm: string, hospital: string = 'hope
     },
     enabled: searchTerm.length >= 2,
   });
+};
+
+// ── Default payees for an obligation (template) ──
+export interface DefaultPayee {
+  id: string;
+  obligation_id: string;
+  payee_name: string;
+  amount: number;
+  created_at: string;
+}
+
+export const useObligationDefaultPayees = (obligationId: string | null) => {
+  const queryClient = useQueryClient();
+
+  const payees = useQuery({
+    queryKey: ['obligation-default-payees', obligationId],
+    queryFn: async () => {
+      if (!obligationId) return [];
+      const { data, error } = await (supabase as any)
+        .from('obligation_default_payees')
+        .select('*')
+        .eq('obligation_id', obligationId)
+        .order('created_at', { ascending: true });
+      if (error) throw error;
+      return (data || []) as DefaultPayee[];
+    },
+    enabled: !!obligationId,
+  });
+
+  const addPayee = useMutation({
+    mutationFn: async ({ payee_name, amount }: { payee_name: string; amount: number }) => {
+      const { data, error } = await (supabase as any)
+        .from('obligation_default_payees')
+        .insert({ obligation_id: obligationId, payee_name, amount })
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['obligation-default-payees', obligationId] });
+    },
+    onError: (err: any) => {
+      toast.error('Failed to add payee: ' + err.message);
+    },
+  });
+
+  const removePayee = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await (supabase as any)
+        .from('obligation_default_payees')
+        .delete()
+        .eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['obligation-default-payees', obligationId] });
+    },
+    onError: (err: any) => {
+      toast.error('Failed to remove payee: ' + err.message);
+    },
+  });
+
+  const updatePayee = useMutation({
+    mutationFn: async ({ id, payee_name, amount }: { id: string; payee_name: string; amount: number }) => {
+      const { error } = await (supabase as any)
+        .from('obligation_default_payees')
+        .update({ payee_name, amount })
+        .eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['obligation-default-payees', obligationId] });
+    },
+    onError: (err: any) => {
+      toast.error('Failed to update payee: ' + err.message);
+    },
+  });
+
+  return {
+    defaultPayees: payees.data || [],
+    isLoading: payees.isLoading,
+    addPayee,
+    removePayee,
+    updatePayee,
+  };
 };

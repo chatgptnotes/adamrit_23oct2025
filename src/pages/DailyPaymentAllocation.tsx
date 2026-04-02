@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -15,7 +16,7 @@ import {
   Wallet, Building2, IndianRupee, TrendingUp, TrendingDown,
   Clock, CheckCircle, AlertTriangle, Plus, Edit2, ToggleLeft,
   ToggleRight, Banknote, Calendar, RefreshCw, Save, PenLine,
-  GripVertical, X, SkipForward, Users
+  GripVertical, X, SkipForward, Users, Upload, ExternalLink, FileSpreadsheet
 } from 'lucide-react';
 import {
   DndContext,
@@ -45,7 +46,7 @@ import {
   type BankAccount,
   type SubAllocation,
 } from '@/hooks/useDailyPaymentAllocation';
-import { usePaymentObligations, usePayeeSearch, useMultiPayeeSearch, type PaymentObligation } from '@/hooks/usePaymentObligations';
+import { usePaymentObligations, usePayeeSearch, useMultiPayeeSearch, useObligationDefaultPayees, type PaymentObligation, type DefaultPayee } from '@/hooks/usePaymentObligations';
 
 const formatINR = (n: number) =>
   new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(n);
@@ -267,7 +268,21 @@ const SortableObligationRow = ({
             : <ToggleLeft className="h-5 w-5 text-gray-400" />}
         </Button>
       </TableCell>
-      <TableCell className="text-sm text-muted-foreground max-w-[150px] truncate">{ob.notes || '-'}</TableCell>
+      <TableCell className="text-sm text-muted-foreground max-w-[150px]">
+        <div className="truncate">{ob.notes || '-'}</div>
+        <div className="flex items-center gap-1 mt-0.5">
+          {ob.attachment_url && (
+            <a href={ob.attachment_url.startsWith('http') ? ob.attachment_url : '#'} target="_blank" rel="noopener noreferrer" title="View attachment">
+              <FileSpreadsheet className="h-3.5 w-3.5 text-green-600" />
+            </a>
+          )}
+          {ob.google_sheet_link && (
+            <a href={ob.google_sheet_link} target="_blank" rel="noopener noreferrer" title="Open Google Sheet">
+              <ExternalLink className="h-3.5 w-3.5 text-blue-600" />
+            </a>
+          )}
+        </div>
+      </TableCell>
       <TableCell className="text-center">
         <div className="flex items-center justify-center gap-1">
           <Button size="sm" variant="ghost" onClick={onEdit} title="Edit">
@@ -320,6 +335,7 @@ const DailyPaymentAllocation = () => {
     party_name: '', category: 'variable' as 'fixed' | 'variable',
     sub_category: 'other', default_daily_amount: '',
     priority: '10', notes: '', payee_name: '', payee_search_table: '',
+    attachment_url: '', google_sheet_link: '',
   });
 
   // Payee search for sub-payments (consultant, RMO, staff)
@@ -340,6 +356,13 @@ const DailyPaymentAllocation = () => {
   // Drag-and-drop local order for schedule and obligations
   const [localScheduleOrder, setLocalScheduleOrder] = useState<string[] | null>(null);
   const [localObligationOrder, setLocalObligationOrder] = useState<string[] | null>(null);
+
+  // Default payees for obligation editor
+  const { defaultPayees, addPayee: addDefaultPayee, removePayee: removeDefaultPayee } = useObligationDefaultPayees(editingObligationId);
+  const [defPayeeName, setDefPayeeName] = useState('');
+  const [defPayeeAmount, setDefPayeeAmount] = useState('');
+  const [defPayeeSearchTerm, setDefPayeeSearchTerm] = useState('');
+  const { data: defPayeeResults = [] } = useMultiPayeeSearch(defPayeeSearchTerm, hospital);
 
   // Add manual account dialog
   const [addAccountOpen, setAddAccountOpen] = useState(false);
@@ -573,6 +596,8 @@ const DailyPaymentAllocation = () => {
       hospital_name: selectedHospital,
       payee_name: newObligation.payee_name || null,
       payee_search_table: newObligation.payee_search_table || null,
+      attachment_url: newObligation.attachment_url || null,
+      google_sheet_link: newObligation.google_sheet_link || null,
     };
     if (editingObligationId) {
       updateObligation.mutate({ id: editingObligationId, ...payload });
@@ -581,7 +606,7 @@ const DailyPaymentAllocation = () => {
     }
     setAddDialogOpen(false);
     setEditingObligationId(null);
-    setNewObligation({ party_name: '', category: 'variable', sub_category: 'other', default_daily_amount: '', priority: '10', notes: '', payee_name: '', payee_search_table: '' });
+    setNewObligation({ party_name: '', category: 'variable', sub_category: 'other', default_daily_amount: '', priority: '10', notes: '', payee_name: '', payee_search_table: '', attachment_url: '', google_sheet_link: '' });
   };
 
   const handleEditObligation = (ob: PaymentObligation) => {
@@ -595,6 +620,8 @@ const DailyPaymentAllocation = () => {
       notes: ob.notes || '',
       payee_name: ob.payee_name || '',
       payee_search_table: ob.payee_search_table || '',
+      attachment_url: ob.attachment_url || '',
+      google_sheet_link: ob.google_sheet_link || '',
     });
     setAddDialogOpen(true);
   };
@@ -979,7 +1006,7 @@ const DailyPaymentAllocation = () => {
         <TabsContent value="master" className="mt-4 space-y-4">
           <div className="flex justify-between items-center">
             <h3 className="text-lg font-semibold">Payment Obligations</h3>
-            <Button onClick={() => { setEditingObligationId(null); setNewObligation({ party_name: '', category: 'variable', sub_category: 'other', default_daily_amount: '', priority: '10', notes: '', payee_name: '', payee_search_table: '' }); setAddDialogOpen(true); }}>
+            <Button onClick={() => { setEditingObligationId(null); setNewObligation({ party_name: '', category: 'variable', sub_category: 'other', default_daily_amount: '', priority: '10', notes: '', payee_name: '', payee_search_table: '', attachment_url: '', google_sheet_link: '' }); setAddDialogOpen(true); }}>
               <Plus className="h-4 w-4 mr-1" /> Add Obligation
             </Button>
           </div>
@@ -1290,6 +1317,18 @@ const DailyPaymentAllocation = () => {
                 <Button variant="outline" onClick={() => setPayDialogOpen(false)}>Close</Button>
                 {dialogSubAllocations.length > 0 && (
                   <Button
+                    variant="secondary"
+                    className="bg-blue-100 hover:bg-blue-200 text-blue-800"
+                    onClick={() => {
+                      toast.success(`Saved ${dialogSubAllocations.length} payee(s) for ${payingEntry?.party_name}. Pay later or carry forward.`);
+                      setPayDialogOpen(false);
+                    }}
+                  >
+                    <Save className="h-4 w-4 mr-1" /> Save & Pay Later
+                  </Button>
+                )}
+                {dialogSubAllocations.length > 0 && (
+                  <Button
                     className="bg-green-600 hover:bg-green-700"
                     onClick={handlePayAll}
                     disabled={markPaid.isPending}
@@ -1393,6 +1432,85 @@ const DailyPaymentAllocation = () => {
                 />
               </div>
             </div>
+            {/* Default Payees — multiple names/amounts (shown first when editing) */}
+            {editingObligationId && (
+              <div className="border-2 border-blue-200 rounded-md p-3 space-y-2 bg-blue-50/40">
+                <div className="flex items-center gap-2">
+                  <Users className="h-4 w-4 text-blue-600" />
+                  <Label className="text-sm font-bold text-blue-800">Breakup — Names & Amounts</Label>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  e.g. Hope Electricity: ₹12,000 &amp; Ayushman Electricity: ₹8,000. These are saved and pre-populated daily.
+                </p>
+                {defaultPayees.length > 0 && (
+                  <div className="border rounded-md divide-y bg-white">
+                    {defaultPayees.map((dp) => (
+                      <div key={dp.id} className="flex items-center gap-2 px-3 py-1.5">
+                        <span className="flex-1 text-sm">{dp.payee_name}</span>
+                        <span className="font-mono text-sm text-gray-700">{formatINR(dp.amount)}</span>
+                        <Button
+                          size="sm" variant="ghost"
+                          className="h-6 w-6 p-0 text-red-400 hover:text-red-600"
+                          onClick={() => removeDefaultPayee.mutate(dp.id)}
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    ))}
+                    <div className="px-3 py-1.5 bg-gray-50 text-sm font-semibold flex justify-between">
+                      <span>Total</span>
+                      <span className="font-mono">{formatINR(defaultPayees.reduce((s, dp) => s + dp.amount, 0))}</span>
+                    </div>
+                  </div>
+                )}
+                <div className="space-y-1">
+                  <Input
+                    value={defPayeeSearchTerm || defPayeeName}
+                    onChange={(e) => { setDefPayeeSearchTerm(e.target.value); setDefPayeeName(e.target.value); }}
+                    placeholder="Type name e.g. Hope Electricity, Dr. Sharma..."
+                    className="h-8 text-sm"
+                  />
+                  {defPayeeResults.length > 0 && defPayeeSearchTerm.length >= 2 && (
+                    <div className="border rounded-md max-h-32 overflow-y-auto bg-white shadow-sm">
+                      {defPayeeResults.map((p: any) => (
+                        <div
+                          key={p.id}
+                          className="px-3 py-1.5 hover:bg-blue-50 cursor-pointer text-sm flex justify-between"
+                          onClick={() => { setDefPayeeName(p.name); setDefPayeeSearchTerm(''); }}
+                        >
+                          <span className="font-medium">{p.name}</span>
+                          <span className="text-xs text-muted-foreground">{p.source}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <Input
+                    type="number" value={defPayeeAmount}
+                    onChange={(e) => setDefPayeeAmount(e.target.value)}
+                    placeholder="Amount" className="h-8 text-sm flex-1"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && defPayeeName.trim() && defPayeeAmount) {
+                        addDefaultPayee.mutate({ payee_name: defPayeeName.trim(), amount: parseFloat(defPayeeAmount) });
+                        setDefPayeeName(''); setDefPayeeAmount(''); setDefPayeeSearchTerm('');
+                      }
+                    }}
+                  />
+                  <Button
+                    size="sm" className="h-8"
+                    disabled={!defPayeeName.trim() || !defPayeeAmount || addDefaultPayee.isPending}
+                    onClick={() => {
+                      addDefaultPayee.mutate({ payee_name: defPayeeName.trim(), amount: parseFloat(defPayeeAmount) });
+                      setDefPayeeName(''); setDefPayeeAmount(''); setDefPayeeSearchTerm('');
+                    }}
+                  >
+                    <Plus className="h-3.5 w-3.5 mr-1" /> Add
+                  </Button>
+                </div>
+              </div>
+            )}
+
             <div>
               <Label>Payee Search Table</Label>
               <Select value={newObligation.payee_search_table || 'none'} onValueChange={(v) => setNewObligation({ ...newObligation, payee_search_table: v === 'none' ? '' : v })}>
@@ -1406,12 +1524,15 @@ const DailyPaymentAllocation = () => {
                   <SelectItem value="staff_members">Staff Members</SelectItem>
                   <SelectItem value="hope_surgeons">Hope Surgeons</SelectItem>
                   <SelectItem value="ayushman_surgeons">Ayushman Surgeons</SelectItem>
+                  <SelectItem value="hope_rmos">Hope RMOs</SelectItem>
+                  <SelectItem value="ayushman_rmos">Ayushman RMOs</SelectItem>
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground mt-1">
                 When paying, user can search this table to pick the specific person.
               </p>
             </div>
+
             <div>
               <Label>Notes</Label>
               <Input
@@ -1419,6 +1540,98 @@ const DailyPaymentAllocation = () => {
                 onChange={(e) => setNewObligation({ ...newObligation, notes: e.target.value })}
                 placeholder="Optional notes"
               />
+            </div>
+
+            {/* Outstanding Payments — Upload & Google Link */}
+            <div className="border rounded-md p-3 space-y-3 bg-amber-50/40">
+              <div className="flex items-center gap-2">
+                <FileSpreadsheet className="h-4 w-4 text-amber-700" />
+                <Label className="text-sm font-bold text-amber-800">Outstanding Payments</Label>
+              </div>
+
+              {/* Upload Excel/Doc */}
+              <div>
+                <Label className="text-xs">Upload Excel / Doc</Label>
+                <div className="flex items-center gap-2 mt-1">
+                  <label className="cursor-pointer flex-1">
+                    <div className="flex items-center gap-2 border rounded-md px-3 py-1.5 bg-white hover:bg-gray-50 text-sm">
+                      <Upload className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-muted-foreground truncate">
+                        {newObligation.attachment_url
+                          ? newObligation.attachment_url.split('/').pop()
+                          : 'Choose file (.xlsx, .xls, .csv, .doc, .pdf)'}
+                      </span>
+                    </div>
+                    <input
+                      type="file"
+                      accept=".xlsx,.xls,.csv,.doc,.docx,.pdf"
+                      className="hidden"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        try {
+                          const filename = `obligations/${editingObligationId || 'new'}/${Date.now()}_${file.name}`;
+                          const { data, error } = await (supabase as any).storage
+                            .from('attachments')
+                            .upload(filename, file, { upsert: true });
+                          if (error) {
+                            // If bucket doesn't exist, store filename as reference
+                            toast.info('File selected: ' + file.name + '. Storage bucket may need setup.');
+                            setNewObligation({ ...newObligation, attachment_url: file.name });
+                            return;
+                          }
+                          const { data: urlData } = (supabase as any).storage
+                            .from('attachments')
+                            .getPublicUrl(data.path);
+                          setNewObligation({ ...newObligation, attachment_url: urlData.publicUrl });
+                          toast.success('File uploaded: ' + file.name);
+                        } catch (err) {
+                          toast.error('Upload failed');
+                        }
+                        e.target.value = '';
+                      }}
+                    />
+                  </label>
+                  {newObligation.attachment_url && (
+                    <Button
+                      size="sm" variant="ghost"
+                      className="h-8 px-2 text-red-400 hover:text-red-600"
+                      onClick={() => setNewObligation({ ...newObligation, attachment_url: '' })}
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </Button>
+                  )}
+                </div>
+                {newObligation.attachment_url && newObligation.attachment_url.startsWith('http') && (
+                  <a href={newObligation.attachment_url} target="_blank" rel="noopener noreferrer"
+                    className="text-xs text-blue-600 hover:underline mt-1 inline-flex items-center gap-1">
+                    <ExternalLink className="h-3 w-3" /> View uploaded file
+                  </a>
+                )}
+              </div>
+
+              {/* Google Sheet / Drive Link */}
+              <div>
+                <Label className="text-xs">Google Sheet / Drive Link</Label>
+                <div className="flex items-center gap-2 mt-1">
+                  <Input
+                    value={newObligation.google_sheet_link}
+                    onChange={(e) => setNewObligation({ ...newObligation, google_sheet_link: e.target.value })}
+                    placeholder="Paste Google Sheets or Drive link here..."
+                    className="h-8 text-sm"
+                  />
+                  {newObligation.google_sheet_link && (
+                    <a href={newObligation.google_sheet_link} target="_blank" rel="noopener noreferrer">
+                      <Button size="sm" variant="outline" className="h-8 px-2" type="button">
+                        <ExternalLink className="h-3.5 w-3.5" />
+                      </Button>
+                    </a>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Link to Google Sheet with outstanding payment details for this category.
+                </p>
+              </div>
             </div>
           </div>
           <DialogFooter>

@@ -59,6 +59,8 @@ const HopeAnaesthetists = lazy(() => import("../pages/HopeAnaesthetists"));
 const AyushmanSurgeons = lazy(() => import("../pages/AyushmanSurgeons"));
 const AyushmanConsultants = lazy(() => import("../pages/AyushmanConsultants"));
 const AyushmanAnaesthetists = lazy(() => import("../pages/AyushmanAnaesthetists"));
+const HopeRMOs = lazy(() => import("../pages/HopeRMOs"));
+const AyushmanRMOs = lazy(() => import("../pages/AyushmanRMOs"));
 const MandatoryService = lazy(() => import("../pages/MandatoryService"));
 const MandatoryServiceCreate = lazy(() => import("../pages/MandatoryServiceCreate"));
 const ClinicalServices = lazy(() => import("../pages/ClinicalServices"));
@@ -181,6 +183,8 @@ export const AppRoutes = () => {
         <Route path="/ayushman-surgeons" element={<Suspense fallback={<PageLoader />}><AyushmanSurgeons /></Suspense>} />
         <Route path="/ayushman-consultants" element={<Suspense fallback={<PageLoader />}><AyushmanConsultants /></Suspense>} />
         <Route path="/ayushman-anaesthetists" element={<Suspense fallback={<PageLoader />}><AyushmanAnaesthetists /></Suspense>} />
+        <Route path="/hope-rmos" element={<Suspense fallback={<PageLoader />}><HopeRMOs /></Suspense>} />
+        <Route path="/ayushman-rmos" element={<Suspense fallback={<PageLoader />}><AyushmanRMOs /></Suspense>} />
         <Route path="/accounting" element={<Suspense fallback={<PageLoader />}><Accounting /></Suspense>} />
         <Route path="/cash-book" element={<Suspense fallback={<PageLoader />}><CashBook /></Suspense>} />
         <Route path="/patient-ledger" element={<Suspense fallback={<PageLoader />}><PatientLedger /></Suspense>} />
