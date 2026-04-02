@@ -156,3 +156,61 @@ export const usePayeeSearch = (searchTable: string, searchTerm: string) => {
     enabled: !!searchTable && searchTerm.length >= 2,
   });
 };
+
+// Multi-table payee search — searches across consultants, surgeons, and Tally ledgers
+export const useMultiPayeeSearch = (searchTerm: string, hospital: string = 'hope') => {
+  return useQuery({
+    queryKey: ['multi-payee-search', searchTerm, hospital],
+    queryFn: async () => {
+      if (!searchTerm || searchTerm.length < 2) return [];
+
+      const results: { id: string; name: string; specialty?: string; source: string }[] = [];
+
+      // Search consultants
+      const consultTable = hospital === 'hope' ? 'hope_consultants' : 'ayushman_consultants';
+      const { data: consultants } = await (supabase as any)
+        .from(consultTable)
+        .select('id, name, specialty')
+        .ilike('name', `%${searchTerm}%`)
+        .limit(10);
+      if (consultants) {
+        for (const c of consultants) {
+          results.push({ id: c.id, name: c.name, specialty: c.specialty, source: 'Consultant' });
+        }
+      }
+
+      // Search surgeons
+      const surgeonTable = hospital === 'hope' ? 'hope_surgeons' : 'ayushman_surgeons';
+      const { data: surgeons } = await (supabase as any)
+        .from(surgeonTable)
+        .select('id, name, specialty')
+        .ilike('name', `%${searchTerm}%`)
+        .limit(10);
+      if (surgeons) {
+        for (const s of surgeons) {
+          // Avoid duplicates (same name from consultants)
+          if (!results.find(r => r.name === s.name)) {
+            results.push({ id: s.id, name: s.name, specialty: s.specialty, source: 'Surgeon' });
+          }
+        }
+      }
+
+      // Search Tally ledgers (vendors, expenses)
+      const { data: ledgers } = await (supabase as any)
+        .from('tally_ledgers')
+        .select('id, name, parent_group')
+        .ilike('name', `%${searchTerm}%`)
+        .limit(10);
+      if (ledgers) {
+        for (const l of ledgers) {
+          if (!results.find(r => r.name === l.name)) {
+            results.push({ id: l.id, name: l.name, specialty: l.parent_group, source: 'Ledger' });
+          }
+        }
+      }
+
+      return results;
+    },
+    enabled: searchTerm.length >= 2,
+  });
+};

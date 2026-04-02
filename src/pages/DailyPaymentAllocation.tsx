@@ -45,7 +45,7 @@ import {
   type BankAccount,
   type SubAllocation,
 } from '@/hooks/useDailyPaymentAllocation';
-import { usePaymentObligations, usePayeeSearch, type PaymentObligation } from '@/hooks/usePaymentObligations';
+import { usePaymentObligations, usePayeeSearch, useMultiPayeeSearch, type PaymentObligation } from '@/hooks/usePaymentObligations';
 
 const formatINR = (n: number) =>
   new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(n);
@@ -388,8 +388,8 @@ const DailyPaymentAllocation = () => {
     : '';
   // payeeResults for the original single-payee flow (the add-obligation dialog search term)
   const { data: payeeResults = [] } = usePayeeSearch(payeeTable, payeeSearchTerm);
-  // payeeResults for the sub-allocation payee search in plan mode
-  const { data: subPayeeResults = [] } = usePayeeSearch(payeeTable, subPayeeSearchTerm);
+  // payeeResults for the sub-allocation payee search in plan mode (multi-table search)
+  const { data: subPayeeResults = [] } = useMultiPayeeSearch(subPayeeSearchTerm, selectedHospital);
   const { data: history = [] } = usePaymentHistory(historyFrom, historyTo, selectedHospital);
 
   // Use actual cash if manually entered, else system value
@@ -1173,37 +1173,43 @@ const DailyPaymentAllocation = () => {
               {/* Add new payee row */}
               <div className="border rounded-md p-3 space-y-2 bg-blue-50/40">
                 <p className="text-xs font-medium text-muted-foreground">Add Payee</p>
-                {payeeTable ? (
-                  <div>
-                    <Input
-                      value={subPayeeSearchTerm}
-                      onChange={(e) => { setSubPayeeSearchTerm(e.target.value); setSubSelectedPayeeName(''); setNewPayeeName(''); }}
-                      placeholder={`Search ${payingSubCategory === 'consultant' ? 'consultant' : payingSubCategory === 'rmo' ? 'RMO/doctor' : 'staff'}...`}
-                      className="h-8 text-sm"
-                    />
-                    {subPayeeResults.length > 0 && !subSelectedPayeeName && (
-                      <div className="border rounded-md mt-1 max-h-32 overflow-y-auto bg-white shadow-sm">
-                        {subPayeeResults.map((p: any) => (
-                          <div
-                            key={p.id}
-                            className="px-3 py-1.5 hover:bg-blue-50 cursor-pointer text-sm"
-                            onClick={() => { setSubSelectedPayeeName(p.name); setSubPayeeSearchTerm(p.name); setNewPayeeName(p.name); }}
-                          >
-                            <span className="font-medium">{p.name}</span>
-                            {p.specialty && <span className="text-muted-foreground ml-2 text-xs">({p.specialty})</span>}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                ) : (
+                <div>
                   <Input
-                    value={newPayeeName}
-                    onChange={(e) => setNewPayeeName(e.target.value)}
-                    placeholder="Payee name"
+                    value={subPayeeSearchTerm || newPayeeName}
+                    onChange={(e) => {
+                      setSubPayeeSearchTerm(e.target.value);
+                      setNewPayeeName(e.target.value);
+                      setSubSelectedPayeeName('');
+                    }}
+                    placeholder="Search by name (doctors, consultants, vendors, ledgers)..."
                     className="h-8 text-sm"
                   />
-                )}
+                  {subPayeeResults.length > 0 && !subSelectedPayeeName && (
+                    <div className="border rounded-md mt-1 max-h-40 overflow-y-auto bg-white shadow-sm z-10 relative">
+                      {subPayeeResults.map((p: any) => (
+                        <div
+                          key={p.id}
+                          className="px-3 py-1.5 hover:bg-blue-50 cursor-pointer text-sm flex justify-between items-center"
+                          onClick={() => {
+                            setSubSelectedPayeeName(p.name);
+                            setSubPayeeSearchTerm(p.name);
+                            setNewPayeeName(p.name);
+                          }}
+                        >
+                          <span className="font-medium">{p.name}</span>
+                          <span className="text-muted-foreground text-xs">
+                            {p.source}{p.specialty ? ` · ${p.specialty}` : ''}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {subSelectedPayeeName && (
+                    <p className="text-xs text-green-700 mt-1 flex items-center gap-1">
+                      <CheckCircle className="h-3 w-3" /> Selected: {subSelectedPayeeName}
+                    </p>
+                  )}
+                </div>
                 <div className="flex gap-2">
                   <Input
                     type="number"
