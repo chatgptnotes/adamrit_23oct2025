@@ -24,6 +24,14 @@ import {
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
+import { useCompanies } from '@/hooks/useCompanies';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -85,6 +93,8 @@ const formatCurrency = (val: number): string =>
 // ---------------------------------------------------------------------------
 
 const TrialBalance: React.FC = () => {
+  const { data: companies = [] } = useCompanies();
+  const [selectedCompanyId, setSelectedCompanyId] = useState('');
   const [asOfDate, setAsOfDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(
     new Set()
@@ -129,16 +139,22 @@ const TrialBalance: React.FC = () => {
     isError: entriesError,
     error,
   } = useQuery({
-    queryKey: ['tb_entries'],
+    queryKey: ['tb_entries', selectedCompanyId],
     queryFn: async () => {
-      const { data, error: fetchError } = await supabase
+      let query = supabase
         .from('voucher_entries')
         .select(`
           account_id, debit_amount, credit_amount,
-          voucher:vouchers(voucher_date, status)
+          voucher:vouchers(voucher_date, status, company_id)
         `);
+      const { data, error: fetchError } = await query;
       if (fetchError) throw fetchError;
-      return data as EntryRow[];
+      // Filter by company if selected
+      let filtered = data as any[];
+      if (selectedCompanyId) {
+        filtered = filtered.filter((e: any) => e.voucher?.company_id === selectedCompanyId);
+      }
+      return filtered as EntryRow[];
     },
   });
 
@@ -293,8 +309,21 @@ const TrialBalance: React.FC = () => {
           </div>
         </div>
 
-        {/* As-of Date Filter */}
-        <div className="mt-4 max-w-xs">
+        {/* Filters */}
+        <div className="mt-4 flex items-end gap-4 flex-wrap">
+          <div className="space-y-1">
+            <Label>Company</Label>
+            <select
+              value={selectedCompanyId}
+              onChange={(e) => setSelectedCompanyId(e.target.value)}
+              className="flex h-9 w-52 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+            >
+              <option value="">All Companies</option>
+              {companies.map((c) => (
+                <option key={c.id} value={c.id}>{c.company_name}</option>
+              ))}
+            </select>
+          </div>
           <div className="space-y-1">
             <Label htmlFor="as-of-date">As of Date</Label>
             <Input
@@ -302,6 +331,7 @@ const TrialBalance: React.FC = () => {
               type="date"
               value={asOfDate}
               onChange={(e) => setAsOfDate(e.target.value)}
+              className="w-40"
             />
           </div>
         </div>

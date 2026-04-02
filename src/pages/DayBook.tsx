@@ -6,10 +6,13 @@ import PatientTransactionModal from '@/components/PatientTransactionModal';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import * as XLSX from 'xlsx';
+import { useCompanies } from '@/hooks/useCompanies';
 
 const DayBook: React.FC = () => {
   // Get today's date in YYYY-MM-DD format
   const today = new Date().toISOString().split('T')[0];
+  const { data: companies = [] } = useCompanies();
+  const [selectedCompanyId, setSelectedCompanyId] = useState('');
   const navigate = useNavigate();
   const { hospitalConfig } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -413,6 +416,18 @@ const DayBook: React.FC = () => {
               className="w-32 outline-none text-sm"
             />
           </div>
+
+          {/* Company Filter */}
+          <select
+            value={selectedCompanyId}
+            onChange={(e) => setSelectedCompanyId(e.target.value)}
+            className="px-3 py-1.5 border border-gray-300 rounded text-sm outline-none focus:border-blue-500 bg-white"
+          >
+            <option value="">All Companies</option>
+            {companies.map((c) => (
+              <option key={c.id} value={c.id}>{c.company_name}</option>
+            ))}
+          </select>
 
           {/* Payment Mode Filter */}
           <select
