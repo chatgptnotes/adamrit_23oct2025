@@ -855,11 +855,14 @@ const FinalBill = () => {
         // Patient is private ONLY if they don't have a corporate panel
         const isPrivatePatient = !hasCorporate && (patientType === 'private' || corporate === 'private');
 
-        // Check if corporate qualifies for Non-NABH rates (CGHS/ECHS/ESIC)
+        // Check if corporate qualifies for Non-NABH rates (ESIC only)
         const usesNonNABHRate = hasCorporate &&
+          corporate.includes('esic');
+
+        // Check if corporate qualifies for CGHS/NABH rates
+        const usesCGHSNABHRate = hasCorporate &&
           (corporate.includes('cghs') ||
-          corporate.includes('echs') ||
-          corporate.includes('esic'));
+          corporate.includes('echs'));
 
         // Check if corporate qualifies for Bhopal NABH rates
         const usesBhopaliNABHRate = hasCorporate &&
@@ -868,7 +871,7 @@ const FinalBill = () => {
           corporate.includes('ordnance factory itarsi'));
 
         // Check if patient has other corporate
-        const usesNABHRate = hasCorporate && !usesNonNABHRate && !usesBhopaliNABHRate;
+        const usesNABHRate = usesCGHSNABHRate || (hasCorporate && !usesNonNABHRate && !usesBhopaliNABHRate);
 
         console.log('🔍 Patient Type for Surgery Dropdown:', {
           patientType,
@@ -978,9 +981,11 @@ const FinalBill = () => {
 
           // Check if corporate qualifies for Non-NABH rates (CGHS/ECHS/ESIC)
           const usesNonNABHRate = hasCorporate &&
+            corporate.includes('esic');
+
+          const usesCGHSNABHRate = hasCorporate &&
             (corporate.includes('cghs') ||
-            corporate.includes('echs') ||
-            corporate.includes('esic'));
+            corporate.includes('echs'));
 
           // Check if corporate qualifies for Bhopal NABH rates
           const usesBhopaliNABHRate = hasCorporate &&
@@ -989,7 +994,7 @@ const FinalBill = () => {
             corporate.includes('ordnance factory itarsi'));
 
           // Check if patient has other corporate
-          const usesNABHRate = hasCorporate && !usesNonNABHRate && !usesBhopaliNABHRate;
+          const usesNABHRate = usesCGHSNABHRate || (hasCorporate && !usesNonNABHRate && !usesBhopaliNABHRate);
 
           console.log('🔍 Patient Type for Lab Dropdown:', {
             patientType,
@@ -1147,9 +1152,11 @@ const FinalBill = () => {
 
           // Check if corporate qualifies for Non-NABH rates (CGHS/ECHS/ESIC)
           const usesNonNABHRate = hasCorporate &&
+            corporate.includes('esic');
+
+          const usesCGHSNABHRate = hasCorporate &&
             (corporate.includes('cghs') ||
-            corporate.includes('echs') ||
-            corporate.includes('esic'));
+            corporate.includes('echs'));
 
           // Check if corporate qualifies for Bhopal NABH rates
           const usesBhopaliNABHRate = hasCorporate &&
@@ -1158,7 +1165,7 @@ const FinalBill = () => {
             corporate.includes('ordnance factory itarsi'));
 
           // Check if patient has other corporate
-          const usesNABHRate = hasCorporate && !usesNonNABHRate && !usesBhopaliNABHRate;
+          const usesNABHRate = usesCGHSNABHRate || (hasCorporate && !usesNonNABHRate && !usesBhopaliNABHRate);
 
           console.log('🔍 Patient Type for Radiology Dropdown:', {
             patientType,
@@ -2179,9 +2186,11 @@ const FinalBill = () => {
 
           // Check if corporate qualifies for Non-NABH rates (CGHS/ECHS/ESIC)
           const usesNonNABHRate = hasCorporate &&
+            corporate.includes('esic');
+
+          const usesCGHSNABHRate = hasCorporate &&
             (corporate.includes('cghs') ||
-            corporate.includes('echs') ||
-            corporate.includes('esic'));
+            corporate.includes('echs'));
 
           // Check if corporate qualifies for Bhopal NABH rates
           const usesBhopaliNABHRate = hasCorporate &&
@@ -2190,7 +2199,7 @@ const FinalBill = () => {
             corporate.includes('ordnance factory itarsi'));
 
           // Check if patient has other corporate
-          const usesNABHRate = hasCorporate && !usesNonNABHRate && !usesBhopaliNABHRate;
+          const usesNABHRate = usesCGHSNABHRate || (hasCorporate && !usesNonNABHRate && !usesBhopaliNABHRate);
 
           console.log('🔍 Patient Type for Implant Dropdown:', {
             patientType,
@@ -6240,11 +6249,13 @@ INSTRUCTIONS:
               const corporate = (patientInfo?.corporate || '').toLowerCase().trim();
               const hasCorporate = corporate.length > 0;
 
-              // Check if corporate qualifies for Non-NABH rates (CGHS/ECHS/ESIC)
-              const usesNonNABHRate =
+              // Check if corporate qualifies for Non-NABH rates (ESIC only)
+              const usesNonNABHRate = corporate.includes('esic');
+
+              // Check if corporate qualifies for CGHS/NABH rates
+              const usesCGHSNABHRate =
                 corporate.includes('cghs') ||
-                corporate.includes('echs') ||
-                corporate.includes('esic');
+                corporate.includes('echs');
 
               // Check if corporate qualifies for Bhopal NABH rates
               const usesBhopaliNABHRate =
@@ -6253,7 +6264,7 @@ INSTRUCTIONS:
                 corporate.includes('ordnance factory itarsi');
 
               // Check if patient has other corporate
-              const usesNABHRate = hasCorporate && !usesNonNABHRate && !usesBhopaliNABHRate;
+              const usesNABHRate = usesCGHSNABHRate || (hasCorporate && !usesNonNABHRate && !usesBhopaliNABHRate);
 
               // STRICT CORPORATE RATE SELECTION - NO FALLBACK
               let correctRate = 0;
@@ -6403,9 +6414,11 @@ INSTRUCTIONS:
 
               // Check if corporate qualifies for Non-NABH rates (CGHS/ECHS/ESIC)
               const usesNonNABHRate = hasCorporate &&
+                corporate.includes('esic');
+
+              const usesCGHSNABHRate = hasCorporate &&
                 (corporate.includes('cghs') ||
-                corporate.includes('echs') ||
-                corporate.includes('esic'));
+                corporate.includes('echs'));
 
               // Check if corporate qualifies for Bhopal NABH rates
               const usesBhopaliNABHRate = hasCorporate &&
@@ -6418,7 +6431,7 @@ INSTRUCTIONS:
                 (corporate.includes('icici lombard') || corporate.includes('icici'));
 
               // Check if patient has other corporate (not CGHS/ECHS/ESIC, not MP Police/Ordnance Factory, not ICICI)
-              const usesNABHRate = hasCorporate && !usesNonNABHRate && !usesBhopaliNABHRate && !usesPrivateRate;
+              const usesNABHRate = usesCGHSNABHRate || (hasCorporate && !usesNonNABHRate && !usesBhopaliNABHRate && !usesPrivateRate);
 
               // Select appropriate rate based on corporate (priority: Private > Non-NABH > Bhopal NABH > NABH > Fallback)
               let correctRate = 100; // Default fallback
@@ -10079,11 +10092,14 @@ INSTRUCTIONS:
       // Patient is private ONLY if they don't have a corporate panel
       const isPrivatePatient = !hasCorporate && (patientType === 'private' || corporate === 'private');
 
-      // Check if corporate qualifies for Non-NABH rates (CGHS/ECHS/ESIC)
+      // Check if corporate qualifies for Non-NABH rates (ESIC only)
       const usesNonNABHRate = hasCorporate &&
+        corporate.includes('esic');
+
+      // Check if corporate qualifies for CGHS/NABH rates
+      const usesCGHSNABHRate = hasCorporate &&
         (corporate.includes('cghs') ||
-        corporate.includes('echs') ||
-        corporate.includes('esic'));
+        corporate.includes('echs'));
 
       // Check if corporate qualifies for Bhopal NABH rates
       const usesBhopaliNABHRate = hasCorporate &&
@@ -10092,7 +10108,7 @@ INSTRUCTIONS:
         corporate.includes('ordnance factory itarsi'));
 
       // Check if patient has other corporate
-      const usesNABHRate = hasCorporate && !usesNonNABHRate && !usesBhopaliNABHRate;
+      const usesNABHRate = usesCGHSNABHRate || (hasCorporate && !usesNonNABHRate && !usesBhopaliNABHRate);
 
       console.log('🔍 Saved Radiology - Patient Type Detection:', {
         patientType,
@@ -10316,9 +10332,11 @@ INSTRUCTIONS:
 
           // Check if corporate qualifies for Non-NABH rates (CGHS/ECHS/ESIC)
           const usesNonNABHRate = hasCorporate &&
+            corporate.includes('esic');
+
+          const usesCGHSNABHRate = hasCorporate &&
             (corporate.includes('cghs') ||
-            corporate.includes('echs') ||
-            corporate.includes('esic'));
+            corporate.includes('echs'));
 
           // Check if corporate qualifies for Bhopal NABH rates
           const usesBhopaliNABHRate = hasCorporate &&
@@ -10331,7 +10349,7 @@ INSTRUCTIONS:
             (corporate.includes('icici lombard') || corporate.includes('icici'));
 
           // Check if patient has other corporate (not CGHS/ECHS/ESIC, not MP Police/Ordnance Factory, not ICICI)
-          const usesNABHRate = hasCorporate && !usesNonNABHRate && !usesBhopaliNABHRate && !usesPrivateRate;
+          const usesNABHRate = usesCGHSNABHRate || (hasCorporate && !usesNonNABHRate && !usesBhopaliNABHRate && !usesPrivateRate);
 
           // Select appropriate rate based on patient type (priority: Private > Non-NABH > Bhopal NABH > NABH > Fallback)
           let cost = 100; // Default fallback
@@ -10443,11 +10461,14 @@ INSTRUCTIONS:
         // Patient is private ONLY if they don't have a corporate panel
         const isPrivatePatient = !hasCorporate && (patientType === 'private' || corporate === 'private');
 
-        // Check if corporate qualifies for Non-NABH rates (CGHS/ECHS/ESIC)
+        // Check if corporate qualifies for Non-NABH rates (ESIC only)
         const usesNonNABHRate = hasCorporate &&
+          corporate.includes('esic');
+
+        // Check if corporate qualifies for CGHS/NABH rates
+        const usesCGHSNABHRate = hasCorporate &&
           (corporate.includes('cghs') ||
-          corporate.includes('echs') ||
-          corporate.includes('esic'));
+          corporate.includes('echs'));
 
         // Check if corporate uses Private rates (ICICI Lombard, etc.)
         const usesPrivateRate = hasCorporate &&
@@ -10461,7 +10482,7 @@ INSTRUCTIONS:
           corporate.includes('ordnance factory itarsi'));
 
         // Check if patient has other corporate (not CGHS/ECHS/ESIC, not MP Police/Ordnance Factory, not ICICI)
-        const usesNABHRate = hasCorporate && !usesNonNABHRate && !usesBhopaliNABHRate && !usesPrivateRate;
+        const usesNABHRate = usesCGHSNABHRate || (hasCorporate && !usesNonNABHRate && !usesBhopaliNABHRate && !usesPrivateRate);
 
         // Rate selection based on patient type (priority: Private > Non-NABH > Bhopal NABH > NABH > Fallback)
         let finalCost = 0;
@@ -10613,9 +10634,11 @@ INSTRUCTIONS:
 
           // Check if corporate qualifies for Non-NABH rates (CGHS/ECHS/ESIC)
           const usesNonNABHRate = hasCorporate &&
+            corporate.includes('esic');
+
+          const usesCGHSNABHRate = hasCorporate &&
             (corporate.includes('cghs') ||
-            corporate.includes('echs') ||
-            corporate.includes('esic'));
+            corporate.includes('echs'));
 
           // Check if corporate qualifies for Bhopal NABH rates
           const usesBhopaliNABHRate = hasCorporate &&
@@ -10628,7 +10651,7 @@ INSTRUCTIONS:
             (corporate.includes('icici lombard') || corporate.includes('icici'));
 
           // Check if patient has other corporate (not CGHS/ECHS/ESIC, not MP Police/Ordnance Factory, not ICICI)
-          const usesNABHRate = hasCorporate && !usesNonNABHRate && !usesBhopaliNABHRate && !usesPrivateRate;
+          const usesNABHRate = usesCGHSNABHRate || (hasCorporate && !usesNonNABHRate && !usesBhopaliNABHRate && !usesPrivateRate);
 
           // Select appropriate rate based on patient type
           let cost = 0;
@@ -11571,11 +11594,14 @@ INSTRUCTIONS:
       // Patient is private ONLY if they don't have a corporate panel
       const isPrivate = !hasCorporate;
 
-      // Check if corporate qualifies for Non-NABH rates (CGHS/ECHS/ESIC)
+      // Check if corporate qualifies for Non-NABH rates (ESIC only)
       const usesNonNABHRate = hasCorporate &&
+        corporate.includes('esic');
+
+      // Check if corporate qualifies for CGHS/NABH rates
+      const usesCGHSNABHRate = hasCorporate &&
         (corporate.includes('cghs') ||
-        corporate.includes('echs') ||
-        corporate.includes('esic'));
+        corporate.includes('echs'));
 
       // Check if corporate qualifies for Bhopal NABH rates
       const usesBhopaliRate = hasCorporate &&
@@ -11584,7 +11610,7 @@ INSTRUCTIONS:
         corporate.includes('ordnance factory itarsi'));
 
       // Check if patient has other corporate
-      const usesNABHRate = hasCorporate && !usesNonNABHRate && !usesBhopaliRate;
+      const usesNABHRate = usesCGHSNABHRate || (hasCorporate && !usesNonNABHRate && !usesBhopaliRate);
 
       const surgeriesWithSelectedRate = data?.map(surgery => {
         // Select appropriate rate based on corporate (priority: Private > Non-NABH > Bhopal NABH > NABH NABL > Fallback)
@@ -12109,11 +12135,14 @@ INSTRUCTIONS:
       // Patient is private ONLY if they don't have a corporate panel
       const isPrivatePatient = !hasCorporate && (patientType === 'private' || corporate === 'private');
 
-      // Check if corporate qualifies for Non-NABH rates (CGHS/ECHS/ESIC)
+      // Check if corporate qualifies for Non-NABH rates (ESIC only)
       const usesNonNABHRate = hasCorporate &&
+        corporate.includes('esic');
+
+      // Check if corporate qualifies for CGHS/NABH rates
+      const usesCGHSNABHRate = hasCorporate &&
         (corporate.includes('cghs') ||
-        corporate.includes('echs') ||
-        corporate.includes('esic'));
+        corporate.includes('echs'));
 
       // Check if corporate qualifies for Bhopal NABH rates
       const usesBhopaliNABHRate = hasCorporate &&
@@ -12122,7 +12151,7 @@ INSTRUCTIONS:
         corporate.includes('ordnance factory itarsi'));
 
       // Check if patient has other corporate (uses NABH rate)
-      const usesNABHRate = hasCorporate && !usesNonNABHRate && !usesBhopaliNABHRate;
+      const usesNABHRate = usesCGHSNABHRate || (hasCorporate && !usesNonNABHRate && !usesBhopaliNABHRate);
 
       console.log('🔍 fetchSavedSurgeriesFromVisit - Patient Type Detection:', {
         patientType,
@@ -12366,11 +12395,14 @@ INSTRUCTIONS:
       // Patient is private ONLY if they don't have a corporate panel
       const isPrivatePatient = !hasCorporate && (patientType === 'private' || corporate === 'private');
 
-      // Check if corporate qualifies for Non-NABH rates (CGHS/ECHS/ESIC)
+      // Check if corporate qualifies for Non-NABH rates (ESIC only)
       const usesNonNABHRate = hasCorporate &&
+        corporate.includes('esic');
+
+      // Check if corporate qualifies for CGHS/NABH rates
+      const usesCGHSNABHRate = hasCorporate &&
         (corporate.includes('cghs') ||
-        corporate.includes('echs') ||
-        corporate.includes('esic'));
+        corporate.includes('echs'));
 
       // Check if corporate qualifies for Bhopal NABH rates
       const usesBhopaliNABHRate = hasCorporate &&
@@ -12383,7 +12415,7 @@ INSTRUCTIONS:
         (corporate.includes('icici lombard') || corporate.includes('icici'));
 
       // Check if patient has other corporate (not CGHS/ECHS/ESIC, not MP Police/Ordnance Factory, not ICICI)
-      const usesNABHRate = hasCorporate && !usesNonNABHRate && !usesBhopaliNABHRate && !usesPrivateRate;
+      const usesNABHRate = usesCGHSNABHRate || (hasCorporate && !usesNonNABHRate && !usesBhopaliNABHRate && !usesPrivateRate);
 
       console.log('🔍 Patient Type Check in fetchSavedLabs:', {
         patientType,
@@ -13815,11 +13847,14 @@ Format the response as JSON:
       // Patient is private ONLY if they don't have a corporate panel
       const isPrivatePatient = !hasCorporate && (patientType === 'private' || corporate === 'private');
 
-      // Check if corporate qualifies for Non-NABH rates (CGHS/ECHS/ESIC)
+      // Check if corporate qualifies for Non-NABH rates (ESIC only)
       const usesNonNABHRate = hasCorporate &&
+        corporate.includes('esic');
+
+      // Check if corporate qualifies for CGHS/NABH rates
+      const usesCGHSNABHRate = hasCorporate &&
         (corporate.includes('cghs') ||
-        corporate.includes('echs') ||
-        corporate.includes('esic'));
+        corporate.includes('echs'));
 
       // Check if corporate qualifies for Bhopal NABH rates
       const usesBhopaliNABHRate = hasCorporate &&
@@ -13832,7 +13867,7 @@ Format the response as JSON:
         (corporate.includes('icici lombard') || corporate.includes('icici'));
 
       // Check if patient has other corporate (not CGHS/ECHS/ESIC, not MP Police/Ordnance Factory, not ICICI)
-      const usesNABHRate = hasCorporate && !usesNonNABHRate && !usesBhopaliNABHRate && !usesPrivateRate;
+      const usesNABHRate = usesCGHSNABHRate || (hasCorporate && !usesNonNABHRate && !usesBhopaliNABHRate && !usesPrivateRate);
 
       console.log('🔍 Patient Type Check in saveLabsToVisit:', {
         patientType,
