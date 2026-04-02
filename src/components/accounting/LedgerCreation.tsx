@@ -1,13 +1,16 @@
 import React, { useState } from 'react';
 import { X } from 'lucide-react';
 import TallyHeader from './TallyHeader';
+import { useCompanies } from '@/hooks/useCompanies';
 
 interface LedgerCreationProps {
   onClose: () => void;
 }
 
 const LedgerCreation: React.FC<LedgerCreationProps> = ({ onClose }) => {
+  const { data: companies = [] } = useCompanies();
   const [formData, setFormData] = useState({
+    companyId: '',
     name: '',
     alias: '',
     under: '',
@@ -56,6 +59,24 @@ const LedgerCreation: React.FC<LedgerCreationProps> = ({ onClose }) => {
 
           {/* Form Fields */}
           <div className="space-y-6">
+            {/* Company */}
+            <div className="grid grid-cols-2 gap-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Company</label>
+                <select
+                  value={formData.companyId}
+                  onChange={(e) => handleInputChange('companyId', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-blue-500"
+                >
+                  <option value="">Select Company</option>
+                  {companies.map((c) => (
+                    <option key={c.id} value={c.id}>{c.company_name}</option>
+                  ))}
+                </select>
+              </div>
+              <div></div>
+            </div>
+
             {/* Name and Alias */}
             <div className="grid grid-cols-2 gap-6">
               <div>
