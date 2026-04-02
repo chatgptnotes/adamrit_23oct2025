@@ -13,6 +13,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { QuickCaptureCard } from '@/components/CameraUpload';
 
 const Index = () => {
   const { hospitalConfig } = useAuth();
@@ -412,8 +413,15 @@ const Index = () => {
           </p>
         </div>
 
-        <ClinicalKPIs />
-        <StatisticsCards 
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+          <div className="md:col-span-3">
+            <ClinicalKPIs />
+          </div>
+          <div>
+            <QuickCaptureCard />
+          </div>
+        </div>
+        <StatisticsCards
           totalPatients={totalPatients}
         />
 

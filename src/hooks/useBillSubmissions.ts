@@ -15,6 +15,69 @@ export interface BillSubmissionInput {
   received_date?: string;
 }
 
+// Corporate short name mapping for bill number prefix
+const getCorporateBillPrefix = (corporateName: string | null | undefined): string => {
+  if (!corporateName || corporateName.trim() === '' || corporateName.toLowerCase() === 'private') {
+    return 'PVT';
+  }
+  const shortNameMap: Record<string, string> = {
+    'Mahatma Jyotirao Phule jan Arogya Yojana (MJPJAY)': 'MJPJAY',
+    'Ayushman Bharat - Pradhan Mantri Jan Arogya Yojna (PM-JAY)': 'PM-JAY',
+    'Rashtriya Bal Swasthya Karyakram (RBSK)': 'RBSK',
+    'Central Government Health Scheme (CGHS)': 'CGHS',
+    'Ex Serviceman Contributory Health Scheme (ECHS)': 'ECHS',
+    'Maharashtra Police Kutumb Arogya Yojana (MPKAY)': 'MPKAY',
+    'MIKSSKAY - Maharashtra Karagruh Va Sudhar Sevabal Kutumb Arogya Yojana': 'MIKSSKAY',
+    'Maharashtra Dharmadaya Karmachari Kutumbe Seashya Yojana (MDKKSY)': 'MDKKSY',
+    'Coal India Limited (CIL)': 'CIL',
+    'Central Railways (C.Rly)': 'CR',
+    'South Eastern Central Railway (SECR)': 'SECR',
+    'Western Coalfield Limited (WCL)': 'WCL',
+  };
+  return shortNameMap[corporateName] || corporateName.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
+};
+
+// Generate bill numbers for submissions grouped by corporate-month
+const assignBillNumbers = (
+  submissions: any[],
+  billNoMap: Record<string, string>
+): any[] => {
+  const monthNames = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+
+  // Sort by admission_date ascending so serial numbers are chronological
+  const sorted = [...submissions].sort((a, b) => {
+    const dateA = a.visits?.admission_date || a.created_at || '';
+    const dateB = b.visits?.admission_date || b.created_at || '';
+    return dateA.localeCompare(dateB);
+  });
+
+  // Track serial counters per corporate-month group
+  const counters: Record<string, number> = {};
+
+  for (const item of sorted) {
+    // If already has a bill_no from bills table, keep it
+    if (billNoMap[item.visit_id]) {
+      item._bill_no = billNoMap[item.visit_id];
+      continue;
+    }
+
+    const corporate = item.visits?.patients?.corporate || '';
+    const prefix = getCorporateBillPrefix(corporate);
+    const admissionDate = item.visits?.admission_date || item.created_at || '';
+    const date = admissionDate ? new Date(admissionDate) : new Date();
+    const month = monthNames[date.getMonth()];
+    const groupKey = `${prefix}-${month}`;
+
+    if (!counters[groupKey]) {
+      counters[groupKey] = 0;
+    }
+    counters[groupKey]++;
+    item._bill_no = `${groupKey}-${String(counters[groupKey]).padStart(3, '0')}`;
+  }
+
+  return sorted;
+};
+
 // Fetch all bill submissions with patient info via join, filtered by hospital
 export const useBillSubmissions = (hospitalName?: string) => {
   return useQuery({
@@ -52,7 +115,7 @@ export const useBillSubmissions = (hospitalName?: string) => {
 
       if (error) throw error;
 
-      // Fetch bill numbers for all visit_ids
+      // Fetch bill numbers for all visit_ids from bills table
       const visitIds = (data || []).map((item: any) => item.visit_id).filter(Boolean);
       let billNoMap: Record<string, string> = {};
       if (visitIds.length > 0) {
@@ -67,10 +130,13 @@ export const useBillSubmissions = (hospitalName?: string) => {
         }
       }
 
-      // Map data to include patient_name, dates, and bill_no from join
-      return (data || []).map((item: any) => ({
+      // Assign bill numbers (from bills table or auto-generated)
+      const withBillNos = assignBillNumbers(data || [], billNoMap);
+
+      // Map data to include patient_name, dates, and bill_no
+      return withBillNos.map((item: any) => ({
         ...item,
-        bill_no: billNoMap[item.visit_id] || '',
+        bill_no: item._bill_no || billNoMap[item.visit_id] || '',
         patient_name: item.visits?.patients?.name || '',
         patient_corporate: item.visits?.patients?.corporate || '',
         admission_date: item.visits?.admission_date || '',

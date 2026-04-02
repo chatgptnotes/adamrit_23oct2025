@@ -91,6 +91,21 @@ const fetchBillAgingData = async (hospitalName?: string): Promise<BillAgingRecor
 
   if (error) throw error;
 
+  // Fetch bill numbers for all visit_ids
+  const visitIds = (data || []).map((item: any) => item.visit_id).filter(Boolean);
+  const billNoMap: Record<string, string> = {};
+  if (visitIds.length > 0) {
+    const { data: bills } = await supabase
+      .from('bills')
+      .select('visit_id, bill_no, formatted_bill_no')
+      .in('visit_id', visitIds);
+    (bills || []).forEach((b: any) => {
+      if (b.visit_id) {
+        billNoMap[b.visit_id] = b.formatted_bill_no || b.bill_no || '';
+      }
+    });
+  }
+
   // Map and calculate aging fields
   return (data || []).map((item: any) => {
     const billAmount = Number(item.bill_amount) || 0;
@@ -106,6 +121,7 @@ const fetchBillAgingData = async (hospitalName?: string): Promise<BillAgingRecor
     return {
       id: item.id,
       visit_id: item.visit_id,
+      bill_no: billNoMap[item.visit_id] || '',
       claim_id: item.visits?.claim_id || null,
       patient_name: item.visits?.patients?.name || '',
       patient_id: item.visits?.patients?.id || '',
@@ -276,11 +292,12 @@ export const useBillAgingReport = (hospitalName?: string) => {
       // Search filter
       if (filters.searchTerm) {
         const searchLower = filters.searchTerm.toLowerCase();
+        const matchesBillNo = record.bill_no?.toLowerCase().includes(searchLower);
         const matchesVisitId = record.visit_id?.toLowerCase().includes(searchLower);
         const matchesClaimId = record.claim_id?.toLowerCase().includes(searchLower);
         const matchesPatientName = record.patient_name?.toLowerCase().includes(searchLower);
         const matchesCorporate = record.corporate?.toLowerCase().includes(searchLower);
-        if (!matchesVisitId && !matchesClaimId && !matchesPatientName && !matchesCorporate) {
+        if (!matchesBillNo && !matchesVisitId && !matchesClaimId && !matchesPatientName && !matchesCorporate) {
           return false;
         }
       }
