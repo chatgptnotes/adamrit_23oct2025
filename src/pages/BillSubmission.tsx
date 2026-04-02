@@ -288,16 +288,44 @@ const BillSubmissionPage: React.FC = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const handlePatientSelect = (visit: any) => {
-    setSelectedPatient({
-      visitId: visit.visit_id || '',
-      patientName: visit.patients?.name || '',
-      corporate: visit.patients?.corporate || '',
-    });
-    setEditData(null);
-    setIsFormOpen(true);
+  const handlePatientSelect = async (visit: any) => {
     setShowDropdown(false);
     setSearchTerm('');
+
+    // Check if a bill_preparation record already exists for this visit
+    const { data: existing } = await supabase
+      .from('bill_preparation' as any)
+      .select('*')
+      .eq('visit_id', visit.visit_id)
+      .maybeSingle();
+
+    if (existing) {
+      // Load existing record as edit data so we don't overwrite saved dates
+      setSelectedPatient(null);
+      setEditData({
+        id: existing.id,
+        visitId: existing.visit_id || '',
+        patientName: visit.patients?.name || '',
+        corporate: existing.corporate || visit.patients?.corporate || '',
+        billAmount: Number(existing.bill_amount) || 0,
+        submittedBy: existing.executive_who_submitted || '',
+        submissionDate: existing.date_of_submission ? String(existing.date_of_submission).split('T')[0] : '',
+        expectedPaymentDate: existing.expected_payment_date ? String(existing.expected_payment_date).split('T')[0] : '',
+        receivedAmount: Number(existing.received_amount) || 0,
+        deductionAmount: Number(existing.deduction_amount) || 0,
+        tdsAmount: Number(existing.tds_amount) || 0,
+        receivedDate: existing.received_date ? String(existing.received_date).split('T')[0] : '',
+      });
+    } else {
+      // No existing record — open fresh form
+      setEditData(null);
+      setSelectedPatient({
+        visitId: visit.visit_id || '',
+        patientName: visit.patients?.name || '',
+        corporate: visit.patients?.corporate || '',
+      });
+    }
+    setIsFormOpen(true);
   };
 
   // Handle patient lookup selection

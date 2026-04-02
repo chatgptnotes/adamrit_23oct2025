@@ -146,28 +146,35 @@ export const useBillSubmissions = (hospitalName?: string) => {
   });
 };
 
-// Create bill submission (uses upsert to update existing record if visit_id exists)
+// Create bill submission (merge-upsert: preserves existing values, never overwrites with null)
 export const useCreateBillSubmission = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async (data: BillSubmissionInput) => {
+      // Fetch existing record to merge (prevent overwriting saved dates with null)
+      const { data: existing } = await supabase
+        .from('bill_preparation' as any)
+        .select('*')
+        .eq('visit_id', data.visit_id)
+        .maybeSingle();
+
+      const merged = {
+        visit_id: data.visit_id,
+        corporate: data.corporate || existing?.corporate || null,
+        bill_amount: data.bill_amount || existing?.bill_amount || 0,
+        executive_who_submitted: data.executive_who_submitted || existing?.executive_who_submitted || null,
+        date_of_submission: data.date_of_submission || existing?.date_of_submission || null,
+        expected_payment_date: data.expected_payment_date || existing?.expected_payment_date || null,
+        received_amount: data.received_amount ?? existing?.received_amount ?? null,
+        deduction_amount: data.deduction_amount ?? existing?.deduction_amount ?? null,
+        tds_amount: data.tds_amount ?? existing?.tds_amount ?? null,
+        received_date: data.received_date || existing?.received_date || null,
+      };
+
       const { data: result, error } = await supabase
         .from('bill_preparation' as any)
-        .upsert({
-          visit_id: data.visit_id,
-          corporate: data.corporate || null,
-          bill_amount: data.bill_amount || 0,
-          executive_who_submitted: data.executive_who_submitted || null,
-          date_of_submission: data.date_of_submission || null,
-          expected_payment_date: data.expected_payment_date || null,
-          received_amount: data.received_amount || null,
-          deduction_amount: data.deduction_amount || null,
-          tds_amount: data.tds_amount || null,
-          received_date: data.received_date || null,
-        }, {
-          onConflict: 'visit_id'
-        })
+        .upsert(merged, { onConflict: 'visit_id' })
         .select()
         .single();
 
