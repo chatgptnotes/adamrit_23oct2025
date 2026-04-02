@@ -1350,24 +1350,30 @@ const Invoice = () => {
     console.log('surgeryOrdersData length:', surgeryOrdersData?.length);
 
     let totalSurgeryCharges = 0;
+    const surgeryNames: string[] = [];
     if (surgeryOrdersData && surgeryOrdersData.length > 0) {
       surgeryOrdersData.forEach((visitSurgery: any) => {
         const surgeryRate = visitSurgery.rate && visitSurgery.rate > 0
           ? Number(visitSurgery.rate)
           : parseFloat(String(visitSurgery.cghs_surgery?.NABH_NABL_Rate || '0').replace(/[^\d.]/g, '')) || 0;
         totalSurgeryCharges += surgeryRate;
+        const surgeryName = visitSurgery.cghs_surgery?.name || visitSurgery.surgery_name || '';
+        if (surgeryName) surgeryNames.push(surgeryName);
         console.log('Adding surgery to total:', {
-          name: visitSurgery.cghs_surgery?.name,
+          name: surgeryName,
           storedRate: visitSurgery.rate,
           surgeryRate: surgeryRate
         });
       });
 
       if (totalSurgeryCharges > 0) {
-        console.log('Adding Surgery Charges summary line:', totalSurgeryCharges);
+        const surgeryLabel = surgeryNames.length > 0
+          ? `Surgery Charges - ${surgeryNames.join(', ')}`
+          : 'Surgery Charges';
+        console.log('Adding Surgery Charges summary line:', totalSurgeryCharges, surgeryLabel);
         services.push({
           srNo: srNo++,
-          item: 'Surgery Charges',
+          item: surgeryLabel,
           rate: totalSurgeryCharges,
           qty: 1,
           amount: totalSurgeryCharges,
