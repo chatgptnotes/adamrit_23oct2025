@@ -715,23 +715,47 @@ const fetchAnesthetistTotal = async (): Promise<number> => {
   };
 
   const fetchPharmacyTotal = async (): Promise<number> => {
-    console.log('🚀 fetchPharmacyTotal called - using existing savedMedicationData');
-
-    // Use existing savedMedicationData instead of database query
-    if (!savedMedicationData || savedMedicationData.length === 0) {
-      console.log('📝 No savedMedicationData available');
+    if (!visitId) {
+      console.log('🚫 No visitId provided for pharmacy total');
       return 0;
     }
 
-    // Use same calculation logic as display
-    const total = savedMedicationData.reduce((sum, medication) => {
-      const cost = parseFloat(medication.cost || '0') || 0;
-      console.log(`💊 Medication: ${medication.medication_name}, Cost: ${cost}`);
-      return sum + cost;
-    }, 0);
+    console.log('🔍 Fetching pharmacy total from pharmacy_sales for visit:', visitId);
 
-    console.log('💰 Pharmacy total calculated from savedMedicationData:', total, 'from', savedMedicationData.length, 'medications');
-    return total;
+    try {
+      // Query pharmacy_sales for CREDIT sales linked to this visit
+      const { data: salesData, error: salesError } = await (supabase as any)
+        .from('pharmacy_sales')
+        .select('sale_id, total_amount, payment_method')
+        .eq('visit_id', visitId)
+        .eq('payment_method', 'CREDIT');
+
+      if (salesError) {
+        console.error('Error fetching pharmacy sales:', salesError);
+        return 0;
+      }
+
+      const totalCreditSales = (salesData || []).reduce((sum: number, sale: any) => sum + (sale.total_amount || 0), 0);
+      const visitSaleIds = (salesData || []).map((sale: any) => sale.sale_id);
+
+      // Subtract returns for these sales
+      let totalReturns = 0;
+      if (visitSaleIds.length > 0) {
+        const { data: returnsData } = await (supabase as any)
+          .from('medicine_returns')
+          .select('net_refund')
+          .in('original_sale_id', visitSaleIds);
+
+        totalReturns = (returnsData || []).reduce((sum: number, ret: any) => sum + (ret.net_refund || 0), 0);
+      }
+
+      const netPharmacy = totalCreditSales - totalReturns;
+      console.log('💰 Pharmacy total:', netPharmacy, '(sales:', totalCreditSales, '- returns:', totalReturns, ')');
+      return netPharmacy > 0 ? netPharmacy : 0;
+    } catch (error) {
+      console.error('Error fetching pharmacy total:', error);
+      return 0;
+    }
   };
 
   const fetchAdvancePaymentTotal = async (): Promise<number> => {
@@ -1094,10 +1118,14 @@ const fetchAnesthetistTotal = async (): Promise<number> => {
                 }
               } else if (discountData) {
                 console.log('✅ [DISCOUNT INTEGRATION] SUCCESS! Found discount from database:', discountData.discount_amount);
-                console.log('✅ [DISCOUNT INTEGRATION] Full discount record:', discountData);
-                console.log('✅ [DISCOUNT INTEGRATION] Converting to string:', discountData.discount_amount?.toString());
-                // Update the discount total with value from new table
-                convertedData.discount.total = discountData.discount_amount?.toString() || '';
+                // Only apply discount if approved (or if approval_status column doesn't exist yet)
+                const approvalStatus = (discountData as any).approval_status;
+                if (!approvalStatus || approvalStatus === 'approved') {
+                  convertedData.discount.total = discountData.discount_amount?.toString() || '';
+                } else {
+                  console.log('⏳ [DISCOUNT INTEGRATION] Discount pending approval, not applying:', approvalStatus);
+                  convertedData.discount.total = '0';
+                }
                 console.log('✅ [DISCOUNT INTEGRATION] Set convertedData.discount.total to:', convertedData.discount.total);
               } else {
                 console.log('📝 [DISCOUNT INTEGRATION] Query succeeded but no data returned');
@@ -1199,15 +1227,19 @@ const fetchAnesthetistTotal = async (): Promise<number> => {
 
               if (!discountError && discountData) {
                 console.log('✅ [DISCOUNT INTEGRATION - NO RECORD] SUCCESS! Found discount:', discountData.discount_amount);
-                // Update state with discount value
+                // Only apply discount if approved
+                const approvalStatus = (discountData as any).approval_status;
+                const effectiveAmount = (!approvalStatus || approvalStatus === 'approved')
+                  ? (discountData.discount_amount?.toString() || '')
+                  : '0';
                 setFinancialSummaryDataTracked(prev => ({
                   ...prev,
                   discount: {
                     ...prev.discount,
-                    total: discountData.discount_amount?.toString() || ''
+                    total: effectiveAmount
                   }
                 }));
-                console.log('✅ [DISCOUNT INTEGRATION - NO RECORD] Updated state with discount total:', discountData.discount_amount);
+                console.log('✅ [DISCOUNT INTEGRATION - NO RECORD] Discount status:', approvalStatus, 'amount applied:', effectiveAmount);
                 setIsInitializing(false);
                 setHasLoadedFromDatabase(true);
                 return; // Exit early - discount loaded successfully

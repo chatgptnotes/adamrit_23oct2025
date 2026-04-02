@@ -4,7 +4,7 @@ import TreatmentSheetPrintView from './TreatmentSheetPrintView';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import { FileText, Printer, Eye, Download, Search, Calendar, ChevronLeft, ChevronRight, Receipt, X, Pencil, Copy, Trash2, User, RotateCcw, Wallet, Pill, FileSpreadsheet } from 'lucide-react';
+import { FileText, Printer, Eye, EyeOff, Download, Search, Calendar, ChevronLeft, ChevronRight, Receipt, X, Pencil, Copy, Trash2, User, RotateCcw, Wallet, Pill, FileSpreadsheet } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import ExcelJS from 'exceljs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -374,12 +374,13 @@ export const SalesDetails: React.FC = () => {
       return;
     }
 
-    // Build query for medicine_returns
+    // Build query for medicine_returns (exclude hidden ones)
     let query = supabase
       .from('medicine_returns')
       .select('*')
       .eq('patient_id', patientData.id)
-      .eq('hospital_name', hospitalConfig.name);
+      .eq('hospital_name', hospitalConfig.name)
+      .neq('is_hidden', true);
 
     // Filter by specific sale IDs if provided (to show returns only for selected visit)
     if (saleIds && saleIds.length > 0) {
@@ -2089,10 +2090,20 @@ export const SalesDetails: React.FC = () => {
                             <Button
                               variant="ghost"
                               size="sm"
-                              className="h-6 w-6 p-0 hover:bg-cyan-100 hover:text-cyan-600"
-                              title="Print"
+                              className="h-6 w-6 p-0 hover:bg-red-100 hover:text-red-600"
+                              title="Hide return"
+                              onClick={async () => {
+                                if (!confirm('Hide this return? It will be hidden from the bill but kept in the database for audit.')) return;
+                                const { error } = await (supabase as any).from('medicine_returns').update({ is_hidden: true }).eq('id', ret.id);
+                                if (error) {
+                                  toast.error('Failed to hide return');
+                                } else {
+                                  toast.success('Return hidden successfully');
+                                  setPatientReturns(prev => prev.filter(r => r.id !== ret.id));
+                                }
+                              }}
                             >
-                              <Printer className="h-3 w-3" />
+                              <EyeOff className="h-3 w-3" />
                             </Button>
                           </div>
                         </td>
