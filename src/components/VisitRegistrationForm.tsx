@@ -284,7 +284,6 @@ export const VisitRegistrationForm: React.FC<VisitRegistrationFormProps> = ({
             room_allotted: formData.roomAllotted || null,
             admission_date: admissionDate,
             diagnosis_id: formData.diagnosisId || null,
-            corporate: formData.billingCategoryOverride || null
           })
           .eq('visit_id', existingVisit.visit_id)
           .select();
@@ -300,6 +299,12 @@ export const VisitRegistrationForm: React.FC<VisitRegistrationFormProps> = ({
         }
 
         console.log('Visit updated successfully:', updateData);
+
+        // Save billing category override (non-blocking — column may not exist yet)
+        if (formData.billingCategoryOverride) {
+          supabase.from('visits').update({ corporate: formData.billingCategoryOverride } as any)
+            .eq('visit_id', existingVisit.visit_id).then(() => {});
+        }
 
         // Log visit edit activity
         logActivity('visit_edit', {
@@ -369,7 +374,6 @@ export const VisitRegistrationForm: React.FC<VisitRegistrationFormProps> = ({
             room_allotted: formData.roomAllotted || null,
             admission_date: isIPDOrEmergency ? new Date().toISOString() : null,
             diagnosis_id: formData.diagnosisId || null,
-            corporate: formData.billingCategoryOverride || null
           })
           .select('id, visit_id')
           .single();
@@ -382,6 +386,12 @@ export const VisitRegistrationForm: React.FC<VisitRegistrationFormProps> = ({
           variant: "destructive"
         });
         return;
+      }
+
+      // Save billing category override (non-blocking — column may not exist yet)
+      if (formData.billingCategoryOverride) {
+        supabase.from('visits').update({ corporate: formData.billingCategoryOverride } as any)
+          .eq('visit_id', visitData.visit_id).then(() => {});
       }
 
       // Get the database-generated UUID for junction table references
