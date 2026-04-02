@@ -387,6 +387,11 @@ export const useSubAllocations = (scheduleId: string | null) => {
     enabled: !!scheduleId,
   });
 
+  const invalidateSubAlloc = () => {
+    queryClient.invalidateQueries({ queryKey: ['sub-allocations', scheduleId] });
+    queryClient.invalidateQueries({ queryKey: ['sub-allocations-batch'] });
+  };
+
   const addPayee = useMutation({
     mutationFn: async ({ payeeName, amount }: { payeeName: string; amount: number }) => {
       if (!scheduleId) throw new Error('No schedule ID');
@@ -396,7 +401,8 @@ export const useSubAllocations = (scheduleId: string | null) => {
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['sub-allocations', scheduleId] });
+      invalidateSubAlloc();
+      toast.success('Payee added');
     },
     onError: (err: any) => {
       toast.error('Failed to add payee: ' + err.message);
@@ -412,7 +418,8 @@ export const useSubAllocations = (scheduleId: string | null) => {
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['sub-allocations', scheduleId] });
+      invalidateSubAlloc();
+      toast.success('Payee removed');
     },
     onError: (err: any) => {
       toast.error('Failed to remove payee: ' + err.message);
@@ -432,7 +439,7 @@ export const useSubAllocations = (scheduleId: string | null) => {
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['sub-allocations', scheduleId] });
+      invalidateSubAlloc();
     },
     onError: (err: any) => {
       toast.error('Failed to update payee: ' + err.message);
@@ -448,7 +455,7 @@ export const useSubAllocations = (scheduleId: string | null) => {
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['sub-allocations', scheduleId] });
+      invalidateSubAlloc();
       toast.success('Payee marked as paid');
     },
     onError: (err: any) => {
