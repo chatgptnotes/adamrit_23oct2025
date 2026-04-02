@@ -418,9 +418,10 @@ const DailyPaymentAllocation = () => {
   // Use actual cash if manually entered, else system value
   const effectiveCash = actualCashCollection !== '' ? parseFloat(actualCashCollection) || 0 : cashCollections;
 
-  // Calculations
-  const totalDue = schedule.reduce((s, e) => s + (e.daily_amount + e.carryforward_amount), 0);
-  const totalPaid = schedule.reduce((s, e) => s + e.paid_amount, 0);
+  // Calculations — exclude skipped entries from totals
+  const activeSchedule = schedule.filter(e => e.status !== 'skipped');
+  const totalDue = activeSchedule.reduce((s, e) => s + (e.daily_amount + e.carryforward_amount), 0);
+  const totalPaid = activeSchedule.reduce((s, e) => s + e.paid_amount, 0);
   const totalAvailable = effectiveCash + funds.totalActual;
   const surplus = totalAvailable - totalDue;
   const coveragePercent = totalDue > 0 ? Math.min(Math.round((totalAvailable / totalDue) * 100), 100) : 100;
@@ -988,8 +989,8 @@ const DailyPaymentAllocation = () => {
                       ))}
                       <TableRow className="bg-gray-50 font-bold">
                         <TableCell colSpan={3}>TOTAL</TableCell>
-                        <TableCell className="text-right font-mono">{formatINR(sortedSchedule.reduce((s, e) => s + e.daily_amount, 0))}</TableCell>
-                        <TableCell className="text-right font-mono text-red-600">{formatINR(sortedSchedule.reduce((s, e) => s + e.carryforward_amount, 0))}</TableCell>
+                        <TableCell className="text-right font-mono">{formatINR(sortedSchedule.filter(e => e.status !== 'skipped').reduce((s, e) => s + e.daily_amount, 0))}</TableCell>
+                        <TableCell className="text-right font-mono text-red-600">{formatINR(sortedSchedule.filter(e => e.status !== 'skipped').reduce((s, e) => s + e.carryforward_amount, 0))}</TableCell>
                         <TableCell className="text-right font-mono">{formatINR(totalDue)}</TableCell>
                         <TableCell className="text-right font-mono text-green-600">{formatINR(totalPaid)}</TableCell>
                         <TableCell colSpan={3}></TableCell>
