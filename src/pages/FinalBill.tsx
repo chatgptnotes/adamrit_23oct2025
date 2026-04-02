@@ -1458,7 +1458,7 @@ const FinalBill = () => {
   // Corporate short name mapping for bill number prefix
   const getCorporateBillPrefix = (corporateName: string | null | undefined): string => {
     if (!corporateName || corporateName.trim() === '' || corporateName.toLowerCase() === 'private') {
-      return 'PVT';
+      return 'PRIVATE';
     }
     const shortNameMap: Record<string, string> = {
       'Mahatma Jyotirao Phule jan Arogya Yojana (MJPJAY)': 'MJPJAY',
@@ -1524,6 +1524,7 @@ const FinalBill = () => {
             patient_id: visitData.patients.id,
             visit_id: visitId,
             bill_no: billNo,
+            formatted_bill_no: billNo,
             claim_id: validateClaimId(visitData.claim_id || visitId || 'TEMP-CLAIM'),
             date: new Date().toISOString(),
             category: 'GENERAL',

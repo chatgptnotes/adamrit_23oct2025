@@ -58,11 +58,11 @@ export const useBillSubmissions = (hospitalName?: string) => {
       if (visitIds.length > 0) {
         const { data: billsData } = await (supabase as any)
           .from('bills')
-          .select('visit_id, bill_no')
+          .select('visit_id, bill_no, formatted_bill_no')
           .in('visit_id', visitIds);
         if (billsData) {
           for (const b of billsData) {
-            if (b.visit_id && b.bill_no) billNoMap[b.visit_id] = b.bill_no;
+            if (b.visit_id) billNoMap[b.visit_id] = b.formatted_bill_no || b.bill_no || '';
           }
         }
       }

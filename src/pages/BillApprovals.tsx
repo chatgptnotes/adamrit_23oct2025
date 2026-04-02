@@ -463,7 +463,7 @@ const BillApprovals = () => {
                       <tbody>
                         {filteredPending.map((bill: any) => (
                           <tr key={bill.id} className="border-t hover:bg-gray-50">
-                            <td className="p-3 font-mono font-medium">{bill.bill_no || '-'}</td>
+                            <td className="p-3 font-mono font-medium">{bill.formatted_bill_no || bill.bill_no || '-'}</td>
                             <td className="p-3 font-medium">{bill.patientName}</td>
                             <td className="p-3">
                               <Badge variant="outline">{bill.category || '-'}</Badge>
@@ -690,7 +690,7 @@ const BillApprovals = () => {
                           <div className="space-y-1 text-xs text-gray-500 border border-gray-200 rounded bg-white p-2">
                             <div className="flex justify-between">
                               <span className="font-medium text-gray-700">Invoice</span>
-                              <span className="font-mono">{bill.bill_no || '-'}</span>
+                              <span className="font-mono">{bill.formatted_bill_no || bill.bill_no || '-'}</span>
                             </div>
                             <hr className="border-dashed" />
                             <div className="flex justify-between">

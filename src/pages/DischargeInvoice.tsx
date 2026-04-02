@@ -330,7 +330,7 @@ const DischargeInvoice = () => {
             </tr>
             <tr>
               <td className="font-semibold py-1">Invoice No.</td>
-              <td className="py-1">: {billData?.bill_no || 'N/A'}</td>
+              <td className="py-1">: {billData?.formatted_bill_no || billData?.bill_no || 'N/A'}</td>
             </tr>
             <tr>
               <td className="font-semibold py-1">Registration No.</td>

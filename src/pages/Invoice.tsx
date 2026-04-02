@@ -1703,7 +1703,7 @@ const Invoice = () => {
           ? format(new Date(visitData.created_at), 'dd/MM/yyyy HH:mm:ss')
           : 'N/A',
     dischargeDate: visitData.discharge_date ? format(new Date(visitData.discharge_date), 'dd/MM/yyyy HH:mm:ss') : '',
-    invoiceNo: billData?.bill_no || visitData.visit_id || 'N/A',
+    invoiceNo: billData?.formatted_bill_no || billData?.bill_no || visitData.visit_id || 'N/A',
     registrationNo: patient?.patients_id || visitData.visit_id || 'N/A',
     category: visitData?.patients?.corporate || billData?.category || 'Private',
     primaryConsultant: visitData.referring_doctor
