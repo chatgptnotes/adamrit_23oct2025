@@ -10,12 +10,12 @@ interface DashboardHeaderProps {
 
 export const DashboardHeader = ({ searchTerm, onSearchChange }: DashboardHeaderProps) => {
   const { hospitalConfig } = useAuth();
-  
+
   return (
     <div className="flex items-center justify-between">
       <div>
-        <h1 className="text-3xl font-bold text-primary" style={{ color: hospitalConfig.primaryColor }}>
-          {hospitalConfig.fullName}
+        <h1 className="text-3xl font-bold text-primary" style={{ color: hospitalConfig?.primaryColor || '#059669' }}>
+          {hospitalConfig?.fullName || 'Hospital Management System'}
         </h1>
       </div>
       <div className="flex items-center gap-4">
