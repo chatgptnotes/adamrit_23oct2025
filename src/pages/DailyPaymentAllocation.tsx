@@ -1,4 +1,5 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
+import * as XLSX from 'xlsx';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -376,6 +377,10 @@ const DailyPaymentAllocation = () => {
   const { defaultPayees, addPayee: addDefaultPayee, removePayee: removeDefaultPayee } = useObligationDefaultPayees(editingObligationId);
   const [defPayeeName, setDefPayeeName] = useState('');
   const [defPayeeAmount, setDefPayeeAmount] = useState('');
+
+  // Extracted staff from uploaded Excel/CSV
+  const [extractedStaff, setExtractedStaff] = useState<{ name: string; amount: number; selected: boolean }[]>([]);
+  const [isImporting, setIsImporting] = useState(false);
   const [defPayeeSearchTerm, setDefPayeeSearchTerm] = useState('');
   const { data: defPayeeResults = [] } = useMultiPayeeSearch(defPayeeSearchTerm, selectedHospital);
 
@@ -1640,21 +1645,47 @@ const DailyPaymentAllocation = () => {
                         const file = e.target.files?.[0];
                         if (!file) return;
                         try {
-                          const filename = `obligations/${editingObligationId || 'new'}/${Date.now()}_${file.name}`;
-                          const { data, error } = await (supabase as any).storage
-                            .from('attachments')
-                            .upload(filename, file, { upsert: true });
-                          if (error) {
-                            // If bucket doesn't exist, store filename as reference
-                            toast.info('File selected: ' + file.name + '. Storage bucket may need setup.');
-                            setNewObligation({ ...newObligation, attachment_url: file.name });
-                            return;
-                          }
-                          const { data: urlData } = (supabase as any).storage
-                            .from('attachments')
-                            .getPublicUrl(data.path);
-                          setNewObligation({ ...newObligation, attachment_url: urlData.publicUrl });
-                          toast.success('File uploaded: ' + file.name);
+                          // Extract names + amounts from Excel/CSV
+                          const reader = new FileReader();
+                          reader.onload = (evt) => {
+                            try {
+                              const data = evt.target?.result;
+                              const workbook = XLSX.read(data, { type: 'binary' });
+                              const sheetName = workbook.SheetNames[0];
+                              const worksheet = workbook.Sheets[sheetName];
+                              const jsonData: any[] = XLSX.utils.sheet_to_json(worksheet);
+
+                              if (jsonData.length === 0) {
+                                toast.error('No data found in file');
+                                return;
+                              }
+
+                              // Auto-detect name and amount columns
+                              const keys = Object.keys(jsonData[0]);
+                              const nameKey = keys.find(k => /name|staff|employee|party|person/i.test(k)) || keys[0];
+                              const amountKey = keys.find(k => /amount|salary|daily|rate|pay|cost/i.test(k)) || keys[1];
+
+                              const staff = jsonData
+                                .map(row => ({
+                                  name: String(row[nameKey] || '').trim(),
+                                  amount: parseFloat(row[amountKey]) || 0,
+                                  selected: true,
+                                }))
+                                .filter(s => s.name && s.name.length > 0);
+
+                              if (staff.length === 0) {
+                                toast.error('No valid names found. Ensure columns have Name and Amount headers.');
+                                return;
+                              }
+
+                              setExtractedStaff(staff);
+                              setNewObligation({ ...newObligation, attachment_url: file.name });
+                              toast.success(`Extracted ${staff.length} entries from ${file.name}`);
+                            } catch (parseErr) {
+                              toast.error('Failed to parse file');
+                            }
+                          };
+                          reader.readAsBinaryString(file);
                         } catch (err) {
                           toast.error('Upload failed');
                         }
@@ -1679,6 +1710,64 @@ const DailyPaymentAllocation = () => {
                   </a>
                 )}
               </div>
+
+              {/* Extracted Staff Preview */}
+              {extractedStaff.length > 0 && (
+                <div className="border rounded-md p-2 bg-white max-h-48 overflow-y-auto">
+                  <div className="flex items-center justify-between mb-2">
+                    <Label className="text-xs font-bold text-green-700">Extracted ({extractedStaff.filter(s => s.selected).length}/{extractedStaff.length} selected)</Label>
+                    <div className="flex gap-1">
+                      <Button size="sm" variant="outline" className="h-6 text-xs px-2"
+                        onClick={() => setExtractedStaff(extractedStaff.map(s => ({ ...s, selected: true })))}>
+                        All
+                      </Button>
+                      <Button size="sm" variant="outline" className="h-6 text-xs px-2"
+                        onClick={() => setExtractedStaff(extractedStaff.map(s => ({ ...s, selected: false })))}>
+                        None
+                      </Button>
+                    </div>
+                  </div>
+                  {extractedStaff.map((s, i) => (
+                    <div key={i} className="flex items-center gap-2 py-0.5 text-xs">
+                      <input type="checkbox" checked={s.selected}
+                        onChange={() => setExtractedStaff(prev => prev.map((p, j) => j === i ? { ...p, selected: !p.selected } : p))} />
+                      <span className="flex-1 truncate">{s.name}</span>
+                      <span className="font-mono text-right w-20">{formatINR(s.amount)}</span>
+                    </div>
+                  ))}
+                  <Button size="sm" className="w-full mt-2 bg-green-600 hover:bg-green-700 text-xs h-7"
+                    disabled={isImporting || extractedStaff.filter(s => s.selected).length === 0}
+                    onClick={async () => {
+                      setIsImporting(true);
+                      const selected = extractedStaff.filter(s => s.selected);
+                      let imported = 0;
+                      for (const s of selected) {
+                        try {
+                          await (supabase as any).from('payment_obligations').insert({
+                            party_name: s.name,
+                            category: newObligation.category || 'variable',
+                            sub_category: newObligation.sub_category || 'salary',
+                            default_daily_amount: s.amount,
+                            priority: 10,
+                            is_active: true,
+                            hospital_name: selectedHospital,
+                          });
+                          imported++;
+                        } catch (err) {
+                          console.error('Failed to import', s.name, err);
+                        }
+                      }
+                      toast.success(`Imported ${imported} of ${selected.length} staff as obligations`);
+                      setExtractedStaff([]);
+                      setNewObligation({ ...newObligation, attachment_url: '' });
+                      // Refresh obligations
+                      window.location.reload();
+                      setIsImporting(false);
+                    }}>
+                    {isImporting ? 'Importing...' : `Import ${extractedStaff.filter(s => s.selected).length} as Obligations`}
+                  </Button>
+                </div>
+              )}
 
               {/* Google Sheet / Drive Link */}
               <div>
