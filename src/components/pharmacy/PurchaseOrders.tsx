@@ -488,22 +488,22 @@ const PurchaseOrders: React.FC<PurchaseOrdersProps> = ({ onAddClick, onEditClick
                           )}
                           {order.status !== 'Completed' ? (
                             <button
-                              title="Delete"
-                              className="p-2 text-red-600 hover:bg-red-100 rounded-lg transition-colors"
+                              title="Cancel order"
+                              className="p-2 text-orange-600 hover:bg-orange-100 rounded-lg transition-colors"
                               onClick={async () => {
-                                if (confirm('Are you sure you want to delete this purchase order?')) {
+                                if (confirm('Are you sure you want to cancel this purchase order? It will be marked as cancelled for audit trail.')) {
                                   try {
                                     await PurchaseOrderService.delete(order.id);
                                     toast({
                                       title: 'Success',
-                                      description: 'Purchase order deleted successfully',
+                                      description: 'Purchase order cancelled successfully',
                                     });
                                     fetchData();
                                   } catch (error) {
-                                    console.error('Error deleting purchase order:', error);
+                                    console.error('Error cancelling purchase order:', error);
                                     toast({
                                       title: 'Error',
-                                      description: 'Failed to delete purchase order',
+                                      description: 'Failed to cancel purchase order',
                                       variant: 'destructive',
                                     });
                                   }

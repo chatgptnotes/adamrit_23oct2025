@@ -950,35 +950,23 @@ export const SalesDetails: React.FC = () => {
     setViewBillModal(bill);
   };
 
-  // Delete Bill handler
+  // Mark Bill as Cancelled (soft-delete — bills can never be deleted for audit trail)
   const handleDeleteBill = async (bill: any) => {
-    if (!confirm('Are you sure you want to delete this bill? This action cannot be undone.')) return;
+    if (!confirm('Are you sure you want to cancel this bill? The bill will be marked as cancelled and hidden from active views. This preserves the audit trail.')) return;
 
-    // Delete sale items first
-    const { error: itemsError } = await supabase
-      .from('pharmacy_sale_items')
-      .delete()
-      .eq('sale_id', bill.sale_id);
-
-    if (itemsError) {
-      console.error('Error deleting sale items:', itemsError);
-      alert('Error deleting bill items');
-      return;
-    }
-
-    // Delete the sale
-    const { error: saleError } = await supabase
+    // Mark the sale as cancelled (soft-delete)
+    const { error: saleError } = await (supabase as any)
       .from('pharmacy_sales')
-      .delete()
+      .update({ status: 'cancelled', updated_at: new Date().toISOString() })
       .eq('sale_id', bill.sale_id);
 
     if (saleError) {
-      console.error('Error deleting sale:', saleError);
-      alert('Error deleting bill');
+      console.error('Error cancelling sale:', saleError);
+      alert('Error cancelling bill');
       return;
     }
 
-    // Update state - remove from selectedPatient.bills
+    // Update state - remove cancelled bill from view
     if (selectedPatient) {
       setSelectedPatient((prev: any) => ({
         ...prev,
@@ -999,7 +987,7 @@ export const SalesDetails: React.FC = () => {
     // Update tableData
     setTableData(prev => prev.filter(s => s.sale_id !== bill.sale_id));
 
-    alert('Bill deleted successfully');
+    alert('Bill cancelled successfully. Audit trail preserved.');
   };
 
   const handleOpenTreatmentSheet = (visitId: string) => {
@@ -1997,13 +1985,13 @@ export const SalesDetails: React.FC = () => {
                             >
                               <Printer className="h-3 w-3" />
                             </Button>
-                            {/* 4. Delete */}
+                            {/* 4. Cancel Bill (soft-delete) */}
                             <Button
                               variant="ghost"
                               size="sm"
                               onClick={() => handleDeleteBill(bill)}
-                              className="h-6 w-6 p-0 hover:bg-red-100 hover:text-red-600"
-                              title="Delete"
+                              className="h-6 w-6 p-0 hover:bg-orange-100 hover:text-orange-600"
+                              title="Cancel bill"
                             >
                               <Trash2 className="h-3 w-3" />
                             </Button>

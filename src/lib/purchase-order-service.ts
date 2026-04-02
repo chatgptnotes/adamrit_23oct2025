@@ -141,16 +141,16 @@ export class PurchaseOrderService {
   }
 
   /**
-   * Delete a purchase order
+   * Cancel a purchase order (soft-delete — preserves audit trail)
    */
   static async delete(id: string): Promise<void> {
     const { error } = await supabaseClient
       .from('purchase_orders')
-      .delete()
+      .update({ status: 'Cancelled', updated_at: new Date().toISOString() } as any)
       .eq('id', id);
 
     if (error) {
-      console.error('Error deleting purchase order:', error);
+      console.error('Error cancelling purchase order:', error);
       throw error;
     }
   }
