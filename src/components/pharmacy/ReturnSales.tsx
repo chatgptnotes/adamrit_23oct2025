@@ -491,6 +491,19 @@ const ReturnSales: React.FC = () => {
         description: `Return ${returnNumber} processed successfully. Refund: ₹${netRefund.toFixed(2)}`,
       });
 
+      // Print payment voucher for the refund
+      printReturnVoucher({
+        returnNumber,
+        patientName: selectedPatient.patient_name || selectedPatient.name || 'N/A',
+        patientId: selectedPatient.patients_id || '',
+        items: returnCart,
+        subtotalRefund,
+        processingFee,
+        netRefund,
+        returnReason,
+        date: new Date(),
+      });
+
       // Reset form
       setReturnCart([]);
       setReturnReason('');
@@ -506,6 +519,95 @@ const ReturnSales: React.FC = () => {
       });
     } finally {
       setIsProcessing(false);
+    }
+  };
+
+  const printReturnVoucher = (details: {
+    returnNumber: string;
+    patientName: string;
+    patientId: string;
+    items: any[];
+    subtotalRefund: number;
+    processingFee: number;
+    netRefund: number;
+    returnReason: string;
+    date: Date;
+  }) => {
+    const hospitalFullName = hospitalConfig?.name === 'ayushman'
+      ? 'Ayushman Hospital Nagpur'
+      : 'Hope Hospital Nagpur';
+    const dateStr = details.date.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    const timeStr = details.date.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+
+    const itemRows = details.items.map((item, i) => `
+      <tr>
+        <td style="border:1px solid #ddd;padding:6px;text-align:center">${i + 1}</td>
+        <td style="border:1px solid #ddd;padding:6px">${item.medicine_name || ''}</td>
+        <td style="border:1px solid #ddd;padding:6px;text-align:center">${item.batch_number || ''}</td>
+        <td style="border:1px solid #ddd;padding:6px;text-align:center">${item.quantity_to_return}</td>
+        <td style="border:1px solid #ddd;padding:6px;text-align:right">${item.unit_price?.toFixed(2) || '0.00'}</td>
+        <td style="border:1px solid #ddd;padding:6px;text-align:right">${item.refund_amount?.toFixed(2) || '0.00'}</td>
+      </tr>
+    `).join('');
+
+    const html = `<!DOCTYPE html>
+<html><head><title>Return Voucher - ${details.returnNumber}</title>
+<style>
+  body { font-family: Arial, sans-serif; padding: 30px; max-width: 800px; margin: 0 auto; font-size: 13px; }
+  h2 { text-align: center; margin-bottom: 4px; }
+  .subtitle { text-align: center; color: #666; margin-bottom: 20px; }
+  .header-row { display: flex; justify-content: space-between; margin-bottom: 15px; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 15px; }
+  th { background: #f0f0f0; border: 1px solid #ddd; padding: 6px; font-size: 12px; }
+  .totals { text-align: right; margin-bottom: 20px; }
+  .totals td { padding: 4px 0; }
+  .totals .label { padding-right: 15px; }
+  .net-amount { font-size: 16px; font-weight: bold; border-top: 2px solid #333; padding-top: 6px; }
+  .signatures { display: flex; justify-content: space-between; margin-top: 60px; }
+  .sig-box { text-align: center; border-top: 1px solid #333; padding-top: 5px; width: 180px; font-size: 11px; }
+  @media print { body { padding: 15px; } }
+</style>
+</head><body>
+  <h2>${hospitalFullName}</h2>
+  <p class="subtitle">PHARMACY RETURN / REFUND VOUCHER</p>
+  <div class="header-row">
+    <div><strong>Return No:</strong> ${details.returnNumber}</div>
+    <div><strong>Date:</strong> ${dateStr} ${timeStr}</div>
+  </div>
+  <div class="header-row">
+    <div><strong>Patient:</strong> ${details.patientName} (${details.patientId})</div>
+    <div><strong>Reason:</strong> ${details.returnReason || 'N/A'}</div>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th style="width:40px">#</th>
+        <th>Medicine</th>
+        <th style="width:90px">Batch</th>
+        <th style="width:50px">Qty</th>
+        <th style="width:80px">Rate</th>
+        <th style="width:90px">Amount</th>
+      </tr>
+    </thead>
+    <tbody>${itemRows}</tbody>
+  </table>
+  <table class="totals">
+    <tr><td class="label">Subtotal Refund:</td><td style="width:100px">₹${details.subtotalRefund.toFixed(2)}</td></tr>
+    ${details.processingFee > 0 ? `<tr><td class="label">Processing Fee:</td><td>- ₹${details.processingFee.toFixed(2)}</td></tr>` : ''}
+    <tr class="net-amount"><td class="label">Net Refund:</td><td>₹${details.netRefund.toFixed(2)}</td></tr>
+  </table>
+  <div class="signatures">
+    <div class="sig-box">Patient Signature</div>
+    <div class="sig-box">Pharmacy Executive</div>
+    <div class="sig-box">Authorised Signatory</div>
+  </div>
+  <script>window.onload = function() { window.print(); }</script>
+</body></html>`;
+
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.write(html);
+      printWindow.document.close();
     }
   };
 

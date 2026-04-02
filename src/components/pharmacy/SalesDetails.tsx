@@ -463,6 +463,45 @@ export const SalesDetails: React.FC = () => {
       minimumFractionDigits: 2
     }).format(amount);
 
+  const printReturnVoucher = (ret: any) => {
+    const hospitalFullName = hospitalConfig?.name === 'ayushman'
+      ? 'Ayushman Hospital Nagpur' : 'Hope Hospital Nagpur';
+    const dateStr = ret.return_date ? new Date(ret.return_date).toLocaleDateString('en-IN') : '-';
+    const html = `<!DOCTYPE html>
+<html><head><title>Return Voucher - ${ret.return_number || ''}</title>
+<style>
+  body { font-family: Arial, sans-serif; padding: 30px; max-width: 800px; margin: 0 auto; font-size: 13px; }
+  h2 { text-align: center; margin-bottom: 4px; }
+  .subtitle { text-align: center; color: #666; margin-bottom: 20px; }
+  .row { display: flex; justify-content: space-between; margin-bottom: 8px; }
+  .amount { font-size: 18px; font-weight: bold; margin: 20px 0; text-align: right; }
+  .totals td { padding: 4px 8px; }
+  .signatures { display: flex; justify-content: space-between; margin-top: 60px; }
+  .sig-box { text-align: center; border-top: 1px solid #333; padding-top: 5px; width: 180px; font-size: 11px; }
+  @media print { body { padding: 15px; } }
+</style></head><body>
+  <h2>${hospitalFullName}</h2>
+  <p class="subtitle">PHARMACY RETURN / REFUND VOUCHER</p>
+  <div class="row"><div><strong>Return No:</strong> ${ret.return_number || `RET-${ret.id?.slice(0, 6)}`}</div><div><strong>Date:</strong> ${dateStr}</div></div>
+  <div class="row"><div><strong>Patient:</strong> ${selectedPatient?.patient_name || selectedPatient?.name || 'N/A'}</div><div><strong>Reason:</strong> ${ret.return_reason || 'N/A'}</div></div>
+  <hr/>
+  <table class="totals" style="margin-left:auto">
+    <tr><td>Refund Amount:</td><td style="text-align:right">${formatCurrency(ret.refund_amount || 0)}</td></tr>
+    ${(ret.processing_fee || 0) > 0 ? `<tr><td>Processing Fee:</td><td style="text-align:right">- ${formatCurrency(ret.processing_fee)}</td></tr>` : ''}
+    <tr style="font-weight:bold;border-top:2px solid #333"><td>Net Refund:</td><td style="text-align:right">${formatCurrency(ret.net_refund || 0)}</td></tr>
+  </table>
+  <p class="amount">${formatCurrency(ret.net_refund || 0)}/-</p>
+  <div class="signatures">
+    <div class="sig-box">Patient Signature</div>
+    <div class="sig-box">Pharmacy Executive</div>
+    <div class="sig-box">Authorised Signatory</div>
+  </div>
+  <script>window.onload = function() { window.print(); }</script>
+</body></html>`;
+    const printWindow = window.open('', '_blank');
+    if (printWindow) { printWindow.document.write(html); printWindow.document.close(); }
+  };
+
   const printBill = (sale: any, items: any[]) => {
     const printWindow = window.open('', '', 'width=800,height=600');
     if (!printWindow) return;
@@ -2083,9 +2122,10 @@ export const SalesDetails: React.FC = () => {
                               variant="ghost"
                               size="sm"
                               className="h-6 w-6 p-0 hover:bg-cyan-100 hover:text-cyan-600"
-                              title="View"
+                              title="Print Return Voucher"
+                              onClick={() => printReturnVoucher(ret)}
                             >
-                              <Eye className="h-3 w-3" />
+                              <Printer className="h-3 w-3" />
                             </Button>
                             <Button
                               variant="ghost"
