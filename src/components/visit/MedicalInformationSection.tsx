@@ -428,8 +428,8 @@ export const MedicalInformationSection: React.FC<MedicalInformationSectionProps>
                           <SelectValue placeholder={isLoadingAnaesthetists ? "Loading..." : "Select anaesthetist"} />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="">None</SelectItem>
-                          {!isLoadingAnaesthetists && anaesthetists.map((anaesthetist) => (
+                          <SelectItem value="none">None</SelectItem>
+                          {!isLoadingAnaesthetists && anaesthetists.filter(a => a.name).map((anaesthetist) => (
                             <SelectItem key={anaesthetist.id} value={anaesthetist.name}>
                               {anaesthetist.name}
                               {anaesthetist.specialty && ` (${anaesthetist.specialty})`}
@@ -590,7 +590,7 @@ export const MedicalInformationSection: React.FC<MedicalInformationSectionProps>
               />
             </SelectTrigger>
             <SelectContent className="bg-white z-50 max-h-60 overflow-y-auto">
-              {!isLoadingReferees && !refereesError && referees.length > 0 && referees.map((referee) => (
+              {!isLoadingReferees && !refereesError && referees.length > 0 && referees.filter(r => r.name).map((referee) => (
                 <SelectItem key={referee.id} value={referee.name} className="hover:bg-gray-100">
                   <div className="flex flex-col">
                     <span className="font-medium">{referee.name}</span>

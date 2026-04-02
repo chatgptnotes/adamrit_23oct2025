@@ -539,7 +539,8 @@ const FinalBill = () => {
   const { billData, isLoading: isBillLoading, saveBill, isSaving } = useFinalBillData(visitId || '');
   const { generateAccommodationsFromShiftings, isGenerating } = useShiftingAccommodation();
   const queryClient = useQueryClient();
-  const { hospitalConfig, user } = useAuth();
+  const { hospitalConfig, user, isAdmin } = useAuth();
+  const [showHiddenLabTests, setShowHiddenLabTests] = useState(false);
   const [surgeons, setSurgeons] = useState<{ id: string; name: string }[]>([]);
   const [anaesthetists, setAnaesthetists] = useState<{ id: string; name: string }[]>([]);
   const [implantsList, setImplantsList] = useState<{ id: string; name: string }[]>([]);
@@ -6499,7 +6500,7 @@ INSTRUCTIONS:
     }
   };
 
-  // Function to delete saved lab test
+  // Function to delete saved lab test (admin only)
   const handleDeleteLabTest = async (labId: string) => {
     if (!confirm('Are you sure you want to delete this lab test?')) {
       return;
@@ -6523,6 +6524,54 @@ INSTRUCTIONS:
     } catch (error) {
       console.error('Error deleting lab test:', error);
       toast.error('Failed to delete lab test');
+    }
+  };
+
+  // Function to hide a wrongly entered lab test (available to all users)
+  const handleHideLabTest = async (labId: string) => {
+    if (!confirm('Hide this test? It will be removed from the bill but kept in the database for audit.')) {
+      return;
+    }
+
+    try {
+      const { error } = await (supabase as any)
+        .from('visit_labs')
+        .update({ is_hidden: true })
+        .eq('id', labId);
+
+      if (error) {
+        console.error('Error hiding lab test:', error);
+        toast.error('Failed to hide lab test');
+        return;
+      }
+
+      await fetchSavedLabData();
+      toast.success('Lab test hidden successfully');
+    } catch (error) {
+      console.error('Error hiding lab test:', error);
+      toast.error('Failed to hide lab test');
+    }
+  };
+
+  // Function to unhide a lab test (admin only)
+  const handleUnhideLabTest = async (labId: string) => {
+    try {
+      const { error } = await (supabase as any)
+        .from('visit_labs')
+        .update({ is_hidden: false })
+        .eq('id', labId);
+
+      if (error) {
+        console.error('Error unhiding lab test:', error);
+        toast.error('Failed to unhide lab test');
+        return;
+      }
+
+      await fetchSavedLabData();
+      toast.success('Lab test restored');
+    } catch (error) {
+      console.error('Error unhiding lab test:', error);
+      toast.error('Failed to unhide lab test');
     }
   };
 
@@ -19138,8 +19187,17 @@ Dr. Murali B K
                         {savedDataTab === 'labs' && (
                           <div>
                             <div className="flex justify-between items-center mb-3">
-                              <h5 className="font-medium text-gray-900">
-                                Saved Lab Tests ({savedLabData.length})
+                              <h5 className="font-medium text-gray-900 flex items-center gap-2">
+                                Saved Lab Tests ({savedLabData.filter(l => !l.is_hidden).length})
+                                {savedLabData.some(l => l.is_hidden) && (
+                                  <button
+                                    onClick={() => setShowHiddenLabTests(!showHiddenLabTests)}
+                                    className={`text-xs px-2 py-0.5 rounded ${showHiddenLabTests ? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-500'}`}
+                                    title="Toggle hidden tests"
+                                  >
+                                    {showHiddenLabTests ? `Hide ${savedLabData.filter(l => l.is_hidden).length} hidden` : `Show ${savedLabData.filter(l => l.is_hidden).length} hidden`}
+                                  </button>
+                                )}
                               </h5>
                               <div className="flex items-center gap-4">
                                 {selectedLabTests.length > 0 && (
@@ -19169,8 +19227,7 @@ Dr. Murali B K
                                   </>
                                 )}
                                 <div className="text-lg font-bold text-green-600">
-                                  Total: ₹{savedLabData.reduce((total, lab) => {
-                                    // Each lab entry represents an individual test with its own cost
+                                  Total: ₹{savedLabData.filter(l => !l.is_hidden).reduce((total, lab) => {
                                     const individualCost = parseFloat(lab.cost) || 0;
                                     return total + individualCost;
                                   }, 0)}
@@ -19197,15 +19254,19 @@ Dr. Murali B K
                                     </tr>
                                   </thead>
                                   <tbody>
-                                    {savedLabData.map((lab, index) => (
-                                      <tr key={lab.id || `lab-${lab.lab_id}-${lab.ordered_date}-${index}`} className="hover:bg-gray-50">
+                                    {savedLabData
+                                      .filter(lab => showHiddenLabTests ? true : !lab.is_hidden)
+                                      .map((lab, index) => (
+                                      <tr key={lab.id || `lab-${lab.lab_id}-${lab.ordered_date}-${index}`} className={`hover:bg-gray-50 ${lab.is_hidden ? 'opacity-50 bg-red-50' : ''}`}>
                                         <td className="border border-gray-300 px-2 py-2 text-center">
-                                          <input
-                                            type="checkbox"
-                                            checked={selectedLabTests.includes(lab.id)}
-                                            onChange={(e) => handleLabTestSelection(lab.id, e.target.checked)}
-                                            className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                                          />
+                                          {!lab.is_hidden && (
+                                            <input
+                                              type="checkbox"
+                                              checked={selectedLabTests.includes(lab.id)}
+                                              onChange={(e) => handleLabTestSelection(lab.id, e.target.checked)}
+                                              className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                                            />
+                                          )}
                                         </td>
                                         <td className="border border-gray-300 px-4 py-2 text-sm text-gray-600">
                                           <input
@@ -19213,25 +19274,49 @@ Dr. Murali B K
                                             value={lab.ordered_date ? (() => { const d = new Date(lab.ordered_date); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}T${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`; })() : ''}
                                             onChange={(e) => updateLabField(lab.id, 'ordered_date', e.target.value ? new Date(e.target.value).toISOString() : '')}
                                             className="w-full px-2 py-1 text-xs border border-gray-200 rounded focus:outline-none focus:border-blue-500"
+                                            disabled={lab.is_hidden}
                                           />
                                         </td>
                                         <td className="border border-gray-300 px-4 py-2 text-sm text-gray-900 font-medium">
                                           {lab.lab_name}
+                                          {lab.is_hidden && <span className="ml-2 text-xs text-red-500 font-normal">(hidden)</span>}
                                         </td>
                                         <td className="border border-gray-300 px-4 py-2 text-center text-sm font-medium text-green-600">
-                                          ₹{lab.cost || 0}
+                                          {lab.is_hidden ? <span className="line-through text-gray-400">₹{lab.cost || 0}</span> : `₹${lab.cost || 0}`}
                                         </td>
                                         <td className="border border-gray-300 px-4 py-2 text-sm text-center">
-                                          {user?.email !== 'user@ayushmanhospital.com' &&
-                                           user?.email !== 'user@hopehospital.com' && (
-                                            <button
-                                              onClick={() => handleDeleteLabTest(lab.id)}
-                                              className="text-red-600 hover:text-red-800 p-2 rounded-full hover:bg-red-50 transition-colors"
-                                              title="Delete lab test"
-                                            >
-                                              🗑️
-                                            </button>
-                                          )}
+                                          <div className="flex items-center justify-center gap-1">
+                                            {lab.is_hidden ? (
+                                              isAdmin && (
+                                                <button
+                                                  onClick={() => handleUnhideLabTest(lab.id)}
+                                                  className="text-green-600 hover:text-green-800 p-1 rounded-full hover:bg-green-50 transition-colors text-xs"
+                                                  title="Restore this test"
+                                                >
+                                                  ↩️
+                                                </button>
+                                              )
+                                            ) : (
+                                              <>
+                                                <button
+                                                  onClick={() => handleHideLabTest(lab.id)}
+                                                  className="text-orange-600 hover:text-orange-800 p-1 rounded-full hover:bg-orange-50 transition-colors"
+                                                  title="Hide wrongly entered test"
+                                                >
+                                                  👁️‍🗨️
+                                                </button>
+                                                {isAdmin && (
+                                                  <button
+                                                    onClick={() => handleDeleteLabTest(lab.id)}
+                                                    className="text-red-600 hover:text-red-800 p-1 rounded-full hover:bg-red-50 transition-colors"
+                                                    title="Delete lab test (admin only)"
+                                                  >
+                                                    🗑️
+                                                  </button>
+                                                )}
+                                              </>
+                                            )}
+                                          </div>
                                         </td>
                                       </tr>
                                     ))}

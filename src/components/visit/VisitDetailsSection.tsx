@@ -366,7 +366,7 @@ export const VisitDetailsSection: React.FC<VisitDetailsSectionProps> = ({
                 <SelectValue placeholder="Same as registration" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">Same as registration</SelectItem>
+                <SelectItem value="same_as_registration">Same as registration</SelectItem>
                 <SelectItem value="private">Private</SelectItem>
               </SelectContent>
             </Select>

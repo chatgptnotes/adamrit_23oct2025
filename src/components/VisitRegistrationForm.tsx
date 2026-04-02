@@ -301,7 +301,7 @@ export const VisitRegistrationForm: React.FC<VisitRegistrationFormProps> = ({
         console.log('Visit updated successfully:', updateData);
 
         // Save billing category override (non-blocking — column may not exist yet)
-        if (formData.billingCategoryOverride) {
+        if (formData.billingCategoryOverride && formData.billingCategoryOverride !== 'same_as_registration') {
           supabase.from('visits').update({ corporate: formData.billingCategoryOverride } as any)
             .eq('visit_id', existingVisit.visit_id).then(() => {});
         }
