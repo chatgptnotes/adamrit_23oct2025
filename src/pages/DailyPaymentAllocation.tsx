@@ -16,7 +16,7 @@ import {
   Wallet, Building2, IndianRupee, TrendingUp, TrendingDown,
   Clock, CheckCircle, AlertTriangle, Plus, Edit2, ToggleLeft,
   ToggleRight, Banknote, Calendar, RefreshCw, Save, PenLine,
-  GripVertical, X, SkipForward, Users, Upload, ExternalLink, FileSpreadsheet
+  GripVertical, X, SkipForward, Users, Upload, ExternalLink, FileSpreadsheet, Printer
 } from 'lucide-react';
 import {
   DndContext,
@@ -66,6 +66,21 @@ const getAgingBorder = (days: number) => {
 };
 
 const today = new Date().toISOString().split('T')[0];
+
+// Print helper — opens a new window with a styled HTML table
+const printTable = (title: string, headers: string[], rows: string[][], dateLabel?: string) => {
+  const fmtINR = (n: number) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(n);
+  void fmtINR; // used in caller; keep formatter accessible
+  const headerRow = headers.map(h => `<th style="border:1px solid #ccc;padding:6px 10px;background:#f5f5f5;font-size:12px;text-align:left">${h}</th>`).join('');
+  const bodyRows = rows.map(r => `<tr>${r.map(c => `<td style="border:1px solid #ccc;padding:5px 10px;font-size:12px">${c}</td>`).join('')}</tr>`).join('');
+  const html = `<!DOCTYPE html><html><head><title>${title}</title>
+<style>body{font-family:Arial,sans-serif;padding:20px;max-width:1000px;margin:0 auto}h2{margin-bottom:4px}table{width:100%;border-collapse:collapse;margin-top:12px}.meta{color:#666;font-size:13px;margin-bottom:10px}@media print{body{padding:10px}}</style>
+</head><body><h2>${title}</h2><p class="meta">${dateLabel || new Date().toLocaleDateString('en-IN')}</p>
+<table><thead><tr>${headerRow}</tr></thead><tbody>${bodyRows}</tbody></table>
+<script>window.onload=function(){window.print()}</script></body></html>`;
+  const w = window.open('', '_blank');
+  if (w) { w.document.write(html); w.document.close(); }
+};
 
 // ── Sortable row for Today's Allocation table ──
 interface SortableScheduleRowProps {
@@ -426,6 +441,49 @@ const DailyPaymentAllocation = () => {
   const surplus = totalAvailable - totalDue;
   const coveragePercent = totalDue > 0 ? Math.min(Math.round((totalAvailable / totalDue) * 100), 100) : 100;
 
+  // Print handlers
+  const printAvailableFunds = () => {
+    const headers = ['Account Name', 'Type', 'Hospital', 'As per Ledger', 'Actual Balance'];
+    const rows = funds.accounts.map(a => [
+      a.name, a.type, a.hospital,
+      formatINR(a.ledger_balance),
+      a.actual_balance !== null ? formatINR(a.actual_balance) : '—',
+    ]);
+    rows.push(['TOTAL', '', '', formatINR(funds.totalLedger), formatINR(funds.totalActual)]);
+    printTable('Available Funds', headers, rows, selectedDate);
+  };
+
+  const printTodayAllocation = () => {
+    const headers = ['#', 'Party', 'Daily Amount', 'Carry Forward', 'Total Due', 'Paid', 'Aging', 'Status'];
+    const active = sortedSchedule.filter(e => e.status !== 'skipped');
+    const rows = active.map((e, i) => [
+      String(i + 1), e.party_name,
+      formatINR(e.daily_amount), formatINR(e.carryforward_amount),
+      formatINR(e.daily_amount + e.carryforward_amount),
+      e.paid_amount > 0 ? formatINR(e.paid_amount) : '-',
+      `${e.days_overdue}d`, e.status,
+    ]);
+    rows.push(['', 'TOTAL',
+      formatINR(active.reduce((s, e) => s + e.daily_amount, 0)),
+      formatINR(active.reduce((s, e) => s + e.carryforward_amount, 0)),
+      formatINR(totalDue), formatINR(totalPaid), '', '',
+    ]);
+    printTable("Today's Payment Allocation", headers, rows, selectedDate);
+  };
+
+  const printPaymentHistory = () => {
+    const headers = ['Date', 'Party', 'Daily', 'Carry Fwd', 'Total Due', 'Paid', 'Aging', 'Status'];
+    const rows = history.map((e: ScheduleEntry) => [
+      new Date(e.schedule_date).toLocaleDateString('en-IN'), e.party_name,
+      formatINR(e.daily_amount),
+      e.carryforward_amount > 0 ? formatINR(e.carryforward_amount) : '-',
+      formatINR(e.daily_amount + e.carryforward_amount),
+      e.paid_amount > 0 ? formatINR(e.paid_amount) : '-',
+      `${e.days_overdue}d`, e.status === 'carried_forward' ? 'Carried' : e.status,
+    ]);
+    printTable('Payment History', headers, rows, `${historyFrom} to ${historyTo}`);
+  };
+
   // Tally stale check
   const tallyStale = funds.lastSyncAt
     ? (Date.now() - new Date(funds.lastSyncAt).getTime()) > 24 * 60 * 60 * 1000
@@ -730,9 +788,14 @@ const DailyPaymentAllocation = () => {
                 </Badge>
               )}
             </CardTitle>
+            <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={printAvailableFunds}>
+              <Printer className="h-3 w-3 mr-1" /> Print
+            </Button>
             <Button variant="outline" size="sm" onClick={() => setAddAccountOpen(true)}>
               <Plus className="h-3 w-3 mr-1" /> Add Account
             </Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent className="pt-0">
@@ -947,6 +1010,9 @@ const DailyPaymentAllocation = () => {
             <Card>
               <div className="px-4 py-2 border-b bg-gray-50 flex items-center justify-between">
                 <p className="text-xs text-muted-foreground">Drag rows to reorder priority. Click pencil to edit amount. Click X to skip.</p>
+                <Button variant="outline" size="sm" onClick={printTodayAllocation}>
+                  <Printer className="h-3 w-3 mr-1" /> Print
+                </Button>
               </div>
               <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
                 <Table>
@@ -1070,6 +1136,9 @@ const DailyPaymentAllocation = () => {
               <Label className="text-xs">To</Label>
               <Input type="date" value={historyTo} onChange={(e) => setHistoryTo(e.target.value)} className="w-40" />
             </div>
+            <Button variant="outline" size="sm" onClick={printPaymentHistory} className="mt-4">
+              <Printer className="h-3 w-3 mr-1" /> Print
+            </Button>
           </div>
           <Card>
             <Table>
