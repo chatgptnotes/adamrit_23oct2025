@@ -362,7 +362,7 @@ const DailyPaymentAllocation = () => {
   const [defPayeeName, setDefPayeeName] = useState('');
   const [defPayeeAmount, setDefPayeeAmount] = useState('');
   const [defPayeeSearchTerm, setDefPayeeSearchTerm] = useState('');
-  const { data: defPayeeResults = [] } = useMultiPayeeSearch(defPayeeSearchTerm, hospital);
+  const { data: defPayeeResults = [] } = useMultiPayeeSearch(defPayeeSearchTerm, selectedHospital);
 
   // Add manual account dialog
   const [addAccountOpen, setAddAccountOpen] = useState(false);
