@@ -188,12 +188,15 @@ export const useFundAccounts = (date: string) => {
 
           const { data: ledgers } = await (supabase as any)
             .from('tally_ledgers')
-            .select('id, name, closing_balance, parent_group, updated_at')
+            .select('id, name, closing_balance, parent_group, updated_at, is_hidden')
             .eq('company_id', config.id)
             .or('parent_group.ilike.%cash%,parent_group.ilike.%bank%');
 
           if (ledgers) {
             for (const l of ledgers) {
+              // Skip hidden/inactive ledgers
+              if (l.is_hidden) continue;
+
               const pg = (l.parent_group || '').toLowerCase();
               const type = pg.includes('cash') ? 'cash' as const : 'bank' as const;
 
