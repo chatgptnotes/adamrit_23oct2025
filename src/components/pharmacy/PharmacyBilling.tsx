@@ -104,7 +104,7 @@ interface Sale {
 }
 
 const PharmacyBilling: React.FC = () => {
-  const { hospitalConfig } = useAuth();
+  const { hospitalConfig, isAdmin } = useAuth();
   const [cart, setCart] = useState<CartItem[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [saleType, setSaleType] = useState<'antibiotic' | 'other'>('other');
@@ -669,7 +669,7 @@ const PharmacyBilling: React.FC = () => {
       tax_percentage: 0,
       total_amount: totals.totalAmount,
       payment_method: paymentMethod,
-      payment_status: 'COMPLETED',
+      payment_status: (totals.totalDiscount > 0 && !isAdmin) ? 'PENDING_DISCOUNT_APPROVAL' : 'COMPLETED',
       items: cart.map(item => {
         console.log('🔍 Cart item being mapped:', {
           medicine_id: item.medicine_id,
@@ -814,7 +814,11 @@ const PharmacyBilling: React.FC = () => {
     setIsProcessingPayment(false);
     clearCart();
 
-    alert(`✅ Sale completed successfully! Sale ID: ${response.sale_id}`);
+    if (totals.totalDiscount > 0 && !isAdmin) {
+      alert(`⏳ Bill submitted for admin discount approval. Sale ID: ${response.sale_id}`);
+    } else {
+      alert(`✅ Sale completed successfully! Sale ID: ${response.sale_id}`);
+    }
   };
 
   const filteredMedicines = searchResults.filter(medicine =>
@@ -1665,6 +1669,11 @@ const PharmacyBilling: React.FC = () => {
                   />
                 </div>
               </div>
+              {orderDiscount > 0 && !isAdmin && (
+                <div className="bg-amber-50 border border-amber-200 rounded-md px-3 py-2 text-xs text-amber-800">
+                  <strong>Admin approval required.</strong> This bill will be saved as pending until an admin approves the discount.
+                </div>
+              )}
               {totals.totalDiscount > 0 && (
                 <div className="flex justify-between text-sm text-gray-500">
                   <span>Total Discount:</span>
@@ -1722,6 +1731,11 @@ const PharmacyBilling: React.FC = () => {
                   <>
                     <Clock className="h-4 w-4 mr-2 animate-spin" />
                     Processing...
+                  </>
+                ) : totals.totalDiscount > 0 && !isAdmin ? (
+                  <>
+                    <Clock className="h-4 w-4 mr-2" />
+                    Submit for Approval - ₹{totals.totalAmount}
                   </>
                 ) : (
                   <>
