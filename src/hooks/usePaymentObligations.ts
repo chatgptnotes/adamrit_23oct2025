@@ -17,6 +17,7 @@ export interface PaymentObligation {
   payee_search_table: string | null; // e.g. hope_consultants, staff_members
   attachment_url: string | null; // uploaded Excel/Doc file URL
   google_sheet_link: string | null; // Google Sheets link for outstanding payments
+  company_id: string | null;
   created_at: string;
   updated_at: string;
 }

@@ -4,6 +4,7 @@ import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { hashPassword } from "@/utils/auth";
 import { logActivity } from "@/lib/activity-logger";
+import { useCompanies } from "@/hooks/useCompanies";
 
 // UI Components
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -77,6 +78,7 @@ interface UserRow {
   last_login: string | null;
   created_at: string | null;
   password_hash: string | null;
+  company_id: string | null;
 }
 
 interface UserFormData {
@@ -90,6 +92,7 @@ interface UserFormData {
   designation: string;
   is_active: boolean;
   must_change_password: boolean;
+  company_id: string;
 }
 
 interface CsvRow {
@@ -246,6 +249,7 @@ const EMPTY_FORM: UserFormData = {
   designation: "",
   is_active: true,
   must_change_password: true,
+  company_id: "",
 };
 
 // ---------------------------------------------------------------------------
@@ -282,6 +286,7 @@ function generateRandomPassword(): string {
 
 const UserManagement: React.FC = () => {
   const { toast } = useToast();
+  const { data: companies = [] } = useCompanies();
 
   // ---- Data state ----
   const [users, setUsers] = useState<UserRow[]>([]);
@@ -400,6 +405,7 @@ const UserManagement: React.FC = () => {
       designation: user.designation || "",
       is_active: user.is_active !== false,
       must_change_password: user.must_change_password === true,
+      company_id: user.company_id || "",
     });
     setShowPassword(false);
     setShowUserDialog(true);
@@ -437,6 +443,7 @@ const UserManagement: React.FC = () => {
         phone: form.phone.trim() || null,
         role: form.role,
         hospital_type: form.hospital_type,
+        company_id: form.company_id || null,
         department: form.department.trim() || null,
         designation: form.designation.trim() || null,
         is_active: form.is_active,
@@ -814,6 +821,7 @@ const UserManagement: React.FC = () => {
                   <TableHead>Phone</TableHead>
                   <TableHead>Role</TableHead>
                   <TableHead>Hospital</TableHead>
+                  <TableHead>Company</TableHead>
                   <TableHead>Department</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Last Login</TableHead>
@@ -845,6 +853,9 @@ const UserManagement: React.FC = () => {
                       </TableCell>
                       <TableCell className="capitalize">
                         {user.hospital_type || "-"}
+                      </TableCell>
+                      <TableCell className="text-xs">
+                        {user.company_id ? (companies.find(c => c.id === user.company_id)?.company_name || '-') : '-'}
                       </TableCell>
                       <TableCell>{user.department || "-"}</TableCell>
                       <TableCell>
@@ -1095,6 +1106,27 @@ const UserManagement: React.FC = () => {
                   <SelectContent>
                     <SelectItem value="hope">Hope</SelectItem>
                     <SelectItem value="ayushman">Ayushman</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Company */}
+              <div className="space-y-1">
+                <Label>Company</Label>
+                <Select
+                  value={form.company_id || "none"}
+                  onValueChange={(v) =>
+                    setForm((f) => ({ ...f, company_id: v === "none" ? "" : v }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select company" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Not assigned</SelectItem>
+                    {companies.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>{c.company_name}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>

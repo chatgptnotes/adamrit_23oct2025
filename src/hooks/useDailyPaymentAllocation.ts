@@ -19,6 +19,7 @@ export interface ScheduleEntry {
   paid_by: string | null;
   notes: string | null;
   hospital_name: string;
+  company_id: string | null;
 }
 
 export interface BankAccount {

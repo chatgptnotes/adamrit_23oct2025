@@ -48,6 +48,7 @@ import {
   type SubAllocation,
 } from '@/hooks/useDailyPaymentAllocation';
 import { usePaymentObligations, usePayeeSearch, useMultiPayeeSearch, useObligationDefaultPayees, type PaymentObligation, type DefaultPayee } from '@/hooks/usePaymentObligations';
+import { useCompanies } from '@/hooks/useCompanies';
 
 const formatINR = (n: number) =>
   new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(n);
@@ -92,6 +93,7 @@ interface SortableScheduleRowProps {
   editNotes: string;
   skipConfirmId: string | null;
   subAllocations: SubAllocation[];
+  companyName: string;
   onStartEdit: () => void;
   onSaveEdit: () => void;
   onCancelEdit: () => void;
@@ -105,7 +107,7 @@ interface SortableScheduleRowProps {
 
 const SortableScheduleRow = ({
   entry, idx, isEditing, editAmount, editNotes, skipConfirmId,
-  subAllocations,
+  subAllocations, companyName,
   onStartEdit, onSaveEdit, onCancelEdit, onEditAmountChange, onEditNotesChange,
   onPay, onSkipConfirm, onSkipCancel, onSkip,
 }: SortableScheduleRowProps) => {
@@ -154,6 +156,7 @@ const SortableScheduleRow = ({
           </div>
         )}
       </TableCell>
+      <TableCell className="text-xs text-muted-foreground">{companyName || '-'}</TableCell>
       <TableCell className="text-right">
         {isEditing ? (
           <Input
@@ -237,6 +240,7 @@ const SortableScheduleRow = ({
 interface SortableObligationRowProps {
   ob: PaymentObligation;
   deleteConfirmId: string | null;
+  companyName: string;
   onEdit: () => void;
   onDeleteConfirm: () => void;
   onDeleteCancel: () => void;
@@ -245,7 +249,7 @@ interface SortableObligationRowProps {
 }
 
 const SortableObligationRow = ({
-  ob, deleteConfirmId, onEdit, onDeleteConfirm, onDeleteCancel, onDelete, onToggleActive,
+  ob, deleteConfirmId, companyName, onEdit, onDeleteConfirm, onDeleteCancel, onDelete, onToggleActive,
 }: SortableObligationRowProps) => {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: ob.id });
   const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 };
@@ -261,6 +265,7 @@ const SortableObligationRow = ({
         <div className="font-medium">{ob.party_name}</div>
         <div className="text-xs text-muted-foreground capitalize">{ob.sub_category || '-'}</div>
       </TableCell>
+      <TableCell className="text-xs text-muted-foreground">{companyName || '-'}</TableCell>
       <TableCell>
         {ob.payee_name ? (
           <span className="text-sm">{ob.payee_name}</span>
@@ -323,6 +328,12 @@ const SortableObligationRow = ({
 const DailyPaymentAllocation = () => {
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin' || user?.role === 'super_admin';
+  const { data: companies = [] } = useCompanies();
+  const companyNameMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    companies.forEach(c => { map[c.id] = c.company_name; });
+    return map;
+  }, [companies]);
 
   const [selectedDate, setSelectedDate] = useState(today);
   const [selectedHospital, setSelectedHospital] = useState('hope');
@@ -351,7 +362,7 @@ const DailyPaymentAllocation = () => {
     party_name: '', category: 'variable' as 'fixed' | 'variable',
     sub_category: 'other', default_daily_amount: '',
     priority: '10', notes: '', payee_name: '', payee_search_table: '',
-    attachment_url: '', google_sheet_link: '',
+    attachment_url: '', google_sheet_link: '', company_id: null as string | null,
   });
 
   // Payee search for sub-payments (consultant, RMO, staff)
@@ -670,7 +681,7 @@ const DailyPaymentAllocation = () => {
     }
     setAddDialogOpen(false);
     setEditingObligationId(null);
-    setNewObligation({ party_name: '', category: 'variable', sub_category: 'other', default_daily_amount: '', priority: '10', notes: '', payee_name: '', payee_search_table: '', attachment_url: '', google_sheet_link: '' });
+    setNewObligation({ party_name: '', category: 'variable', sub_category: 'other', default_daily_amount: '', priority: '10', notes: '', payee_name: '', payee_search_table: '', attachment_url: '', google_sheet_link: '', company_id: null });
   };
 
   const handleEditObligation = (ob: PaymentObligation) => {
@@ -1026,6 +1037,7 @@ const DailyPaymentAllocation = () => {
                       <TableHead className="w-8"></TableHead>
                       <TableHead className="w-10">#</TableHead>
                       <TableHead>Party</TableHead>
+                      <TableHead>Company</TableHead>
                       <TableHead className="text-right">Daily Amount</TableHead>
                       <TableHead className="text-right">Carry Forward</TableHead>
                       <TableHead className="text-right">Total Due</TableHead>
@@ -1047,6 +1059,7 @@ const DailyPaymentAllocation = () => {
                           editNotes={editScheduleNotes}
                           skipConfirmId={skipConfirmId}
                           subAllocations={allSubAllocations.filter(sa => sa.schedule_id === entry.id)}
+                          companyName={entry.company_id ? (companyNameMap[entry.company_id] || '') : ''}
                           onStartEdit={() => startEditSchedule(entry)}
                           onSaveEdit={saveEditSchedule}
                           onCancelEdit={() => setEditingScheduleId(null)}
@@ -1059,7 +1072,7 @@ const DailyPaymentAllocation = () => {
                         />
                       ))}
                       <TableRow className="bg-gray-50 font-bold">
-                        <TableCell colSpan={3}>TOTAL</TableCell>
+                        <TableCell colSpan={4}>TOTAL</TableCell>
                         <TableCell className="text-right font-mono">{formatINR(sortedSchedule.filter(e => e.status !== 'skipped').reduce((s, e) => s + e.daily_amount, 0))}</TableCell>
                         <TableCell className="text-right font-mono text-red-600">{formatINR(sortedSchedule.filter(e => e.status !== 'skipped').reduce((s, e) => s + e.carryforward_amount, 0))}</TableCell>
                         <TableCell className="text-right font-mono">{formatINR(totalDue)}</TableCell>
@@ -1078,7 +1091,7 @@ const DailyPaymentAllocation = () => {
         <TabsContent value="master" className="mt-4 space-y-4">
           <div className="flex justify-between items-center">
             <h3 className="text-lg font-semibold">Payment Obligations</h3>
-            <Button onClick={() => { setEditingObligationId(null); setNewObligation({ party_name: '', category: 'variable', sub_category: 'other', default_daily_amount: '', priority: '10', notes: '', payee_name: '', payee_search_table: '', attachment_url: '', google_sheet_link: '' }); setAddDialogOpen(true); }}>
+            <Button onClick={() => { setEditingObligationId(null); setNewObligation({ party_name: '', category: 'variable', sub_category: 'other', default_daily_amount: '', priority: '10', notes: '', payee_name: '', payee_search_table: '', attachment_url: '', google_sheet_link: '', company_id: null }); setAddDialogOpen(true); }}>
               <Plus className="h-4 w-4 mr-1" /> Add Obligation
             </Button>
           </div>
@@ -1092,6 +1105,7 @@ const DailyPaymentAllocation = () => {
                   <TableRow>
                     <TableHead className="w-8"></TableHead>
                     <TableHead>Party Name</TableHead>
+                    <TableHead>Company</TableHead>
                     <TableHead>Payee</TableHead>
                     <TableHead>Category</TableHead>
                     <TableHead className="text-right">Daily Amount</TableHead>
@@ -1105,7 +1119,7 @@ const DailyPaymentAllocation = () => {
                   <TableBody>
                     {sortedObligations.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
+                        <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
                           No obligations configured. Click "Add Obligation" to get started.
                         </TableCell>
                       </TableRow>
@@ -1115,6 +1129,7 @@ const DailyPaymentAllocation = () => {
                           key={ob.id}
                           ob={ob}
                           deleteConfirmId={deleteConfirmId}
+                          companyName={ob.company_id ? (companyNameMap[ob.company_id] || '') : ''}
                           onEdit={() => handleEditObligation(ob)}
                           onDeleteConfirm={() => setDeleteConfirmId(ob.id)}
                           onDeleteCancel={() => setDeleteConfirmId(null)}
@@ -1439,6 +1454,17 @@ const DailyPaymentAllocation = () => {
             <DialogTitle>{editingObligationId ? 'Edit' : 'Add'} Payment Obligation</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
+            <div>
+              <Label>Company</Label>
+              <Select value={newObligation.company_id || ''} onValueChange={(v) => setNewObligation({ ...newObligation, company_id: v || null })}>
+                <SelectTrigger><SelectValue placeholder="Select company" /></SelectTrigger>
+                <SelectContent>
+                  {companies.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>{c.company_name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <div>
               <Label>Obligation Name *</Label>
               <Input
