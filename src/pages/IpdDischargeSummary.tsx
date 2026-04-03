@@ -1052,6 +1052,7 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
 
       // Load existing discharge summary data if available
       if (summary) {
+        setIsSummarySaved(true);
         if (summary.diagnosis) setDiagnosis(summary.diagnosis);
         if (summary.investigations) setInvestigations(summary.investigations);
         if (summary.stay_notes) setStayNotes(summary.stay_notes);
