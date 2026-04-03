@@ -144,6 +144,7 @@ export const DiscountTab: React.FC<DiscountTabProps> = ({
         applied_by: currentUser,
         updated_at: new Date().toISOString(),
         approval_status: isAdmin ? 'approved' : 'pending_approval',
+        hospital_name: hospitalConfig?.name || 'unknown',
         ...(isAdmin ? { approved_by: currentUser, approved_at: new Date().toISOString() } : { approved_by: null, approved_at: null, rejection_reason: null })
       };
 
