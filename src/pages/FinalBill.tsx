@@ -2885,6 +2885,18 @@ const FinalBill = () => {
         }
       }
 
+      // If changing quantity directly, recalculate amount
+      if (field === 'quantity') {
+        const qty = Math.max(1, parseInt(value) || 1);
+        updateData.quantity = qty;
+        const currentService = savedClinicalServicesData.find(s => s.junction_id === junctionId);
+        if (currentService) {
+          const rate = currentService.rate_used || currentService.selectedRate || 0;
+          const numericRate = typeof rate === 'string' ? parseFloat(rate) : rate;
+          updateData.amount = numericRate * qty;
+        }
+      }
+
       const { error } = await supabase
         .from('visit_clinical_services')
         .update(updateData)
@@ -19675,20 +19687,31 @@ Dr. Murali B K
                                           ₹{parseFloat(service.selectedRate || service.rate_used || service.amount) || 0}
                                         </td>
                                         <td className="border border-gray-300 px-2 py-2 text-sm text-center font-medium">
-                                          {(() => {
-                                            if (!service.start_date || !service.end_date) return 0;
-                                            const start = new Date(service.start_date);
-                                            const end = new Date(service.end_date);
-                                            return Math.max(1, Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1);
-                                          })()}
+                                          <input
+                                            type="number"
+                                            min="1"
+                                            value={(() => {
+                                              if (service.quantity && service.quantity > 0) return service.quantity;
+                                              if (!service.start_date || !service.end_date) return 1;
+                                              const start = new Date(service.start_date);
+                                              const end = new Date(service.end_date);
+                                              return Math.max(1, Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+                                            })()}
+                                            onChange={(e) => updateClinicalServiceField(service.junction_id, 'quantity', e.target.value)}
+                                            className="w-16 text-center border-0 bg-transparent text-sm font-medium focus:outline-none focus:ring-1 focus:ring-blue-500 rounded"
+                                          />
                                         </td>
                                         <td className="border border-gray-300 px-4 py-2 text-sm font-medium text-green-600">
                                           ₹{(() => {
-                                            if (!service.start_date || !service.end_date) return 0;
                                             const rate = parseFloat(service.selectedRate || service.rate_used || service.amount) || 0;
-                                            const start = new Date(service.start_date);
-                                            const end = new Date(service.end_date);
-                                            const qty = Math.max(1, Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+                                            let qty = 1;
+                                            if (service.quantity && service.quantity > 0) {
+                                              qty = service.quantity;
+                                            } else if (service.start_date && service.end_date) {
+                                              const start = new Date(service.start_date);
+                                              const end = new Date(service.end_date);
+                                              qty = Math.max(1, Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+                                            }
                                             return (rate * qty).toLocaleString('en-IN');
                                           })()}
                                         </td>

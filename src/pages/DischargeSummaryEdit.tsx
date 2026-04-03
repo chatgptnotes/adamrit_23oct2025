@@ -3442,7 +3442,10 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
                   <Input
                     id="admissionDate"
                     value={editablePatientData.admissionDate || ''}
-                    onChange={(e) => setEditablePatientData({...editablePatientData, admissionDate: e.target.value})}
+                    readOnly
+                    disabled
+                    className="bg-gray-100 cursor-not-allowed"
+                    title="Date of admission cannot be changed"
                   />
                 </div>
               </div>

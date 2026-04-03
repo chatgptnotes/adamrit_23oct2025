@@ -186,6 +186,9 @@ const IpdDischargeSummary = () => {
     corporateType: ''
   });
 
+  // Track whether a saved discharge summary was loaded (to lock dates after save)
+  const [isSummarySaved, setIsSummarySaved] = useState(false);
+
   // Diagnosis States
   const [diagnosis, setDiagnosis] = useState('');
 
@@ -965,6 +968,7 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
         }
 
         console.log('📋 Found existing discharge summary:', summaryData.id);
+        setIsSummarySaved(true);
 
         // Extract data from JSONB columns
         const medicationsData = summaryData.discharge_medications || [];
@@ -1815,6 +1819,7 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
       });
 
       console.log('🎉 IPD discharge summary saved to database successfully!');
+      setIsSummarySaved(true);
 
       toast({
         title: "Success",
@@ -3483,7 +3488,10 @@ DD/MM/YYYY:-Test Category: Test1:Value1 unit, Test2:Value2 unit`);
                 <Input
                   type="date"
                   value={patientInfo.doa}
-                  onChange={(e) => setPatientInfo({...patientInfo, doa: e.target.value})}
+                  readOnly
+                  disabled
+                  className="bg-gray-100 cursor-not-allowed"
+                  title="Date of admission cannot be changed"
                 />
               </div>
             </div>
@@ -3647,7 +3655,10 @@ DD/MM/YYYY:-Test Category: Test1:Value1 unit, Test2:Value2 unit`);
               <Input
                 type="date"
                 value={patientInfo.doa}
-                onChange={(e) => setPatientInfo({...patientInfo, doa: e.target.value})}
+                readOnly
+                disabled
+                className="bg-gray-100 cursor-not-allowed"
+                title="Date of admission cannot be changed"
               />
             </div>
             <div className="space-y-2">
@@ -3660,11 +3671,15 @@ DD/MM/YYYY:-Test Category: Test1:Value1 unit, Test2:Value2 unit`);
               />
             </div>
             <div className="space-y-2">
-              <Label>Date Of Discharge:</Label>
+              <Label>Date Of Discharge:{isSummarySaved && <span className="text-xs text-gray-500 ml-1">(locked)</span>}</Label>
               <Input
                 type="date"
                 value={patientInfo.dateOfDischarge}
-                onChange={(e) => setPatientInfo({...patientInfo, dateOfDischarge: e.target.value})}
+                onChange={(e) => !isSummarySaved && setPatientInfo({...patientInfo, dateOfDischarge: e.target.value})}
+                readOnly={isSummarySaved}
+                disabled={isSummarySaved}
+                className={isSummarySaved ? "bg-gray-100 cursor-not-allowed" : ""}
+                title={isSummarySaved ? "Discharge date cannot be changed after summary is saved" : ""}
               />
             </div>
             <div className="space-y-2">
