@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate, useSearchParams, Navigate } from 'react-router-dom';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { FileText, AlertCircle, Plus, Edit, Eye, Trash2, X, ChevronLeft, ChevronRight, Download, Upload } from 'lucide-react';
+import { FileText, AlertCircle, Plus, Edit, Eye, Trash2, X, ChevronLeft, ChevronRight, Download, Upload, EyeOff } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePermissions } from '@/hooks/usePermissions';
@@ -36,6 +36,7 @@ interface CghsSurgery {
   private: string | null;
   bhopal_nabh_rate: string | null;
   bhopal_non_nabh_rate: string | null;
+  is_active: boolean;
 }
 
 const CghsSurgeryMaster = () => {
@@ -82,6 +83,7 @@ const CghsSurgeryMaster = () => {
   const [deletingSurgery, setDeletingSurgery] = useState<CghsSurgery | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
+  const [showInactive, setShowInactive] = useState(false);
 
   // Create form state
   const [createFormData, setCreateFormData] = useState({
@@ -118,7 +120,7 @@ const CghsSurgeryMaster = () => {
 
   // Fetch CGHS surgeries from database with pagination
   const { data: cghsSurgeries, isLoading, error } = useQuery({
-    queryKey: ['cghs-surgeries', searchTerm, currentPage, itemsPerPage],
+    queryKey: ['cghs-surgeries', searchTerm, currentPage, itemsPerPage, showInactive],
     queryFn: async () => {
       const from = (currentPage - 1) * itemsPerPage;
       const to = from + itemsPerPage - 1;
@@ -126,6 +128,11 @@ const CghsSurgeryMaster = () => {
       let query = supabase
         .from('cghs_surgery')
         .select('*', { count: 'exact' });
+
+      // Filter by active status (only show active by default)
+      if (!showInactive) {
+        query = query.eq('is_active', true);
+      }
 
       // Apply search filter BEFORE pagination
       if (searchTerm && searchTerm.trim()) {
@@ -235,6 +242,24 @@ const CghsSurgeryMaster = () => {
       toast.error('Failed to delete CGHS surgery');
     } finally {
       setIsDeleting(false);
+    }
+  };
+
+  const handleToggleActive = async (surgery: CghsSurgery) => {
+    try {
+      const newStatus = !surgery.is_active;
+      const { error } = await supabase
+        .from('cghs_surgery')
+        .update({ is_active: newStatus } as any)
+        .eq('id', surgery.id);
+
+      if (error) throw error;
+
+      toast.success(`Surgery "${surgery.name}" ${newStatus ? 'activated' : 'deactivated'} successfully`);
+      queryClient.invalidateQueries({ queryKey: ['cghs-surgeries'] });
+    } catch (error) {
+      console.error('Error toggling surgery status:', error);
+      toast.error('Failed to update surgery status');
     }
   };
 
@@ -475,6 +500,15 @@ const CghsSurgeryMaster = () => {
                   </SelectContent>
                 </Select>
               </div>
+              <label className="flex items-center gap-2 cursor-pointer text-sm font-normal">
+                <input
+                  type="checkbox"
+                  checked={showInactive}
+                  onChange={(e) => { setShowInactive(e.target.checked); setCurrentPage(1); }}
+                  className="rounded border-gray-300"
+                />
+                Show Inactive
+              </label>
               {canEditMasters && (
                 <Button variant="outline" size="sm" onClick={handleExport}>
                   <Download className="h-4 w-4 mr-2" />
@@ -525,8 +559,11 @@ const CghsSurgeryMaster = () => {
                 </thead>
                 <tbody>
                   {cghsSurgeries.map((surgery) => (
-                    <tr key={surgery.id} className="border-b hover:bg-gray-50">
-                      <td className="p-3 font-medium text-gray-900">{surgery.name}</td>
+                    <tr key={surgery.id} className={`border-b hover:bg-gray-50 ${!surgery.is_active ? 'opacity-50 bg-gray-100' : ''}`}>
+                      <td className="p-3 font-medium text-gray-900">
+                        {surgery.name}
+                        {!surgery.is_active && <span className="ml-2 text-xs text-red-500 font-normal">(Inactive)</span>}
+                      </td>
                       <td className="p-3 text-gray-600">{surgery.code || '-'}</td>
                       <td className="p-3 text-gray-600">{surgery.category || '-'}</td>
                       <td className="p-3 text-gray-600">{surgery.NABH_NABL_Rate || '-'}</td>
@@ -553,6 +590,15 @@ const CghsSurgeryMaster = () => {
                               title="Edit surgery"
                             >
                               <Edit className="h-4 w-4" />
+                            </button>
+                          )}
+                          {canEditMasters && (
+                            <button
+                              onClick={() => handleToggleActive(surgery)}
+                              className={`p-1 ${surgery.is_active ? 'text-orange-600 hover:text-orange-800' : 'text-green-600 hover:text-green-800'}`}
+                              title={surgery.is_active ? 'Make inactive' : 'Make active'}
+                            >
+                              <EyeOff className="h-4 w-4" />
                             </button>
                           )}
                           {canEditMasters && (

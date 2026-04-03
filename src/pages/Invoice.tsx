@@ -929,7 +929,7 @@ const Invoice = () => {
         const usesBhopaliNABHRate = hasCorporate && (corporate.includes('mp police') || corporate.includes('ordnance factory'));
         const usesNABHRate = hasCorporate && !usesNonNABHRate && !usesBhopaliNABHRate;
 
-        labOrdersData.forEach((visitLab) => {
+        labOrdersData.filter(l => !l.is_hidden).forEach((visitLab) => {
           const labDetail = visitLab.lab;
           const quantity = visitLab.quantity || 1;
 
@@ -1155,7 +1155,8 @@ const Invoice = () => {
       });
 
       // USE STORED COST from visit_labs table (same as Final Bill)
-      labOrdersData.forEach((visitLab, index) => {
+      // Skip hidden lab tests - they should not appear in the bill
+      labOrdersData.filter(l => !l.is_hidden).forEach((visitLab, index) => {
         const labDetail = visitLab.lab;
 
         // Use the stored cost from visit_labs table instead of recalculating

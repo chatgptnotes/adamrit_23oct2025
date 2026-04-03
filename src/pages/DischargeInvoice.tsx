@@ -97,7 +97,7 @@ const DischargeInvoice = () => {
       ]);
 
       // Calculate totals
-      const labTotal = labData.data?.reduce((sum, item) => sum + (parseFloat(item.cost || '0') || 0), 0) || 0;
+      const labTotal = labData.data?.filter(item => !item.is_hidden).reduce((sum, item) => sum + (parseFloat(item.cost || '0') || 0), 0) || 0;
       const radiologyTotal = radiologyData.data?.reduce((sum, item) => sum + (parseFloat(item.cost || '0') || 0), 0) || 0;
       const medicationTotal = medicationData.data?.reduce((sum, item) => sum + (parseFloat(item.cost || '0') || 0), 0) || 0;
       const clinicalTotal = clinicalData.data?.reduce((sum, item) => sum + (parseFloat(item.amount || '0') || 0), 0) || 0;
@@ -164,7 +164,7 @@ const DischargeInvoice = () => {
       // Calculate category subtotals
       const categoryTotals: any[] = [];
 
-      const labTotal = labData.data?.reduce((sum, item) => sum + (parseFloat(item.cost || '0') || 0), 0) || 0;
+      const labTotal = labData.data?.filter(item => !item.is_hidden).reduce((sum, item) => sum + (parseFloat(item.cost || '0') || 0), 0) || 0;
       if (labTotal > 0) {
         categoryTotals.push({
           description: 'Laboratory Charges',

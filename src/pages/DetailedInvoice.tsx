@@ -1548,7 +1548,7 @@ const DetailedInvoice = () => {
       console.log('🔩 Implant orders:', visitData.implantOrders);
 
       // Calculate total amount from all services
-      const labTotal = visitData.labOrders.reduce((sum, order) => sum + ((order.lab?.private && order.lab.private > 0) ? order.lab.private : 100), 0);
+      const labTotal = visitData.labOrders.filter(order => !order.is_hidden).reduce((sum, order) => sum + ((order.lab?.private && order.lab.private > 0) ? order.lab.private : 100), 0);
       const radioTotal = visitData.radiologyOrders.reduce((sum, order) => {
         const cost = parseFloat(order.cost) || parseFloat(order.unit_rate) || 0;
         console.log('🔍 Radiology order cost:', { name: order.radiology?.name, cost, raw_cost: order.cost, unit_rate: order.unit_rate });
@@ -1651,7 +1651,7 @@ const DetailedInvoice = () => {
       qty: service.quantity || 1,
       rate: parseFloat(service.amount) || parseFloat(service.rate_used) || 0
     })) || [],
-    laboratory: visitData?.labOrders?.map((lab, index) => ({
+    laboratory: visitData?.labOrders?.filter(lab => !lab.is_hidden).map((lab, index) => ({
       item: lab.lab?.name || 'Lab Test',
       dateTime: lab.ordered_date ? format(new Date(lab.ordered_date), 'dd/MM/yyyy HH:mm:ss') : '',
       qty: 1,

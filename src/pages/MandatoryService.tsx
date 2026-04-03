@@ -32,6 +32,12 @@ const MandatoryService = () => {
     nabhBhopal: '',
     nonNabhRate: '',
     nonNabhBhopal: '',
+    tpaRateIpd: '',
+    privateRateIpd: '',
+    nabhRateIpd: '',
+    nabhBhopalIpd: '',
+    nonNabhRateIpd: '',
+    nonNabhBhopalIpd: '',
     status: 'Active'
   });
 
@@ -72,6 +78,12 @@ const MandatoryService = () => {
       nabhBhopal: service.nabh_bhopal?.toString() || '',
       nonNabhRate: service.non_nabh_rate?.toString() || '',
       nonNabhBhopal: service.non_nabh_bhopal?.toString() || '',
+      tpaRateIpd: service.tpa_rate_ipd?.toString() || '',
+      privateRateIpd: service.private_rate_ipd?.toString() || '',
+      nabhRateIpd: service.nabh_rate_ipd?.toString() || '',
+      nabhBhopalIpd: service.nabh_bhopal_ipd?.toString() || '',
+      nonNabhRateIpd: service.non_nabh_rate_ipd?.toString() || '',
+      nonNabhBhopalIpd: service.non_nabh_bhopal_ipd?.toString() || '',
       status: service.status
     });
   };
@@ -118,6 +130,12 @@ const MandatoryService = () => {
           nabh_bhopal: editFormData.nabhBhopal ? parseFloat(editFormData.nabhBhopal) : null,
           non_nabh_rate: editFormData.nonNabhRate ? parseFloat(editFormData.nonNabhRate) : null,
           non_nabh_bhopal: editFormData.nonNabhBhopal ? parseFloat(editFormData.nonNabhBhopal) : null,
+          tpa_rate_ipd: editFormData.tpaRateIpd ? parseFloat(editFormData.tpaRateIpd) : null,
+          private_rate_ipd: editFormData.privateRateIpd ? parseFloat(editFormData.privateRateIpd) : null,
+          nabh_rate_ipd: editFormData.nabhRateIpd ? parseFloat(editFormData.nabhRateIpd) : null,
+          nabh_bhopal_ipd: editFormData.nabhBhopalIpd ? parseFloat(editFormData.nabhBhopalIpd) : null,
+          non_nabh_rate_ipd: editFormData.nonNabhRateIpd ? parseFloat(editFormData.nonNabhRateIpd) : null,
+          non_nabh_bhopal_ipd: editFormData.nonNabhBhopalIpd ? parseFloat(editFormData.nonNabhBhopalIpd) : null,
           status: editFormData.status,
           updated_at: new Date().toISOString()
         })
@@ -299,12 +317,12 @@ const MandatoryService = () => {
                   <tr className="border-b">
                     <th className="text-left p-3 font-semibold text-gray-700">Service Name</th>
                     <th className="text-left p-3 font-semibold text-gray-700">Status</th>
-                    <th className="text-left p-3 font-semibold text-gray-700">TPA Rate</th>
-                    <th className="text-left p-3 font-semibold text-gray-700">Private Rate</th>
-                    <th className="text-left p-3 font-semibold text-gray-700">NABH Rate</th>
-                    <th className="text-left p-3 font-semibold text-gray-700">NABH Bhopal</th>
-                    <th className="text-left p-3 font-semibold text-gray-700">Non-NABH Rate</th>
-                    <th className="text-left p-3 font-semibold text-gray-700">Non-NABH Bhopal</th>
+                    <th className="text-left p-3 font-semibold text-gray-700">TPA Rate<br/><span className="text-xs font-normal text-gray-400">OPD / IPD</span></th>
+                    <th className="text-left p-3 font-semibold text-gray-700">Private Rate<br/><span className="text-xs font-normal text-gray-400">OPD / IPD</span></th>
+                    <th className="text-left p-3 font-semibold text-gray-700">NABH Rate<br/><span className="text-xs font-normal text-gray-400">OPD / IPD</span></th>
+                    <th className="text-left p-3 font-semibold text-gray-700">NABH Bhopal<br/><span className="text-xs font-normal text-gray-400">OPD / IPD</span></th>
+                    <th className="text-left p-3 font-semibold text-gray-700">Non-NABH Rate<br/><span className="text-xs font-normal text-gray-400">OPD / IPD</span></th>
+                    <th className="text-left p-3 font-semibold text-gray-700">Non-NABH Bhopal<br/><span className="text-xs font-normal text-gray-400">OPD / IPD</span></th>
                     <th className="text-left p-3 font-semibold text-gray-700">Created</th>
                     <th className="text-left p-3 font-semibold text-gray-700">Actions</th>
                   </tr>
@@ -325,22 +343,28 @@ const MandatoryService = () => {
                         </span>
                       </td>
                       <td className="p-3 font-medium text-blue-600">
-                        {service.tpa_rate ? `₹${service.tpa_rate.toLocaleString()}` : '-'}
+                        <div>{service.tpa_rate ? `₹${service.tpa_rate.toLocaleString()}` : '-'}</div>
+                        {service.tpa_rate_ipd ? <div className="text-xs text-blue-400">IPD: ₹{service.tpa_rate_ipd.toLocaleString()}</div> : null}
                       </td>
                       <td className="p-3 font-medium text-green-600">
-                        {service.private_rate ? `₹${service.private_rate.toLocaleString()}` : '-'}
+                        <div>{service.private_rate ? `₹${service.private_rate.toLocaleString()}` : '-'}</div>
+                        {service.private_rate_ipd ? <div className="text-xs text-green-400">IPD: ₹{service.private_rate_ipd.toLocaleString()}</div> : null}
                       </td>
                       <td className="p-3 font-medium text-purple-600">
-                        {service.nabh_rate ? `₹${service.nabh_rate.toLocaleString()}` : '-'}
+                        <div>{service.nabh_rate ? `₹${service.nabh_rate.toLocaleString()}` : '-'}</div>
+                        {service.nabh_rate_ipd ? <div className="text-xs text-purple-400">IPD: ₹{service.nabh_rate_ipd.toLocaleString()}</div> : null}
                       </td>
                       <td className="p-3 font-medium text-indigo-600">
-                        {service.nabh_bhopal ? `₹${service.nabh_bhopal.toLocaleString()}` : '-'}
+                        <div>{service.nabh_bhopal ? `₹${service.nabh_bhopal.toLocaleString()}` : '-'}</div>
+                        {service.nabh_bhopal_ipd ? <div className="text-xs text-indigo-400">IPD: ₹{service.nabh_bhopal_ipd.toLocaleString()}</div> : null}
                       </td>
                       <td className="p-3 font-medium text-orange-600">
-                        {service.non_nabh_rate ? `₹${service.non_nabh_rate.toLocaleString()}` : '-'}
+                        <div>{service.non_nabh_rate ? `₹${service.non_nabh_rate.toLocaleString()}` : '-'}</div>
+                        {service.non_nabh_rate_ipd ? <div className="text-xs text-orange-400">IPD: ₹{service.non_nabh_rate_ipd.toLocaleString()}</div> : null}
                       </td>
                       <td className="p-3 font-medium text-pink-600">
-                        {service.non_nabh_bhopal ? `₹${service.non_nabh_bhopal.toLocaleString()}` : '-'}
+                        <div>{service.non_nabh_bhopal ? `₹${service.non_nabh_bhopal.toLocaleString()}` : '-'}</div>
+                        {service.non_nabh_bhopal_ipd ? <div className="text-xs text-pink-400">IPD: ₹{service.non_nabh_bhopal_ipd.toLocaleString()}</div> : null}
                       </td>
                       <td className="p-3 text-gray-600 text-sm">
                         {new Date(service.created_at).toLocaleDateString()}
@@ -516,6 +540,7 @@ const MandatoryService = () => {
                   required
                 />
               </div>
+              <h3 className="text-sm font-semibold text-gray-600 mt-2">OPD Rates</h3>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -593,6 +618,93 @@ const MandatoryService = () => {
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                     min="0"
                     step="1"
+                  />
+                </div>
+              </div>
+              <h3 className="text-sm font-semibold text-gray-600 mt-4 border-t pt-4">IPD Rates (leave blank to use OPD rate)</h3>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    TPA Rate IPD (₹)
+                  </label>
+                  <input
+                    type="number"
+                    value={editFormData.tpaRateIpd}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, tpaRateIpd: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    min="0"
+                    step="1"
+                    placeholder={editFormData.tpaRate || 'Same as OPD'}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Private Rate IPD (₹)
+                  </label>
+                  <input
+                    type="number"
+                    value={editFormData.privateRateIpd}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, privateRateIpd: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    min="0"
+                    step="1"
+                    placeholder={editFormData.privateRate || 'Same as OPD'}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    NABH Rate IPD (₹)
+                  </label>
+                  <input
+                    type="number"
+                    value={editFormData.nabhRateIpd}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, nabhRateIpd: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    min="0"
+                    step="1"
+                    placeholder={editFormData.nabhRate || 'Same as OPD'}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    NABH Bhopal IPD (₹)
+                  </label>
+                  <input
+                    type="number"
+                    value={editFormData.nabhBhopalIpd}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, nabhBhopalIpd: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    min="0"
+                    step="1"
+                    placeholder={editFormData.nabhBhopal || 'Same as OPD'}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Non-NABH Rate IPD (₹)
+                  </label>
+                  <input
+                    type="number"
+                    value={editFormData.nonNabhRateIpd}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, nonNabhRateIpd: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    min="0"
+                    step="1"
+                    placeholder={editFormData.nonNabhRate || 'Same as OPD'}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Non-NABH Bhopal IPD (₹)
+                  </label>
+                  <input
+                    type="number"
+                    value={editFormData.nonNabhBhopalIpd}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, nonNabhBhopalIpd: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    min="0"
+                    step="1"
+                    placeholder={editFormData.nonNabhBhopal || 'Same as OPD'}
                   />
                 </div>
               </div>

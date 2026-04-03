@@ -17,6 +17,7 @@ export const useSearchableCghsSurgery = (patientCorporate?: string) => {
       let query = supabase
         .from('cghs_surgery')
         .select('*')
+        .eq('is_active', true)
         .order('name');
 
       if (searchTerm) {

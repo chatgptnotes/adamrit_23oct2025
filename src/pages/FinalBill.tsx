@@ -3077,23 +3077,41 @@ const FinalBill = () => {
               if (item.lab_id) {
                 const { data: labDetails } = await supabase
                   .from('lab')
-                  .select('name, private, "CGHS_code", description')
+                  .select('name, private, "CGHS_code", description, "NABH_rates_in_rupee", "Non-NABH_rates_in_rupee", bhopal_nabh_rate, bhopal_non_nabh_rate')
                   .eq('id', item.lab_id)
                   .single();
+
+                // Determine correct rate based on corporate status
+                const corporate = (patientInfo?.corporate || '').toLowerCase().trim();
+                const hasCorp = corporate.length > 0 && corporate !== 'private';
+                let masterRate = labDetails?.private || 0;
+                if (hasCorp) {
+                  if (corporate.includes('cghs') || corporate.includes('echs')) {
+                    masterRate = labDetails?.['NABH_rates_in_rupee'] || labDetails?.private || 0;
+                  } else if (corporate.includes('esic')) {
+                    masterRate = labDetails?.['Non-NABH_rates_in_rupee'] || labDetails?.private || 0;
+                  } else if (corporate.includes('mp police') || corporate.includes('ordnance factory')) {
+                    masterRate = labDetails?.bhopal_nabh_rate || labDetails?.private || 0;
+                  } else if (corporate.includes('icici')) {
+                    masterRate = labDetails?.private || 0;
+                  } else {
+                    masterRate = labDetails?.['NABH_rates_in_rupee'] || labDetails?.private || 0;
+                  }
+                }
 
                 return {
                   ...item,
                   lab_name: labDetails?.name || 'Unknown Lab',
-                  cost: item.cost || ((labDetails?.private && labDetails.private > 0) ? labDetails.private : 0), // Preserve saved cost
-                  quantity: item.quantity || 1, // Preserve quantity from database
+                  cost: masterRate > 0 ? masterRate : (item.cost || 0), // Always use current master rate
+                  quantity: item.quantity || 1,
                   description: labDetails?.description || ''
                 };
               }
               return {
                 ...item,
                 lab_name: 'Unknown Lab',
-                cost: item.cost || 0, // Preserve saved cost
-                quantity: item.quantity || 1, // Preserve quantity from database
+                cost: item.cost || 0,
+                quantity: item.quantity || 1,
                 description: ''
               };
             })
@@ -3114,21 +3132,37 @@ const FinalBill = () => {
               if (item.radiology_id) {
                 const { data: radiologyDetails } = await supabase
                   .from('radiology')
-                  .select('name, description')
+                  .select('name, description, private, NABH_NABL_Rate, Non_NABH_NABL_Rate, bhopal_nabh')
                   .eq('id', item.radiology_id)
                   .single();
+
+                // Determine correct rate based on corporate status
+                const corporate = (patientInfo?.corporate || '').toLowerCase().trim();
+                const hasCorp = corporate.length > 0 && corporate !== 'private';
+                let masterRate = radiologyDetails?.private || 0;
+                if (hasCorp) {
+                  if (corporate.includes('cghs') || corporate.includes('echs')) {
+                    masterRate = radiologyDetails?.NABH_NABL_Rate || radiologyDetails?.private || 0;
+                  } else if (corporate.includes('esic')) {
+                    masterRate = radiologyDetails?.Non_NABH_NABL_Rate || radiologyDetails?.private || 0;
+                  } else if (corporate.includes('mp police') || corporate.includes('ordnance factory')) {
+                    masterRate = radiologyDetails?.bhopal_nabh || radiologyDetails?.private || 0;
+                  } else {
+                    masterRate = radiologyDetails?.NABH_NABL_Rate || radiologyDetails?.private || 0;
+                  }
+                }
 
                 return {
                   ...item,
                   radiology_name: radiologyDetails?.name || 'Unknown Radiology',
-                  cost: item.cost || 0,
+                  cost: masterRate > 0 ? masterRate : (item.cost || 0),
                   description: radiologyDetails?.description || ''
                 };
               }
               return {
                 ...item,
                 radiology_name: 'Unknown Radiology',
-                cost: 0,
+                cost: item.cost || 0,
                 description: ''
               };
             })
@@ -3226,6 +3260,16 @@ const FinalBill = () => {
       });
     }
   }, [visitId]);
+
+  // Re-fetch lab and radiology data when patientInfo becomes available
+  // This fixes the race condition where lab rates are loaded before corporate info is known
+  useEffect(() => {
+    if (visitId && patientInfo?.corporate) {
+      console.log('🔄 [PATIENT INFO LOADED] Re-fetching lab data with correct corporate rates:', patientInfo.corporate);
+      fetchSavedLabData().catch(err => console.error('❌ Lab re-fetch failed:', err));
+      fetchSavedRadiologyData().catch(err => console.error('❌ Radiology re-fetch failed:', err));
+    }
+  }, [patientInfo?.corporate]);
 
   // Periodic state verification to ensure data consistency
   useEffect(() => {
@@ -11434,6 +11478,10 @@ INSTRUCTIONS:
         let selectedRate = 0;
         let rateType = 'private'; // Default
 
+        // Determine if patient is IPD (for IPD-specific rates)
+        const patientType = (visitData?.patient_type || visitData?.patients?.patient_type || '').toLowerCase().trim();
+        const isIpd = patientType === 'ipd';
+
         // Get corporate for ICICI Lombard check
         const corporate = (patientInfo?.corporate || '').toLowerCase().trim();
         const hasCorporate = corporate.length > 0 && corporate !== 'private';
@@ -11447,23 +11495,23 @@ INSTRUCTIONS:
 
         // ICICI Lombard always uses private rate
         if (usesPrivateRate) {
-          selectedRate = item.private_rate || item.rate || item.amount || 0;
+          selectedRate = (isIpd && item.private_rate_ipd) || item.private_rate || item.rate || item.amount || 0;
           rateType = 'private';
         } else if (categoryLower.includes('corporate') || categoryLower.includes('company')) {
-          selectedRate = item.private_rate || item.rate || item.amount || 0;
+          selectedRate = (isIpd && item.private_rate_ipd) || item.private_rate || item.rate || item.amount || 0;
           rateType = 'corporate';
         } else if (categoryLower.includes('tpa') || categoryLower.includes('insurance')) {
-          selectedRate = item.tpa_rate || item.private_rate || item.rate || item.amount || 0;
+          selectedRate = (isIpd && item.tpa_rate_ipd) || item.tpa_rate || item.private_rate || item.rate || item.amount || 0;
           rateType = 'tpa';
         } else if (categoryLower.includes('cghs')) {
-          selectedRate = item.cghs_rate || item.private_rate || item.rate || item.amount || 0;
+          selectedRate = (isIpd && item.nabh_rate_ipd) || item.cghs_rate || item.private_rate || item.rate || item.amount || 0;
           rateType = 'cghs';
         } else if (categoryLower.includes('non_cghs') || categoryLower.includes('non-cghs')) {
-          selectedRate = item.non_cghs_rate || item.private_rate || item.rate || item.amount || 0;
+          selectedRate = (isIpd && item.non_nabh_rate_ipd) || item.non_cghs_rate || item.private_rate || item.rate || item.amount || 0;
           rateType = 'non_cghs';
         } else {
           // Default to private rate
-          selectedRate = item.private_rate || item.rate || item.amount || 0;
+          selectedRate = (isIpd && item.private_rate_ipd) || item.private_rate || item.rate || item.amount || 0;
           rateType = 'private';
         }
 
