@@ -158,6 +158,12 @@ const CameraUpload: React.FC<CameraUploadProps> = ({
   const [isListening, setIsListening] = useState(false);
   const recognitionRef = useRef<any>(null);
 
+  // Prescription transcription state
+  const [prescriptionResult, setPrescriptionResult] = useState<string | null>(null);
+  const [showPrescriptionModal, setShowPrescriptionModal] = useState(false);
+  const [transcribing, setTranscribing] = useState(false);
+  const [savingPrescription, setSavingPrescription] = useState(false);
+
   // Recent uploads state
   const [recentUploads, setRecentUploads] = useState<FileUploadRecord[]>([]);
 
@@ -202,15 +208,26 @@ const CameraUpload: React.FC<CameraUploadProps> = ({
 
   const startCamera = useCallback(async () => {
     try {
+      // Stop any existing stream first
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((track) => track.stop());
+        streamRef.current = null;
+      }
+
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode },
+        video: { facingMode, width: { ideal: 1280 }, height: { ideal: 720 } },
       });
       streamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
-        videoRef.current.play();
+        // Wait for video to be ready before marking camera active
+        videoRef.current.onloadedmetadata = () => {
+          videoRef.current?.play().catch(() => {});
+          setCameraActive(true);
+        };
+        // Fallback: mark active after short delay if metadata event doesn't fire
+        setTimeout(() => setCameraActive(true), 500);
       }
-      setCameraActive(true);
     } catch (err) {
       console.error('Camera access error:', err);
       toast({
@@ -233,9 +250,16 @@ const CameraUpload: React.FC<CameraUploadProps> = ({
   }, []);
 
   const switchCamera = useCallback(() => {
-    stopCamera();
+    // Stop stream but don't reset cameraActive — we want to restart with new facing mode
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+    }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
     setFacingMode((prev) => (prev === 'environment' ? 'user' : 'environment'));
-  }, [stopCamera]);
+  }, []);
 
   // Restart camera when facingMode changes while camera was active
   useEffect(() => {
@@ -255,10 +279,20 @@ const CameraUpload: React.FC<CameraUploadProps> = ({
   }, []);
 
   const capturePhoto = useCallback(() => {
-    if (!videoRef.current || !canvasRef.current) return;
+    if (!videoRef.current || !canvasRef.current) {
+      toast({ title: 'Camera not ready', description: 'Please wait for the camera to initialize.', variant: 'destructive' });
+      return;
+    }
 
     const video = videoRef.current;
     const canvas = canvasRef.current;
+
+    // Ensure video has loaded dimensions
+    if (!video.videoWidth || !video.videoHeight) {
+      toast({ title: 'Camera loading', description: 'Camera is still loading. Please try again in a moment.', variant: 'destructive' });
+      return;
+    }
+
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
 
@@ -274,12 +308,14 @@ const CameraUpload: React.FC<CameraUploadProps> = ({
           const url = URL.createObjectURL(blob);
           setPreviewUrl(url);
           stopCamera();
+        } else {
+          toast({ title: 'Capture failed', description: 'Could not capture photo. Please try again.', variant: 'destructive' });
         }
       },
       'image/jpeg',
       0.9
     );
-  }, [stopCamera]);
+  }, [stopCamera, toast]);
 
   // -------------------------------------------------------------------------
   // File upload handling (drag & drop + click)
@@ -553,6 +589,120 @@ Extract patient name if mentioned. Extract any ID/UHID if mentioned. Put the doc
   }, [patientSearch]);
 
   // -------------------------------------------------------------------------
+  // Prescription transcription using Gemini Vision
+  // -------------------------------------------------------------------------
+
+  const transcribePrescription = useCallback(async (imageBlob: Blob): Promise<string | null> => {
+    const geminiApiKey = import.meta.env.VITE_GEMINI_API_KEY;
+    if (!geminiApiKey) {
+      toast({ title: 'AI Unavailable', description: 'Gemini API key not configured.', variant: 'destructive' });
+      return null;
+    }
+
+    // Convert blob to base64
+    const base64 = await new Promise<string>((resolve) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const result = reader.result as string;
+        resolve(result.split(',')[1]); // Remove data:image/...;base64, prefix
+      };
+      reader.readAsDataURL(imageBlob);
+    });
+
+    const mimeType = imageBlob.type || 'image/jpeg';
+
+    const systemPrompt = `You are an expert pharmacist and medical transcription specialist. Analyze this prescription image and extract ALL medicines listed.
+
+Return the prescription in this EXACT format:
+
+PRESCRIPTION
+============
+Patient: [name if visible, otherwise "As per records"]
+Date: [date if visible, otherwise today's date]
+Doctor: [doctor name if visible]
+
+Medicines:
+1. [Medicine Name] - [Strength/Dose] - [Route] - [Frequency] - [Duration]
+2. [Medicine Name] - [Strength/Dose] - [Route] - [Frequency] - [Duration]
+...
+
+Instructions:
+- [Any special instructions visible on the prescription]
+
+Notes:
+- [Any additional notes]
+
+Rules:
+- Extract EVERY medicine visible in the prescription
+- Include strength (e.g., 500mg, 10mg)
+- Include route (Oral, IV, IM, Topical, etc.)
+- Include frequency (OD=once daily, BD=twice daily, TDS=thrice daily, QID=four times daily, SOS=as needed, HS=at bedtime)
+- Include duration (e.g., 5 days, 7 days, 2 weeks)
+- If any field is not clearly visible, write "as directed"
+- Use standard medical abbreviations`;
+
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiApiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{
+            parts: [
+              { text: systemPrompt },
+              { inline_data: { mime_type: mimeType, data: base64 } }
+            ]
+          }],
+          generationConfig: { temperature: 0.2, maxOutputTokens: 2000 },
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(`Gemini API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return data.candidates?.[0]?.content?.parts?.[0]?.text || null;
+  }, [toast]);
+
+  const savePrescriptionToPatient = useCallback(async (transcribedText: string) => {
+    if (!selectedPatient?.id || !transcribedText) return;
+
+    setSavingPrescription(true);
+    try {
+      // Save as a note/prescription record in file_uploads (update the most recent upload's notes)
+      const { data: recentUpload } = await (supabase as any)
+        .from('file_uploads')
+        .select('id')
+        .eq('patient_id', selectedPatient.id)
+        .eq('category', 'prescription')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (recentUpload) {
+        await (supabase as any)
+          .from('file_uploads')
+          .update({ notes: transcribedText })
+          .eq('id', recentUpload.id);
+      }
+
+      toast({
+        title: 'Prescription Saved',
+        description: `Transcribed prescription saved for ${selectedPatient.name}.`,
+      });
+      setShowPrescriptionModal(false);
+      setPrescriptionResult(null);
+    } catch (e) {
+      console.error('Error saving prescription:', e);
+      toast({ title: 'Save Failed', description: 'Could not save prescription.', variant: 'destructive' });
+    } finally {
+      setSavingPrescription(false);
+    }
+  }, [selectedPatient, toast]);
+
+  // -------------------------------------------------------------------------
   // Upload logic
   // -------------------------------------------------------------------------
 
@@ -637,6 +787,23 @@ Extract patient name if mentioned. Extract any ID/UHID if mentioned. Put the doc
         description: `${fileName} has been uploaded successfully.`,
       });
 
+      // If category is prescription and patient is selected, transcribe the prescription
+      if (category === 'prescription' && selectedPatient) {
+        setTranscribing(true);
+        try {
+          const transcription = await transcribePrescription(fileToUpload);
+          if (transcription) {
+            setPrescriptionResult(transcription);
+            setShowPrescriptionModal(true);
+          }
+        } catch (err) {
+          console.error('Prescription transcription error:', err);
+          toast({ title: 'Transcription Failed', description: 'Could not transcribe prescription. File was uploaded successfully.', variant: 'destructive' });
+        } finally {
+          setTranscribing(false);
+        }
+      }
+
       // Reset form and refresh gallery
       clearCapture();
       fetchRecentUploads();
@@ -659,6 +826,7 @@ Extract patient name if mentioned. Extract any ID/UHID if mentioned. Put the doc
     toast,
     clearCapture,
     fetchRecentUploads,
+    transcribePrescription,
   ]);
 
   // -------------------------------------------------------------------------
@@ -1104,11 +1272,67 @@ Extract patient name if mentioned. Extract any ID/UHID if mentioned. Put the doc
   // Main content
   // -------------------------------------------------------------------------
 
+  /** Prescription transcription modal */
+  const renderPrescriptionModal = () => (
+    <Dialog open={showPrescriptionModal} onOpenChange={setShowPrescriptionModal}>
+      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Sparkles className="h-5 w-5 text-purple-600" />
+            Transcribed Prescription
+            {selectedPatient && (
+              <Badge variant="outline" className="ml-2">{selectedPatient.name}</Badge>
+            )}
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 font-mono text-sm whitespace-pre-wrap max-h-[50vh] overflow-y-auto">
+            {prescriptionResult}
+          </div>
+          <div className="flex gap-2 justify-end">
+            <Button variant="outline" onClick={() => { setShowPrescriptionModal(false); setPrescriptionResult(null); }}>
+              Close
+            </Button>
+            <Button
+              onClick={() => {
+                if (prescriptionResult) {
+                  navigator.clipboard.writeText(prescriptionResult);
+                  toast({ title: 'Copied', description: 'Prescription copied to clipboard.' });
+                }
+              }}
+              variant="outline"
+            >
+              <FileText className="h-4 w-4 mr-2" />
+              Copy
+            </Button>
+            <Button
+              className="bg-green-600 hover:bg-green-700"
+              onClick={() => prescriptionResult && savePrescriptionToPatient(prescriptionResult)}
+              disabled={savingPrescription}
+            >
+              {savingPrescription ? (
+                <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Saving...</>
+              ) : (
+                'Save to Patient'
+              )}
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+
   const content = (
     <div className="space-y-4">
       {renderCamera()}
       {renderDropZone()}
       {renderPreview()}
+      {transcribing && (
+        <div className="flex items-center justify-center gap-3 p-4 bg-purple-50 border border-purple-200 rounded-lg">
+          <Loader2 className="h-5 w-5 animate-spin text-purple-600" />
+          <span className="text-sm font-medium text-purple-700">Transcribing prescription with AI...</span>
+        </div>
+      )}
       {renderAiSmartInput()}
       {renderAiLoading()}
       {renderAiConfirm()}
@@ -1123,33 +1347,39 @@ Extract patient name if mentioned. Extract any ID/UHID if mentioned. Put the doc
 
   if (isDialog) {
     return (
-      <Dialog open={open} onOpenChange={(val) => {
-        if (!val) stopCamera();
-        onOpenChange?.(val);
-      }}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Camera className="h-5 w-5 text-blue-600" />
-              Camera Capture & Upload
-            </DialogTitle>
-          </DialogHeader>
-          {content}
-        </DialogContent>
-      </Dialog>
+      <>
+        <Dialog open={open} onOpenChange={(val) => {
+          if (!val) stopCamera();
+          onOpenChange?.(val);
+        }}>
+          <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Camera className="h-5 w-5 text-blue-600" />
+                Camera Capture & Upload
+              </DialogTitle>
+            </DialogHeader>
+            {content}
+          </DialogContent>
+        </Dialog>
+        {renderPrescriptionModal()}
+      </>
     );
   }
 
   return (
-    <Card>
-      <CardHeader className="pb-3">
-        <CardTitle className="text-lg flex items-center gap-2">
-          <Camera className="h-5 w-5 text-blue-600" />
-          Camera Capture & Upload
-        </CardTitle>
-      </CardHeader>
-      <CardContent>{content}</CardContent>
-    </Card>
+    <>
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Camera className="h-5 w-5 text-blue-600" />
+            Camera Capture & Upload
+          </CardTitle>
+        </CardHeader>
+        <CardContent>{content}</CardContent>
+      </Card>
+      {renderPrescriptionModal()}
+    </>
   );
 };
 
