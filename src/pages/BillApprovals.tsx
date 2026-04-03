@@ -121,16 +121,18 @@ const BillApprovals = () => {
         data.map(async (disc: any) => {
           let patientName = 'Unknown';
           let visitId = '';
+          let registrationNumber = '';
           if (disc.visit_id) {
             const { data: visit } = await supabase
               .from('visits')
-              .select('visit_id, patient_id, patients(name)')
+              .select('visit_id, patient_id, patients(name, registration_number)')
               .eq('id', disc.visit_id)
               .single() as { data: any };
             if (visit?.patients?.name) patientName = visit.patients.name;
+            if (visit?.patients?.registration_number) registrationNumber = visit.patients.registration_number;
             if (visit?.visit_id) visitId = visit.visit_id;
           }
-          return { ...disc, patientName, visitIdStr: visitId };
+          return { ...disc, patientName, visitIdStr: visitId, registrationNumber };
         })
       );
       return enriched;
@@ -451,6 +453,7 @@ const BillApprovals = () => {
                     <table className="w-full text-sm">
                       <thead className="bg-gray-50">
                         <tr>
+                          <th className="p-3 text-left">Hospital</th>
                           <th className="p-3 text-left">Bill No</th>
                           <th className="p-3 text-left">Patient Name</th>
                           <th className="p-3 text-left">Category</th>
@@ -463,6 +466,11 @@ const BillApprovals = () => {
                       <tbody>
                         {filteredPending.map((bill: any) => (
                           <tr key={bill.id} className="border-t hover:bg-gray-50">
+                            <td className="p-3">
+                              <Badge className={bill.hospital_name === 'hope' ? 'bg-blue-100 text-blue-800 hover:bg-blue-100' : bill.hospital_name === 'ayushman' ? 'bg-green-100 text-green-800 hover:bg-green-100' : 'bg-gray-100 text-gray-800 hover:bg-gray-100'}>
+                                {bill.hospital_name === 'hope' ? 'Hope' : bill.hospital_name === 'ayushman' ? 'Ayushman' : bill.hospital_name || '-'}
+                              </Badge>
+                            </td>
                             <td className="p-3 font-mono font-medium">{bill.formatted_bill_no || bill.bill_no || '-'}</td>
                             <td className="p-3 font-medium">{bill.patientName}</td>
                             <td className="p-3">
@@ -520,6 +528,7 @@ const BillApprovals = () => {
                     <table className="w-full text-sm">
                       <thead className="bg-orange-50">
                         <tr>
+                          <th className="p-3 text-left">Hospital</th>
                           <th className="p-3 text-left">Patient</th>
                           <th className="p-3 text-right">Discount Amount</th>
                           <th className="p-3 text-left">Reason</th>
@@ -530,7 +539,15 @@ const BillApprovals = () => {
                       <tbody>
                         {pendingDiscounts.map((disc: any) => (
                           <tr key={disc.id} className="border-t hover:bg-orange-50/50">
-                            <td className="p-3 font-medium">{disc.patientName}</td>
+                            <td className="p-3">
+                              <Badge className={disc.hospital_name === 'hope' ? 'bg-blue-100 text-blue-800 hover:bg-blue-100' : disc.hospital_name === 'ayushman' ? 'bg-green-100 text-green-800 hover:bg-green-100' : 'bg-gray-100 text-gray-800 hover:bg-gray-100'}>
+                                {disc.hospital_name === 'hope' ? 'Hope' : disc.hospital_name === 'ayushman' ? 'Ayushman' : disc.hospital_name || '-'}
+                              </Badge>
+                            </td>
+                            <td className="p-3">
+                              <div className="font-medium">{disc.patientName}</div>
+                              {disc.registrationNumber && <div className="text-xs text-muted-foreground font-mono">{disc.registrationNumber}</div>}
+                            </td>
                             <td className="p-3 text-right font-mono font-semibold text-orange-700">
                               Rs. {(Number(disc.discount_amount) || 0).toLocaleString('en-IN')}
                             </td>
@@ -677,7 +694,14 @@ const BillApprovals = () => {
                         {/* Invoice Preview Card */}
                         <div className="bg-gradient-to-br from-gray-50 to-blue-50 p-4 border-b relative">
                           <div className="flex items-center justify-between mb-3">
-                            <FileText className="h-8 w-8 text-blue-400" />
+                            <div className="flex items-center gap-2">
+                              <FileText className="h-8 w-8 text-blue-400" />
+                              {bill.hospital_name && (
+                                <Badge className={bill.hospital_name === 'hope' ? 'bg-blue-100 text-blue-800 hover:bg-blue-100 text-xs' : 'bg-green-100 text-green-800 hover:bg-green-100 text-xs'}>
+                                  {bill.hospital_name === 'hope' ? 'Hope' : bill.hospital_name === 'ayushman' ? 'Ayushman' : bill.hospital_name}
+                                </Badge>
+                              )}
+                            </div>
                             <Badge className={
                               bill.status === 'FINALIZED'
                                 ? 'bg-green-100 text-green-800 hover:bg-green-100'
@@ -697,6 +721,12 @@ const BillApprovals = () => {
                               <span>Patient</span>
                               <span className="text-gray-700 font-medium truncate ml-2 max-w-[120px]">{bill.patientName}</span>
                             </div>
+                            {bill.registrationNumber && (
+                              <div className="flex justify-between">
+                                <span>Reg ID</span>
+                                <span className="text-gray-700 font-mono">{bill.registrationNumber}</span>
+                              </div>
+                            )}
                             <div className="flex justify-between">
                               <span>Category</span>
                               <span className="text-gray-700">{bill.category || '-'}</span>
