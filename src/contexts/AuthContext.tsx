@@ -54,7 +54,10 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   useEffect(() => {
     const savedUser = localStorage.getItem('hmis_user');
     const hasVisitedBefore = localStorage.getItem('hmis_visited');
-    
+
+    // Detect OAuth callback (URL has access_token in hash from Google redirect)
+    const isOAuthCallback = window.location.hash.includes('access_token');
+
     if (savedUser) {
       const parsedUser = JSON.parse(savedUser);
       // Add hospitalType if missing (for backward compatibility)
@@ -73,12 +76,16 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       }
       setUser(parsedUser);
     }
-    
-    // Show landing page only for first-time visitors
-    if (hasVisitedBefore) {
+
+    // Show landing page only for first-time visitors, skip it during OAuth callback
+    if (hasVisitedBefore || isOAuthCallback) {
       setShowLanding(false);
     }
-    setIsAuthLoading(false);
+
+    // Keep loading state during OAuth callback until onAuthStateChange fires
+    if (!isOAuthCallback) {
+      setIsAuthLoading(false);
+    }
   }, []);
 
   // Database authentication
@@ -188,6 +195,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   // Listen for Supabase Auth state changes (handles Google OAuth callback)
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('🔐 Auth state change:', event, session?.user?.email);
+
       if (event === 'SIGNED_IN' && session?.user?.email) {
         const googleEmail = session.user.email.toLowerCase();
         console.log('🔐 Google OAuth signed in:', googleEmail);
@@ -203,6 +212,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           console.error('❌ Google user not found in User table:', googleEmail);
           // Sign out of Supabase Auth since they're not an authorized user
           await supabase.auth.signOut();
+          setIsAuthLoading(false);
           return;
         }
 
@@ -216,11 +226,23 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
         setUser(appUser);
         localStorage.setItem('hmis_user', JSON.stringify(appUser));
+        localStorage.setItem('hmis_visited', 'true');
         setShowLanding(false);
+        setIsAuthLoading(false);
+
+        // Clean up the URL hash after processing OAuth callback
+        if (window.location.hash.includes('access_token')) {
+          window.history.replaceState(null, '', window.location.pathname);
+        }
 
         // Update last_login_at
         (supabase as any).from('User').update({ last_login_at: new Date().toISOString() }).eq('id', data.id).then(() => {});
         logActivity('user_login', { email: appUser.email, role: appUser.role, hospital: appUser.hospitalType, method: 'google' });
+      } else if (event === 'SIGNED_OUT' || event === 'TOKEN_REFRESHED') {
+        setIsAuthLoading(false);
+      } else {
+        // For any other event, ensure loading stops
+        setIsAuthLoading(false);
       }
     });
 
