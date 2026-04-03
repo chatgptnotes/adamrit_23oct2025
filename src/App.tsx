@@ -53,6 +53,7 @@ const getRoleDefaultRoute = (role: string): string => {
       return '/patient-dashboard';
     case 'superadmin':
     case 'super_admin':
+      return '/bill-approvals';
     case 'admin':
     default:
       return '/dashboard';
