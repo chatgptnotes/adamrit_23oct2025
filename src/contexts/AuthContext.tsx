@@ -15,6 +15,7 @@ interface User {
 interface AuthContextType {
   user: User | null;
   login: (credentials: { email: string; password: string }) => Promise<boolean>;
+  loginWithGoogle: () => Promise<void>;
   signup: (userData: { email: string; password: string; role: string; hospitalType: HospitalType }) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
   isAuthenticated: boolean;
@@ -83,43 +84,66 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   // Database authentication
   const login = async (credentials: { email: string; password: string }): Promise<boolean> => {
     try {
-      console.log('🔐 Login attempt for:', credentials.email);
+      // Staff pin login: blank email + @XXXX password
+      const isStaffPin = !credentials.email.trim() && credentials.password.startsWith('@') && credentials.password.length === 5;
 
-      const { data, error } = await supabase
-        .from('User')
-        .select('*')
-        .ilike('email', credentials.email.trim())
-        .single();
+      let data: any = null;
+      let error: any = null;
+
+      if (isStaffPin) {
+        const pin = credentials.password.substring(1); // Remove @ prefix
+        console.log('🔐 Staff pin login attempt');
+        const result = await supabase
+          .from('User')
+          .select('*')
+          .eq('staff_pin', pin)
+          .eq('hospital_type', 'ayushman')
+          .single();
+        data = result.data;
+        error = result.error;
+      } else {
+        console.log('🔐 Login attempt for:', credentials.email);
+        const result = await supabase
+          .from('User')
+          .select('*')
+          .ilike('email', credentials.email.trim())
+          .single();
+        data = result.data;
+        error = result.error;
+      }
 
       if (error || !data) {
         console.error('Login error:', error);
         return false;
       }
 
-      console.log('✅ User found, checking password...');
-      console.log('📋 Password type:', data.password.startsWith('$2') ? 'hashed' : 'plain');
+      // Staff pin login: pin already verified by the query, skip password check
+      if (!isStaffPin) {
+        console.log('✅ User found, checking password...');
+        console.log('📋 Password type:', data.password.startsWith('$2') ? 'hashed' : 'plain');
 
-      // Check if password is hashed (new users) or plain text (existing users)
-      let isPasswordValid = false;
+        // Check if password is hashed (new users) or plain text (existing users)
+        let isPasswordValid = false;
 
-      if (data.password.startsWith('$2')) {
-        // Hashed password - use bcrypt compare with setTimeout to prevent UI blocking
-        isPasswordValid = await new Promise<boolean>((resolve) => {
-          setTimeout(async () => {
-            const result = await comparePassword(credentials.password, data.password);
-            resolve(result);
-          }, 10);
-        });
-      } else {
-        // Plain text password - direct comparison (for backward compatibility)
-        isPasswordValid = data.password === credentials.password;
-      }
+        if (data.password.startsWith('$2')) {
+          // Hashed password - use bcrypt compare with setTimeout to prevent UI blocking
+          isPasswordValid = await new Promise<boolean>((resolve) => {
+            setTimeout(async () => {
+              const result = await comparePassword(credentials.password, data.password);
+              resolve(result);
+            }, 10);
+          });
+        } else {
+          // Plain text password - direct comparison (for backward compatibility)
+          isPasswordValid = data.password === credentials.password;
+        }
 
-      console.log('🔑 Password validation result:', isPasswordValid);
+        console.log('🔑 Password validation result:', isPasswordValid);
 
-      if (!isPasswordValid) {
-        console.error('❌ Invalid password');
-        return false;
+        if (!isPasswordValid) {
+          console.error('❌ Invalid password');
+          return false;
+        }
       }
 
       console.log('✅ Password valid, creating user session...');
@@ -147,6 +171,61 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       return false;
     }
   };
+
+  // Google OAuth login
+  const loginWithGoogle = useCallback(async () => {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: window.location.origin
+      }
+    });
+    if (error) {
+      console.error('Google login error:', error);
+    }
+  }, []);
+
+  // Listen for Supabase Auth state changes (handles Google OAuth callback)
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_IN' && session?.user?.email) {
+        const googleEmail = session.user.email.toLowerCase();
+        console.log('🔐 Google OAuth signed in:', googleEmail);
+
+        // Look up user in our User table
+        const { data, error } = await supabase
+          .from('User')
+          .select('*')
+          .ilike('email', googleEmail)
+          .single();
+
+        if (error || !data) {
+          console.error('❌ Google user not found in User table:', googleEmail);
+          // Sign out of Supabase Auth since they're not an authorized user
+          await supabase.auth.signOut();
+          return;
+        }
+
+        const appUser: User = {
+          id: data.id,
+          email: data.email,
+          username: data.email.split('@')[0],
+          role: data.role,
+          hospitalType: data.hospital_type || 'hope'
+        };
+
+        setUser(appUser);
+        localStorage.setItem('hmis_user', JSON.stringify(appUser));
+        setShowLanding(false);
+
+        // Update last_login_at
+        (supabase as any).from('User').update({ last_login_at: new Date().toISOString() }).eq('id', data.id).then(() => {});
+        logActivity('user_login', { email: appUser.email, role: appUser.role, hospital: appUser.hospitalType, method: 'google' });
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
 
   // Signup functionality
   const signup = async (userData: { email: string; password: string; role: string; hospitalType: HospitalType }): Promise<{ success: boolean; error?: string }> => {
@@ -209,17 +288,20 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     }
   };
 
-  const logout = () => {
+  const logout = useCallback(() => {
     setUser(null);
     localStorage.removeItem('hmis_user');
     setShowHospitalSelection(false);
-  };
+    // Also sign out of Supabase Auth (for Google OAuth sessions)
+    supabase.auth.signOut().catch(() => {});
+  }, []);
 
   const hospitalConfig = useMemo(() => getHospitalConfig(user?.hospitalType), [user?.hospitalType]);
 
   const value: AuthContextType = useMemo(() => ({
     user,
     login,
+    loginWithGoogle,
     signup,
     logout,
     isAuthenticated: !!user,
