@@ -1025,7 +1025,7 @@ const PharmacyBilling: React.FC = () => {
             const subtotal = completedSale.subtotal || (completedSale.total_amount + discount);
             if (discount > 0) {
               return `<div>Subtotal: Rs ${subtotal.toFixed(2)}</div>
-              <div>Discount: Rs ${discount.toFixed(2)}</div>
+              <div>Discount Given: Rs ${discount.toFixed(2)}</div>
               <div class="net-total">Net Amount: Rs ${completedSale.total_amount.toFixed(2)}</div>`;
             }
             return `<div>Total: Rs ${completedSale.total_amount.toFixed(2)}</div>`;

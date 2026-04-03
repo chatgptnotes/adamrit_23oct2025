@@ -19333,6 +19333,7 @@ Dr. Murali B K
                                       </th>
                                       <th className="border border-gray-300 px-4 py-2 text-left text-sm font-medium text-gray-900">Date/Time</th>
                                       <th className="border border-gray-300 px-4 py-2 text-left text-sm font-medium text-gray-900">Test Name</th>
+                                      <th className="border border-gray-300 px-2 py-2 text-center text-sm font-medium text-gray-900 w-16">Qty</th>
                                       <th className="border border-gray-300 px-4 py-2 text-center text-sm font-medium text-gray-900">Amount</th>
                                       <th className="border border-gray-300 px-4 py-2 text-left text-sm font-medium text-gray-900">Action</th>
                                     </tr>
@@ -19364,6 +19365,23 @@ Dr. Murali B K
                                         <td className="border border-gray-300 px-4 py-2 text-sm text-gray-900 font-medium">
                                           {lab.lab_name}
                                           {lab.is_hidden && <span className="ml-2 text-xs text-red-500 font-normal">(hidden)</span>}
+                                        </td>
+                                        <td className="border border-gray-300 px-2 py-2 text-center">
+                                          <input
+                                            type="number"
+                                            min="1"
+                                            value={lab.quantity || 1}
+                                            onChange={async (e) => {
+                                              const newQty = parseInt(e.target.value) || 1;
+                                              const unitRate = lab.unit_rate || (parseFloat(lab.cost) / (lab.quantity || 1));
+                                              const newCost = unitRate * newQty;
+                                              await supabase.from('visit_labs').update({ quantity: newQty, cost: newCost }).eq('id', lab.id);
+                                              setSavedLabData(prev => prev.map(l => l.id === lab.id ? { ...l, quantity: newQty, cost: newCost } : l));
+                                              toast.success(`Quantity updated to ${newQty}`);
+                                            }}
+                                            className="w-14 px-1 py-1 text-xs text-center border border-gray-200 rounded focus:outline-none focus:border-blue-500"
+                                            disabled={lab.is_hidden}
+                                          />
                                         </td>
                                         <td className="border border-gray-300 px-4 py-2 text-center text-sm font-medium text-green-600">
                                           {lab.is_hidden ? <span className="line-through text-gray-400">₹{lab.cost || 0}</span> : `₹${lab.cost || 0}`}
@@ -20203,12 +20221,10 @@ Dr. Murali B K
                                     <input
                                       type="date"
                                       value={editableVisitDates.admission_date}
-                                      onChange={(e) => {
-                                        const newValue = e.target.value;
-                                        setEditableVisitDates(prev => ({ ...prev, admission_date: newValue }));
-                                        saveVisitDates('admission_date', newValue);
-                                      }}
-                                      className="w-full bg-transparent border-none outline-none text-xs"
+                                      readOnly
+                                      disabled
+                                      className="w-full bg-transparent border-none outline-none text-xs text-gray-700 cursor-not-allowed"
+                                      title="Date of admission cannot be changed"
                                     />
                                   </td>
                                   <td className="border border-black p-1 font-semibold bg-gray-100">DATE OF DISCHARGE</td>

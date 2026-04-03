@@ -1120,8 +1120,8 @@ export const SalesDetails: React.FC = () => {
             <tr>
               <th>Date</th>
               <th class="right">Paid Amt</th>
-              <th class="right">Discount</th>
-              <th class="right">Balance</th>
+              <th class="right">Discount Given</th>
+              <th class="right">Credit Pending</th>
             </tr>
           </thead>
           <tbody>
@@ -2215,8 +2215,8 @@ export const SalesDetails: React.FC = () => {
                       <tr className="bg-cyan-600 text-white">
                         <th className="px-3 py-2 text-left text-xs font-semibold">Date</th>
                         <th className="px-3 py-2 text-right text-xs font-semibold">Paid Amt</th>
-                        <th className="px-3 py-2 text-right text-xs font-semibold">Discount</th>
-                        <th className="px-3 py-2 text-right text-xs font-semibold">Balance</th>
+                        <th className="px-3 py-2 text-right text-xs font-semibold">Discount Given</th>
+                        <th className="px-3 py-2 text-right text-xs font-semibold">Credit Pending</th>
                       </tr>
                     </thead>
                     <tbody>

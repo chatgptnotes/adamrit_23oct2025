@@ -423,6 +423,14 @@ const DischargeInvoice = () => {
                     {amountPaid.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </td>
                 </tr>
+                {discount > 0 && (
+                  <tr>
+                    <td className="border border-black p-2 font-semibold">Discount Given</td>
+                    <td className="border border-black p-2 text-right">
+                      Rs. {discount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </td>
+                  </tr>
+                )}
                 <tr>
                   <td className="border border-black p-2 font-semibold">Balance</td>
                   <td className="border border-black p-2 text-right">

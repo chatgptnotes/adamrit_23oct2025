@@ -840,7 +840,7 @@ const DirectSaleBill: React.FC = () => {
             const discount = subtotal - completedBill.totalAmount;
             if (discount > 0.01) {
               return `<div>Subtotal: Rs ${subtotal.toFixed(2)}</div>
-              <div>Discount: Rs ${discount.toFixed(2)}</div>
+              <div>Discount Given: Rs ${discount.toFixed(2)}</div>
               <div class="net-total">Net Amount: Rs ${completedBill.totalAmount.toFixed(2)}</div>`;
             }
             return `<div>Total: Rs ${completedBill.totalAmount.toFixed(2)}</div>`;

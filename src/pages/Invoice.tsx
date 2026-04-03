@@ -2008,7 +2008,7 @@ const Invoice = () => {
                     <td style="text-align: right;">Rs ${invoiceData.amountPaid.toLocaleString()}.00</td>
                   </tr>
                   <tr>
-                    <td class="label-cell">Discount</td>
+                    <td class="label-cell">Discount Given</td>
                     <td style="text-align: right;">Rs ${currentDiscount.toLocaleString()}.00</td>
                   </tr>
                   <tr>
@@ -2198,7 +2198,7 @@ const Invoice = () => {
                       <td className="border border-gray-400 p-2 text-right">Rs {invoiceData.amountPaid.toLocaleString()}.00</td>
                     </tr>
                     <tr>
-                      <td className="border border-gray-400 p-2 bg-gray-100 font-medium">Discount</td>
+                      <td className="border border-gray-400 p-2 bg-gray-100 font-medium">Discount Given</td>
                       <td className="border border-gray-400 p-2 text-right">Rs {currentDiscount.toLocaleString()}.00</td>
                     </tr>
                     <tr>

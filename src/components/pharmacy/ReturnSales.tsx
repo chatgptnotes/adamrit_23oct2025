@@ -11,6 +11,7 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDebounce } from 'use-debounce';
+import { printReceipt } from '@/utils/receiptPrinter';
 import {
   Search,
   RotateCcw,
@@ -407,6 +408,7 @@ const ReturnSales: React.FC = () => {
           refund_amount: subtotalRefund,
           processing_fee: processingFee,
           net_refund: netRefund,
+          refund_method: refundMethod,
           status: 'PROCESSED',
           processed_at: new Date().toISOString(),
           hospital_name: hospitalConfig?.name || 'hope HMIS',
@@ -491,7 +493,7 @@ const ReturnSales: React.FC = () => {
         description: `Return ${returnNumber} processed successfully. Refund: ₹${netRefund.toFixed(2)}`,
       });
 
-      // Print payment voucher for the refund
+      // Print return details voucher
       printReturnVoucher({
         returnNumber,
         patientName: selectedPatient.patient_name || selectedPatient.name || 'N/A',
@@ -502,6 +504,18 @@ const ReturnSales: React.FC = () => {
         netRefund,
         returnReason,
         date: new Date(),
+      });
+
+      // Print formal payment voucher for accounting
+      printReceipt({
+        patient_name: selectedPatient.patient_name || selectedPatient.name || 'N/A',
+        patients_id: selectedPatient.patients_id || '',
+        advance_amount: netRefund,
+        payment_date: new Date().toISOString().split('T')[0],
+        payment_mode: refundMethod,
+        is_refund: true,
+        voucher_no: returnNumber,
+        remarks: `Pharmacy refund for return ${returnNumber}`,
       });
 
       // Reset form
