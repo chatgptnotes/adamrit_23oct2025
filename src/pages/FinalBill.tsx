@@ -1536,8 +1536,7 @@ const FinalBill = () => {
             date: new Date().toISOString(),
             category: 'GENERAL',
             total_amount: 0,
-            status: 'DRAFT',
-            hospital_name: hospitalConfig?.name || 'unknown'
+            status: 'DRAFT'
           } as any)
           .select()
           .single();
