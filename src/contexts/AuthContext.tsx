@@ -192,62 +192,73 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     }
   }, []);
 
-  // Listen for Supabase Auth state changes (handles Google OAuth callback)
+  // Handle Google OAuth session - look up email in User table
+  const handleGoogleSession = useCallback(async (email: string) => {
+    const googleEmail = email.toLowerCase();
+    console.log('🔐 Processing Google session for:', googleEmail);
+
+    const { data, error } = await supabase
+      .from('User')
+      .select('*')
+      .ilike('email', googleEmail)
+      .single();
+
+    if (error || !data) {
+      console.error('❌ Google user not found in User table:', googleEmail);
+      await supabase.auth.signOut();
+      setIsAuthLoading(false);
+      return;
+    }
+
+    const appUser: User = {
+      id: data.id,
+      email: data.email,
+      username: data.email.split('@')[0],
+      role: data.role,
+      hospitalType: data.hospital_type || 'hope'
+    };
+
+    setUser(appUser);
+    localStorage.setItem('hmis_user', JSON.stringify(appUser));
+    localStorage.setItem('hmis_visited', 'true');
+    setShowLanding(false);
+    setIsAuthLoading(false);
+
+    // Clean up the URL hash after processing OAuth callback
+    if (window.location.hash.includes('access_token')) {
+      window.history.replaceState(null, '', window.location.pathname);
+    }
+
+    (supabase as any).from('User').update({ last_login_at: new Date().toISOString() }).eq('id', data.id).then(() => {});
+    logActivity('user_login', { email: appUser.email, role: appUser.role, hospital: appUser.hospitalType, method: 'google' });
+  }, []);
+
+  // Listen for Supabase Auth state changes AND check existing session on mount
   useEffect(() => {
+    // Register listener for future auth events
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       console.log('🔐 Auth state change:', event, session?.user?.email);
 
       if (event === 'SIGNED_IN' && session?.user?.email) {
-        const googleEmail = session.user.email.toLowerCase();
-        console.log('🔐 Google OAuth signed in:', googleEmail);
-
-        // Look up user in our User table
-        const { data, error } = await supabase
-          .from('User')
-          .select('*')
-          .ilike('email', googleEmail)
-          .single();
-
-        if (error || !data) {
-          console.error('❌ Google user not found in User table:', googleEmail);
-          // Sign out of Supabase Auth since they're not an authorized user
-          await supabase.auth.signOut();
-          setIsAuthLoading(false);
-          return;
-        }
-
-        const appUser: User = {
-          id: data.id,
-          email: data.email,
-          username: data.email.split('@')[0],
-          role: data.role,
-          hospitalType: data.hospital_type || 'hope'
-        };
-
-        setUser(appUser);
-        localStorage.setItem('hmis_user', JSON.stringify(appUser));
-        localStorage.setItem('hmis_visited', 'true');
-        setShowLanding(false);
-        setIsAuthLoading(false);
-
-        // Clean up the URL hash after processing OAuth callback
-        if (window.location.hash.includes('access_token')) {
-          window.history.replaceState(null, '', window.location.pathname);
-        }
-
-        // Update last_login_at
-        (supabase as any).from('User').update({ last_login_at: new Date().toISOString() }).eq('id', data.id).then(() => {});
-        logActivity('user_login', { email: appUser.email, role: appUser.role, hospital: appUser.hospitalType, method: 'google' });
-      } else if (event === 'SIGNED_OUT' || event === 'TOKEN_REFRESHED') {
-        setIsAuthLoading(false);
+        await handleGoogleSession(session.user.email);
       } else {
-        // For any other event, ensure loading stops
+        setIsAuthLoading(false);
+      }
+    });
+
+    // Also check if there's already an active session (OAuth token may have been
+    // processed by Supabase client before the listener was registered)
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (session?.user?.email && !localStorage.getItem('hmis_user')) {
+        console.log('🔐 Found existing Supabase session on mount:', session.user.email);
+        await handleGoogleSession(session.user.email);
+      } else {
         setIsAuthLoading(false);
       }
     });
 
     return () => subscription.unsubscribe();
-  }, []);
+  }, [handleGoogleSession]);
 
   // Signup functionality
   const signup = async (userData: { email: string; password: string; role: string; hospitalType: HospitalType }): Promise<{ success: boolean; error?: string }> => {
