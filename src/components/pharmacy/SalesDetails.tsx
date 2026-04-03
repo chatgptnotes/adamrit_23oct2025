@@ -1995,16 +1995,18 @@ export const SalesDetails: React.FC = () => {
                         <td className="px-2 py-2 text-right font-medium text-gray-800">{amount.toFixed(2)}</td>
                         <td className="px-2 py-2">
                           <div className="flex items-center justify-center gap-1">
-                            {/* 1. Edit */}
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => navigate(`/pharmacy/edit-sale/${bill.sale_id}`)}
-                              className="h-6 w-6 p-0 hover:bg-cyan-100 hover:text-cyan-600"
-                              title="Edit"
-                            >
-                              <Pencil className="h-3 w-3" />
-                            </Button>
+                            {/* 1. Edit - only for non-completed sales */}
+                            {bill.payment_status !== 'COMPLETED' && bill.payment_status !== 'REFUNDED' && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => navigate(`/pharmacy/edit-sale/${bill.sale_id}`)}
+                                className="h-6 w-6 p-0 hover:bg-cyan-100 hover:text-cyan-600"
+                                title="Edit"
+                              >
+                                <Pencil className="h-3 w-3" />
+                              </Button>
+                            )}
                             {/* 2. View Sales - Modal */}
                             <Button
                               variant="ghost"

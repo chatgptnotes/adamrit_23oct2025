@@ -74,6 +74,13 @@ export const EditSaleBill: React.FC = () => {
       return;
     }
 
+    // Block editing completed sales
+    if (saleData.payment_status === 'COMPLETED' || saleData.payment_status === 'REFUNDED') {
+      alert('This sale has been completed and cannot be edited.');
+      navigate(-1);
+      return;
+    }
+
     setSale(saleData);
 
     // Initialize billDate from sale data
