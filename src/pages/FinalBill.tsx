@@ -14317,6 +14317,12 @@ Format the response as JSON:
   }, [invoiceItems, savedSurgeries, surgeryRows, isSavingBill]);
 
   const handlePrint = () => {
+    // Block printing after bill is submitted or amount received
+    if (isBillSubmitted || isAmountReceived) {
+      toast.error('Print is locked after bill submission. Contact superadmin to unlock.');
+      return;
+    }
+
     try {
       console.log('🖨️ Print button clicked for Final Bill');
 
@@ -22937,8 +22943,15 @@ Dr. Murali B K
                     <>💾 Save Bill</>
                   )}
                 </Button>
-                <Button onClick={handlePrint} variant="outline" size="lg" className="px-6 py-2">
-                  🖨️ Print / Save PDF
+                <Button
+                  onClick={handlePrint}
+                  variant="outline"
+                  size="lg"
+                  className="px-6 py-2"
+                  disabled={isBillSubmitted || isAmountReceived}
+                  title={isBillSubmitted ? 'Print disabled - Bill already submitted' : isAmountReceived ? 'Print disabled - Amount already received' : 'Print / Save PDF'}
+                >
+                  {isBillSubmitted || isAmountReceived ? '🔒 Print Locked' : '🖨️ Print / Save PDF'}
                 </Button>
                 {billData?.id && (billData as any)?.status !== 'PENDING_APPROVAL' && (billData as any)?.status !== 'APPROVED' && (
                   <Button
