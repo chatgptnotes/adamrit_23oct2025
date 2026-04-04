@@ -487,6 +487,104 @@ const DailyPaymentAllocation = () => {
     printTable("Today's Payment Allocation", headers, rows, selectedDate);
   };
 
+  const printDetailedAllocation = () => {
+    const active = sortedSchedule.filter(e => e.status !== 'skipped');
+    const dateLabel = new Date(selectedDate).toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+
+    // Build rows with payee sub-rows
+    let bodyHtml = '';
+    let serial = 0;
+    let grandDaily = 0, grandCarry = 0, grandDue = 0, grandPaid = 0;
+
+    for (const entry of active) {
+      serial++;
+      const totalDueEntry = entry.daily_amount + entry.carryforward_amount;
+      grandDaily += entry.daily_amount;
+      grandCarry += entry.carryforward_amount;
+      grandDue += totalDueEntry;
+      grandPaid += entry.paid_amount;
+
+      const subs = allSubAllocations.filter(sa => sa.schedule_id === entry.id);
+
+      // Main party row
+      bodyHtml += `<tr style="background:#fafafa;font-weight:600">
+        <td style="border:1px solid #ccc;padding:6px 10px;font-size:12px">${serial}</td>
+        <td style="border:1px solid #ccc;padding:6px 10px;font-size:12px">${entry.party_name}${entry.notes ? `<br/><span style="font-weight:400;color:#666;font-size:11px">${entry.notes}</span>` : ''}</td>
+        <td style="border:1px solid #ccc;padding:6px 10px;font-size:12px;text-align:right">${formatINR(entry.daily_amount)}</td>
+        <td style="border:1px solid #ccc;padding:6px 10px;font-size:12px;text-align:right">${entry.carryforward_amount > 0 ? formatINR(entry.carryforward_amount) : '-'}</td>
+        <td style="border:1px solid #ccc;padding:6px 10px;font-size:12px;text-align:right;font-weight:700">${formatINR(totalDueEntry)}</td>
+        <td style="border:1px solid #ccc;padding:6px 10px;font-size:12px;text-align:right;color:${entry.paid_amount > 0 ? 'green' : '#999'}">${entry.paid_amount > 0 ? formatINR(entry.paid_amount) : '-'}</td>
+        <td style="border:1px solid #ccc;padding:6px 10px;font-size:12px;text-align:center">${entry.days_overdue}d</td>
+        <td style="border:1px solid #ccc;padding:6px 10px;font-size:12px">${entry.status === 'carried_forward' ? 'Carried' : entry.status}</td>
+      </tr>`;
+
+      // Payee sub-rows
+      if (subs.length > 0) {
+        for (const sa of subs) {
+          bodyHtml += `<tr>
+            <td style="border:1px solid #eee;padding:3px 10px;font-size:11px"></td>
+            <td style="border:1px solid #eee;padding:3px 10px 3px 30px;font-size:11px;color:#444">↳ ${sa.payee_name}${sa.notes ? ` <span style="color:#888">(${sa.notes})</span>` : ''}</td>
+            <td style="border:1px solid #eee;padding:3px 10px;font-size:11px;text-align:right">${formatINR(sa.amount)}</td>
+            <td style="border:1px solid #eee;padding:3px 10px;font-size:11px"></td>
+            <td style="border:1px solid #eee;padding:3px 10px;font-size:11px"></td>
+            <td style="border:1px solid #eee;padding:3px 10px;font-size:11px;text-align:right;color:${sa.is_paid ? 'green' : '#999'}">${sa.is_paid ? '✓ Paid' : 'Pending'}</td>
+            <td style="border:1px solid #eee;padding:3px 10px;font-size:11px"></td>
+            <td style="border:1px solid #eee;padding:3px 10px;font-size:11px"></td>
+          </tr>`;
+        }
+      }
+    }
+
+    // Totals row
+    bodyHtml += `<tr style="background:#f0f0f0;font-weight:700">
+      <td style="border:1px solid #ccc;padding:6px 10px;font-size:12px"></td>
+      <td style="border:1px solid #ccc;padding:6px 10px;font-size:12px">TOTAL</td>
+      <td style="border:1px solid #ccc;padding:6px 10px;font-size:12px;text-align:right">${formatINR(grandDaily)}</td>
+      <td style="border:1px solid #ccc;padding:6px 10px;font-size:12px;text-align:right">${formatINR(grandCarry)}</td>
+      <td style="border:1px solid #ccc;padding:6px 10px;font-size:12px;text-align:right">${formatINR(grandDue)}</td>
+      <td style="border:1px solid #ccc;padding:6px 10px;font-size:12px;text-align:right">${formatINR(grandPaid)}</td>
+      <td style="border:1px solid #ccc;padding:6px 10px;font-size:12px"></td>
+      <td style="border:1px solid #ccc;padding:6px 10px;font-size:12px"></td>
+    </tr>`;
+
+    const html = `<!DOCTYPE html><html><head><title>Detailed Payment Allocation</title>
+<style>
+body{font-family:Arial,sans-serif;padding:20px;max-width:1100px;margin:0 auto}
+h2{margin-bottom:4px}
+table{width:100%;border-collapse:collapse;margin-top:12px}
+.meta{color:#666;font-size:13px;margin-bottom:4px}
+.summary{margin-top:8px;padding:8px 12px;background:#f8f8f8;border:1px solid #ddd;border-radius:4px;font-size:12px;display:flex;gap:24px}
+.summary span{font-weight:600}
+@media print{body{padding:10px}.summary{break-inside:avoid}}
+</style>
+</head><body>
+<h2>Detailed Payment Allocation — ${selectedHospital.charAt(0).toUpperCase() + selectedHospital.slice(1)}</h2>
+<p class="meta">${dateLabel}</p>
+<div class="summary">
+  <div>Total Due: <span>${formatINR(grandDue)}</span></div>
+  <div>Total Paid: <span style="color:green">${formatINR(grandPaid)}</span></div>
+  <div>Balance: <span style="color:${grandDue - grandPaid > 0 ? 'red' : 'green'}">${formatINR(grandDue - grandPaid)}</span></div>
+  <div>Funds Available: <span>${formatINR(totalAvailable)}</span></div>
+</div>
+<table>
+<thead><tr>
+  <th style="border:1px solid #ccc;padding:6px 10px;background:#f5f5f5;font-size:12px;text-align:left">#</th>
+  <th style="border:1px solid #ccc;padding:6px 10px;background:#f5f5f5;font-size:12px;text-align:left">Party / Payee</th>
+  <th style="border:1px solid #ccc;padding:6px 10px;background:#f5f5f5;font-size:12px;text-align:right">Daily Amount</th>
+  <th style="border:1px solid #ccc;padding:6px 10px;background:#f5f5f5;font-size:12px;text-align:right">Carry Forward</th>
+  <th style="border:1px solid #ccc;padding:6px 10px;background:#f5f5f5;font-size:12px;text-align:right">Total Due</th>
+  <th style="border:1px solid #ccc;padding:6px 10px;background:#f5f5f5;font-size:12px;text-align:right">Paid</th>
+  <th style="border:1px solid #ccc;padding:6px 10px;background:#f5f5f5;font-size:12px;text-align:center">Aging</th>
+  <th style="border:1px solid #ccc;padding:6px 10px;background:#f5f5f5;font-size:12px;text-align:left">Status</th>
+</tr></thead>
+<tbody>${bodyHtml}</tbody>
+</table>
+<script>window.onload=function(){window.print()}</script>
+</body></html>`;
+    const w = window.open('', '_blank');
+    if (w) { w.document.write(html); w.document.close(); }
+  };
+
   const printPaymentHistory = () => {
     const headers = ['Date', 'Party', 'Daily', 'Carry Fwd', 'Total Due', 'Paid', 'Aging', 'Status'];
     const rows = history.map((e: ScheduleEntry) => [
@@ -1026,9 +1124,14 @@ const DailyPaymentAllocation = () => {
             <Card>
               <div className="px-4 py-2 border-b bg-gray-50 flex items-center justify-between">
                 <p className="text-xs text-muted-foreground">Drag rows to reorder priority. Click pencil to edit amount. Click X to skip.</p>
-                <Button variant="outline" size="sm" onClick={printTodayAllocation}>
-                  <Printer className="h-3 w-3 mr-1" /> Print
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" size="sm" onClick={printTodayAllocation}>
+                    <Printer className="h-3 w-3 mr-1" /> Print
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={printDetailedAllocation}>
+                    <Users className="h-3 w-3 mr-1" /> Detailed Print
+                  </Button>
+                </div>
               </div>
               <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
                 <Table>
