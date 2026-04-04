@@ -3,17 +3,55 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 
+// Helper: check if patient is Maharashtra Yojana (MJPJY / Ayushman Bharat MH)
+const isMaharashtraYojana = (corp: string) => {
+  const c = (corp || '').toLowerCase().trim();
+  return c.includes('yojana') || c.includes('mjpjy') || c.includes('ayushman') ||
+    c.includes('mahatma jyotiba') || c.includes('pmjay') || c.includes('ab-pmjay') ||
+    c.includes('ab pmjay') || c.includes('maharashtra yojana');
+};
+
 export const useSearchableCghsSurgery = (patientCorporate?: string) => {
   const [searchTerm, setSearchTerm] = useState('');
 
   const { data: surgeries = [], isLoading } = useQuery({
     queryKey: ['cghs-surgery', searchTerm, patientCorporate],
     queryFn: async () => {
-      console.log('🔍 Fetching CGHS surgeries:', {
-        searchTerm,
-        patientCorporate: patientCorporate || 'NOT SET'
-      });
+      const corporate = (patientCorporate || '').toLowerCase().trim();
+      const isYojana = isMaharashtraYojana(corporate);
 
+      // For Maharashtra Yojana patients, search from yojana_mh_procedures
+      if (isYojana) {
+        let query = supabase
+          .from('yojana_mh_procedures')
+          .select('id, procedure_code, procedure_name, package_name, specialty, tier3_rate, level_of_care, los, medical_or_surgical')
+          .order('procedure_name');
+
+        if (searchTerm) {
+          query = query.or(`procedure_name.ilike.%${searchTerm}%,package_name.ilike.%${searchTerm}%,procedure_code.ilike.%${searchTerm}%,specialty.ilike.%${searchTerm}%`);
+        }
+
+        const { data, error } = await query;
+        if (error) {
+          console.error('Error fetching Yojana procedures:', error);
+          throw error;
+        }
+
+        return (data || []).map(proc => ({
+          id: proc.id,
+          name: proc.procedure_name || proc.package_name || '',
+          code: proc.procedure_code || '',
+          category: proc.specialty || '',
+          description: `${proc.package_name || ''} | LOS: ${proc.los || 'N/A'} | ${proc.level_of_care || ''}`,
+          private: proc.tier3_rate || 0,
+          NABH_NABL_Rate: proc.tier3_rate || 0,
+          selectedRate: proc.tier3_rate || 0,
+          rateSource: 'yojana_mh_tier3',
+          is_yojana: true
+        }));
+      }
+
+      // Standard CGHS surgery search
       let query = supabase
         .from('cghs_surgery')
         .select('*')
@@ -32,14 +70,12 @@ export const useSearchableCghsSurgery = (patientCorporate?: string) => {
       }
 
       // Apply corporate-based rate selection
-      const corporate = (patientCorporate || '').toLowerCase().trim();
       const usesBhopaliRate =
         corporate.includes('mp police') ||
         corporate.includes('ordnance factory') ||
         corporate.includes('ordnance factory itarsi');
 
       const surgeriesWithSelectedRate = data?.map(surgery => {
-        // Select appropriate rate based on corporate
         let selectedRate = surgery.private || surgery.NABH_NABL_Rate || 0;
         let rateSource = 'private/nabh_nabl';
 
@@ -48,23 +84,11 @@ export const useSearchableCghsSurgery = (patientCorporate?: string) => {
           rateSource = 'bhopal_nabh';
         }
 
-        console.log('🔍 Surgery rate mapping:', {
-          surgeryName: surgery.name,
-          patientCorporate: patientCorporate || 'NOT SET',
-          corporateLower: corporate || 'EMPTY',
-          usesBhopaliRate: usesBhopaliRate,
-          bhopaliNABHRate: surgery.bhopal_nabh_rate,
-          privateRate: surgery.private,
-          nabhNablRate: surgery.NABH_NABL_Rate,
-          selectedRate: selectedRate,
-          rateSource: rateSource
-        });
-
         return {
           ...surgery,
-          selectedRate, // Add selected rate field
-          NABH_NABL_Rate: selectedRate, // Override NABH_NABL_Rate with selected rate
-          rateSource // Add rate source for debugging
+          selectedRate,
+          NABH_NABL_Rate: selectedRate,
+          rateSource
         };
       }) || [];
 

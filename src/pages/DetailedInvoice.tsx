@@ -1548,7 +1548,7 @@ const DetailedInvoice = () => {
       console.log('🔩 Implant orders:', visitData.implantOrders);
 
       // Calculate total amount from all services
-      const labTotal = visitData.labOrders.filter(order => !order.is_hidden).reduce((sum, order) => sum + ((order.lab?.private && order.lab.private > 0) ? order.lab.private : 100), 0);
+      const labTotal = visitData.labOrders.filter(order => !order.is_hidden).reduce((sum, order) => sum + (parseFloat(order.cost) || parseFloat(order.unit_rate) || parseFloat(order.lab?.NABH_rates_in_rupee) || 0), 0);
       const radioTotal = visitData.radiologyOrders.reduce((sum, order) => {
         const cost = parseFloat(order.cost) || parseFloat(order.unit_rate) || 0;
         console.log('🔍 Radiology order cost:', { name: order.radiology?.name, cost, raw_cost: order.cost, unit_rate: order.unit_rate });
@@ -1654,9 +1654,9 @@ const DetailedInvoice = () => {
     laboratory: visitData?.labOrders?.filter(lab => !lab.is_hidden).map((lab, index) => ({
       item: lab.lab?.name || 'Lab Test',
       dateTime: lab.ordered_date ? format(new Date(lab.ordered_date), 'dd/MM/yyyy HH:mm:ss') : '',
-      qty: 1,
-      cghsRate: lab.lab?.NABH_rates_in_rupee || lab.lab?.CGHS_code || '',
-      rate: lab.cost || lab.unit_rate || 100
+      qty: lab.quantity || 1,
+      cghsRate: lab.lab?.NABH_rates_in_rupee || '',
+      rate: parseFloat(lab.cost) || parseFloat(lab.unit_rate) || parseFloat(lab.lab?.NABH_rates_in_rupee) || 0
     })) || [],
     radiology: visitData?.radiologyOrders?.map((radio, index) => ({
       item: radio.radiology?.name || 'Radiology Test',

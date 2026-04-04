@@ -533,6 +533,14 @@ const DocumentModal: React.FC<DocumentModalProps> = ({
   );
 };
 
+// Helper: check if patient is Maharashtra Yojana (MJPJY / Ayushman Bharat MH)
+const isMaharashtraYojana = (corp: string) => {
+  const c = (corp || '').toLowerCase().trim();
+  return c.includes('yojana') || c.includes('mjpjy') || c.includes('ayushman') ||
+    c.includes('mahatma jyotiba') || c.includes('pmjay') || c.includes('ab-pmjay') ||
+    c.includes('ab pmjay') || c.includes('maharashtra yojana');
+};
+
 const FinalBill = () => {
   const { visitId } = useParams<{ visitId: string }>();
   const navigate = useNavigate();
@@ -835,19 +843,44 @@ const FinalBill = () => {
         }
       }
 
+      // Determine patient type to select appropriate rate
+      const patientType = (visitDataResult?.patient_type || patientInfo?.patient_type || '').toLowerCase().trim();
+      // Check visit-level billing override first, then fall back to patient corporate
+      const visitCorporateOverride = (visitDataResult?.corporate || '').toLowerCase().trim();
+      const patientCorporateVal = (patientInfo?.corporate || '').toLowerCase().trim();
+      const corporate = visitCorporateOverride || patientCorporateVal;
+
+      // For Maharashtra Yojana patients, fetch from yojana_mh_procedures tariff
+      const isYojana = isMaharashtraYojana(corporate);
+      if (isYojana) {
+        const { data: yojanaData, error: yojanaError } = await supabase
+          .from('yojana_mh_procedures')
+          .select('id, procedure_code, procedure_name, package_name, specialty, tier3_rate, level_of_care, los, medical_or_surgical');
+
+        if (yojanaData && Array.isArray(yojanaData)) {
+          console.log('🏥 Maharashtra Yojana procedures loaded:', yojanaData.length, 'procedures');
+          const transformedYojana = yojanaData.map(proc => ({
+            id: proc.id,
+            name: proc.procedure_name || proc.package_name || '',
+            code: proc.procedure_code || '',
+            category: proc.specialty || '',
+            description: `${proc.package_name || ''} | LOS: ${proc.los || 'N/A'} | ${proc.level_of_care || ''}`,
+            private: proc.tier3_rate || 0,
+            NABH_NABL_Rate: (proc.tier3_rate || 0).toString(),
+            rateSource: 'yojana_mh_tier3',
+            is_yojana: true
+          }));
+          setCghsSurgeries(transformedYojana as any);
+        }
+        return; // Skip CGHS surgery fetch for yojana patients
+      }
+
       const { data, error } = await supabase
         .from('cghs_surgery')
         .select('id, name, code, category, private, Non_NABH_NABL_Rate, bhopal_nabh_rate, NABH_NABL_Rate, description');
 
       if (data && Array.isArray(data)) {
         console.log('CGHS Surgeries loaded:', data.length, 'surgeries');
-
-        // Determine patient type to select appropriate rate
-        const patientType = (visitDataResult?.patient_type || patientInfo?.patient_type || '').toLowerCase().trim();
-        // Check visit-level billing override first, then fall back to patient corporate
-        const visitCorporateOverride = (visitDataResult?.corporate || '').toLowerCase().trim();
-        const patientCorporateVal = (patientInfo?.corporate || '').toLowerCase().trim();
-        const corporate = visitCorporateOverride || patientCorporateVal;
 
         // Corporate field takes priority - check if patient has a corporate panel first
         const hasCorporate = corporate.length > 0 && corporate !== 'private';
@@ -5833,7 +5866,7 @@ INSTRUCTIONS:
             description: '', // No description for date-based entries
             code: '',
             rate: parseFloat(charge.rate?.toString() || '0') || 0,
-            qty: parseInt(charge.days?.toString() || '1') || 1,
+            qty: parseInt(charge.qty?.toString() || '1') || 1,
             amount: parseFloat(charge.amount?.toString() || '0') || 0,
             type: 'standard' as const,
             dates: {
@@ -6159,11 +6192,15 @@ INSTRUCTIONS:
               const updatedSubItem = { ...subItem, [field]: processedValue };
 
               // Auto-calculate days and amount when dates change
+              // Skip auto-multiplication for Pathology and Medicine charges — their qty is independent of date range
               if (field === 'dates') {
-                const calculatedDays = calculateDaysBetweenDates(processedValue);
-                updatedSubItem.qty = calculatedDays;
-                const rate = (updatedSubItem as StandardSubItem).rate || 0;
-                (updatedSubItem as StandardSubItem).amount = rate * calculatedDays;
+                const isPathologyOrMedicine = item.description === 'Pathology Charges' || item.description === 'Medicine Charges';
+                if (!isPathologyOrMedicine) {
+                  const calculatedDays = calculateDaysBetweenDates(processedValue);
+                  updatedSubItem.qty = calculatedDays;
+                  const rate = (updatedSubItem as StandardSubItem).rate || 0;
+                  (updatedSubItem as StandardSubItem).amount = rate * calculatedDays;
+                }
               }
 
               // Auto-calculate amount when rate or qty changes
@@ -9334,7 +9371,9 @@ INSTRUCTIONS:
         visit_id: visitData.id,
         start_date: today,
         end_date: today,
-        rate: 0
+        rate: 0,
+        qty: 1,
+        amount: 0
       };
 
       console.log('💾 [PATHOLOGY ADD] Inserting with defaults:', pathologyData);
@@ -9368,9 +9407,21 @@ INSTRUCTIONS:
   // Function to update pathology field
   const updatePathologyField = async (pathologyId: string, field: string, value: string | number) => {
     try {
+      const updateData: Record<string, any> = { [field]: value };
+
+      // When rate or qty changes, recalculate amount (no longer auto-generated by DB)
+      if (field === 'rate' || field === 'qty') {
+        const currentCharge = savedPathologyCharges.find(c => c.id === pathologyId);
+        if (currentCharge) {
+          const rate = field === 'rate' ? parseFloat(value.toString()) || 0 : parseFloat(currentCharge.rate?.toString() || '0');
+          const qty = field === 'qty' ? parseInt(value.toString()) || 1 : parseInt(currentCharge.qty?.toString() || '1');
+          updateData.amount = rate * qty;
+        }
+      }
+
       const { error } = await supabase
         .from('visit_pathology_charges')
-        .update({ [field]: value })
+        .update(updateData)
         .eq('id', pathologyId);
 
       if (error) {
@@ -9379,7 +9430,7 @@ INSTRUCTIONS:
         return;
       }
 
-      // Refresh pathology data to get auto-calculated days and amount
+      // Refresh pathology data
       await fetchSavedPathologyCharges();
 
       toast.success('Pathology data updated successfully');
@@ -9697,7 +9748,13 @@ INSTRUCTIONS:
       return total + finalAmount;
     }, 0);
 
-    return baseAmount + surgeryTreatmentTotal;
+    // Add anaesthetist charges from saved data
+    const anesthetistChargesTotal = savedAnesthetistData.reduce((total, a) => total + (parseFloat(a.rate) || 0), 0);
+
+    // Add OT charges from saved anesthetist data (if ot_charges field exists)
+    const otChargesTotal = savedAnesthetistData.reduce((total, a) => total + (parseFloat(a.ot_charges) || 0), 0);
+
+    return baseAmount + surgeryTreatmentTotal + anesthetistChargesTotal + otChargesTotal;
   };
 
   // Surgery Treatment functions
@@ -11623,17 +11680,52 @@ INSTRUCTIONS:
     enabled: diagnosisSearchTerm.length >= 2
   });
 
-  // CGHS Surgery search query
+  // CGHS Surgery search query (also searches Maharashtra Yojana tariff for yojana patients)
   const { data: availableSurgeries = [] } = useQuery({
     queryKey: ['cghs_surgery', surgerySearchTerm, patientInfo?.corporate],
     queryFn: async () => {
-      console.log('🔍 Fetching CGHS surgeries in FinalBill:', {
+      console.log('🔍 Fetching surgeries in FinalBill:', {
         surgerySearchTerm,
         patientCorporate: patientInfo?.corporate || 'NOT SET'
       });
 
       if (!surgerySearchTerm || surgerySearchTerm.length < 2) return [];
 
+      const corporate = (patientInfo?.corporate || '').toLowerCase().trim();
+      const isYojana = isMaharashtraYojana(corporate);
+
+      // For Maharashtra Yojana patients, search from yojana_mh_procedures tariff
+      if (isYojana) {
+        const { data: yojanaData, error: yojanaError } = await supabase
+          .from('yojana_mh_procedures')
+          .select('id, procedure_code, procedure_name, package_name, specialty, specialty_code, tier3_rate, level_of_care, los, medical_or_surgical')
+          .or(`procedure_name.ilike.%${surgerySearchTerm}%,package_name.ilike.%${surgerySearchTerm}%,procedure_code.ilike.%${surgerySearchTerm}%,specialty.ilike.%${surgerySearchTerm}%`)
+          .order('procedure_name')
+          .limit(15);
+
+        if (yojanaError) {
+          console.error('Error fetching Yojana procedures:', yojanaError);
+          return [];
+        }
+
+        // Map yojana procedures to the same shape as cghs_surgery for compatibility
+        return (yojanaData || []).map(proc => ({
+          id: proc.id,
+          name: proc.procedure_name || proc.package_name || '',
+          code: proc.procedure_code || '',
+          category: proc.specialty || '',
+          description: `${proc.package_name || ''} | LOS: ${proc.los || 'N/A'} | ${proc.level_of_care || ''} | ${proc.medical_or_surgical || ''}`,
+          private: proc.tier3_rate || 0,
+          NABH_NABL_Rate: proc.tier3_rate || 0,
+          Non_NABH_NABL_Rate: 0,
+          bhopal_nabh_rate: 0,
+          selectedRate: proc.tier3_rate || 0,
+          rateSource: 'yojana_mh_tier3',
+          is_yojana: true
+        }));
+      }
+
+      // Standard CGHS surgery search for non-yojana patients
       const { data, error } = await supabase
         .from('cghs_surgery')
         .select('id, name, code, category, private, Non_NABH_NABL_Rate, bhopal_nabh_rate, NABH_NABL_Rate, description')
@@ -11645,9 +11737,6 @@ INSTRUCTIONS:
         console.error('Error fetching surgeries:', error);
         return [];
       }
-
-      // Apply corporate-based rate selection
-      const corporate = (patientInfo?.corporate || '').toLowerCase().trim();
 
       // Corporate field takes priority - check if patient has a corporate panel first
       const hasCorporate = corporate.length > 0 && corporate !== 'private';
@@ -11679,7 +11768,6 @@ INSTRUCTIONS:
         let rateSource = 'fallback';
 
         if (isPrivate) {
-          // Private patients → use private rate (even if 0), only fallback to NABH if NULL
           if (surgery.private !== null && surgery.private !== undefined) {
             selectedRate = surgery.private;
             rateSource = 'private';
@@ -11691,44 +11779,24 @@ INSTRUCTIONS:
             rateSource = 'no_rate';
           }
         } else if (usesNonNABHRate && surgery.Non_NABH_NABL_Rate && surgery.Non_NABH_NABL_Rate > 0) {
-          // CGHS/ECHS/ESIC → use Non_NABH_NABL_Rate
           selectedRate = surgery.Non_NABH_NABL_Rate;
           rateSource = 'non_nabh_nabl';
         } else if (usesBhopaliRate && surgery.bhopal_nabh_rate && surgery.bhopal_nabh_rate > 0) {
-          // MP Police/Ordnance Factory → use bhopal_nabh_rate
           selectedRate = surgery.bhopal_nabh_rate;
           rateSource = 'bhopal_nabh';
         } else if (usesNABHRate && surgery.NABH_NABL_Rate && surgery.NABH_NABL_Rate > 0) {
-          // All other corporate patients → use NABH_NABL_Rate
           selectedRate = surgery.NABH_NABL_Rate;
           rateSource = 'nabh_nabl';
         } else {
-          // Fallback
           selectedRate = surgery.NABH_NABL_Rate || surgery.private || 0;
           rateSource = 'fallback';
         }
 
-        console.log('🔍 Surgery rate mapping in FinalBill:', {
-          surgeryName: surgery.name,
-          patientCorporate: patientInfo?.corporate || 'NOT SET',
-          corporateLower: corporate || 'EMPTY',
-          isPrivate: isPrivate,
-          usesNonNABHRate: usesNonNABHRate,
-          usesBhopaliRate: usesBhopaliRate,
-          usesNABHRate: usesNABHRate,
-          privateRate: surgery.private,
-          nonNabhRate: surgery.Non_NABH_NABL_Rate,
-          bhopaliNABHRate: surgery.bhopal_nabh_rate,
-          nabhNablRate: surgery.NABH_NABL_Rate,
-          selectedRate: selectedRate,
-          rateSource: rateSource
-        });
-
         return {
           ...surgery,
-          NABH_NABL_Rate: selectedRate, // Override with selected rate
-          selectedRate, // Add selectedRate field
-          rateSource // Add rate source for debugging
+          NABH_NABL_Rate: selectedRate,
+          selectedRate,
+          rateSource
         };
       }) || [];
 
@@ -20154,7 +20222,10 @@ Dr. Murali B K
                                 Saved Anesthetists ({savedAnesthetistData.length})
                               </h5>
                               <span className="text-orange-600 font-bold">
-                                Total: ₹{savedAnesthetistData.reduce((sum, item) => sum + (parseFloat(item.rate) || 0), 0).toLocaleString()}
+                                Anaesthetist: ₹{savedAnesthetistData.reduce((sum, item) => sum + (parseFloat(item.rate) || 0), 0).toLocaleString()}
+                                {savedAnesthetistData.reduce((sum, item) => sum + (parseFloat(item.ot_charges) || 0), 0) > 0 && (
+                                  <span className="ml-2 text-green-600">| OT: ₹{savedAnesthetistData.reduce((sum, item) => sum + (parseFloat(item.ot_charges) || 0), 0).toLocaleString()}</span>
+                                )}
                               </span>
                             </div>
                             {savedAnesthetistData.length === 0 ? (
@@ -20170,6 +20241,7 @@ Dr. Murali B K
                                       <th className="text-left p-2 border border-gray-300 font-semibold">Anesthetist Name</th>
                                       <th className="text-center p-2 border border-gray-300 font-semibold">Type</th>
                                       <th className="text-right p-2 border border-gray-300 font-semibold">Rate</th>
+                                      <th className="text-right p-2 border border-gray-300 font-semibold">OT Charges</th>
                                       <th className="text-center p-2 border border-gray-300 font-semibold">Action</th>
                                     </tr>
                                   </thead>
@@ -20183,6 +20255,27 @@ Dr. Murali B K
                                         <td className="p-2 border border-gray-300 text-center">{anesthetist.anesthetist_type || '-'}</td>
                                         <td className="p-2 border border-gray-300 text-right text-orange-600 font-medium">
                                           ₹{(parseFloat(anesthetist.rate) || 0).toLocaleString()}
+                                        </td>
+                                        <td className="p-2 border border-gray-300 text-right">
+                                          <input
+                                            type="number"
+                                            defaultValue={anesthetist.ot_charges || 0}
+                                            className="w-24 text-right border border-gray-300 rounded px-1 py-1 text-sm"
+                                            placeholder="OT ₹"
+                                            onBlur={async (e) => {
+                                              const otVal = parseFloat(e.target.value) || 0;
+                                              const { error } = await supabase
+                                                .from('visit_anesthetists')
+                                                .update({ ot_charges: otVal })
+                                                .eq('id', anesthetist.id);
+                                              if (error) {
+                                                toast.error('Failed to save OT charges');
+                                              } else {
+                                                toast.success('OT charges saved');
+                                                fetchSavedAnesthetistData();
+                                              }
+                                            }}
+                                          />
                                         </td>
                                         <td className="p-2 border border-gray-300 text-center">
                                           <button
@@ -22575,34 +22668,11 @@ Dr. Murali B K
                           const secondDiscountAmount = amountAfterFirstDiscount * ((row.secondAdjustmentPercent || 0) / 100);
                           const totalDiscountAmount = firstDiscountAmount + secondDiscountAmount;
                           const finalAmount = amountAfterFirstDiscount - secondDiscountAmount;
-                          
-                          // Debug console log with detailed breakdown
-                          console.log(`🧮 Surgery Row ${index + 1} Calculation:`, {
-                            description: row.name,
-                            baseAmount,
-                            adjustment: row.adjustment,
-                            adjustmentPercent: row.adjustmentPercent,
-                            firstDiscountAmount,
-                            amountAfterFirstDiscount,
-                            secondAdjustment: row.secondAdjustment,
-                            secondAdjustmentPercent: row.secondAdjustmentPercent,
-                            secondDiscountAmount,
-                            totalDiscountAmount,
-                            finalAmount,
-                            // Additional debugging for 75% issue
-                            calculationBreakdown: {
-                              step1_baseAmount: baseAmount,
-                              step2_firstDiscount: `${row.adjustmentPercent}% of ${baseAmount} = ${firstDiscountAmount}`,
-                              step3_afterFirstDiscount: `${baseAmount} - ${firstDiscountAmount} = ${amountAfterFirstDiscount}`,
-                              step4_secondDiscount: `${row.secondAdjustmentPercent || 0}% of ${amountAfterFirstDiscount} = ${secondDiscountAmount}`,
-                              step5_finalAmount: `${amountAfterFirstDiscount} - ${secondDiscountAmount} = ${finalAmount}`
-                            }
-                          });
 
                           return (
                             <tr key={row.id}>
                               <td className="border border-gray-400 p-3 text-center font-bold">
-                                {String.fromCharCode(97 + index)})
+                                {String.fromCharCode(97 + index)}) {/* Surgery letter */}
                               </td>
                               <td className="border border-gray-400 p-3">
                                 <div className="screen-only">
@@ -22744,6 +22814,46 @@ Dr. Murali B K
                             </tr>
                           );
                         })}
+
+                        {/* Auto-generated Anaesthetist Charges row (from saved anesthetist data) */}
+                        {savedAnesthetistData.length > 0 && (() => {
+                          const anesthetistTotal = savedAnesthetistData.reduce((sum, a) => sum + (parseFloat(a.rate) || 0), 0);
+                          const anesthetistNames = savedAnesthetistData.map(a => a.anesthetist_name).filter(Boolean).join(', ');
+                          return anesthetistTotal > 0 ? (
+                            <tr className="bg-blue-50">
+                              <td className="border border-gray-400 p-3 text-center font-bold">
+                                {String.fromCharCode(97 + surgeryRows.length)})
+                              </td>
+                              <td className="border border-gray-400 p-3" colSpan={2}>
+                                <div className="font-semibold">Anaesthetist Charges</div>
+                                {anesthetistNames && <div className="text-xs text-gray-600">{anesthetistNames}</div>}
+                              </td>
+                              <td className="border border-gray-400 p-3 text-center text-xs text-gray-500">Auto</td>
+                              <td className="border border-gray-400 p-3 text-right font-semibold">₹{anesthetistTotal.toLocaleString('en-IN')}</td>
+                              <td className="border border-gray-400 p-3 text-right font-semibold">₹{anesthetistTotal.toLocaleString('en-IN')}</td>
+                              <td className="border border-gray-400 p-2 no-print"></td>
+                            </tr>
+                          ) : null;
+                        })()}
+
+                        {/* Auto-generated OT Charges row (from saved anesthetist data — OT charges tracked with anesthetists) */}
+                        {savedAnesthetistData.length > 0 && (() => {
+                          const otCharges = savedAnesthetistData.reduce((sum, a) => sum + (parseFloat(a.ot_charges) || 0), 0);
+                          return otCharges > 0 ? (
+                            <tr className="bg-green-50">
+                              <td className="border border-gray-400 p-3 text-center font-bold">
+                                {String.fromCharCode(97 + surgeryRows.length + 1)})
+                              </td>
+                              <td className="border border-gray-400 p-3" colSpan={2}>
+                                <div className="font-semibold">OT Charges</div>
+                              </td>
+                              <td className="border border-gray-400 p-3 text-center text-xs text-gray-500">Auto</td>
+                              <td className="border border-gray-400 p-3 text-right font-semibold">₹{otCharges.toLocaleString('en-IN')}</td>
+                              <td className="border border-gray-400 p-3 text-right font-semibold">₹{otCharges.toLocaleString('en-IN')}</td>
+                              <td className="border border-gray-400 p-2 no-print"></td>
+                            </tr>
+                          ) : null;
+                        })()}
                       </>
                     )}
 
