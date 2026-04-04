@@ -727,7 +727,8 @@ Rules:
         ? selectedFile.name
         : `capture_${Date.now()}.jpg`;
 
-      const storagePath = `uploads/${Date.now()}_${fileName}`;
+      const sanitizedName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const storagePath = `uploads/${Date.now()}_${sanitizedName}`;
 
       // Upload to Supabase Storage bucket "uploads"
       const { error: storageError } = await (supabase as any).storage
@@ -765,7 +766,7 @@ Rules:
           patient_id: selectedPatient?.id || null,
           patient_name: selectedPatient?.name || null,
           notes: notes || null,
-          uploaded_by: user?.id || user?.email || null,
+          uploaded_by: user?.id || null,
         });
 
       if (insertError) {
