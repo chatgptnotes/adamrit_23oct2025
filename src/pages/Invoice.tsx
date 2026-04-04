@@ -810,6 +810,65 @@ const Invoice = () => {
     enabled: !!visitId
   });
 
+  // Fetch pharmacy charges (CREDIT sales for this visit)
+  const { data: pharmacyData } = useQuery({
+    queryKey: ['invoice-pharmacy', visitId, hospitalConfig?.name],
+    queryFn: async () => {
+      if (!visitId) return { totalAmount: 0 };
+
+      const patientId = visitData?.patients?.patients_id;
+      const hName = hospitalConfig?.name;
+
+      if (!patientId || !hName) return { totalAmount: 0 };
+
+      // 1. Get CREDIT sales for this patient for THIS VISIT
+      const { data: salesData, error: salesError } = await supabase
+        .from('pharmacy_sales')
+        .select('sale_id, total_amount')
+        .eq('patient_id', patientId)
+        .eq('visit_id', visitId)
+        .eq('hospital_name', hName)
+        .eq('payment_method', 'CREDIT');
+
+      if (salesError) {
+        console.error('Error fetching pharmacy sales:', salesError);
+        return { totalAmount: 0 };
+      }
+
+      const totalCreditSales = (salesData || []).reduce((sum, sale) => sum + (sale.total_amount || 0), 0);
+      const visitSaleIds = (salesData || []).map(sale => sale.sale_id);
+
+      // 2. Get returns for sales from THIS VISIT
+      let totalReturns = 0;
+      if (visitSaleIds.length > 0) {
+        const { data: returnsData } = await supabase
+          .from('medicine_returns')
+          .select('net_refund')
+          .in('original_sale_id', visitSaleIds)
+          .eq('hospital_name', hName);
+
+        totalReturns = (returnsData || []).reduce((sum, ret) => sum + (ret.net_refund || 0), 0);
+      }
+
+      // 3. Get credit payments for sales from THIS VISIT
+      let totalPaymentsReceived = 0;
+      if (visitSaleIds.length > 0) {
+        const { data: paymentsData } = await supabase
+          .from('pharmacy_credit_payments')
+          .select('amount')
+          .in('sale_id', visitSaleIds)
+          .eq('hospital_name', hName);
+
+        totalPaymentsReceived = (paymentsData || []).reduce((sum, payment) => sum + (payment.amount || 0), 0);
+      }
+
+      const pendingAmount = Math.max(0, totalCreditSales - totalReturns - totalPaymentsReceived);
+
+      return { totalAmount: pendingAmount };
+    },
+    enabled: !!visitId && !!visitData?.patients?.patients_id && !!hospitalConfig?.name
+  });
+
   // Show loading state
   if (isLoading) {
     return (
@@ -1614,6 +1673,43 @@ const Invoice = () => {
       console.log('No mandatory services found in junction table for this visit');
     }
 
+    // Add pharmacy charges if toggled on
+    if (showPharmacyCharges && pharmacyData?.totalAmount > 0) {
+      services.push({
+        srNo: srNo++,
+        item: 'Pharmacy Charges',
+        rate: pharmacyData.totalAmount,
+        qty: 1,
+        amount: pharmacyData.totalAmount,
+        type: 'pharmacy'
+      });
+    }
+
+    // For package patients with medicine: compulsorily add medicine line
+    const isPackagePatient = visitData?.package_amount && Number(visitData.package_amount) > 0
+      && visitData?.package_status === 'approved';
+    const packageIncludesMedicine = visitData?.package_includes_medicine === true;
+
+    if (isPackagePatient && packageIncludesMedicine && pharmacyData?.totalAmount > 0) {
+      // If pharmacy charges weren't already added via toggle, add them compulsorily for package patients
+      if (!showPharmacyCharges) {
+        services.push({
+          srNo: srNo++,
+          item: 'Medicine Charges (Included in Package - Amount paid by hospital to third party pharmacy)',
+          rate: pharmacyData.totalAmount,
+          qty: 1,
+          amount: pharmacyData.totalAmount,
+          type: 'pharmacy'
+        });
+      } else {
+        // Update the already-added pharmacy line with the note
+        const pharmacyLine = services.find(s => s.type === 'pharmacy');
+        if (pharmacyLine) {
+          pharmacyLine.item = 'Medicine Charges (Included in Package - Amount paid by hospital to third party pharmacy)';
+        }
+      }
+    }
+
     return services;
   };
 
@@ -2126,9 +2222,13 @@ const Invoice = () => {
           <div className="flex justify-center gap-2 mb-4 flex-wrap items-center">
             <button
               onClick={() => setShowPharmacyCharges(!showPharmacyCharges)}
-              className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors text-sm"
+              className={`px-4 py-2 text-white rounded transition-colors text-sm ${
+                showPharmacyCharges
+                  ? 'bg-green-500 hover:bg-green-600'
+                  : 'bg-blue-500 hover:bg-blue-600'
+              }`}
             >
-              Show Pharmacy Charge
+              {showPharmacyCharges ? 'Hide Pharmacy Charge' : 'Show Pharmacy Charge'}
             </button>
             <button
               onClick={() => setHideLabRadiology(!hideLabRadiology)}

@@ -15800,6 +15800,29 @@ Dr. Murali B K
     }
   };
 
+  // Handle Request Approval - sets bill status to PENDING_APPROVAL
+  const handleRequestApproval = async () => {
+    if (!billData?.id) {
+      toast.error('Please save the bill first before requesting approval.');
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('bills')
+        .update({ status: 'PENDING_APPROVAL' } as any)
+        .eq('id', billData.id);
+
+      if (error) throw error;
+
+      toast.success('Bill submitted for approval successfully!');
+      queryClient.invalidateQueries({ queryKey: ['final-bill', visitId] });
+    } catch (error) {
+      console.error('Error requesting approval:', error);
+      toast.error('Failed to submit bill for approval.');
+    }
+  };
+
   // Check if visit ID is missing
   if (!visitId) {
     return (
@@ -22807,6 +22830,25 @@ Dr. Murali B K
                 <Button onClick={handlePrint} variant="outline" size="lg" className="px-6 py-2">
                   🖨️ Print / Save PDF
                 </Button>
+                {billData?.id && (billData as any)?.status !== 'PENDING_APPROVAL' && (billData as any)?.status !== 'APPROVED' && (
+                  <Button
+                    onClick={handleRequestApproval}
+                    className="bg-orange-500 hover:bg-orange-600 text-white px-6 py-2"
+                    size="lg"
+                  >
+                    Request Approval
+                  </Button>
+                )}
+                {(billData as any)?.status === 'PENDING_APPROVAL' && (
+                  <span className="flex items-center text-orange-600 font-medium px-4">
+                    Pending Approval
+                  </span>
+                )}
+                {(billData as any)?.status === 'APPROVED' && (
+                  <span className="flex items-center text-green-600 font-medium px-4">
+                    Approved
+                  </span>
+                )}
               </div>
 
               {/* Bill Preparation Section */}
