@@ -15882,15 +15882,20 @@ Dr. Murali B K
     }
 
     try {
+      const raw = localStorage.getItem('hmis_user');
+      const currentUser = raw ? JSON.parse(raw) : {};
+      const requestedBy = currentUser.email || currentUser.username || 'Unknown';
+
       const { error } = await supabase
         .from('bills')
-        .update({ status: 'PENDING_APPROVAL' } as any)
+        .update({ status: 'PENDING_APPROVAL', created_by: requestedBy } as any)
         .eq('id', billData.id);
 
       if (error) throw error;
 
       toast.success('Bill submitted for approval successfully!');
       queryClient.invalidateQueries({ queryKey: ['final-bill', visitId] });
+      queryClient.invalidateQueries({ queryKey: ['pending-bill-count'] });
     } catch (error) {
       console.error('Error requesting approval:', error);
       toast.error('Failed to submit bill for approval.');
