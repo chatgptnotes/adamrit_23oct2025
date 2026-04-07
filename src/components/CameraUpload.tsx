@@ -61,7 +61,7 @@ interface FileUploadRecord {
   created_at: string;
 }
 
-type UploadCategory = 'report' | 'prescription' | 'xray' | 'document' | 'photo' | 'id_proof';
+type UploadCategory = 'report' | 'prescription' | 'treatment_sheet' | 'xray' | 'document' | 'photo' | 'id_proof';
 
 type AiUploadStep = 'idle' | 'ai_input' | 'ai_loading' | 'ai_confirm' | 'manual';
 
@@ -73,8 +73,9 @@ interface AiParseResult {
 }
 
 const CATEGORY_OPTIONS: { value: UploadCategory; label: string }[] = [
-  { value: 'report', label: 'Report' },
+  { value: 'treatment_sheet', label: 'Treatment Sheet' },
   { value: 'prescription', label: 'Prescription' },
+  { value: 'report', label: 'Report' },
   { value: 'xray', label: 'X-Ray' },
   { value: 'document', label: 'Document' },
   { value: 'photo', label: 'Photo' },
@@ -418,7 +419,8 @@ Category mapping hints:
 - Aadhaar card, PAN card, voter ID, driving license, passport → "id_proof"
 - X-ray, CT scan, MRI → "xray"
 - Blood test, lab report, pathology → "report"
-- Prescription, medication list → "prescription"
+- Treatment sheet, treatment chart, medication chart, drug chart, nursing chart → "treatment_sheet"
+- Prescription, medication list, doctor prescription → "prescription"
 - Discharge summary, referral letter, consent form → "document"
 - Patient photo, wound photo → "photo"
 
@@ -703,6 +705,180 @@ Rules:
   }, [selectedPatient, toast]);
 
   // -------------------------------------------------------------------------
+  // Treatment Sheet: extract medicines as structured JSON using Gemini Vision
+  // -------------------------------------------------------------------------
+
+  const transcribeTreatmentSheet = useCallback(async (imageBlob: Blob): Promise<string | null> => {
+    const geminiApiKey = import.meta.env.VITE_GEMINI_API_KEY;
+    if (!geminiApiKey) {
+      toast({ title: 'AI Unavailable', description: 'Gemini API key not configured.', variant: 'destructive' });
+      return null;
+    }
+
+    const base64 = await new Promise<string>((resolve) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const result = reader.result as string;
+        resolve(result.split(',')[1]);
+      };
+      reader.readAsDataURL(imageBlob);
+    });
+
+    const mimeType = imageBlob.type || 'image/jpeg';
+
+    const systemPrompt = `You are an expert pharmacist analyzing a hospital treatment sheet / medication chart image.
+
+Extract ALL medicines listed in this treatment sheet.
+
+Return the result in this EXACT format:
+
+TREATMENT SHEET EXTRACTED
+=========================
+Patient: [name if visible, otherwise "As per records"]
+Date: [date if visible]
+Doctor: [doctor name if visible]
+
+Medicines:
+1. [Medicine Name] - [Strength/Dose] - [Route] - [Frequency] - [Duration] - [Special Instructions]
+2. [Medicine Name] - [Strength/Dose] - [Route] - [Frequency] - [Duration] - [Special Instructions]
+...
+
+ALSO return a JSON block at the end in this format (after the text):
+===JSON===
+[
+  {"name": "Medicine Name", "strength": "500mg", "route": "Oral", "frequency": "BD", "duration": "5 days", "instructions": "after food"},
+  ...
+]
+===END_JSON===
+
+Rules:
+- Extract EVERY medicine visible, even if partially legible
+- Include IV fluids, injections, tablets, syrups, everything
+- Frequency codes: OD=once daily, BD=twice daily, TDS=thrice daily, QID=4 times, SOS=as needed, HS=bedtime, STAT=immediately
+- Route: Oral, IV, IM, SC, Topical, Inhaler, Nebulization, etc.
+- If any field is unclear, write "as directed"
+- The JSON block must be valid JSON`;
+
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiApiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{
+            parts: [
+              { text: systemPrompt },
+              { inline_data: { mime_type: mimeType, data: base64 } }
+            ]
+          }],
+          generationConfig: { temperature: 0.2, maxOutputTokens: 4000 },
+        }),
+      }
+    );
+
+    if (!response.ok) throw new Error(`Gemini API error: ${response.status}`);
+
+    const data = await response.json();
+    return data.candidates?.[0]?.content?.parts?.[0]?.text || null;
+  }, [toast]);
+
+  // Save extracted treatment sheet medicines as a prescription (visit_medications)
+  const saveExtractedMedicines = useCallback(async (transcribedText: string) => {
+    if (!selectedPatient?.id || !transcribedText) return;
+
+    setSavingPrescription(true);
+    try {
+      // Extract JSON block from the transcribed text
+      const jsonMatch = transcribedText.match(/===JSON===\s*([\s\S]*?)\s*===END_JSON===/);
+      let medicines: { name: string; strength?: string; route?: string; frequency?: string; duration?: string; instructions?: string }[] = [];
+
+      if (jsonMatch) {
+        try {
+          medicines = JSON.parse(jsonMatch[1]);
+        } catch (e) {
+          console.error('Failed to parse medicines JSON:', e);
+        }
+      }
+
+      // Get the patient's latest visit
+      const { data: visitData } = await (supabase as any)
+        .from('visits')
+        .select('id, visit_id')
+        .eq('patient_id', selectedPatient.id)
+        .order('admission_date', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (!visitData) {
+        toast({ title: 'No Visit Found', description: 'Could not find an active visit for this patient. Prescription text saved to notes only.', variant: 'destructive' });
+        // Still save the text transcription to file_uploads notes
+        const { data: recentUpload } = await (supabase as any)
+          .from('file_uploads')
+          .select('id')
+          .eq('patient_id', selectedPatient.id)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .single();
+        if (recentUpload) {
+          await (supabase as any).from('file_uploads').update({ notes: transcribedText }).eq('id', recentUpload.id);
+        }
+        setShowPrescriptionModal(false);
+        setPrescriptionResult(null);
+        return;
+      }
+
+      // Insert medicines into visit_medications
+      if (medicines.length > 0) {
+        const medsToInsert = medicines.map(med => ({
+          visit_id: visitData.id,
+          medication_name: med.name || 'Unknown',
+          dosage: med.strength || '',
+          route: med.route || 'Oral',
+          frequency: med.frequency || 'OD',
+          duration: med.duration || '',
+          special_instructions: med.instructions || '',
+          prescribed_date: new Date().toISOString(),
+          status: 'active',
+        }));
+
+        const { error: insertError } = await (supabase as any)
+          .from('visit_medications')
+          .insert(medsToInsert);
+
+        if (insertError) {
+          console.error('Error inserting medications:', insertError);
+          toast({ title: 'Partial Save', description: `Extracted ${medicines.length} medicines but failed to save to visit: ${insertError.message}. Text saved to notes.`, variant: 'destructive' });
+        } else {
+          toast({
+            title: 'Prescription Created!',
+            description: `${medicines.length} medicines extracted from treatment sheet and saved to ${selectedPatient.name}'s visit.`,
+          });
+        }
+      }
+
+      // Also save full text to file_uploads notes
+      const { data: recentUpload } = await (supabase as any)
+        .from('file_uploads')
+        .select('id')
+        .eq('patient_id', selectedPatient.id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+      if (recentUpload) {
+        await (supabase as any).from('file_uploads').update({ notes: transcribedText }).eq('id', recentUpload.id);
+      }
+
+      setShowPrescriptionModal(false);
+      setPrescriptionResult(null);
+    } catch (e) {
+      console.error('Error saving extracted medicines:', e);
+      toast({ title: 'Save Failed', description: 'Could not save prescription.', variant: 'destructive' });
+    } finally {
+      setSavingPrescription(false);
+    }
+  }, [selectedPatient, toast]);
+
+  // -------------------------------------------------------------------------
   // Upload logic
   // -------------------------------------------------------------------------
 
@@ -788,18 +964,20 @@ Rules:
         description: `${fileName} has been uploaded successfully.`,
       });
 
-      // If category is prescription and patient is selected, transcribe the prescription
-      if (category === 'prescription' && selectedPatient) {
+      // If category is prescription or treatment_sheet and patient is selected, transcribe
+      if ((category === 'prescription' || category === 'treatment_sheet') && selectedPatient) {
         setTranscribing(true);
         try {
-          const transcription = await transcribePrescription(fileToUpload);
+          const transcription = category === 'treatment_sheet'
+            ? await transcribeTreatmentSheet(fileToUpload)
+            : await transcribePrescription(fileToUpload);
           if (transcription) {
             setPrescriptionResult(transcription);
             setShowPrescriptionModal(true);
           }
         } catch (err) {
-          console.error('Prescription transcription error:', err);
-          toast({ title: 'Transcription Failed', description: 'Could not transcribe prescription. File was uploaded successfully.', variant: 'destructive' });
+          console.error('Transcription error:', err);
+          toast({ title: 'Transcription Failed', description: 'Could not transcribe document. File was uploaded successfully.', variant: 'destructive' });
         } finally {
           setTranscribing(false);
         }
@@ -828,6 +1006,7 @@ Rules:
     clearCapture,
     fetchRecentUploads,
     transcribePrescription,
+    transcribeTreatmentSheet,
   ]);
 
   // -------------------------------------------------------------------------
@@ -1273,24 +1452,32 @@ Rules:
   // Main content
   // -------------------------------------------------------------------------
 
-  /** Prescription transcription modal */
+  /** Prescription / Treatment Sheet transcription modal */
+  const isTreatmentSheet = category === 'treatment_sheet';
+  const hasJsonMedicines = prescriptionResult?.includes('===JSON===');
+
   const renderPrescriptionModal = () => (
     <Dialog open={showPrescriptionModal} onOpenChange={setShowPrescriptionModal}>
       <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Sparkles className="h-5 w-5 text-purple-600" />
-            Transcribed Prescription
+            {isTreatmentSheet ? 'Extracted Treatment Sheet' : 'Transcribed Prescription'}
             {selectedPatient && (
               <Badge variant="outline" className="ml-2">{selectedPatient.name}</Badge>
             )}
           </DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
+          {isTreatmentSheet && hasJsonMedicines && (
+            <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-sm text-green-800">
+              <strong>Medicines detected!</strong> Click "Create Prescription" to add these medicines to the patient's visit as a prescription.
+            </div>
+          )}
           <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 font-mono text-sm whitespace-pre-wrap max-h-[50vh] overflow-y-auto">
-            {prescriptionResult}
+            {prescriptionResult?.replace(/===JSON===[\s\S]*===END_JSON===/, '').trim()}
           </div>
-          <div className="flex gap-2 justify-end">
+          <div className="flex gap-2 justify-end flex-wrap">
             <Button variant="outline" onClick={() => { setShowPrescriptionModal(false); setPrescriptionResult(null); }}>
               Close
             </Button>
@@ -1298,7 +1485,7 @@ Rules:
               onClick={() => {
                 if (prescriptionResult) {
                   navigator.clipboard.writeText(prescriptionResult);
-                  toast({ title: 'Copied', description: 'Prescription copied to clipboard.' });
+                  toast({ title: 'Copied', description: 'Text copied to clipboard.' });
                 }
               }}
               variant="outline"
@@ -1306,17 +1493,31 @@ Rules:
               <FileText className="h-4 w-4 mr-2" />
               Copy
             </Button>
-            <Button
-              className="bg-green-600 hover:bg-green-700"
-              onClick={() => prescriptionResult && savePrescriptionToPatient(prescriptionResult)}
-              disabled={savingPrescription}
-            >
-              {savingPrescription ? (
-                <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Saving...</>
-              ) : (
-                'Save to Patient'
-              )}
-            </Button>
+            {isTreatmentSheet && hasJsonMedicines ? (
+              <Button
+                className="bg-green-600 hover:bg-green-700"
+                onClick={() => prescriptionResult && saveExtractedMedicines(prescriptionResult)}
+                disabled={savingPrescription}
+              >
+                {savingPrescription ? (
+                  <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Creating Prescription...</>
+                ) : (
+                  '💊 Create Prescription'
+                )}
+              </Button>
+            ) : (
+              <Button
+                className="bg-green-600 hover:bg-green-700"
+                onClick={() => prescriptionResult && savePrescriptionToPatient(prescriptionResult)}
+                disabled={savingPrescription}
+              >
+                {savingPrescription ? (
+                  <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Saving...</>
+                ) : (
+                  'Save to Patient'
+                )}
+              </Button>
+            )}
           </div>
         </div>
       </DialogContent>
@@ -1331,7 +1532,9 @@ Rules:
       {transcribing && (
         <div className="flex items-center justify-center gap-3 p-4 bg-purple-50 border border-purple-200 rounded-lg">
           <Loader2 className="h-5 w-5 animate-spin text-purple-600" />
-          <span className="text-sm font-medium text-purple-700">Transcribing prescription with AI...</span>
+          <span className="text-sm font-medium text-purple-700">
+            {category === 'treatment_sheet' ? 'Extracting medicines from treatment sheet...' : 'Transcribing prescription with AI...'}
+          </span>
         </div>
       )}
       {renderAiSmartInput()}
