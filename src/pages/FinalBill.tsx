@@ -9113,22 +9113,51 @@ INSTRUCTIONS:
 
   // Function to fetch prescriptions for the patient
   const fetchPatientPrescriptions = async () => {
-    if (!patientInfo?.id) return;
+    if (!patientInfo?.id && !patientInfo?.name) return;
     try {
-      // Step 1: Fetch prescriptions for this patient
-      const { data: rxData, error: rxError } = await (supabase as any)
-        .from('prescriptions')
-        .select('*')
-        .eq('patient_id', patientInfo.id)
-        .order('created_at', { ascending: false });
-
-      if (rxError) {
-        console.error('❌ [PRESCRIPTIONS FETCH] Error:', rxError);
-        toast.error('Failed to load prescriptions');
-        return;
+      // Step 1: Try by patient_id first
+      let rxData: any[] = [];
+      if (patientInfo?.id) {
+        const { data, error } = await (supabase as any)
+          .from('prescriptions')
+          .select('*')
+          .eq('patient_id', patientInfo.id)
+          .order('created_at', { ascending: false });
+        if (!error && data) rxData = data;
       }
 
-      if (!rxData || rxData.length === 0) {
+      // Step 2: If no results by ID, also try searching ALL recent prescriptions
+      // and match by patient name (handles ID mismatch between camera upload and visit)
+      if (rxData.length === 0 && patientInfo?.name) {
+        const { data: allRx, error: allError } = await (supabase as any)
+          .from('prescriptions')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(100);
+
+        if (!allError && allRx) {
+          // Look up patient names for these prescriptions
+          const patientIds = [...new Set(allRx.map((rx: any) => rx.patient_id).filter(Boolean))];
+          if (patientIds.length > 0) {
+            const { data: patients } = await (supabase as any)
+              .from('patients')
+              .select('id, name')
+              .in('id', patientIds);
+
+            const nameMap: Record<string, string> = {};
+            for (const p of (patients || [])) {
+              nameMap[p.id] = (p.name || '').toLowerCase().trim();
+            }
+
+            const searchName = (patientInfo.name || '').toLowerCase().trim();
+            rxData = allRx.filter((rx: any) =>
+              nameMap[rx.patient_id] === searchName
+            );
+          }
+        }
+      }
+
+      if (rxData.length === 0) {
         setPrescriptionsForPatient([]);
         setPrescriptionsLoaded(true);
         return;
@@ -20472,7 +20501,8 @@ Dr. Murali B K
                             {prescriptionsForPatient.length === 0 ? (
                               <div className="text-center py-4">
                                 <p className="text-sm text-gray-500">No prescriptions found for this patient.</p>
-                                <p className="text-xs text-gray-400 mt-1">Patient ID: {patientInfo?.id || 'not loaded'}</p>
+                                <p className="text-xs text-gray-400 mt-1">Patient: {patientInfo?.name || 'unknown'} | ID: {patientInfo?.id ? patientInfo.id.substring(0, 8) + '...' : 'not loaded'}</p>
+                                <p className="text-xs text-blue-500 mt-2">Upload a treatment sheet via the camera icon to create prescriptions.</p>
                               </div>
                             ) : (
                               <div className="space-y-3">
