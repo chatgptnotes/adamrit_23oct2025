@@ -1773,6 +1773,7 @@ const FinalBill = () => {
   const [serviceSearchTerm, setServiceSearchTerm] = useState("");
   const [accommodationSearchTerm, setAccommodationSearchTerm] = useState("");
   const [activeServiceTab, setActiveServiceTab] = useState("Laboratory services");
+  const [implantCategoryFilter, setImplantCategoryFilter] = useState<string>('ALL');
   const [diagnosisSearchTerm, setDiagnosisSearchTerm] = useState("");
   const [selectedDiagnoses, setSelectedDiagnoses] = useState<any[]>([]);
   const [savedDiagnoses, setSavedDiagnoses] = useState<{ id: string; name: string; is_primary: boolean }[]>([]);
@@ -2193,9 +2194,9 @@ const FinalBill = () => {
           }
         }
 
-        const { data, error } = await supabase
+        const { data, error } = await (supabase as any)
           .from('implants')
-          .select('id, name, nabh_nabl_rate, non_nabh_nabl_rate, private_rate, bhopal_nabh_rate, bhopal_non_nabh_rate')
+          .select('id, name, nabh_nabl_rate, non_nabh_nabl_rate, private_rate, bhopal_nabh_rate, bhopal_non_nabh_rate, category, subcategory, manufacturer, model_number, description')
           .order('name');
 
         if (error) {
@@ -2284,7 +2285,12 @@ const FinalBill = () => {
               name: implant.name,
               amount: cost,
               code: '',
-              rateSource: rateSource
+              rateSource: rateSource,
+              category: implant.category || 'General',
+              subcategory: implant.subcategory || '',
+              manufacturer: implant.manufacturer || '',
+              model_number: implant.model_number || '',
+              description: implant.description || '',
             };
           });
 
@@ -10912,12 +10918,15 @@ INSTRUCTIONS:
 
   // Filtered implant services
   const filteredImplantServices = (() => {
-    const result = serviceSearchTerm.length >= 2
+    const base = serviceSearchTerm.length >= 2
       ? searchedImplantServices
       : availableImplantServices.filter(service =>
           service.name?.toLowerCase().includes(serviceSearchTerm.toLowerCase())
         );
-    return result;
+    if (!implantCategoryFilter || implantCategoryFilter === 'ALL') return base;
+    return (base || []).filter((service: any) =>
+      (service.category || 'General') === implantCategoryFilter
+    );
   })();
 
   // Debug logging for implant services
@@ -18234,6 +18243,30 @@ Dr. Murali B K
 
                       {activeServiceTab === "Implant" && (
                         <>
+                          {/* Category filter pills */}
+                          {!isLoadingImplantServices && availableImplantServices.length > 0 && (
+                            <div className="px-2 pt-2 pb-1 flex flex-wrap gap-1 border-b border-gray-100">
+                              {['ALL', 'Orthopedic', 'Cardiac', 'Spinal', 'Neurosurgery', 'Ophthalmic', 'Dental', 'ENT', 'Urology', 'Vascular', 'General'].map((cat) => {
+                                const catCount = cat === 'ALL'
+                                  ? availableImplantServices.length
+                                  : availableImplantServices.filter((s: any) => (s.category || 'General') === cat).length;
+                                if (catCount === 0 && cat !== 'ALL') return null;
+                                return (
+                                  <button
+                                    key={cat}
+                                    onClick={() => setImplantCategoryFilter(cat)}
+                                    className={`px-2 py-0.5 rounded-full text-xs font-medium border transition-colors ${
+                                      implantCategoryFilter === cat
+                                        ? 'bg-blue-600 text-white border-blue-600'
+                                        : 'bg-white text-gray-600 border-gray-300 hover:border-blue-400 hover:text-blue-600'
+                                    }`}
+                                  >
+                                    {cat} {catCount > 0 && <span className="opacity-70">({catCount})</span>}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          )}
                           {(isLoadingImplantServices || isSearchingImplants) ? (
                             <div className="p-2 text-gray-500 text-sm">
                               {serviceSearchTerm.length >= 2 ? 'Searching implant services...' : 'Loading implant services...'}
@@ -18241,7 +18274,7 @@ Dr. Murali B K
                           ) : (
                             <>
                               {filteredImplantServices && filteredImplantServices.length > 0 ? (
-                                filteredImplantServices.map((service) => (
+                                filteredImplantServices.map((service: any) => (
                                   <div
                                     key={service.id}
                                     className={`p-2 border-b border-gray-100 last:border-b-0 ${(!service.amount || service.amount === 0) ? 'bg-gray-50 cursor-not-allowed opacity-60' : 'hover:bg-gray-100 cursor-pointer'}`}
@@ -18252,13 +18285,24 @@ Dr. Murali B K
                                     }}
                                   >
                                     <div className="flex justify-between items-center">
-                                      <div className="flex-1">
+                                      <div className="flex-1 min-w-0">
                                         <div className={`font-medium text-sm ${(!service.amount || service.amount === 0) ? 'text-gray-400' : ''}`}>{service.name}</div>
+                                        <div className="flex flex-wrap gap-1 mt-0.5">
+                                          {service.category && service.category !== 'General' && (
+                                            <span className="text-xs text-blue-600">{service.category}</span>
+                                          )}
+                                          {service.subcategory && (
+                                            <span className="text-xs text-gray-500">· {service.subcategory}</span>
+                                          )}
+                                          {service.manufacturer && (
+                                            <span className="text-xs text-gray-500">· {service.manufacturer}</span>
+                                          )}
+                                        </div>
                                         {(!service.amount || service.amount === 0) && (
                                           <div className="text-xs text-red-500 mt-1">Rate not available</div>
                                         )}
                                       </div>
-                                      <div className={`text-sm font-medium ${(!service.amount || service.amount === 0) ? 'text-red-500' : 'text-green-600'}`}>
+                                      <div className={`text-sm font-medium ml-2 shrink-0 ${(!service.amount || service.amount === 0) ? 'text-red-500' : 'text-green-600'}`}>
                                         {service.rateSource === 'private' && 'Private: '}
                                         {service.rateSource === 'non_nabh' && 'Non-NABH: '}
                                         {service.rateSource === 'bhopal_nabh' && 'Bhopal NABH: '}
@@ -19323,6 +19367,20 @@ Dr. Murali B K
                           Medications ({savedMedicationData.length}) {console.log('🔍 savedMedicationData:', savedMedicationData)}
                         </button>
                         <button
+                          className={`px-4 py-2 text-sm font-medium ${savedDataTab === 'prescriptions'
+                            ? 'border-b-2 border-purple-500 text-purple-600 bg-purple-50'
+                            : 'text-purple-400 hover:text-purple-700 bg-purple-50/50'
+                            }`}
+                          onClick={() => {
+                            setSavedDataTab('prescriptions');
+                            if (!prescriptionsLoaded) {
+                              fetchPatientPrescriptions();
+                            }
+                          }}
+                        >
+                          Prescriptions ({prescriptionsForPatient.length})
+                        </button>
+                        <button
                           className={`px-4 py-2 text-sm font-medium ${savedDataTab === 'clinical_services'
                             ? 'border-b-2 border-blue-500 text-blue-600 bg-blue-50'
                             : 'text-gray-500 hover:text-gray-700'
@@ -19422,20 +19480,6 @@ Dr. Murali B K
                           onClick={() => setSavedDataTab('discount')}
                         >
                           Discount
-                        </button>
-                        <button
-                          className={`px-4 py-2 text-sm font-medium ${savedDataTab === 'prescriptions'
-                            ? 'border-b-2 border-blue-500 text-blue-600 bg-blue-50'
-                            : 'text-gray-500 hover:text-gray-700'
-                            }`}
-                          onClick={() => {
-                            setSavedDataTab('prescriptions');
-                            if (!prescriptionsLoaded) {
-                              fetchPatientPrescriptions();
-                            }
-                          }}
-                        >
-                          Prescriptions ({prescriptionsForPatient.length})
                         </button>
                       </div>
 

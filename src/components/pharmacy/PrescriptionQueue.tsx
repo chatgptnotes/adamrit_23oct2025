@@ -158,7 +158,7 @@ async function fetchPrescriptions(): Promise<Prescription[]> {
     if (!itemsByPrescription[key]) itemsByPrescription[key] = [];
     itemsByPrescription[key].push({
       ...item,
-      medicine_name: item.medicine_id ? medicineMap[item.medicine_id] || 'Unknown Medicine' : 'Unknown Medicine',
+      medicine_name: item.medicine_id ? medicineMap[item.medicine_id] || item.medicine_name || 'Unknown Medicine' : item.medicine_name || 'Unknown Medicine',
     });
   }
 

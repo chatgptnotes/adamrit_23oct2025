@@ -1600,6 +1600,7 @@ Rules:
           return {
             prescription_id: prescriptionId,
             medicine_id: null,
+            medicine_name: m.name || 'Unknown',
             quantity_prescribed: m.qty,
             dosage_frequency: m.frequency,
             dosage_timing: m.route,
