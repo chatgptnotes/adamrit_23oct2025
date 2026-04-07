@@ -36,6 +36,7 @@ import {
   Calendar,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/contexts/AuthContext';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -178,9 +179,10 @@ async function fetchPrescriptions(): Promise<Prescription[]> {
 interface DispenseModalProps {
   prescription: Prescription;
   onClose: () => void;
+  hospitalName?: string;
 }
 
-const DispenseModal: React.FC<DispenseModalProps> = ({ prescription, onClose }) => {
+const DispenseModal: React.FC<DispenseModalProps> = ({ prescription, onClose, hospitalName }) => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [isDispensing, setIsDispensing] = useState(false);
@@ -258,6 +260,7 @@ const DispenseModal: React.FC<DispenseModalProps> = ({ prescription, onClose }) 
           patient_name: prescription.patient_name,
           prescription_number: prescription.prescription_number,
           doctor_name: prescription.doctor_name,
+          hospital_name: hospitalName || 'hope',
           bill_number: billNumber,
           subtotal: 0,
           discount: 0,
@@ -527,6 +530,7 @@ const DetailModal: React.FC<DetailModalProps> = ({ prescription, onClose }) => {
 // ─── Main Component ────────────────────────────────────────────────────────────
 
 const PrescriptionQueue: React.FC = () => {
+  const { hospitalType } = useAuth();
   const [activeStatusTab, setActiveStatusTab] = useState<StatusTab>('ALL');
   const [searchTerm, setSearchTerm] = useState('');
   const [viewPrescription, setViewPrescription] = useState<Prescription | null>(null);
@@ -805,6 +809,7 @@ const PrescriptionQueue: React.FC = () => {
             <DispenseModal
               prescription={dispensePrescription}
               onClose={() => setDispensePrescription(null)}
+              hospitalName={hospitalType || 'hope'}
             />
           )}
         </DialogContent>
