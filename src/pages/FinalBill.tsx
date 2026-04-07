@@ -2645,6 +2645,8 @@ const FinalBill = () => {
   const [savedPathologyCharges, setSavedPathologyCharges] = useState<any[]>([]);
   const [prescriptionsForPatient, setPrescriptionsForPatient] = useState<any[]>([]);
   const [prescriptionsLoaded, setPrescriptionsLoaded] = useState(false);
+  const [addMedicineToRxId, setAddMedicineToRxId] = useState<string | null>(null);
+  const [newMedicine, setNewMedicine] = useState({ name: '', route: 'IV', frequency: 'BD', duration: '', qty: 3, instructions: '' });
 
   // State initialization flags to prevent duplicate fetches
   const [clinicalServicesInitialized, setClinicalServicesInitialized] = useState(false);
@@ -20593,40 +20595,166 @@ Dr. Murali B K
                                     </div>
 
                                     {/* Medicines Table */}
-                                    {prescription.prescription_items && prescription.prescription_items.length > 0 && (
-                                      <div className="border-t border-gray-100">
-                                        <table className="w-full text-xs">
-                                          <thead className="bg-gray-50">
-                                            <tr>
-                                              <th className="px-3 py-1.5 text-left text-gray-600 font-medium w-8">#</th>
-                                              <th className="px-3 py-1.5 text-left text-gray-600 font-medium">Medicine</th>
-                                              <th className="px-3 py-1.5 text-left text-gray-600 font-medium">Route</th>
-                                              <th className="px-3 py-1.5 text-left text-gray-600 font-medium">Frequency</th>
-                                              <th className="px-3 py-1.5 text-left text-gray-600 font-medium">Instructions</th>
-                                              <th className="px-3 py-1.5 text-center text-gray-600 font-medium w-16">Qty</th>
+                                    <div className="border-t border-gray-100">
+                                      <table className="w-full text-xs">
+                                        <thead className="bg-gray-50">
+                                          <tr>
+                                            <th className="px-3 py-1.5 text-left text-gray-600 font-medium w-8">#</th>
+                                            <th className="px-3 py-1.5 text-left text-gray-600 font-medium">Medicine</th>
+                                            <th className="px-3 py-1.5 text-left text-gray-600 font-medium">Route</th>
+                                            <th className="px-3 py-1.5 text-left text-gray-600 font-medium">Frequency</th>
+                                            <th className="px-3 py-1.5 text-left text-gray-600 font-medium">Instructions</th>
+                                            <th className="px-3 py-1.5 text-center text-gray-600 font-medium w-16">Qty</th>
+                                            <th className="px-3 py-1.5 text-center text-gray-600 font-medium w-8"></th>
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          {(prescription.prescription_items || []).map((item: any, idx: number) => (
+                                            <tr key={item.id} className="border-t border-gray-50 hover:bg-blue-50/30">
+                                              <td className="px-3 py-1.5 text-gray-400">{idx + 1}</td>
+                                              <td className="px-3 py-1.5 font-medium text-gray-800">
+                                                {(item.medicine_name || `Medicine #${item.medicine_id || '?'}`).toUpperCase()}
+                                                {item.special_instructions && (
+                                                  <span className="ml-1 text-blue-500 font-normal italic">{item.special_instructions}</span>
+                                                )}
+                                              </td>
+                                              <td className="px-3 py-1.5 text-gray-600">{item.dosage_timing || '-'}</td>
+                                              <td className="px-3 py-1.5 text-gray-600">{item.dosage_frequency || '-'}</td>
+                                              <td className="px-3 py-1.5 text-gray-500">{item.duration_days ? `${item.duration_days} days` : '-'}</td>
+                                              <td className="px-3 py-1.5 text-center font-medium">{item.quantity_prescribed || 0}</td>
+                                              <td className="px-3 py-1.5 text-center">
+                                                <button
+                                                  onClick={async () => {
+                                                    if (!confirm('Remove this medicine?')) return;
+                                                    const { error } = await (supabase as any).from('prescription_items').delete().eq('id', item.id);
+                                                    if (error) { toast.error('Failed to remove'); } else { fetchPatientPrescriptions(); }
+                                                  }}
+                                                  className="text-red-300 hover:text-red-600 text-[10px]"
+                                                  title="Remove medicine"
+                                                >✕</button>
+                                              </td>
                                             </tr>
-                                          </thead>
-                                          <tbody>
-                                            {prescription.prescription_items.map((item: any, idx: number) => (
-                                              <tr key={item.id} className="border-t border-gray-50 hover:bg-blue-50/30">
-                                                <td className="px-3 py-1.5 text-gray-400">{idx + 1}</td>
-                                                <td className="px-3 py-1.5 font-medium text-gray-800">
-                                                  {(item.medicine_name || `Medicine #${item.medicine_id || '?'}`).toUpperCase()}
-                                                  {item.special_instructions && (
-                                                    <span className="ml-1 text-blue-500 font-normal italic">{item.special_instructions}</span>
-                                                  )}
-                                                </td>
-                                                <td className="px-3 py-1.5 text-gray-600">{item.dosage_timing || '-'}</td>
-                                                <td className="px-3 py-1.5 text-gray-600">{item.dosage_frequency || '-'}</td>
-                                                <td className="px-3 py-1.5 text-gray-500">{item.duration_days ? `${item.duration_days} days` : '-'}</td>
-                                                <td className="px-3 py-1.5 text-center font-medium">{item.quantity_prescribed || 0}</td>
-                                              </tr>
-                                            ))}
-                                          </tbody>
-                                        </table>
-                                      </div>
-                                    )}
-                                    {/* No notes shown — raw AI text is not useful to display */}
+                                          ))}
+
+                                          {/* Add Medicine inline form */}
+                                          {addMedicineToRxId === prescription.id && (
+                                            <tr className="border-t-2 border-blue-200 bg-blue-50/50">
+                                              <td className="px-3 py-1.5 text-blue-400">+</td>
+                                              <td className="px-2 py-1">
+                                                <input
+                                                  type="text"
+                                                  placeholder="Medicine name..."
+                                                  value={newMedicine.name}
+                                                  onChange={(e) => setNewMedicine(prev => ({ ...prev, name: e.target.value }))}
+                                                  className="w-full h-6 text-xs border border-blue-300 rounded px-1.5 bg-white"
+                                                  autoFocus
+                                                />
+                                              </td>
+                                              <td className="px-2 py-1">
+                                                <select
+                                                  value={newMedicine.route}
+                                                  onChange={(e) => setNewMedicine(prev => ({ ...prev, route: e.target.value }))}
+                                                  className="h-6 text-xs border border-blue-300 rounded px-1 bg-white w-full"
+                                                >
+                                                  <option value="IV">IV</option>
+                                                  <option value="IM">IM</option>
+                                                  <option value="Oral">Oral</option>
+                                                  <option value="SC">SC</option>
+                                                  <option value="Topical">Topical</option>
+                                                  <option value="Inhale">Inhale</option>
+                                                  <option value="SL">SL</option>
+                                                  <option value="PR">PR</option>
+                                                </select>
+                                              </td>
+                                              <td className="px-2 py-1">
+                                                <select
+                                                  value={newMedicine.frequency}
+                                                  onChange={(e) => setNewMedicine(prev => ({ ...prev, frequency: e.target.value }))}
+                                                  className="h-6 text-xs border border-blue-300 rounded px-1 bg-white w-full"
+                                                >
+                                                  <option value="OD">OD</option>
+                                                  <option value="BD">BD</option>
+                                                  <option value="TDS">TDS</option>
+                                                  <option value="QID">QID</option>
+                                                  <option value="HS">HS</option>
+                                                  <option value="SOS">SOS</option>
+                                                  <option value="STAT">STAT</option>
+                                                </select>
+                                              </td>
+                                              <td className="px-2 py-1">
+                                                <input
+                                                  type="text"
+                                                  placeholder="e.g. 5 days"
+                                                  value={newMedicine.instructions}
+                                                  onChange={(e) => setNewMedicine(prev => ({ ...prev, instructions: e.target.value }))}
+                                                  className="w-full h-6 text-xs border border-blue-300 rounded px-1.5 bg-white"
+                                                />
+                                              </td>
+                                              <td className="px-2 py-1">
+                                                <input
+                                                  type="number"
+                                                  min={1}
+                                                  value={newMedicine.qty}
+                                                  onChange={(e) => setNewMedicine(prev => ({ ...prev, qty: Math.max(1, parseInt(e.target.value) || 1) }))}
+                                                  className="w-14 h-6 text-xs border border-blue-300 rounded px-1.5 bg-white text-center"
+                                                />
+                                              </td>
+                                              <td className="px-2 py-1 flex gap-1">
+                                                <button
+                                                  onClick={async () => {
+                                                    if (!newMedicine.name.trim()) { toast.error('Enter medicine name'); return; }
+                                                    const { error } = await (supabase as any)
+                                                      .from('prescription_items')
+                                                      .insert({
+                                                        prescription_id: prescription.id,
+                                                        medicine_id: null,
+                                                        medicine_name: newMedicine.name.trim(),
+                                                        quantity_prescribed: newMedicine.qty,
+                                                        dosage_frequency: newMedicine.frequency,
+                                                        dosage_timing: newMedicine.route,
+                                                        duration_days: parseInt(newMedicine.duration) || 0,
+                                                        special_instructions: newMedicine.instructions || null,
+                                                      });
+                                                    if (error) {
+                                                      toast.error('Failed to add medicine: ' + error.message);
+                                                    } else {
+                                                      toast.success(`Added ${newMedicine.name}`);
+                                                      setNewMedicine({ name: '', route: 'IV', frequency: 'BD', duration: '', qty: 3, instructions: '' });
+                                                      fetchPatientPrescriptions();
+                                                    }
+                                                  }}
+                                                  className="text-green-600 hover:text-green-800 text-sm font-bold"
+                                                  title="Save"
+                                                >✓</button>
+                                                <button
+                                                  onClick={() => {
+                                                    setAddMedicineToRxId(null);
+                                                    setNewMedicine({ name: '', route: 'IV', frequency: 'BD', duration: '', qty: 3, instructions: '' });
+                                                  }}
+                                                  className="text-gray-400 hover:text-gray-600 text-sm"
+                                                  title="Cancel"
+                                                >✕</button>
+                                              </td>
+                                            </tr>
+                                          )}
+                                        </tbody>
+                                      </table>
+
+                                      {/* Add Medicine button */}
+                                      {addMedicineToRxId !== prescription.id && (
+                                        <div className="px-3 py-1.5 border-t border-gray-100">
+                                          <button
+                                            onClick={() => {
+                                              setAddMedicineToRxId(prescription.id);
+                                              setNewMedicine({ name: '', route: 'IV', frequency: 'BD', duration: '', qty: 3, instructions: '' });
+                                            }}
+                                            className="text-xs text-blue-600 hover:text-blue-800 hover:bg-blue-50 px-2 py-1 rounded"
+                                          >
+                                            + Add Medicine
+                                          </button>
+                                        </div>
+                                      )}
+                                    </div>
                                   </div>
                                 ))}
                               </div>
