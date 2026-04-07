@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useMemo, useCallback, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useMemo, useCallback, useRef, ReactNode } from 'react';
 import { HospitalType, getHospitalConfig } from '@/types/hospital';
 import { supabase } from '@/integrations/supabase/client';
 import { hashPassword, comparePassword, validateEmail, sanitizeInput, signupRateLimiter } from '@/utils/auth';
@@ -235,17 +235,23 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
   // Listen for Supabase Auth state changes AND check existing session on mount
   useEffect(() => {
+    // Track whether we're in an OAuth callback — don't prematurely stop loading
+    const isOAuthCallback = window.location.hash.includes('access_token');
+    let oauthResolved = false;
+
     // Register listener for future auth events
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       console.log('🔐 Auth state change:', event, session?.user?.email);
 
       if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session?.user?.email) {
+        oauthResolved = true;
         if (!localStorage.getItem('hmis_user')) {
           await handleGoogleSession(session.user.email);
         } else {
           setIsAuthLoading(false);
         }
-      } else {
+      } else if (!isOAuthCallback || oauthResolved) {
+        // Only stop loading if we're NOT waiting for an OAuth token exchange
         setIsAuthLoading(false);
       }
     });
@@ -254,14 +260,29 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     // processed by Supabase client before the listener was registered)
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (session?.user?.email && !localStorage.getItem('hmis_user')) {
+        oauthResolved = true;
         console.log('🔐 Found existing Supabase session on mount:', session.user.email);
         await handleGoogleSession(session.user.email);
-      } else {
+      } else if (!isOAuthCallback || oauthResolved) {
         setIsAuthLoading(false);
       }
     });
 
-    return () => subscription.unsubscribe();
+    // Safety timeout: if OAuth callback doesn't resolve in 8 seconds, stop loading
+    let oauthTimeout: ReturnType<typeof setTimeout> | undefined;
+    if (isOAuthCallback) {
+      oauthTimeout = setTimeout(() => {
+        if (!oauthResolved) {
+          console.error('⏰ OAuth callback timed out — stopping loading');
+          setIsAuthLoading(false);
+        }
+      }, 8000);
+    }
+
+    return () => {
+      subscription.unsubscribe();
+      if (oauthTimeout) clearTimeout(oauthTimeout);
+    };
   }, [handleGoogleSession]);
 
   // Signup functionality
