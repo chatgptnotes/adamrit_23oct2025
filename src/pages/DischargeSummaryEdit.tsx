@@ -1599,7 +1599,11 @@ PLEASE CONTACT: 7030974619, 9373111709.
 `;
 
       // Save fetched data to separate panel (not the editor)
-      setFetchedDataText(summary);
+      // Include extracted handwritten notes at the top if available
+      const fullFetchedData = extractedNotes
+        ? `=== EXTRACTED HANDWRITTEN NOTES ===\n${extractedNotes}\n\n=== DATABASE DATA ===\n${summary}`
+        : summary;
+      setFetchedDataText(fullFetchedData);
       setDataFetched(true);
 
       // Show success message with accurate data counts
@@ -3599,49 +3603,53 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
           )}
         </div>
 
-        {/* Extracted Handwritten Notes Panel */}
-        {extractedNotes && (
-          <div className="lg:col-span-2">
-            <Card className="border-purple-200 bg-purple-50/30 mb-4">
-              <CardHeader className="pb-2">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-base flex items-center gap-2 text-purple-700">
-                    <Edit3 className="h-4 w-4" />
-                    Extracted Handwritten Notes
-                  </CardTitle>
+        {/* Panel 1: Extracted Handwritten Notes - ALWAYS VISIBLE */}
+        <div className="lg:col-span-2">
+          <Card className="border-purple-200 bg-purple-50/30 mb-4">
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base flex items-center gap-2 text-purple-700">
+                  <Edit3 className="h-4 w-4" />
+                  Panel 1: Extracted Handwritten Notes
+                </CardTitle>
+                {extractedNotes && (
                   <Button
                     variant="ghost"
                     size="sm"
                     onClick={() => setExtractedNotes('')}
                     className="text-gray-400 hover:text-red-500 h-7 w-7 p-0"
-                    title="Dismiss extracted notes"
+                    title="Clear extracted notes"
                   >
                     <X className="h-4 w-4" />
                   </Button>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="bg-white border border-purple-100 rounded-lg p-4 max-h-60 overflow-y-auto">
+                )}
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="bg-white border border-purple-100 rounded-lg p-4 min-h-[80px] max-h-60 overflow-y-auto">
+                {extractedNotes ? (
                   <pre className="whitespace-pre-wrap text-sm text-gray-800 font-sans leading-relaxed">{extractedNotes}</pre>
-                </div>
-                <p className="text-xs text-purple-500 mt-2">
-                  This text was extracted from the handwritten document. It will be used when generating the AI summary.
-                </p>
-              </CardContent>
-            </Card>
-          </div>
-        )}
+                ) : (
+                  <p className="text-sm text-gray-400 italic">No handwritten notes extracted yet. Use "Scan OPD" or "Upload OPD" to capture handwritten doctor notes.</p>
+                )}
+              </div>
+              <p className="text-xs text-purple-500 mt-2">
+                This text is extracted from the handwritten document via OCR. It will be included when generating the AI summary.
+              </p>
+            </CardContent>
+          </Card>
+        </div>
 
-        {/* Fetched Database Data Panel */}
-        {fetchedDataText && (
-          <div className="lg:col-span-2">
-            <Card className="border-green-200 bg-green-50/30 mb-4">
-              <CardHeader className="pb-2">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-base flex items-center gap-2 text-green-700">
-                    <Download className="h-4 w-4" />
-                    Fetched Database Data
-                  </CardTitle>
+        {/* Panel 2: Fetched Database Data - ALWAYS VISIBLE */}
+        <div className="lg:col-span-2">
+          <Card className="border-green-200 bg-green-50/30 mb-4">
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base flex items-center gap-2 text-green-700">
+                  <Download className="h-4 w-4" />
+                  Panel 2: Fetched Data (Extracted Notes + Lab/Radiology + Demographics)
+                </CardTitle>
+                {fetchedDataText && (
                   <Button
                     variant="ghost"
                     size="sm"
@@ -3651,26 +3659,33 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
                   >
                     <X className="h-4 w-4" />
                   </Button>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="bg-white border border-green-100 rounded-lg p-4 max-h-72 overflow-y-auto">
+                )}
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="bg-white border border-green-100 rounded-lg p-4 min-h-[80px] max-h-72 overflow-y-auto">
+                {fetchedDataText ? (
                   <pre className="whitespace-pre-wrap text-xs text-gray-800 font-mono leading-relaxed">{fetchedDataText}</pre>
-                </div>
-                <p className="text-xs text-green-600 mt-2">
-                  Patient data, labs, medications, and diagnosis from the database. Click "Generate by AI" to create the OPD summary.
-                </p>
-              </CardContent>
-            </Card>
-          </div>
-        )}
+                ) : (
+                  <p className="text-sm text-gray-400 italic">No data fetched yet. Click "Fetch Data" to load patient demographics, lab results, radiology reports, and extracted notes.</p>
+                )}
+              </div>
+              <p className="text-xs text-green-600 mt-2">
+                Combined data: patient demographics, lab results, radiology, medications, and diagnosis. Click "Generate by AI" after fetching.
+              </p>
+            </CardContent>
+          </Card>
+        </div>
 
-        {/* Main Content */}
+        {/* Panel 3: AI Generated OPD Summary - ALWAYS VISIBLE */}
         <div className="lg:col-span-2">
-          <Card>
+          <Card className="border-blue-200 bg-blue-50/10">
             <CardHeader>
               <div className="flex items-center justify-between">
-                <CardTitle>OPD Summary Content</CardTitle>
+                <CardTitle className="flex items-center gap-2 text-blue-700">
+                  <Sparkles className="h-5 w-5" />
+                  Panel 3: OPD Summary (AI Generated)
+                </CardTitle>
                 <div className="flex items-center gap-2 flex-wrap justify-end">
                   {/* Hidden file input for upload */}
                   <input
