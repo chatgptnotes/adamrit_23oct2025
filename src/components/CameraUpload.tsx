@@ -1863,6 +1863,7 @@ Rules:
                 <div className="text-green-600 text-4xl mb-3">&#10003;</div>
                 <h3 className="text-lg font-bold text-green-800 mb-1">Prescription Saved Successfully!</h3>
                 <p className="text-sm text-green-700">Rx No: <strong>{savedPrescriptionNumber}</strong></p>
+                <p className="text-xs text-green-600 mt-1">Patient: {selectedPatient?.name} (ID: {selectedPatient?.id?.substring(0, 8)}...)</p>
                 <p className="text-xs text-gray-500 mt-2">
                   This prescription is now visible in FinalBill → Saved Data → Prescriptions tab
                   and in the Pharmacy → Prescriptions queue.

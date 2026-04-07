@@ -20470,7 +20470,10 @@ Dr. Murali B K
                               </button>
                             </div>
                             {prescriptionsForPatient.length === 0 ? (
-                              <p className="text-sm text-gray-500 text-center py-4">No prescriptions found for this patient.</p>
+                              <div className="text-center py-4">
+                                <p className="text-sm text-gray-500">No prescriptions found for this patient.</p>
+                                <p className="text-xs text-gray-400 mt-1">Patient ID: {patientInfo?.id || 'not loaded'}</p>
+                              </div>
                             ) : (
                               <div className="space-y-3">
                                 {prescriptionsForPatient.map((prescription: any) => (
