@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -9,10 +9,11 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { ArrowLeft, Save, Printer, Sparkles, Download, Eye, Loader2, Edit3, Settings } from 'lucide-react';
+import { ArrowLeft, Save, Printer, Sparkles, Download, Eye, Loader2, Edit3, Settings, Camera, Upload, X } from 'lucide-react';
 import { useDebounce } from 'use-debounce';
 import DischargeSummary from '@/components/DischargeSummary';
 import { useVisitDiagnosis } from '@/hooks/useVisitDiagnosis';
+import { useToast } from '@/hooks/use-toast';
 
 interface Patient {
   id: string;
@@ -263,6 +264,18 @@ export default function DischargeSummaryEdit() {
   const [showGenerationModal, setShowGenerationModal] = useState(false);
   const [editablePrompt, setEditablePrompt] = useState('');
   const [editablePatientData, setEditablePatientData] = useState<any>({});
+
+  // Camera/Upload OCR states
+  const [showCameraDialog, setShowCameraDialog] = useState(false);
+  const [isCapturing, setIsCapturing] = useState(false);
+  const [isProcessingOCR, setIsProcessingOCR] = useState(false);
+  const [capturedImage, setCapturedImage] = useState<string | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const { toast } = useToast();
 
   // Lab results state
   const [labResults, setLabResults] = useState<any[]>([]);
@@ -2057,6 +2070,234 @@ IMPORTANT: Format everything as plain text, include ALL provided investigations,
     }
   };
 
+  // ---------------------------------------------------------------------------
+  // Camera & OCR Functions
+  // ---------------------------------------------------------------------------
+
+  const startCamera = async () => {
+    try {
+      setShowCameraDialog(true);
+      setIsCapturing(true);
+      setCapturedImage(null);
+
+      // Small delay to ensure dialog is mounted
+      setTimeout(async () => {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } },
+          });
+          streamRef.current = stream;
+          if (videoRef.current) {
+            videoRef.current.srcObject = stream;
+            videoRef.current.onloadedmetadata = () => {
+              videoRef.current?.play().catch(() => {});
+            };
+          }
+        } catch (err) {
+          console.error('Camera access error:', err);
+          toast({
+            title: 'Camera Error',
+            description: 'Unable to access camera. Please check permissions.',
+            variant: 'destructive',
+          });
+          setShowCameraDialog(false);
+          setIsCapturing(false);
+        }
+      }, 300);
+    } catch (err) {
+      console.error('Camera error:', err);
+    }
+  };
+
+  const stopCamera = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+    }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
+    setIsCapturing(false);
+  };
+
+  const capturePhoto = () => {
+    if (!videoRef.current || !canvasRef.current) return;
+
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+
+    if (!video.videoWidth || !video.videoHeight) {
+      toast({
+        title: 'Camera loading',
+        description: 'Camera is still loading. Please try again.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      ctx.drawImage(video, 0, 0);
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+      setCapturedImage(dataUrl);
+      stopCamera();
+    }
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/') && file.type !== 'application/pdf') {
+      toast({
+        title: 'Invalid file',
+        description: 'Please upload an image (JPEG, PNG) or PDF file.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+      toast({
+        title: 'File too large',
+        description: 'Maximum file size is 10 MB.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+      setCapturedImage(dataUrl);
+      setShowCameraDialog(true);
+    };
+    reader.readAsDataURL(file);
+
+    // Reset input so same file can be selected again
+    e.target.value = '';
+  };
+
+  const processImageWithOCR = async (imageDataUrl: string) => {
+    try {
+      setIsProcessingOCR(true);
+
+      // Extract base64 data from data URL
+      const base64Data = imageDataUrl.split(',')[1];
+      const mimeType = imageDataUrl.split(';')[0].split(':')[1] || 'image/jpeg';
+
+      const patientName = patient?.patients?.name || 'Unknown';
+      const patientId = patient?.visit_id || 'Unknown';
+      const doctor = patient?.appointment_with || 'Unknown';
+
+      const ocrPrompt = `You are a medical document OCR specialist. This is a photo of a handwritten OPD (Outpatient Department) summary for patient "${patientName}" (ID: ${patientId}), attending doctor: Dr. ${doctor}.
+
+Please carefully read and transcribe ALL handwritten text from this image. Structure the output as a proper OPD summary with the following sections (include only sections that are present in the handwriting):
+
+- Chief Complaints
+- History of Present Illness
+- Past History
+- Examination Findings / Vitals
+- Diagnosis / Provisional Diagnosis
+- Investigations (Lab tests, X-ray, ECG, etc.)
+- Treatment Given / Medications Prescribed
+- Procedures Done
+- Condition at Discharge
+- Follow-up Instructions
+- Advice on Discharge
+
+IMPORTANT:
+- Transcribe the handwritten content as accurately as possible
+- Use proper medical terminology
+- If something is unclear, write it with [unclear] notation
+- Format medications as: Drug Name - Strength - Route - Dosage - Duration
+- Keep the formatting clean with bullet points where appropriate
+- Do NOT add information that is not in the handwritten document
+- Output ONLY the transcribed and structured text, no explanations`;
+
+      const requestBody = {
+        contents: [{
+          parts: [
+            {
+              inline_data: {
+                mime_type: mimeType,
+                data: base64Data,
+              }
+            },
+            {
+              text: ocrPrompt
+            }
+          ]
+        }],
+        generationConfig: {
+          temperature: 0.2,
+          maxOutputTokens: 4000
+        }
+      };
+
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${import.meta.env.VITE_GEMINI_API_KEY}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(requestBody),
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => null);
+        throw new Error(`Gemini API error: ${response.status} - ${errorData?.error?.message || response.statusText}`);
+      }
+
+      const data = await response.json();
+      const extractedText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+
+      if (!extractedText) {
+        toast({
+          title: 'No text detected',
+          description: 'Could not extract any text from the image. Please try again with a clearer image.',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      // If there's existing text, append; otherwise replace
+      if (dischargeSummaryText.trim()) {
+        setDischargeSummaryText(dischargeSummaryText + '\n\n--- Extracted from Handwritten OPD Summary ---\n\n' + extractedText);
+      } else {
+        setDischargeSummaryText(extractedText);
+      }
+
+      toast({
+        title: 'Text extracted successfully',
+        description: 'Handwritten OPD summary has been processed and added to the editor.',
+      });
+
+      // Close the dialog
+      setShowCameraDialog(false);
+      setCapturedImage(null);
+
+    } catch (error) {
+      console.error('OCR processing error:', error);
+      toast({
+        title: 'OCR Processing Failed',
+        description: error instanceof Error ? error.message : 'Failed to process image. Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsProcessingOCR(false);
+    }
+  };
+
+  const closeCameraDialog = () => {
+    stopCamera();
+    setShowCameraDialog(false);
+    setCapturedImage(null);
+    setIsProcessingOCR(false);
+  };
+
   // Actual AI generation function
   const generateAISummary = async () => {
     try {
@@ -3012,9 +3253,18 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
     }
   };
 
+  // Check if this is an OPD/outpatient visit (no payment gate needed)
+  const isOpdVisit = (() => {
+    const vt = (patient?.visit_type || '').toLowerCase();
+    return vt === 'consultation' || vt === 'follow-up' || vt === 'follow up' || vt === 'opd' || vt === 'new' || vt === 'review';
+  })();
+
+  // OPD visits can always print/preview; IPD visits require bill_paid
+  const canPrintAndPreview = isOpdVisit || !!patient?.bill_paid;
+
   // Handle preview toggle with payment check
   const togglePreview = () => {
-    if (!patient?.bill_paid) {
+    if (!canPrintAndPreview) {
       alert('⚠️ Final Payment Required\n\nPlease complete the final payment before previewing the discharge summary.');
       return;
     }
@@ -3023,7 +3273,7 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
 
   // Handle print with payment check
   const handlePrintWithCheck = () => {
-    if (!patient?.bill_paid) {
+    if (!canPrintAndPreview) {
       alert('⚠️ Final Payment Required\n\nPlease complete the final payment before printing the discharge summary.');
       return;
     }
@@ -3221,6 +3471,34 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
               <div className="flex items-center justify-between">
                 <CardTitle>OPD Summary Content</CardTitle>
                 <div className="flex items-center gap-2">
+                  {/* Hidden file input for upload */}
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*,application/pdf"
+                    className="hidden"
+                    onChange={handleFileUpload}
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={startCamera}
+                    className="flex items-center gap-2 bg-purple-50 hover:bg-purple-100 border-purple-200 text-purple-700"
+                    title="Take photo of handwritten OPD summary"
+                  >
+                    <Camera className="h-4 w-4" />
+                    Scan OPD
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="flex items-center gap-2 bg-indigo-50 hover:bg-indigo-100 border-indigo-200 text-indigo-700"
+                    title="Upload photo of handwritten OPD summary"
+                  >
+                    <Upload className="h-4 w-4" />
+                    Upload OPD
+                  </Button>
                   <Button
                     variant="outline"
                     size="sm"
@@ -3253,14 +3531,14 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
                             size="sm"
                             onClick={togglePreview}
                             className="flex items-center gap-2"
-                            disabled={!patient?.bill_paid}
+                            disabled={!canPrintAndPreview}
                           >
                             <Eye className="h-4 w-4" />
                             {showPreview ? 'Edit' : 'Preview'}
                           </Button>
                         </span>
                       </TooltipTrigger>
-                      {!patient?.bill_paid && (
+                      {!canPrintAndPreview && (
                         <TooltipContent className="bg-red-600 text-white border-red-700 font-semibold">
                           <p className="flex items-center gap-2">
                             <span className="text-lg">⚠️</span>
@@ -3279,14 +3557,14 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
                             size="sm"
                             onClick={handlePrintWithCheck}
                             className="flex items-center gap-2"
-                            disabled={!patient?.bill_paid}
+                            disabled={!canPrintAndPreview}
                           >
                             <Printer className="h-4 w-4" />
                             Print
                           </Button>
                         </span>
                       </TooltipTrigger>
-                      {!patient?.bill_paid && (
+                      {!canPrintAndPreview && (
                         <TooltipContent className="bg-red-600 text-white border-red-700 font-semibold">
                           <p className="flex items-center gap-2">
                             <span className="text-lg">⚠️</span>
@@ -3405,6 +3683,116 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
         </div>
       </div>
 
+
+      {/* Camera/Upload OCR Dialog */}
+      <Dialog open={showCameraDialog} onOpenChange={(open) => {
+        if (!open) closeCameraDialog();
+      }}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Camera className="h-5 w-5" />
+              {capturedImage ? 'Review Captured Image' : 'Capture Handwritten OPD Summary'}
+            </DialogTitle>
+            <DialogDescription>
+              {capturedImage
+                ? 'Review the image and click "Extract Text" to process the handwritten content.'
+                : 'Position the handwritten OPD summary in front of the camera and capture it.'}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {/* Camera View */}
+            {isCapturing && !capturedImage && (
+              <div className="relative">
+                <video
+                  ref={videoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  className="w-full rounded-lg bg-black"
+                  style={{ maxHeight: '400px', objectFit: 'contain' }}
+                />
+                <canvas ref={canvasRef} className="hidden" />
+                <div className="flex justify-center gap-3 mt-4">
+                  <Button
+                    onClick={capturePhoto}
+                    className="flex items-center gap-2 bg-red-500 hover:bg-red-600 text-white rounded-full px-6"
+                  >
+                    <Camera className="h-5 w-5" />
+                    Capture
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={closeCameraDialog}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* Captured/Uploaded Image Preview */}
+            {capturedImage && (
+              <div className="space-y-4">
+                <div className="border rounded-lg overflow-hidden">
+                  <img
+                    src={capturedImage}
+                    alt="Captured OPD Summary"
+                    className="w-full object-contain"
+                    style={{ maxHeight: '400px' }}
+                  />
+                </div>
+                <div className="flex justify-center gap-3">
+                  <Button
+                    onClick={() => processImageWithOCR(capturedImage)}
+                    disabled={isProcessingOCR}
+                    className="flex items-center gap-2"
+                  >
+                    {isProcessingOCR ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Sparkles className="h-4 w-4" />
+                    )}
+                    {isProcessingOCR ? 'Extracting Text...' : 'Extract Text'}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setCapturedImage(null);
+                      startCamera();
+                    }}
+                    disabled={isProcessingOCR}
+                  >
+                    Retake
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={closeCameraDialog}
+                    disabled={isProcessingOCR}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+                {isProcessingOCR && (
+                  <div className="text-center text-sm text-blue-600 bg-blue-50 p-3 rounded-lg">
+                    <Loader2 className="h-4 w-4 animate-spin inline mr-2" />
+                    Processing handwritten text with AI... This may take a few seconds.
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Initial state - no camera yet */}
+            {!isCapturing && !capturedImage && (
+              <div className="text-center py-8 text-gray-500">
+                <Camera className="h-12 w-12 mx-auto mb-3 text-gray-400" />
+                <p>Starting camera...</p>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* AI Generation Modal */}
       <Dialog open={showGenerationModal} onOpenChange={setShowGenerationModal}>
