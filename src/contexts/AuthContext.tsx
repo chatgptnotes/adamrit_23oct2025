@@ -1,8 +1,13 @@
-import { createContext, useContext, useState, useEffect, useMemo, useCallback, useRef, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useMemo, useCallback, ReactNode } from 'react';
 import { HospitalType, getHospitalConfig } from '@/types/hospital';
 import { supabase } from '@/integrations/supabase/client';
 import { hashPassword, comparePassword, validateEmail, sanitizeInput, signupRateLimiter } from '@/utils/auth';
 import { logActivity } from '@/lib/activity-logger';
+
+// Detect OAuth callback — covers both implicit (#access_token) and PKCE (?code=) flows
+const isOAuthRedirect = () =>
+  window.location.hash.includes('access_token') ||
+  new URLSearchParams(window.location.search).has('code');
 
 interface User {
   id?: string;
@@ -55,8 +60,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     const savedUser = localStorage.getItem('hmis_user');
     const hasVisitedBefore = localStorage.getItem('hmis_visited');
 
-    // Detect OAuth callback (URL has access_token in hash from Google redirect)
-    const isOAuthCallback = window.location.hash.includes('access_token');
+    // Detect OAuth callback (implicit: #access_token, PKCE: ?code=)
+    const isOAuthCallback = isOAuthRedirect();
 
     if (savedUser) {
       const parsedUser = JSON.parse(savedUser);
@@ -224,8 +229,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     setShowLanding(false);
     setIsAuthLoading(false);
 
-    // Clean up the URL hash after processing OAuth callback
-    if (window.location.hash.includes('access_token')) {
+    // Clean up the URL after processing OAuth callback (hash tokens or PKCE code)
+    if (window.location.hash.includes('access_token') || new URLSearchParams(window.location.search).has('code')) {
       window.history.replaceState(null, '', window.location.pathname);
     }
 
@@ -236,7 +241,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   // Listen for Supabase Auth state changes AND check existing session on mount
   useEffect(() => {
     // Track whether we're in an OAuth callback — don't prematurely stop loading
-    const isOAuthCallback = window.location.hash.includes('access_token');
+    const isOAuthCallback = isOAuthRedirect();
     let oauthResolved = false;
 
     // Register listener for future auth events
