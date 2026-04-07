@@ -102,12 +102,12 @@ const LabDashboard: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <TestTube className="h-6 w-6 text-primary" />
+          <TestTube className="h-6 w-6 text-primary shrink-0" />
           <div>
-            <h1 className="text-3xl font-bold">Laboratory Management</h1>
-            <p className="text-muted-foreground">
+            <h1 className="text-xl sm:text-3xl font-bold">Laboratory Management</h1>
+            <p className="text-muted-foreground text-xs sm:text-sm">
               Enterprise-level laboratory operations and test management
             </p>
           </div>
@@ -133,21 +133,21 @@ const LabDashboard: React.FC = () => {
       </div>
 
       <Tabs value={selectedTab} onValueChange={setSelectedTab} className="space-y-6">
-        <div className="flex flex-wrap gap-2">
-          <TabsList className="grid grid-cols-7 w-auto">
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="catalog">Test Catalog</TabsTrigger>
-            <TabsTrigger value="orders">Orders</TabsTrigger>
-            <TabsTrigger value="samples">Samples</TabsTrigger>
-            <TabsTrigger value="results">Results</TabsTrigger>
-            <TabsTrigger value="reports">Reports</TabsTrigger>
-            <TabsTrigger value="printformat">📄 Print Format</TabsTrigger>
+        <div className="flex flex-col sm:flex-row flex-wrap gap-2 overflow-x-auto">
+          <TabsList className="flex flex-wrap h-auto gap-1 w-full sm:w-auto">
+            <TabsTrigger value="overview" className="text-xs sm:text-sm">Overview</TabsTrigger>
+            <TabsTrigger value="catalog" className="text-xs sm:text-sm">Test Catalog</TabsTrigger>
+            <TabsTrigger value="orders" className="text-xs sm:text-sm">Orders</TabsTrigger>
+            <TabsTrigger value="samples" className="text-xs sm:text-sm">Samples</TabsTrigger>
+            <TabsTrigger value="results" className="text-xs sm:text-sm">Results</TabsTrigger>
+            <TabsTrigger value="reports" className="text-xs sm:text-sm">Reports</TabsTrigger>
+            <TabsTrigger value="printformat" className="text-xs sm:text-sm">Print Format</TabsTrigger>
           </TabsList>
-          <TabsList className="grid grid-cols-4 w-auto bg-blue-50 border-2 border-blue-200">
-            <TabsTrigger value="subspecialty" className="text-blue-700 font-semibold">🧪 Sub Specialty</TabsTrigger>
-            <TabsTrigger value="panels" className="text-blue-700 font-semibold">📊 Add Panel</TabsTrigger>
-            <TabsTrigger value="processing" className="text-blue-700 font-semibold">🔬 Sample Processing</TabsTrigger>
-            <TabsTrigger value="quality">Quality</TabsTrigger>
+          <TabsList className="flex flex-wrap h-auto gap-1 w-full sm:w-auto bg-blue-50 border-2 border-blue-200">
+            <TabsTrigger value="subspecialty" className="text-blue-700 font-semibold text-xs sm:text-sm">Sub Specialty</TabsTrigger>
+            <TabsTrigger value="panels" className="text-blue-700 font-semibold text-xs sm:text-sm">Add Panel</TabsTrigger>
+            <TabsTrigger value="processing" className="text-blue-700 font-semibold text-xs sm:text-sm">Sample Processing</TabsTrigger>
+            <TabsTrigger value="quality" className="text-xs sm:text-sm">Quality</TabsTrigger>
           </TabsList>
         </div>
 
@@ -360,7 +360,7 @@ const LabDashboard: React.FC = () => {
               <CardTitle>Department Status</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
                 {departmentStatus.map((dept, index) => (
                   <div key={index} className="p-4 border rounded-lg">
                     <div className="flex items-center gap-2 mb-2">
