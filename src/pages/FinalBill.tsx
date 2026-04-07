@@ -13650,10 +13650,12 @@ Format the response as JSON:
         return;
       }
 
-      // First, check which surgeries already exist for this visit
+      // First, check which surgeries already exist for this visit.
+      // We fetch both surgery_id (CGHS) and yojana_procedure_id so duplicate detection
+      // works correctly for both patient types.
       const { data: existingSurgeries, error: checkError } = await supabase
         .from('visit_surgeries' as any)
-        .select('surgery_id')
+        .select('surgery_id, yojana_procedure_id')
         .eq('visit_id', visitData.id);
 
       if (checkError) {
@@ -13662,7 +13664,15 @@ Format the response as JSON:
         return;
       }
 
-      const existingSurgeryIds = new Set(existingSurgeries?.map(s => s.surgery_id) || []);
+      // Build a set of IDs already saved — covers both CGHS UUIDs and Yojana UUIDs.
+      const existingSurgeryIds = new Set<string>(
+        (existingSurgeries || []).flatMap(s => {
+          const ids: string[] = [];
+          if (s.surgery_id) ids.push(s.surgery_id);
+          if (s.yojana_procedure_id) ids.push(s.yojana_procedure_id);
+          return ids;
+        })
+      );
 
       // Filter out surgeries that already exist
       const newSurgeries = selectedSurgeries.filter(surgery => !existingSurgeryIds.has(surgery.id));
@@ -13678,17 +13688,28 @@ Format the response as JSON:
         return;
       }
 
-      // Prepare data for insertion (only new surgeries)
-      const surgeriesToSave = newSurgeries.map((surgery) => ({
-        visit_id: visitData.id,
-        surgery_id: surgery.id,
-        is_primary: false, // Don't automatically set as primary - let user choose
-        status: 'planned',
-        sanction_status: surgery.sanction_status || 'Not Sanctioned',
-        notes: null,
-        rate: parseFloat(surgery.NABH_NABL_Rate?.toString().replace(/[^\d.]/g, '') || '0'),
-        rate_type: surgery.rateSource || 'private'
-      }));
+      // Prepare data for insertion (only new surgeries).
+      // For Maharashtra Yojana patients (is_yojana: true), the surgery.id is a UUID
+      // from yojana_mh_procedures — it must NOT go into surgery_id (which has a FK to
+      // cghs_surgery).  Instead we store it in yojana_procedure_id and leave surgery_id
+      // as null (the migration 20260407160000 makes surgery_id nullable).
+      const surgeriesToSave = newSurgeries.map((surgery) => {
+        const isYojanaSurgery = !!(surgery as any).is_yojana;
+        const parsedRate = parseFloat(
+          surgery.NABH_NABL_Rate?.toString().replace(/[^\d.]/g, '') || '0'
+        );
+        return {
+          visit_id: visitData.id,
+          surgery_id: isYojanaSurgery ? null : surgery.id,
+          yojana_procedure_id: isYojanaSurgery ? surgery.id : null,
+          is_primary: false,
+          status: 'planned',
+          sanction_status: surgery.sanction_status || 'Not Sanctioned',
+          notes: null,
+          rate: parsedRate,
+          rate_type: surgery.rateSource || 'private',
+        };
+      });
 
       console.log('New surgeries to save:', surgeriesToSave);
 
