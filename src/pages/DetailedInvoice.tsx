@@ -377,7 +377,8 @@ const DetailedInvoice = () => {
       return;
     }
 
-    const total = items.reduce((sum, item) => sum + (item.rate || 0), 0);
+    // Calculate total as sum of (rate * qty) for each item
+    const total = items.reduce((sum, item) => sum + ((item.rate || 0) * (item.qty || 1)), 0);
 
     const printContent = `
       <!DOCTYPE html>
@@ -450,20 +451,22 @@ const DetailedInvoice = () => {
                 <th class="text-center" style="width: 120px;">DATE & TIME</th>
                 <th class="text-center" style="width: 100px;">CGHS NABH RATE</th>
                 <th class="text-center" style="width: 80px;">QTY</th>
-                <th class="text-right" style="width: 100px;">RATE</th>
+                <th class="text-right" style="width: 100px;">AMOUNT</th>
               </tr>
             </thead>
             <tbody>
-              ${items.map((item, index) => `
+              ${items.map((item, index) => {
+                const lineAmount = (item.rate || 0) * (item.qty || 1);
+                return `
                 <tr>
                   <td class="text-center">${index + 1}</td>
                   <td contenteditable="true">${item.item}</td>
                   <td class="text-center" contenteditable="true">${item.dateTime}</td>
                   <td class="text-center" contenteditable="true">${item.cghsRate || ''}</td>
                   <td class="text-center" contenteditable="true">${item.qty}</td>
-                  <td class="text-right" contenteditable="true">${item.rate}</td>
+                  <td class="text-right" contenteditable="true">${lineAmount}</td>
                 </tr>
-              `).join('')}
+              `}).join('')}
               <tr class="total-row">
                 <td colspan="5" class="text-right">TOTAL:</td>
                 <td class="text-right" id="grand-total">${total}</td>
@@ -641,7 +644,8 @@ const DetailedInvoice = () => {
       return;
     }
 
-    const total = items.reduce((sum, item) => sum + (item.rate || 0), 0);
+    // Calculate total as sum of (rate * qty) for each item
+    const total = items.reduce((sum, item) => sum + ((item.rate || 0) * (item.qty || 1)), 0);
 
     const printContent = `
       <!DOCTYPE html>
@@ -714,20 +718,22 @@ const DetailedInvoice = () => {
                 <th class="text-center" style="width: 120px;">DATE & TIME</th>
                 <th class="text-center" style="width: 100px;">CGHS NABH RATE</th>
                 <th class="text-center" style="width: 80px;">QTY</th>
-                <th class="text-right" style="width: 100px;">RATE</th>
+                <th class="text-right" style="width: 100px;">AMOUNT</th>
               </tr>
             </thead>
             <tbody>
-              ${items.map((item, index) => `
+              ${items.map((item, index) => {
+                const lineAmount = (item.rate || 0) * (item.qty || 1);
+                return `
                 <tr>
                   <td class="text-center">${index + 1}</td>
                   <td contenteditable="true">${item.item}</td>
                   <td class="text-center" contenteditable="true">${item.dateTime}</td>
                   <td class="text-center" contenteditable="true">${item.cghsRate || ''}</td>
                   <td class="text-center" contenteditable="true">${item.qty}</td>
-                  <td class="text-right" contenteditable="true">${item.rate}</td>
+                  <td class="text-right" contenteditable="true">${lineAmount}</td>
                 </tr>
-              `).join('')}
+              `}).join('')}
               <tr class="total-row">
                 <td colspan="5" class="text-right">TOTAL:</td>
                 <td class="text-right" id="grand-total">${total}</td>
@@ -892,7 +898,7 @@ const DetailedInvoice = () => {
     };
 
     const items = serviceData[section] || [];
-    const total = items.reduce((sum, item) => sum + (item.rate || 0), 0);
+    const total = items.reduce((sum, item) => sum + ((item.rate || 0) * (item.qty || 1)), 0);
     const itemCount = items.length;
 
     const printContent = `
@@ -1720,16 +1726,18 @@ const DetailedInvoice = () => {
     balance: patientData?.totalAmount || 0
   };
 
-  // Calculate total from displayed serviceData values
+  // Calculate total from displayed serviceData values (rate * qty for each item)
+  const calcLineTotal = (items: { rate?: number; qty?: number }[]) =>
+    items.reduce((sum, item) => sum + ((item.rate || 0) * (item.qty || 1)), 0);
   const calculatedTotal =
-    serviceData.roomTariff.reduce((sum, item) => sum + (item.rate || 0), 0) +
-    serviceData.services.reduce((sum, item) => sum + (item.rate || 0), 0) +
-    serviceData.laboratory.reduce((sum, item) => sum + (item.rate || 0), 0) +
-    serviceData.radiology.reduce((sum, item) => sum + (item.rate || 0), 0) +
-    serviceData.surgery.reduce((sum, item) => sum + (item.rate || 0), 0) +
-    serviceData.implants.reduce((sum, item) => sum + (item.rate || 0), 0) +
-    serviceData.mandatory.reduce((sum, item) => sum + (item.rate || 0), 0) +
-    serviceData.pharmacy.reduce((sum, item) => sum + (item.rate || 0), 0);
+    calcLineTotal(serviceData.roomTariff) +
+    calcLineTotal(serviceData.services) +
+    calcLineTotal(serviceData.laboratory) +
+    calcLineTotal(serviceData.radiology) +
+    calcLineTotal(serviceData.surgery) +
+    calcLineTotal(serviceData.implants) +
+    calcLineTotal(serviceData.mandatory) +
+    calcLineTotal(serviceData.pharmacy);
 
   // Convert to words
   const totalInWords = convertNumberToWords(calculatedTotal);
