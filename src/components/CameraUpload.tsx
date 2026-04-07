@@ -147,7 +147,7 @@ const CameraUpload: React.FC<CameraUploadProps> = ({
   const [patientResults, setPatientResults] = useState<PatientResult[]>([]);
   const [selectedPatient, setSelectedPatient] = useState<PatientResult | null>(null);
   const [showPatientDropdown, setShowPatientDropdown] = useState(false);
-  const [category, setCategory] = useState<UploadCategory>('photo');
+  const [category, setCategory] = useState<UploadCategory>('treatment_sheet');
   const [notes, setNotes] = useState('');
   const [uploading, setUploading] = useState(false);
 
@@ -548,7 +548,7 @@ Extract patient name if mentioned. Extract any ID/UHID if mentioned. Put the doc
     setPatientSearch('');
     setPatientResults([]);
     setSelectedPatient(null);
-    setCategory('photo');
+    setCategory('treatment_sheet');
     setNotes('');
     setAiStep('idle');
     setAiInstruction('');
@@ -1140,6 +1140,74 @@ Rules:
   };
 
   // -------------------------------------------------------------------------
+  // Quick Setup: patient + category shown immediately when file is ready
+  // -------------------------------------------------------------------------
+
+  const renderQuickSetup = () => {
+    if (!hasFile) return null;
+    // Don't show in manual mode (it has its own patient/category fields)
+    if (aiStep === 'manual') return null;
+
+    return (
+      <div className="space-y-3 pt-2 pb-1 border-b border-gray-200 mb-2">
+        {/* Patient search */}
+        <div className="space-y-1 relative">
+          <Label className="text-xs font-semibold text-gray-600">Patient</Label>
+          <div className="relative">
+            <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-gray-400" />
+            <Input
+              placeholder="Search patient name..."
+              value={selectedPatient ? selectedPatient.name : patientSearch}
+              onChange={(e) => {
+                setPatientSearch(e.target.value);
+                setSelectedPatient(null);
+              }}
+              className="pl-8 h-8 text-sm"
+            />
+          </div>
+          {showPatientDropdown && patientResults.length > 0 && !selectedPatient && (
+            <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-32 overflow-y-auto">
+              {patientResults.map((p) => (
+                <button
+                  key={p.id}
+                  className="w-full text-left px-3 py-1.5 text-sm hover:bg-blue-50"
+                  onClick={() => {
+                    setSelectedPatient(p);
+                    setPatientSearch(p.name);
+                    setShowPatientDropdown(false);
+                  }}
+                >
+                  {p.name}
+                </button>
+              ))}
+            </div>
+          )}
+          {selectedPatient && (
+            <Badge variant="secondary" className="text-[10px] mt-1">Patient linked: {selectedPatient.name}</Badge>
+          )}
+        </div>
+
+        {/* Category */}
+        <div className="space-y-1">
+          <Label className="text-xs font-semibold text-gray-600">Document Type</Label>
+          <Select value={category} onValueChange={(v) => setCategory(v as UploadCategory)}>
+            <SelectTrigger className="h-8 text-sm">
+              <SelectValue placeholder="Select type" />
+            </SelectTrigger>
+            <SelectContent>
+              {CATEGORY_OPTIONS.map((opt) => (
+                <SelectItem key={opt.value} value={opt.value}>
+                  {opt.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+    );
+  };
+
+  // -------------------------------------------------------------------------
   // AI Smart Upload render helpers
   // -------------------------------------------------------------------------
 
@@ -1529,6 +1597,7 @@ Rules:
       {renderCamera()}
       {renderDropZone()}
       {renderPreview()}
+      {renderQuickSetup()}
       {transcribing && (
         <div className="flex items-center justify-center gap-3 p-4 bg-purple-50 border border-purple-200 rounded-lg">
           <Loader2 className="h-5 w-5 animate-spin text-purple-600" />
