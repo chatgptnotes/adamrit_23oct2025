@@ -36,6 +36,7 @@ interface AuthContextType {
   setShowLanding: (show: boolean) => void;
   showHospitalSelection: boolean;
   setShowHospitalSelection: (show: boolean) => void;
+  authError: string | null;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -57,24 +58,29 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [isAuthLoading, setIsAuthLoading] = useState<boolean>(true);
   const [showLanding, setShowLanding] = useState<boolean>(true);
   const [showHospitalSelection, setShowHospitalSelection] = useState<boolean>(false);
+  const [authError, setAuthError] = useState<string | null>(null);
 
-  // Handle Google OAuth session - look up email in User table using anon client to bypass RLS
+  // Handle Google OAuth session - look up email in User table using RPC to bypass RLS
   const handleGoogleSession = async (email: string) => {
     const googleEmail = email.toLowerCase();
-    console.log('Processing Google session for:', googleEmail);
+    console.log('[OAuth] Processing Google session for:', googleEmail);
 
-    const { data, error } = await supabaseAnon
-      .from('User')
-      .select('*')
-      .ilike('email', googleEmail)
-      .single();
+    // Use SECURITY DEFINER RPC function to bypass RLS
+    const { data: rows, error } = await supabaseAnon
+      .rpc('lookup_user_by_email', { lookup_email: googleEmail });
+
+    const data = rows?.[0] || null;
 
     if (error || !data) {
-      console.error('Google user not found in User table:', googleEmail, error);
-      // Do NOT aggressively sign out — just stop loading and let login page show
+      console.error('[OAuth] Google user not found in User table:', googleEmail, error);
+      setAuthError(`No account found for ${googleEmail}. Please contact admin to create your account first.`);
+      // Sign out the Supabase OAuth session since user doesn't exist in our app
+      supabase.auth.signOut().catch(() => {});
       setIsAuthLoading(false);
       return;
     }
+
+    console.log('[OAuth] User found:', data.email, 'role:', data.role);
 
     const appUser: User = {
       id: data.id,
@@ -88,6 +94,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     localStorage.setItem('hmis_user', JSON.stringify(appUser));
     localStorage.setItem('hmis_visited', 'true');
     setShowLanding(false);
+    setShowHospitalSelection(false);
+    setAuthError(null);
     setIsAuthLoading(false);
 
     // Clean up the URL after processing OAuth callback (hash tokens or PKCE code)
@@ -135,8 +143,26 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       return;
     }
 
-    // Step 4: No saved user — check for Supabase auth session (Google OAuth)
-    // This handles BOTH fresh OAuth callbacks and existing sessions
+    // Detect if this is an OAuth callback (URL has ?code= or #access_token=)
+    const isOAuthCallback = new URLSearchParams(window.location.search).has('code') ||
+      window.location.hash.includes('access_token');
+
+    // Step 4: No saved user and NOT an OAuth callback — stop loading quickly
+    if (!isOAuthCallback) {
+      // Check for existing Supabase session (e.g., user refreshed the page while still logged in via Google)
+      supabase.auth.getSession().then(async ({ data: { session } }) => {
+        if (session?.user?.email) {
+          console.log('[OAuth] Existing session found for:', session.user.email);
+          await handleGoogleSession(session.user.email);
+        } else {
+          setIsAuthLoading(false);
+        }
+      });
+      return;
+    }
+
+    // Step 5: OAuth callback — wait for PKCE code exchange to complete
+    console.log('[OAuth] Detected OAuth callback, waiting for session exchange...');
     let resolved = false;
 
     const processOAuthSession = async (email: string) => {
@@ -148,40 +174,31 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     const finishLoading = () => {
       if (!resolved) {
         resolved = true;
+        console.error('[OAuth] Session exchange timed out — no session obtained');
+        setAuthError('Google sign-in timed out. Please try again.');
+        // Clean up URL
+        window.history.replaceState(null, '', window.location.pathname);
         setIsAuthLoading(false);
       }
     };
 
-    // Register auth state change listener
+    // Register auth state change listener — this fires when PKCE exchange completes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('Auth event:', event, session?.user?.email);
+      console.log('[OAuth] Auth event:', event, session?.user?.email);
       if (session?.user?.email && !resolved) {
         await processOAuthSession(session.user.email);
       }
     });
 
-    // Also check existing session (covers case where exchange already completed)
+    // Also check if session is already available (exchange might have completed during init)
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (session?.user?.email && !resolved) {
         await processOAuthSession(session.user.email);
-      } else if (!resolved) {
-        // Give onAuthStateChange 1.5 seconds to fire SIGNED_IN
-        // This covers PKCE exchange that's still in progress
-        setTimeout(async () => {
-          if (resolved) return;
-          // Final check
-          const { data: { session: finalSession } } = await supabase.auth.getSession();
-          if (finalSession?.user?.email) {
-            await processOAuthSession(finalSession.user.email);
-          } else {
-            finishLoading();
-          }
-        }, 1500);
       }
     });
 
-    // Safety timeout
-    const safetyTimeout = setTimeout(finishLoading, 5000);
+    // Safety timeout — give PKCE exchange up to 8 seconds
+    const safetyTimeout = setTimeout(finishLoading, 8000);
 
     return () => {
       subscription.unsubscribe();
@@ -374,9 +391,10 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     showLanding,
     setShowLanding,
     showHospitalSelection,
-    setShowHospitalSelection
+    setShowHospitalSelection,
+    authError
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [user, isAuthLoading, hospitalConfig, showLanding, showHospitalSelection]);
+  }), [user, isAuthLoading, hospitalConfig, showLanding, showHospitalSelection, authError]);
 
   return (
     <AuthContext.Provider value={value}>

@@ -177,6 +177,7 @@ const CameraUpload: React.FC<CameraUploadProps> = ({
 
   // Recent uploads state
   const [recentUploads, setRecentUploads] = useState<FileUploadRecord[]>([]);
+  const [showAllUploads, setShowAllUploads] = useState(false);
 
   // -------------------------------------------------------------------------
   // Fetch recent uploads
@@ -1531,11 +1532,26 @@ Rules:
   const renderRecentUploads = () => {
     if (recentUploads.length === 0) return null;
 
+    const ROW_LIMIT = 3; // show 1 row (3 items on sm+)
+    const visibleUploads = showAllUploads ? recentUploads : recentUploads.slice(0, ROW_LIMIT);
+    const hasMore = recentUploads.length > ROW_LIMIT;
+
     return (
       <div className="space-y-2 pt-4 border-t border-gray-200">
-        <h4 className="text-sm font-semibold text-gray-700">Recent Uploads</h4>
+        <div className="flex items-center justify-between">
+          <h4 className="text-sm font-semibold text-gray-700">Recent Uploads</h4>
+          {hasMore && (
+            <button
+              type="button"
+              onClick={() => setShowAllUploads(!showAllUploads)}
+              className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+            >
+              {showAllUploads ? 'Show Less' : `View More (${recentUploads.length})`}
+            </button>
+          )}
+        </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-          {recentUploads.map((upload) => {
+          {visibleUploads.map((upload) => {
             const isImage = upload.file_type?.startsWith('image/');
             return (
               <div

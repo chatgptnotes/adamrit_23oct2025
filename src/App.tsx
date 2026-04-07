@@ -152,7 +152,8 @@ const AppContent = () => {
     setShowLanding,
     showHospitalSelection,
     setShowHospitalSelection,
-    hospitalConfig
+    hospitalConfig,
+    authError
   } = useAuth();
   const { toast } = useToast();
   // Always call hooks at the top level; avoid wrapping hooks in try/catch
@@ -250,7 +251,16 @@ const AppContent = () => {
 
   // Fallback: Show hospital selection if no hospital is selected
   if (!isAuthenticated) {
-    return <HospitalSelection onHospitalSelect={handleHospitalSelect} onBackToHome={handleBackToHome} />;
+    return (
+      <>
+        {authError && (
+          <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg shadow-lg max-w-md text-sm">
+            {authError}
+          </div>
+        )}
+        <HospitalSelection onHospitalSelect={handleHospitalSelect} onBackToHome={handleBackToHome} />
+      </>
+    );
   }
 
 
