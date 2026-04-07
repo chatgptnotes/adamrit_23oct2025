@@ -169,7 +169,7 @@ export const useMultiPayeeSearch = (searchTerm: string, hospital: string = 'hope
     queryFn: async () => {
       if (!searchTerm || searchTerm.length < 2) return [];
 
-      const results: { id: string; name: string; specialty?: string; source: string }[] = [];
+      const results: { id: string; name: string; specialty?: string; source: string; amount?: number }[] = [];
 
       // Search consultants
       const consultTable = hospital === 'hope' ? 'hope_consultants' : 'ayushman_consultants';
@@ -200,17 +200,17 @@ export const useMultiPayeeSearch = (searchTerm: string, hospital: string = 'hope
         }
       }
 
-      // Search RMOs
+      // Search RMOs (include daily_remuneration for auto-fill)
       const rmoTable = hospital === 'hope' ? 'hope_rmos' : 'ayushman_rmos';
       const { data: rmos } = await (supabase as any)
         .from(rmoTable)
-        .select('id, name, specialty')
+        .select('id, name, specialty, daily_remuneration')
         .ilike('name', `%${searchTerm}%`)
         .limit(10);
       if (rmos) {
         for (const r of rmos) {
           if (!results.find(x => x.name === r.name)) {
-            results.push({ id: r.id, name: r.name, specialty: r.specialty, source: 'RMO' });
+            results.push({ id: r.id, name: r.name, specialty: r.specialty, source: 'RMO', amount: r.daily_remuneration || 0 });
           }
         }
       }

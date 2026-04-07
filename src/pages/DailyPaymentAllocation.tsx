@@ -1781,9 +1781,18 @@ table{width:100%;border-collapse:collapse;margin-top:12px}
                             setSubSelectedPayeeName(p.name);
                             setSubPayeeSearchTerm(p.name);
                             setNewPayeeName(p.name);
+                            // Auto-fill amount from master (e.g., RMO daily_remuneration)
+                            if (p.amount && p.amount > 0) {
+                              setNewPayeeAmount(String(p.amount));
+                            }
                           }}
                         >
-                          <span className="font-medium">{p.name}</span>
+                          <div>
+                            <span className="font-medium">{p.name}</span>
+                            {p.amount > 0 && (
+                              <span className="ml-2 text-green-700 font-mono text-xs">₹{p.amount.toLocaleString('en-IN')}</span>
+                            )}
+                          </div>
                           <span className="text-muted-foreground text-xs">
                             {p.source}{p.specialty ? ` · ${p.specialty}` : ''}
                           </span>
