@@ -78,7 +78,6 @@ const ImplantMaster = () => {
       const { data, error } = await (supabase as any)
         .from('implants')
         .select('*')
-        .order('category')
         .order('name');
 
       if (error) {

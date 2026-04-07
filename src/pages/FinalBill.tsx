@@ -2196,7 +2196,7 @@ const FinalBill = () => {
 
         const { data, error } = await (supabase as any)
           .from('implants')
-          .select('id, name, nabh_nabl_rate, non_nabh_nabl_rate, private_rate, bhopal_nabh_rate, bhopal_non_nabh_rate, category, subcategory, manufacturer, model_number, description')
+          .select('*')
           .order('name');
 
         if (error) {
@@ -10749,9 +10749,9 @@ INSTRUCTIONS:
       }
 
       try {
-        const { data, error } = await supabase
+        const { data, error } = await (supabase as any)
           .from('implants')
-          .select('id, name, nabh_nabl_rate, non_nabh_nabl_rate, private_rate, bhopal_nabh_rate, bhopal_non_nabh_rate')
+          .select('*')
           .ilike('name', `%${serviceSearchTerm}%`)
           .order('name')
           .limit(20);
