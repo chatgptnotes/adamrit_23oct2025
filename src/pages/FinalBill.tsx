@@ -9115,17 +9115,51 @@ INSTRUCTIONS:
   const fetchPatientPrescriptions = async () => {
     if (!patientInfo?.id) return;
     try {
-      const { data, error } = await (supabase as any)
+      // Step 1: Fetch prescriptions for this patient
+      const { data: rxData, error: rxError } = await (supabase as any)
         .from('prescriptions')
-        .select('*, prescription_items(*)')
+        .select('*')
         .eq('patient_id', patientInfo.id)
         .order('created_at', { ascending: false });
-      if (error) {
-        console.error('❌ [PRESCRIPTIONS FETCH] Error:', error);
+
+      if (rxError) {
+        console.error('❌ [PRESCRIPTIONS FETCH] Error:', rxError);
         toast.error('Failed to load prescriptions');
         return;
       }
-      setPrescriptionsForPatient(data || []);
+
+      if (!rxData || rxData.length === 0) {
+        setPrescriptionsForPatient([]);
+        setPrescriptionsLoaded(true);
+        return;
+      }
+
+      // Step 2: Fetch prescription items separately (avoids FK join issues)
+      const rxIds = rxData.map((rx: any) => rx.id);
+      const { data: itemsData, error: itemsError } = await (supabase as any)
+        .from('prescription_items')
+        .select('*')
+        .in('prescription_id', rxIds);
+
+      if (itemsError) {
+        console.error('❌ [PRESCRIPTIONS FETCH] Items error:', itemsError);
+        // Still show prescriptions without items
+      }
+
+      // Group items by prescription_id
+      const itemsByRx: Record<string, any[]> = {};
+      for (const item of (itemsData || [])) {
+        if (!itemsByRx[item.prescription_id]) itemsByRx[item.prescription_id] = [];
+        itemsByRx[item.prescription_id].push(item);
+      }
+
+      // Combine
+      const combined = rxData.map((rx: any) => ({
+        ...rx,
+        prescription_items: itemsByRx[rx.id] || [],
+      }));
+
+      setPrescriptionsForPatient(combined);
       setPrescriptionsLoaded(true);
     } catch (err) {
       console.error('❌ [PRESCRIPTIONS FETCH] Unexpected error:', err);
@@ -19373,9 +19407,7 @@ Dr. Murali B K
                             }`}
                           onClick={() => {
                             setSavedDataTab('prescriptions');
-                            if (!prescriptionsLoaded) {
-                              fetchPatientPrescriptions();
-                            }
+                            fetchPatientPrescriptions();
                           }}
                         >
                           Prescriptions ({prescriptionsForPatient.length})
