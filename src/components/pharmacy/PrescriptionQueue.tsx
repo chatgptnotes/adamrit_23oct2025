@@ -302,7 +302,7 @@ const DispenseModal: React.FC<DispenseModalProps> = ({ prescription, onClose }) 
       });
 
       // Refresh the prescription list
-      queryClient.invalidateQueries({ queryKey: ['prescriptions'] });
+      queryClient.invalidateQueries({ queryKey: ['prescription-queue'] });
       onClose();
     } catch (err: any) {
       toast({
