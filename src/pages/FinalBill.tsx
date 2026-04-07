@@ -2637,6 +2637,8 @@ const FinalBill = () => {
   const [savedImplantData, setSavedImplantData] = useState<any[]>([]);
   const [savedAnesthetistData, setSavedAnesthetistData] = useState<any[]>([]);
   const [savedPathologyCharges, setSavedPathologyCharges] = useState<any[]>([]);
+  const [prescriptionsForPatient, setPrescriptionsForPatient] = useState<any[]>([]);
+  const [prescriptionsLoaded, setPrescriptionsLoaded] = useState(false);
 
   // State initialization flags to prevent duplicate fetches
   const [clinicalServicesInitialized, setClinicalServicesInitialized] = useState(false);
@@ -9100,6 +9102,27 @@ INSTRUCTIONS:
     } catch (error) {
       console.error('❌ [IMPLANT FETCH] Unexpected error:', error);
       return [];
+    }
+  };
+
+  // Function to fetch prescriptions for the patient
+  const fetchPatientPrescriptions = async () => {
+    if (!patientInfo?.id) return;
+    try {
+      const { data, error } = await (supabase as any)
+        .from('prescriptions')
+        .select('*, prescription_items(*)')
+        .eq('patient_id', patientInfo.id)
+        .order('created_at', { ascending: false });
+      if (error) {
+        console.error('❌ [PRESCRIPTIONS FETCH] Error:', error);
+        toast.error('Failed to load prescriptions');
+        return;
+      }
+      setPrescriptionsForPatient(data || []);
+      setPrescriptionsLoaded(true);
+    } catch (err) {
+      console.error('❌ [PRESCRIPTIONS FETCH] Unexpected error:', err);
     }
   };
 
@@ -19400,6 +19423,20 @@ Dr. Murali B K
                         >
                           Discount
                         </button>
+                        <button
+                          className={`px-4 py-2 text-sm font-medium ${savedDataTab === 'prescriptions'
+                            ? 'border-b-2 border-blue-500 text-blue-600 bg-blue-50'
+                            : 'text-gray-500 hover:text-gray-700'
+                            }`}
+                          onClick={() => {
+                            setSavedDataTab('prescriptions');
+                            if (!prescriptionsLoaded) {
+                              fetchPatientPrescriptions();
+                            }
+                          }}
+                        >
+                          Prescriptions ({prescriptionsForPatient.length})
+                        </button>
                       </div>
 
                       {/* Tab Content */}
@@ -20338,6 +20375,123 @@ Dr. Murali B K
                                     ))}
                                   </tbody>
                                 </table>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        {savedDataTab === 'prescriptions' && (
+                          <div>
+                            <div className="flex justify-between items-center mb-3">
+                              <h5 className="font-medium text-gray-900">Prescriptions ({prescriptionsForPatient.length})</h5>
+                              <button
+                                onClick={() => {
+                                  setPrescriptionsLoaded(false);
+                                  fetchPatientPrescriptions();
+                                }}
+                                className="text-xs px-2 py-1 bg-blue-50 text-blue-600 rounded hover:bg-blue-100"
+                              >
+                                Refresh
+                              </button>
+                            </div>
+                            {prescriptionsForPatient.length === 0 ? (
+                              <p className="text-sm text-gray-500 text-center py-4">No prescriptions found for this patient.</p>
+                            ) : (
+                              <div className="space-y-3">
+                                {prescriptionsForPatient.map((prescription: any) => (
+                                  <div key={prescription.id} className="border border-gray-200 rounded-lg overflow-hidden">
+                                    <div className="flex items-center justify-between p-3 bg-gray-50">
+                                      <div>
+                                        <span className="font-medium text-gray-900 text-sm">#{prescription.prescription_number}</span>
+                                        <span className="ml-3 text-xs text-gray-500">
+                                          {prescription.prescription_date ? new Date(prescription.prescription_date).toLocaleDateString() : new Date(prescription.created_at).toLocaleDateString()}
+                                        </span>
+                                        {prescription.doctor_name && (
+                                          <span className="ml-3 text-xs text-gray-600">Dr. {prescription.doctor_name}</span>
+                                        )}
+                                      </div>
+                                      <div className="flex items-center gap-2">
+                                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                                          prescription.status === 'PENDING' ? 'bg-yellow-100 text-yellow-700' :
+                                          prescription.status === 'APPROVED' ? 'bg-green-100 text-green-700' :
+                                          prescription.status === 'DISPENSED' ? 'bg-blue-100 text-blue-700' :
+                                          prescription.status === 'PARTIALLY_DISPENSED' ? 'bg-orange-100 text-orange-700' :
+                                          prescription.status === 'CANCELLED' ? 'bg-red-100 text-red-700' :
+                                          'bg-gray-100 text-gray-600'
+                                        }`}>
+                                          {prescription.status}
+                                        </span>
+                                        {prescription.status === 'PENDING' && (
+                                          <>
+                                            <button
+                                              onClick={async () => {
+                                                const { error } = await (supabase as any)
+                                                  .from('prescriptions')
+                                                  .update({ status: 'APPROVED' })
+                                                  .eq('id', prescription.id);
+                                                if (error) {
+                                                  toast.error('Failed to approve prescription');
+                                                } else {
+                                                  toast.success('Prescription approved');
+                                                  fetchPatientPrescriptions();
+                                                }
+                                              }}
+                                              className="text-xs px-2 py-1 bg-green-600 text-white rounded hover:bg-green-700"
+                                            >
+                                              Approve
+                                            </button>
+                                            <button
+                                              onClick={async () => {
+                                                const { error } = await (supabase as any)
+                                                  .from('prescriptions')
+                                                  .update({ status: 'CANCELLED' })
+                                                  .eq('id', prescription.id);
+                                                if (error) {
+                                                  toast.error('Failed to reject prescription');
+                                                } else {
+                                                  toast.success('Prescription rejected');
+                                                  fetchPatientPrescriptions();
+                                                }
+                                              }}
+                                              className="text-xs px-2 py-1 bg-red-600 text-white rounded hover:bg-red-700"
+                                            >
+                                              Reject
+                                            </button>
+                                          </>
+                                        )}
+                                        {prescription.status === 'APPROVED' && (
+                                          <span className="text-xs text-green-600 italic">Sent to Pharmacy</span>
+                                        )}
+                                      </div>
+                                    </div>
+                                    {prescription.prescription_items && prescription.prescription_items.length > 0 && (
+                                      <div className="p-3 border-t border-gray-100">
+                                        <p className="text-xs text-gray-500 mb-2 font-medium">Medicines ({prescription.prescription_items.length})</p>
+                                        <div className="space-y-1">
+                                          {prescription.prescription_items.map((item: any) => (
+                                            <div key={item.id} className="flex items-start justify-between text-xs text-gray-700 py-1 border-b border-gray-50 last:border-0">
+                                              <div className="flex-1">
+                                                <span className="font-medium">{item.medicine_name || `Medicine #${item.medicine_id}`}</span>
+                                                {item.dosage_frequency && <span className="ml-2 text-gray-500">{item.dosage_frequency}</span>}
+                                                {item.dosage_timing && <span className="ml-1 text-gray-500">({item.dosage_timing})</span>}
+                                                {item.duration_days && <span className="ml-2 text-gray-400">{item.duration_days} days</span>}
+                                                {item.special_instructions && <span className="ml-2 text-blue-500 italic">{item.special_instructions}</span>}
+                                              </div>
+                                              <div className="ml-4 text-right">
+                                                <span className="text-gray-600">Qty: {item.quantity_prescribed}</span>
+                                                {item.quantity_dispensed != null && (
+                                                  <span className="ml-1 text-green-600">(given: {item.quantity_dispensed})</span>
+                                                )}
+                                              </div>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    )}
+                                    {prescription.notes && (
+                                      <div className="px-3 pb-2 text-xs text-gray-500 italic">Note: {prescription.notes}</div>
+                                    )}
+                                  </div>
+                                ))}
                               </div>
                             )}
                           </div>
