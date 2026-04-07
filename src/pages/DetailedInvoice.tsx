@@ -378,7 +378,7 @@ const DetailedInvoice = () => {
     }
 
     // Calculate total as sum of (rate * qty) for each item
-    const total = items.reduce((sum, item) => sum + ((item.rate || 0) * (item.qty || 1)), 0);
+    const total = items.reduce((sum, item) => sum + ((parseFloat(item.cghsRate) || item.rate || 0) * (item.qty || 1)), 0);
 
     const printContent = `
       <!DOCTYPE html>
@@ -456,7 +456,7 @@ const DetailedInvoice = () => {
             </thead>
             <tbody>
               ${items.map((item, index) => {
-                const lineAmount = (item.rate || 0) * (item.qty || 1);
+                const lineAmount = (parseFloat(item.cghsRate) || item.rate || 0) * (item.qty || 1);
                 return `
                 <tr>
                   <td class="text-center">${index + 1}</td>
@@ -645,7 +645,7 @@ const DetailedInvoice = () => {
     }
 
     // Calculate total as sum of (rate * qty) for each item
-    const total = items.reduce((sum, item) => sum + ((item.rate || 0) * (item.qty || 1)), 0);
+    const total = items.reduce((sum, item) => sum + ((parseFloat(item.cghsRate) || item.rate || 0) * (item.qty || 1)), 0);
 
     const printContent = `
       <!DOCTYPE html>
@@ -723,7 +723,7 @@ const DetailedInvoice = () => {
             </thead>
             <tbody>
               ${items.map((item, index) => {
-                const lineAmount = (item.rate || 0) * (item.qty || 1);
+                const lineAmount = (parseFloat(item.cghsRate) || item.rate || 0) * (item.qty || 1);
                 return `
                 <tr>
                   <td class="text-center">${index + 1}</td>
@@ -898,7 +898,7 @@ const DetailedInvoice = () => {
     };
 
     const items = serviceData[section] || [];
-    const total = items.reduce((sum, item) => sum + ((item.rate || 0) * (item.qty || 1)), 0);
+    const total = items.reduce((sum, item) => sum + ((parseFloat(item.cghsRate) || item.rate || 0) * (item.qty || 1)), 0);
     const itemCount = items.length;
 
     const printContent = `
@@ -1727,8 +1727,8 @@ const DetailedInvoice = () => {
   };
 
   // Calculate total from displayed serviceData values (rate * qty for each item)
-  const calcLineTotal = (items: { rate?: number; qty?: number }[]) =>
-    items.reduce((sum, item) => sum + ((item.rate || 0) * (item.qty || 1)), 0);
+  const calcLineTotal = (items: { rate?: number; qty?: number; cghsRate?: string | number }[]) =>
+    items.reduce((sum, item) => sum + ((parseFloat(String(item.cghsRate)) || item.rate || 0) * (item.qty || 1)), 0);
   const calculatedTotal =
     calcLineTotal(serviceData.roomTariff) +
     calcLineTotal(serviceData.services) +

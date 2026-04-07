@@ -76,6 +76,8 @@ const DirectSaleBill: React.FC = () => {
   const [address, setAddress] = useState('');
   const [doctorName, setDoctorName] = useState('');
   const [paymentMode, setPaymentMode] = useState('Cash');
+  const [backdateEnabled, setBackdateEnabled] = useState(false);
+  const [billDateInput, setBillDateInput] = useState(new Date().toISOString().split('T')[0]);
   const [totalAmount, setTotalAmount] = useState('Rs');
   const [netAmount, setNetAmount] = useState('Rs');
   const [completedBill, setCompletedBill] = useState<CompletedBill | null>(null);
@@ -481,6 +483,7 @@ const DirectSaleBill: React.FC = () => {
       const validMedicines = medicines.filter(m => m.itemName && m.quantity);
       const billRows = validMedicines.map(med => ({
         bill_number: billNumber,
+        bill_date: backdateEnabled ? new Date(billDateInput + 'T12:00:00').toISOString() : new Date().toISOString(),
         is_hope_employee: forHopeEmployee,
         patient_name: patientName,
         date_of_birth: dateOfBirth || null,
@@ -567,7 +570,7 @@ const DirectSaleBill: React.FC = () => {
       // Set completed bill for dialog
       setCompletedBill({
         billNumber: billNumber,
-        billDate: new Date().toISOString(),
+        billDate: backdateEnabled ? new Date(billDateInput + 'T12:00:00').toISOString() : new Date().toISOString(),
         patientName: patientName,
         totalAmount: total,
         paymentMode: paymentMode,
@@ -578,7 +581,7 @@ const DirectSaleBill: React.FC = () => {
       pushPharmacySaleToTally({
         invoiceNumber: billNumber,
         patientName: patientName || 'Walk-in',
-        date: new Date().toISOString().split('T')[0],
+        date: backdateEnabled ? billDateInput : new Date().toISOString().split('T')[0],
         totalAmount: total,
         items: validMedicines.map(med => ({
           medicineName: med.itemName,
@@ -594,6 +597,8 @@ const DirectSaleBill: React.FC = () => {
 
       // Reset form
       setForHopeEmployee(false);
+      setBackdateEnabled(false);
+      setBillDateInput(new Date().toISOString().split('T')[0]);
       setPatientName('');
       setDateOfBirth('');
       setAge('');
@@ -1206,20 +1211,41 @@ const DirectSaleBill: React.FC = () => {
 
       {/* Payment and Total */}
       <div className="grid grid-cols-2 gap-8">
-        <div>
-          <label className="text-sm font-medium">
-            Payment Mode:<span className="text-red-500">*</span>
-          </label>
-          <select
-            className="w-48 p-2 border rounded"
-            value={paymentMode}
-            onChange={(e) => setPaymentMode(e.target.value)}
-          >
-            <option value="Cash">Cash</option>
-            <option value="Card">Card</option>
-            <option value="UPI">UPI</option>
-            <option value="Insurance">Insurance</option>
-          </select>
+        <div className="space-y-3">
+          <div>
+            <label className="text-sm font-medium">
+              Payment Mode:<span className="text-red-500">*</span>
+            </label>
+            <select
+              className="w-48 p-2 border rounded"
+              value={paymentMode}
+              onChange={(e) => setPaymentMode(e.target.value)}
+            >
+              <option value="Cash">Cash</option>
+              <option value="Card">Card</option>
+              <option value="UPI">UPI</option>
+              <option value="Insurance">Insurance</option>
+            </select>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="backdate-bill"
+                checked={backdateEnabled}
+                onCheckedChange={(checked) => setBackdateEnabled(!!checked)}
+              />
+              <label htmlFor="backdate-bill" className="text-sm font-medium cursor-pointer">Backdate Bill</label>
+            </div>
+            {backdateEnabled && (
+              <input
+                type="date"
+                value={billDateInput}
+                onChange={(e) => setBillDateInput(e.target.value)}
+                max={new Date().toISOString().split('T')[0]}
+                className="p-2 border rounded border-blue-400 bg-blue-50 text-sm"
+              />
+            )}
+          </div>
         </div>
         <div className="text-right space-y-2">
           <div>

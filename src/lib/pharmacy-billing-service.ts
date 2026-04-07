@@ -42,6 +42,7 @@ export interface SaleData {
   remarks?: string;
   hospital_name?: string; // Add hospital name field
   bill_number?: string; // Unique bill number (e.g., BILL1766125832838)
+  sale_date?: string; // ISO date string — allows backdated bills for corporate patients
   subtotal: number;
   discount: number;
   discount_percentage?: number;
@@ -97,7 +98,7 @@ export async function savePharmacySale(saleData: SaleData): Promise<SaleResponse
         total_amount: saleData.total_amount,
         payment_method: saleData.payment_method,
         payment_status: saleData.payment_status || 'COMPLETED',
-        sale_date: new Date().toISOString(),
+        sale_date: saleData.sale_date || new Date().toISOString(),
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       })

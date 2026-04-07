@@ -116,6 +116,7 @@ const PharmacyBilling: React.FC = () => {
   const [orderDiscount, setOrderDiscount] = useState(0); // Order-level discount amount
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
   const [completedSale, setCompletedSale] = useState<Sale | null>(null);
+  const [saleDate, setSaleDate] = useState(new Date().toISOString().split('T')[0]); // YYYY-MM-DD
   
   const [patientSearchResults, setPatientSearchResults] = useState<any[]>([]);
   const [isSearchingPatient, setIsSearchingPatient] = useState(false);
@@ -625,7 +626,7 @@ const PharmacyBilling: React.FC = () => {
       patient_id: patientInfo.id || undefined,
       patient_name: patientInfo.name || undefined,
       prescription_id: prescriptionId || undefined,
-      sale_date: new Date().toISOString(),
+      sale_date: patientInfo.corporate ? new Date(saleDate + 'T12:00:00').toISOString() : new Date().toISOString(),
       sale_type: saleType,
       subtotal: totals.subtotal,
       discount_amount: totals.totalDiscount,
@@ -662,6 +663,7 @@ const PharmacyBilling: React.FC = () => {
       prescription_number: prescriptionId || undefined,
       hospital_name: hospitalConfig?.name || undefined, // Add hospital name
       bill_number: billNumber, // Save bill number to database
+      sale_date: patientInfo.corporate ? new Date(saleDate + 'T12:00:00').toISOString() : undefined,
       subtotal: totals.subtotal,
       discount: totals.totalDiscount,
       discount_percentage: discountPercentage,
@@ -1193,6 +1195,20 @@ const PharmacyBilling: React.FC = () => {
                     readOnly
                     className="bg-gray-50"
                   />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Bill Date</label>
+                  <Input
+                    type="date"
+                    value={saleDate}
+                    onChange={(e) => setSaleDate(e.target.value)}
+                    max={new Date().toISOString().split('T')[0]}
+                    disabled={!patientInfo.corporate}
+                    className={patientInfo.corporate ? 'border-blue-400 bg-blue-50' : 'bg-gray-50'}
+                  />
+                  {!patientInfo.corporate && (
+                    <p className="text-xs text-gray-400 mt-1">Backdating available for corporate/panel/yojana patients only</p>
+                  )}
                 </div>
               </div>
               <div className="grid grid-cols-3 gap-4">
