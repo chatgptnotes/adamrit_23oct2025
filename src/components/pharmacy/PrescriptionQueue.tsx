@@ -156,9 +156,13 @@ async function fetchPrescriptions(): Promise<Prescription[]> {
   for (const item of items || []) {
     const key = item.prescription_id;
     if (!itemsByPrescription[key]) itemsByPrescription[key] = [];
+    const resolvedName =
+      item.medicine_name ||
+      (item.medicine_id ? medicineMap[item.medicine_id] : null) ||
+      'Unknown Medicine';
     itemsByPrescription[key].push({
       ...item,
-      medicine_name: item.medicine_id ? medicineMap[item.medicine_id] || item.medicine_name || 'Unknown Medicine' : item.medicine_name || 'Unknown Medicine',
+      medicine_name: resolvedName.toUpperCase(),
     });
   }
 
@@ -345,12 +349,7 @@ const DetailModal: React.FC<DetailModalProps> = ({ prescription, onClose }) => {
             {formatStatusLabel(prescription.status)}
           </Badge>
         </div>
-        {prescription.notes && (
-          <div className="col-span-2">
-            <p className="text-xs text-muted-foreground">Notes</p>
-            <p className="text-sm">{prescription.notes}</p>
-          </div>
-        )}
+        {/* Notes (raw AI extraction) intentionally hidden */}
       </div>
 
       {/* Items */}
