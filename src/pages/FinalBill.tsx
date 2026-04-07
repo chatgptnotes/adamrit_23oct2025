@@ -19757,11 +19757,15 @@ Dr. Murali B K
                               </h5>
                               <div className="text-lg font-bold text-blue-600">
                                 Total: ₹{savedClinicalServicesData.reduce((total, service) => {
-                                  if (!service.start_date || !service.end_date) return total;
                                   const rate = parseFloat(service.selectedRate || service.rate_used || service.amount) || 0;
-                                  const start = new Date(service.start_date);
-                                  const end = new Date(service.end_date);
-                                  const qty = Math.max(1, Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+                                  let qty = 1;
+                                  if (service.quantity && service.quantity > 0) {
+                                    qty = service.quantity;
+                                  } else if (service.start_date && service.end_date) {
+                                    const start = new Date(service.start_date);
+                                    const end = new Date(service.end_date);
+                                    qty = Math.max(1, Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+                                  }
                                   return total + (rate * qty);
                                 }, 0).toLocaleString('en-IN')}
                               </div>
@@ -19801,7 +19805,7 @@ Dr. Murali B K
                                               return Math.max(1, Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1);
                                             })()}
                                             onChange={(e) => updateClinicalServiceField(service.junction_id, 'quantity', e.target.value)}
-                                            className="w-16 text-center border-0 bg-transparent text-sm font-medium focus:outline-none focus:ring-1 focus:ring-blue-500 rounded"
+                                            className="w-20 text-center border border-blue-300 bg-blue-50 text-sm font-bold rounded px-1 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                                           />
                                         </td>
                                         <td className="border border-gray-300 px-4 py-2 text-sm font-medium text-green-600">
