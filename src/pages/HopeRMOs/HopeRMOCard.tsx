@@ -51,13 +51,19 @@ export const HopeRMOCard = ({ rmo, onEdit, onDelete }: HopeRMOCardProps) => {
           </div>
         </CardTitle>
       </CardHeader>
-      {rmo.contact_info && (
-        <CardContent>
-          <div className="text-sm">
-            <span className="font-semibold">Contact:</span> {rmo.contact_info}
-          </div>
-        </CardContent>
-      )}
+      <CardContent>
+        <div className="space-y-1 text-sm">
+          {(rmo.daily_remuneration !== undefined && rmo.daily_remuneration !== null && rmo.daily_remuneration > 0) && (
+            <div className="flex items-center gap-2">
+              <span className="font-semibold">Daily Remuneration:</span>
+              <Badge className="bg-green-100 text-green-800 font-mono">₹{rmo.daily_remuneration.toLocaleString('en-IN')}</Badge>
+            </div>
+          )}
+          {rmo.contact_info && (
+            <div><span className="font-semibold">Contact:</span> {rmo.contact_info}</div>
+          )}
+        </div>
+      </CardContent>
     </Card>
   );
 };

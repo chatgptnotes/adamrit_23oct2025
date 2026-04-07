@@ -100,7 +100,8 @@ export const useAyushmanRMOs = () => {
       tpa_rate: formData.tpa_rate ? parseFloat(formData.tpa_rate) : undefined,
       non_nabh_rate: formData.non_nabh_rate ? parseFloat(formData.non_nabh_rate) : undefined,
       nabh_rate: formData.nabh_rate ? parseFloat(formData.nabh_rate) : undefined,
-      private_rate: formData.private_rate ? parseFloat(formData.private_rate) : undefined
+      private_rate: formData.private_rate ? parseFloat(formData.private_rate) : undefined,
+      daily_remuneration: formData.daily_remuneration ? parseFloat(formData.daily_remuneration) : 0,
     });
   };
 
@@ -121,7 +122,8 @@ export const useAyushmanRMOs = () => {
           tpa_rate: formData.tpa_rate ? parseFloat(formData.tpa_rate) : undefined,
           non_nabh_rate: formData.non_nabh_rate ? parseFloat(formData.non_nabh_rate) : undefined,
           nabh_rate: formData.nabh_rate ? parseFloat(formData.nabh_rate) : undefined,
-          private_rate: formData.private_rate ? parseFloat(formData.private_rate) : undefined
+          private_rate: formData.private_rate ? parseFloat(formData.private_rate) : undefined,
+          daily_remuneration: formData.daily_remuneration ? parseFloat(formData.daily_remuneration) : 0,
         }
       });
     }
