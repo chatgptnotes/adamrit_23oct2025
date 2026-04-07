@@ -26,13 +26,17 @@ export default function OpdSummaryLanding() {
   const [searchQuery, setSearchQuery] = useState('');
   const [todaysVisits, setTodaysVisits] = useState<OpdVisit[]>([]);
   const [filteredVisits, setFilteredVisits] = useState<OpdVisit[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
+  const [loadedOnce, setLoadedOnce] = useState(false);
   const [searchResults, setSearchResults] = useState<OpdVisit[]>([]);
   const [isSearching, setIsSearching] = useState(false);
-  const hasFetched = useRef(false);
+  const fetchingRef = useRef(false);
 
   // Fetch today's OPD visits
   const fetchTodaysVisits = async () => {
+    // Prevent concurrent or repeated fetches
+    if (fetchingRef.current) return;
+    fetchingRef.current = true;
     setIsLoading(true);
     try {
       const today = new Date().toISOString().split('T')[0];
@@ -69,15 +73,17 @@ export default function OpdSummaryLanding() {
       setFilteredVisits([]);
     } finally {
       setIsLoading(false);
+      setLoadedOnce(true);
+      fetchingRef.current = false;
     }
   };
 
-  // Fetch once on mount
+  // Fetch exactly once on mount
   useEffect(() => {
-    if (!hasFetched.current) {
-      hasFetched.current = true;
+    if (!loadedOnce && !fetchingRef.current) {
       fetchTodaysVisits();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Search patients across all visits

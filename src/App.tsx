@@ -138,17 +138,22 @@ const AppContent = () => {
   const [selectedHospitalType, setSelectedHospitalType] = React.useState<HospitalType | null>(null);
   const wasAuthenticated = useRef(false);
 
-  // Role-based redirect after login
+  // Role-based redirect after login — use sessionStorage to prevent redirect loops on full-page reloads
   useEffect(() => {
     if (isAuthenticated && user && !wasAuthenticated.current) {
       wasAuthenticated.current = true;
       const targetRoute = getRoleDefaultRoute(user.role);
       const currentPath = window.location.pathname;
       // Only redirect if on a generic landing route AND not already on the target
+      // Use sessionStorage flag to avoid repeated redirects after full-page reload
+      const redirectKey = `role_redirected_${user.email}`;
+      const alreadyRedirected = sessionStorage.getItem(redirectKey);
       if (
+        !alreadyRedirected &&
         (currentPath === '/' || currentPath === '/dashboard' || currentPath === '/login') &&
         currentPath !== targetRoute
       ) {
+        sessionStorage.setItem(redirectKey, 'true');
         window.location.href = targetRoute;
       }
     }
