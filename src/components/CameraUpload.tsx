@@ -33,6 +33,7 @@ import {
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { logActivity } from '@/lib/activity-logger';
+import { useAuth } from '@/contexts/AuthContext';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -47,6 +48,7 @@ interface CameraUploadProps {
 interface PatientResult {
   id: string;
   name: string;
+  patients_id?: string;
 }
 
 interface FileUploadRecord {
@@ -128,6 +130,7 @@ const CameraUpload: React.FC<CameraUploadProps> = ({
   onOpenChange,
 }) => {
   const { toast } = useToast();
+  const { hospitalConfig } = useAuth();
 
   // Camera state
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -164,6 +167,9 @@ const CameraUpload: React.FC<CameraUploadProps> = ({
   const [showPrescriptionModal, setShowPrescriptionModal] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
   const [savingPrescription, setSavingPrescription] = useState(false);
+  const [reviewMedicines, setReviewMedicines] = useState<{name: string; strength: string; route: string; frequency: string; duration: string; instructions: string; qty: number; checked: boolean}[]>([]);
+  const [prescriptionDoctor, setPrescriptionDoctor] = useState('');
+  const [prescriptionStep, setPrescriptionStep] = useState<'review' | 'done'>('review');
 
   // Recent uploads state
   const [recentUploads, setRecentUploads] = useState<FileUploadRecord[]>([]);
@@ -572,7 +578,7 @@ Extract patient name if mentioned. Extract any ID/UHID if mentioned. Put the doc
       try {
         const { data, error } = await (supabase as any)
           .from('patients')
-          .select('id, name')
+          .select('id, name, patients_id')
           .ilike('name', `%${patientSearch}%`)
           .limit(10);
 
@@ -589,6 +595,32 @@ Extract patient name if mentioned. Extract any ID/UHID if mentioned. Put the doc
 
     return () => clearTimeout(timeout);
   }, [patientSearch]);
+
+  // -------------------------------------------------------------------------
+  // Parse medicines when prescription modal opens
+  // -------------------------------------------------------------------------
+
+  useEffect(() => {
+    if (showPrescriptionModal && prescriptionResult) {
+      const jsonMatch = prescriptionResult.match(/===JSON===\s*([\s\S]*?)\s*===END_JSON===/);
+      if (jsonMatch) {
+        try {
+          const parsed = JSON.parse(jsonMatch[1]);
+          setReviewMedicines(parsed.map((m: any) => ({
+            name: m.name || '',
+            strength: m.strength || '',
+            route: m.route || 'Oral',
+            frequency: m.frequency || 'OD',
+            duration: m.duration || '',
+            instructions: m.instructions || '',
+            qty: 3,
+            checked: true,
+          })));
+        } catch(e) { console.error('Parse error:', e); }
+      }
+      setPrescriptionStep('review');
+    }
+  }, [showPrescriptionModal, prescriptionResult]);
 
   // -------------------------------------------------------------------------
   // Prescription transcription using Gemini Vision
@@ -1170,20 +1202,21 @@ Rules:
               {patientResults.map((p) => (
                 <button
                   key={p.id}
-                  className="w-full text-left px-3 py-1.5 text-sm hover:bg-blue-50"
+                  className="w-full text-left px-3 py-1.5 text-sm hover:bg-blue-50 flex justify-between items-center"
                   onClick={() => {
                     setSelectedPatient(p);
                     setPatientSearch(p.name);
                     setShowPatientDropdown(false);
                   }}
                 >
-                  {p.name}
+                  <span>{p.name}</span>
+                  {p.patients_id && <span className="text-[10px] text-gray-400 ml-2">{p.patients_id}</span>}
                 </button>
               ))}
             </div>
           )}
           {selectedPatient && (
-            <Badge variant="secondary" className="text-[10px] mt-1">Patient linked: {selectedPatient.name}</Badge>
+            <Badge variant="secondary" className="text-[10px] mt-1">Patient linked: {selectedPatient.name} {selectedPatient.patients_id ? `(${selectedPatient.patients_id})` : ''}</Badge>
           )}
         </div>
 
@@ -1295,6 +1328,7 @@ Rules:
           {selectedPatient ? (
             <div className="flex items-center gap-2">
               <span className="text-sm text-green-700 font-medium">{selectedPatient.name}</span>
+              {selectedPatient.patients_id && <span className="text-[10px] text-gray-500">({selectedPatient.patients_id})</span>}
               <Badge variant="secondary" className="text-[10px]">Matched</Badge>
               <button
                 className="text-xs text-blue-500 hover:underline ml-auto"
@@ -1524,73 +1558,346 @@ Rules:
   const isTreatmentSheet = category === 'treatment_sheet';
   const hasJsonMedicines = prescriptionResult?.includes('===JSON===');
 
-  const renderPrescriptionModal = () => (
-    <Dialog open={showPrescriptionModal} onOpenChange={setShowPrescriptionModal}>
-      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Sparkles className="h-5 w-5 text-purple-600" />
-            {isTreatmentSheet ? 'Extracted Treatment Sheet' : 'Transcribed Prescription'}
-            {selectedPatient && (
-              <Badge variant="outline" className="ml-2">{selectedPatient.name}</Badge>
-            )}
-          </DialogTitle>
-        </DialogHeader>
-        <div className="space-y-4">
-          {isTreatmentSheet && hasJsonMedicines && (
-            <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-sm text-green-800">
-              <strong>Medicines detected!</strong> Click "Create Prescription" to add these medicines to the patient's visit as a prescription.
+  const handleGeneratePrescription = async () => {
+    const checkedMedicines = reviewMedicines.filter(m => m.checked);
+    if (checkedMedicines.length === 0) {
+      toast({ title: 'No Medicines Selected', description: 'Please select at least one medicine.', variant: 'destructive' });
+      return;
+    }
+
+    setSavingPrescription(true);
+    try {
+      const prescriptionNumber = 'RX-' + Date.now();
+      const today = new Date().toISOString().split('T')[0];
+
+      // Insert prescription record
+      const { data: rxData, error: rxError } = await (supabase as any)
+        .from('prescriptions')
+        .insert({
+          prescription_number: prescriptionNumber,
+          patient_id: selectedPatient?.id || null,
+          doctor_name: prescriptionDoctor || 'As per records',
+          prescription_date: today,
+          status: 'PENDING',
+          notes: prescriptionResult || '',
+        })
+        .select('id')
+        .single();
+
+      if (rxError) {
+        console.error('Error inserting prescription:', rxError);
+        toast({ title: 'Save Failed', description: rxError.message || 'Could not save prescription.', variant: 'destructive' });
+        setSavingPrescription(false);
+        return;
+      }
+
+      const prescriptionId = rxData?.id;
+
+      // Insert prescription items
+      if (prescriptionId) {
+        const itemsToInsert = checkedMedicines.map(m => {
+          const durationDays = parseInt(m.duration) || 0;
+          return {
+            prescription_id: prescriptionId,
+            medicine_id: null,
+            quantity_prescribed: m.qty,
+            dosage_frequency: m.frequency,
+            dosage_timing: m.route,
+            duration_days: durationDays,
+            special_instructions: [m.instructions, m.strength].filter(Boolean).join(' | '),
+          };
+        });
+
+        const { error: itemsError } = await (supabase as any)
+          .from('prescription_items')
+          .insert(itemsToInsert);
+
+        if (itemsError) {
+          console.error('Error inserting prescription items:', itemsError);
+          // Non-fatal: prescription header was saved, items failed
+        }
+      }
+
+      // Open print window
+      const hospitalName = (hospitalConfig as any)?.name || 'Hope Multi-Specialty Hospital';
+      const patientName = selectedPatient?.name || 'As per records';
+      const doctorName = prescriptionDoctor || 'As per records';
+      const printDate = new Date().toLocaleString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+      const medicineRows = checkedMedicines.map((m, idx) => `
+        <tr>
+          <td>${idx + 1}</td>
+          <td><strong>${m.name.toUpperCase()}</strong></td>
+          <td>${m.strength || '-'}</td>
+          <td>${m.route || '-'}</td>
+          <td>${m.frequency || '-'}</td>
+          <td>${m.duration || '-'}</td>
+          <td>${m.qty}</td>
+        </tr>
+      `).join('');
+
+      const printHtml = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Prescription - ${prescriptionNumber}</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: Arial, sans-serif; font-size: 12px; color: #000; background: #fff; padding: 20px; }
+    .header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 12px; margin-bottom: 16px; }
+    .hospital-name { font-size: 22px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; }
+    .rx-title { font-size: 16px; font-weight: bold; letter-spacing: 3px; margin-top: 6px; color: #333; }
+    .patient-info { display: flex; justify-content: space-between; margin-bottom: 14px; border: 1px solid #ccc; padding: 10px; border-radius: 4px; background: #f9f9f9; }
+    .patient-info .col { flex: 1; }
+    .patient-info .col p { margin-bottom: 4px; }
+    .patient-info .col strong { font-size: 13px; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+    th { background: #1a1a2e; color: #fff; padding: 8px 6px; font-size: 11px; text-align: left; }
+    td { padding: 7px 6px; border-bottom: 1px solid #e0e0e0; font-size: 12px; vertical-align: top; }
+    tr:nth-child(even) td { background: #f7f7f7; }
+    .footer { margin-top: 30px; display: flex; justify-content: space-between; align-items: flex-end; border-top: 1px solid #ccc; padding-top: 16px; }
+    .signature-block { text-align: center; min-width: 180px; }
+    .signature-line { border-top: 1px solid #000; margin-top: 40px; padding-top: 6px; font-size: 11px; }
+    .stamp-block { text-align: center; min-width: 150px; }
+    .stamp-box { width: 120px; height: 80px; border: 1px dashed #aaa; margin: 0 auto 6px; display: flex; align-items: center; justify-content: center; color: #aaa; font-size: 10px; }
+    .rx-number { font-size: 10px; color: #666; text-align: right; margin-bottom: 4px; }
+    @media print {
+      body { padding: 10mm; }
+      @page { size: A4; margin: 10mm; }
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="hospital-name">${hospitalName}</div>
+    <div class="rx-title">PRESCRIPTION</div>
+  </div>
+  <div class="rx-number">Rx No: ${prescriptionNumber}</div>
+  <div class="patient-info">
+    <div class="col">
+      <p><strong>Patient:</strong> ${patientName}</p>
+      <p><strong>Date:</strong> ${today}</p>
+    </div>
+    <div class="col" style="text-align:right;">
+      <p><strong>Doctor:</strong> ${doctorName}</p>
+      <p><strong>Printed:</strong> ${printDate}</p>
+    </div>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th style="width:40px;">Sr.No</th>
+        <th>MEDICINE NAME</th>
+        <th style="width:80px;">STRENGTH</th>
+        <th style="width:70px;">ROUTE</th>
+        <th style="width:70px;">FREQUENCY</th>
+        <th style="width:80px;">DURATION</th>
+        <th style="width:40px;">QTY</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${medicineRows}
+    </tbody>
+  </table>
+  <div class="footer">
+    <div class="signature-block">
+      <div class="signature-line">Doctor's Signature</div>
+    </div>
+    <div class="stamp-block">
+      <div class="stamp-box">Hospital Stamp</div>
+      <div style="font-size:10px;color:#666;">Date: ${today}</div>
+    </div>
+  </div>
+  <script>window.onload = function() { window.print(); };</script>
+</body>
+</html>`;
+
+      const printWindow = window.open('', '_blank', 'width=800,height=900');
+      if (printWindow) {
+        printWindow.document.write(printHtml);
+        printWindow.document.close();
+      }
+
+      toast({ title: 'Prescription Saved', description: `${prescriptionNumber} saved and sent to print.` });
+      setShowPrescriptionModal(false);
+      setPrescriptionResult(null);
+      setPrescriptionStep('review');
+      setPrescriptionDoctor('');
+      setReviewMedicines([]);
+    } catch (e) {
+      console.error('Error generating prescription:', e);
+      toast({ title: 'Error', description: 'Could not generate prescription.', variant: 'destructive' });
+    } finally {
+      setSavingPrescription(false);
+    }
+  };
+
+  const renderPrescriptionModal = () => {
+    const allChecked = reviewMedicines.length > 0 && reviewMedicines.every(m => m.checked);
+
+    return (
+      <Dialog open={showPrescriptionModal} onOpenChange={(open) => {
+        if (!open) {
+          setShowPrescriptionModal(false);
+          setPrescriptionResult(null);
+          setPrescriptionStep('review');
+          setPrescriptionDoctor('');
+          setReviewMedicines([]);
+        }
+      }}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-purple-600" />
+              {isTreatmentSheet ? 'Review Extracted Medicines' : 'Transcribed Prescription'}
+              {selectedPatient && (
+                <Badge variant="outline" className="ml-2">{selectedPatient.name}</Badge>
+              )}
+            </DialogTitle>
+          </DialogHeader>
+
+          {isTreatmentSheet && hasJsonMedicines && prescriptionStep === 'review' ? (
+            <div className="space-y-4">
+              {/* Select All / Deselect All */}
+              <div className="flex items-center justify-between border-b pb-3">
+                <span className="text-sm text-gray-600">
+                  {reviewMedicines.filter(m => m.checked).length} of {reviewMedicines.length} medicines selected
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setReviewMedicines(prev => prev.map(m => ({ ...m, checked: !allChecked })))}
+                >
+                  {allChecked ? 'Deselect All' : 'Select All'}
+                </Button>
+              </div>
+
+              {/* Medicine checklist table */}
+              <div className="overflow-x-auto rounded-lg border border-gray-200">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 text-gray-700">
+                    <tr>
+                      <th className="px-3 py-2 text-left w-8"></th>
+                      <th className="px-3 py-2 text-left">Medicine</th>
+                      <th className="px-3 py-2 text-left">Strength</th>
+                      <th className="px-3 py-2 text-left">Route</th>
+                      <th className="px-3 py-2 text-left">Frequency</th>
+                      <th className="px-3 py-2 text-left">Duration</th>
+                      <th className="px-3 py-2 text-left w-20">Qty</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {reviewMedicines.map((med, idx) => (
+                      <tr key={idx} className={`border-t ${med.checked ? 'bg-white' : 'bg-gray-50 opacity-60'}`}>
+                        <td className="px-3 py-2">
+                          <input
+                            type="checkbox"
+                            checked={med.checked}
+                            onChange={() => setReviewMedicines(prev => prev.map((m, i) => i === idx ? { ...m, checked: !m.checked } : m))}
+                            className="h-4 w-4 cursor-pointer"
+                          />
+                        </td>
+                        <td className="px-3 py-2 font-bold">{med.name}</td>
+                        <td className="px-3 py-2 text-gray-600">{med.strength || '-'}</td>
+                        <td className="px-3 py-2 text-gray-600">{med.route || '-'}</td>
+                        <td className="px-3 py-2 text-gray-600">{med.frequency || '-'}</td>
+                        <td className="px-3 py-2 text-gray-600">{med.duration || '-'}</td>
+                        <td className="px-3 py-2">
+                          <input
+                            type="number"
+                            min={1}
+                            value={med.qty}
+                            onChange={(e) => setReviewMedicines(prev => prev.map((m, i) => i === idx ? { ...m, qty: Math.max(1, parseInt(e.target.value) || 1) } : m))}
+                            className="w-16 h-7 border border-gray-300 rounded px-2 text-sm"
+                          />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Doctor name input */}
+              <div className="space-y-1.5">
+                <Label className="text-sm font-medium text-gray-700">Prescribing Doctor</Label>
+                <Input
+                  placeholder="Enter doctor name..."
+                  value={prescriptionDoctor}
+                  onChange={(e) => setPrescriptionDoctor(e.target.value)}
+                  className="max-w-sm"
+                />
+              </div>
+
+              {/* Action buttons */}
+              <div className="flex gap-2 justify-end pt-2">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setShowPrescriptionModal(false);
+                    setPrescriptionResult(null);
+                    setPrescriptionStep('review');
+                    setPrescriptionDoctor('');
+                    setReviewMedicines([]);
+                  }}
+                >
+                  Close
+                </Button>
+                <Button
+                  className="bg-green-600 hover:bg-green-700"
+                  onClick={handleGeneratePrescription}
+                  disabled={savingPrescription || reviewMedicines.filter(m => m.checked).length === 0}
+                >
+                  {savingPrescription ? (
+                    <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Generating...</>
+                  ) : (
+                    <>
+                      <FileText className="h-4 w-4 mr-2" />
+                      Generate Prescription
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          ) : (
+            // Fallback: show raw transcribed text for non-treatment-sheet or no JSON
+            <div className="space-y-4">
+              <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 font-mono text-sm whitespace-pre-wrap max-h-[50vh] overflow-y-auto">
+                {prescriptionResult?.replace(/===JSON===[\s\S]*===END_JSON===/, '').trim()}
+              </div>
+              <div className="flex gap-2 justify-end flex-wrap">
+                <Button variant="outline" onClick={() => { setShowPrescriptionModal(false); setPrescriptionResult(null); }}>
+                  Close
+                </Button>
+                <Button
+                  onClick={() => {
+                    if (prescriptionResult) {
+                      navigator.clipboard.writeText(prescriptionResult);
+                      toast({ title: 'Copied', description: 'Text copied to clipboard.' });
+                    }
+                  }}
+                  variant="outline"
+                >
+                  <FileText className="h-4 w-4 mr-2" />
+                  Copy
+                </Button>
+                <Button
+                  className="bg-green-600 hover:bg-green-700"
+                  onClick={() => prescriptionResult && savePrescriptionToPatient(prescriptionResult)}
+                  disabled={savingPrescription}
+                >
+                  {savingPrescription ? (
+                    <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Saving...</>
+                  ) : (
+                    'Save to Patient'
+                  )}
+                </Button>
+              </div>
             </div>
           )}
-          <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 font-mono text-sm whitespace-pre-wrap max-h-[50vh] overflow-y-auto">
-            {prescriptionResult?.replace(/===JSON===[\s\S]*===END_JSON===/, '').trim()}
-          </div>
-          <div className="flex gap-2 justify-end flex-wrap">
-            <Button variant="outline" onClick={() => { setShowPrescriptionModal(false); setPrescriptionResult(null); }}>
-              Close
-            </Button>
-            <Button
-              onClick={() => {
-                if (prescriptionResult) {
-                  navigator.clipboard.writeText(prescriptionResult);
-                  toast({ title: 'Copied', description: 'Text copied to clipboard.' });
-                }
-              }}
-              variant="outline"
-            >
-              <FileText className="h-4 w-4 mr-2" />
-              Copy
-            </Button>
-            {isTreatmentSheet && hasJsonMedicines ? (
-              <Button
-                className="bg-green-600 hover:bg-green-700"
-                onClick={() => prescriptionResult && saveExtractedMedicines(prescriptionResult)}
-                disabled={savingPrescription}
-              >
-                {savingPrescription ? (
-                  <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Creating Prescription...</>
-                ) : (
-                  '💊 Create Prescription'
-                )}
-              </Button>
-            ) : (
-              <Button
-                className="bg-green-600 hover:bg-green-700"
-                onClick={() => prescriptionResult && savePrescriptionToPatient(prescriptionResult)}
-                disabled={savingPrescription}
-              >
-                {savingPrescription ? (
-                  <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Saving...</>
-                ) : (
-                  'Save to Patient'
-                )}
-              </Button>
-            )}
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
+        </DialogContent>
+      </Dialog>
+    );
+  };
 
   const content = (
     <div className="space-y-4">
