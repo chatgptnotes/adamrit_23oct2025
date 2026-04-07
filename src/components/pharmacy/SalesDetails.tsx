@@ -1988,15 +1988,39 @@ export const SalesDetails: React.FC = () => {
                       <tr key={bill.sale_id || idx} className="bg-white border-b hover:bg-gray-50">
                         <td className="px-2 py-2 text-gray-800">SB-{bill.sale_id}</td>
                         <td className="px-2 py-2 text-gray-600">{bill.payment_method || 'Cash'}</td>
-                        <td className="px-2 py-2 text-gray-600">{bill.sale_date ? new Date(bill.sale_date).toLocaleDateString('en-IN') : '-'}</td>
+                        <td className="px-2 py-2 text-gray-600">
+                          {bill.payment_method === 'CREDIT' ? (
+                            <input
+                              type="date"
+                              defaultValue={bill.sale_date ? new Date(bill.sale_date).toISOString().split('T')[0] : ''}
+                              max={new Date().toISOString().split('T')[0]}
+                              onBlur={async (e) => {
+                                const newDate = e.target.value;
+                                if (!newDate || newDate === (bill.sale_date ? new Date(bill.sale_date).toISOString().split('T')[0] : '')) return;
+                                const { error } = await supabase
+                                  .from('pharmacy_sales')
+                                  .update({ sale_date: new Date(newDate + 'T12:00:00').toISOString() })
+                                  .eq('sale_id', bill.sale_id);
+                                if (error) {
+                                  alert('Failed to update date: ' + error.message);
+                                } else {
+                                  bill.sale_date = new Date(newDate + 'T12:00:00').toISOString();
+                                }
+                              }}
+                              className="w-28 px-1 py-0.5 text-xs border border-blue-300 bg-blue-50 rounded focus:ring-1 focus:ring-blue-500"
+                            />
+                          ) : (
+                            bill.sale_date ? new Date(bill.sale_date).toLocaleDateString('en-IN') : '-'
+                          )}
+                        </td>
                         <td className="px-2 py-2 text-right text-gray-800">{((bill.total_amount || 0) + (bill.discount || 0)).toFixed(2)}</td>
                         <td className="px-2 py-2 text-right text-gray-800">{paid.toFixed(2)}</td>
                         <td className="px-2 py-2 text-right text-gray-600">{(bill.discount || 0).toFixed(2)}</td>
                         <td className="px-2 py-2 text-right font-medium text-gray-800">{amount.toFixed(2)}</td>
                         <td className="px-2 py-2">
                           <div className="flex items-center justify-center gap-1">
-                            {/* 1. Edit - only for non-completed sales */}
-                            {bill.payment_status !== 'COMPLETED' && bill.payment_status !== 'REFUNDED' && (
+                            {/* 1. Edit - for non-completed sales OR CREDIT (corporate/panel/insurance) */}
+                            {(bill.payment_status !== 'COMPLETED' && bill.payment_status !== 'REFUNDED') || bill.payment_method === 'CREDIT' ? (
                               <Button
                                 variant="ghost"
                                 size="sm"
@@ -2006,7 +2030,7 @@ export const SalesDetails: React.FC = () => {
                               >
                                 <Pencil className="h-3 w-3" />
                               </Button>
-                            )}
+                            ) : null}
                             {/* 2. View Sales - Modal */}
                             <Button
                               variant="ghost"
