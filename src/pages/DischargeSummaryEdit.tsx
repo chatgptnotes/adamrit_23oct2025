@@ -9,7 +9,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { ArrowLeft, Save, Printer, Sparkles, Download, Eye, Loader2, Edit3, Settings, Camera, Upload, X, Search } from 'lucide-react';
+import { ArrowLeft, Save, Printer, Sparkles, Download, Eye, Loader2, Edit3, Settings, Camera, Upload, X, Search, Trash2 } from 'lucide-react';
 import { useDebounce } from 'use-debounce';
 import DischargeSummary from '@/components/DischargeSummary';
 import { useVisitDiagnosis } from '@/hooks/useVisitDiagnosis';
@@ -3694,6 +3694,21 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
                       )}
                     </Tooltip>
                   </TooltipProvider>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      if (window.confirm('Clear all summary content? This cannot be undone.')) {
+                        setDischargeSummaryText('');
+                        setShowPreview(false);
+                      }
+                    }}
+                    className="flex items-center gap-2 text-red-600 hover:bg-red-50 border-red-200"
+                    title="Clear all content to start fresh"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    Clear
+                  </Button>
                   <Button
                     onClick={handleSave}
                     disabled={isSaving}
