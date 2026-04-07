@@ -3383,7 +3383,7 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
         <div className="text-center">
           <h1 className="text-2xl font-bold text-red-600 mb-4">Patient Not Found</h1>
           <p className="text-gray-600 mb-4">Could not find patient data for visit ID: {visitId}</p>
-          <Button onClick={() => navigate('/todays-opd')}>
+          <Button onClick={() => navigate('/opd-summary')}>
             <ArrowLeft className="mr-2 h-4 w-4" />
             Back to OPD Dashboard
           </Button>
@@ -3400,7 +3400,7 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
           <div className="flex items-center gap-4">
             <Button
               variant="outline"
-              onClick={() => navigate('/todays-opd')}
+              onClick={() => navigate('/opd-summary')}
               className="flex items-center gap-2"
             >
               <ArrowLeft className="h-4 w-4" />
