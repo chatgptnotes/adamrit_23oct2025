@@ -21,23 +21,29 @@ interface OpdVisit {
   } | null;
 }
 
+// Module-level cache — survives component remounts and React StrictMode double-mounts
+let cachedVisits: OpdVisit[] | null = null;
+let fetchInProgress = false;
+
 export default function OpdSummaryLanding() {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
-  const [todaysVisits, setTodaysVisits] = useState<OpdVisit[]>([]);
-  const [filteredVisits, setFilteredVisits] = useState<OpdVisit[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [loadedOnce, setLoadedOnce] = useState(false);
+  const [todaysVisits, setTodaysVisits] = useState<OpdVisit[]>(cachedVisits || []);
+  const [filteredVisits, setFilteredVisits] = useState<OpdVisit[]>(cachedVisits || []);
+  const [isLoading, setIsLoading] = useState(cachedVisits === null);
   const [searchResults, setSearchResults] = useState<OpdVisit[]>([]);
   const [isSearching, setIsSearching] = useState(false);
-  const fetchingRef = useRef(false);
+  const mountedRef = useRef(true);
 
-  // Fetch today's OPD visits
-  const fetchTodaysVisits = async () => {
-    // Prevent concurrent or repeated fetches
-    if (fetchingRef.current) return;
-    fetchingRef.current = true;
-    setIsLoading(true);
+  const fetchTodaysVisits = async (isManualRefresh = false) => {
+    // If already fetching, skip
+    if (fetchInProgress) return;
+    // If we have cached data and this isn't a manual refresh, skip
+    if (cachedVisits !== null && !isManualRefresh) return;
+
+    fetchInProgress = true;
+    if (mountedRef.current) setIsLoading(true);
+
     try {
       const today = new Date().toISOString().split('T')[0];
       const { data, error } = await supabase
@@ -47,46 +53,59 @@ export default function OpdSummaryLanding() {
         .order('created_at', { ascending: false })
         .limit(100);
 
-      if (error || !data || data.length === 0) {
+      let visits: OpdVisit[] = [];
+
+      if (!error && data && data.length > 0) {
+        visits = (data as OpdVisit[]).filter(v => v.patients);
+      } else {
         if (error) console.error('Error fetching visits:', error);
-        // Fallback: fetch recent visits (last 7 days)
+        // Fallback: recent 7 days
         const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-        const { data: fallback, error: fallbackErr } = await supabase
+        const { data: fallback } = await supabase
           .from('visits')
           .select('visit_id, visit_type, appointment_with, visit_date, status, patients(name, patients_id, gender, age, phone)')
           .gte('visit_date', weekAgo)
           .order('visit_date', { ascending: false })
           .limit(50);
 
-        if (fallbackErr) console.error('Fallback error:', fallbackErr);
-        const visits = ((fallback || []) as OpdVisit[]).filter(v => v.patients);
-        setTodaysVisits(visits);
-        setFilteredVisits(visits);
-      } else {
-        const visits = (data as OpdVisit[]).filter(v => v.patients);
+        visits = ((fallback || []) as OpdVisit[]).filter(v => v.patients);
+      }
+
+      // Update module cache
+      cachedVisits = visits;
+
+      if (mountedRef.current) {
         setTodaysVisits(visits);
         setFilteredVisits(visits);
       }
     } catch (err) {
       console.error('Fetch error:', err);
-      setTodaysVisits([]);
-      setFilteredVisits([]);
+      cachedVisits = [];
+      if (mountedRef.current) {
+        setTodaysVisits([]);
+        setFilteredVisits([]);
+      }
     } finally {
-      setIsLoading(false);
-      setLoadedOnce(true);
-      fetchingRef.current = false;
+      fetchInProgress = false;
+      if (mountedRef.current) setIsLoading(false);
     }
   };
 
-  // Fetch exactly once on mount
   useEffect(() => {
-    if (!loadedOnce && !fetchingRef.current) {
+    mountedRef.current = true;
+    // Only fetch if no cached data
+    if (cachedVisits === null) {
       fetchTodaysVisits();
     }
+    return () => { mountedRef.current = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Search patients across all visits
+  const handleManualRefresh = () => {
+    cachedVisits = null; // Clear cache so fetch runs
+    fetchTodaysVisits(true);
+  };
+
   const handleSearch = async (query: string) => {
     setSearchQuery(query);
 
@@ -96,7 +115,6 @@ export default function OpdSummaryLanding() {
       return;
     }
 
-    // First filter today's visits locally
     const q = query.toLowerCase();
     const localFiltered = todaysVisits.filter((v) => {
       const name = v.patients?.name?.toLowerCase() || '';
@@ -106,7 +124,6 @@ export default function OpdSummaryLanding() {
     });
     setFilteredVisits(localFiltered);
 
-    // Also search all visits if local results are few
     if (localFiltered.length < 3) {
       setIsSearching(true);
       try {
@@ -124,14 +141,13 @@ export default function OpdSummaryLanding() {
           return name.includes(q) || pid.includes(q) || vid.includes(q);
         });
 
-        // Merge without duplicates
         const existingIds = new Set(localFiltered.map((v) => v.visit_id));
         const additional = allFiltered.filter((v) => !existingIds.has(v.visit_id));
-        setSearchResults(additional.slice(0, 10));
+        if (mountedRef.current) setSearchResults(additional.slice(0, 10));
       } catch (err) {
         console.error('Search error:', err);
       } finally {
-        setIsSearching(false);
+        if (mountedRef.current) setIsSearching(false);
       }
     } else {
       setSearchResults([]);
@@ -157,9 +173,9 @@ export default function OpdSummaryLanding() {
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <div>
             <h1 className="text-xl sm:text-2xl font-bold text-gray-900">OPD Summary Dashboard</h1>
-            <p className="text-gray-500 text-xs sm:text-sm mt-1">Search for a patient or select from today's visits to create/view OPD summary</p>
+            <p className="text-gray-500 text-xs sm:text-sm mt-1">Search for a patient or select from today's visits</p>
           </div>
-          <Button variant="outline" onClick={fetchTodaysVisits} disabled={isLoading} className="flex items-center gap-2">
+          <Button variant="outline" onClick={handleManualRefresh} disabled={isLoading} className="flex items-center gap-2">
             <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
             Refresh
           </Button>
@@ -248,7 +264,6 @@ export default function OpdSummaryLanding() {
                 </button>
               ))}
 
-              {/* Additional search results */}
               {searchResults.length > 0 && (
                 <>
                   <div className="border-t pt-3 mt-3">
