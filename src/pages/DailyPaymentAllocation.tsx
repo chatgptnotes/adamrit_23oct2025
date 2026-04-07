@@ -17,7 +17,7 @@ import {
   Wallet, Building2, IndianRupee, TrendingUp, TrendingDown,
   Clock, CheckCircle, AlertTriangle, Plus, Edit2, ToggleLeft,
   ToggleRight, Banknote, Calendar, RefreshCw, Save, PenLine,
-  GripVertical, X, SkipForward, Users, Upload, ExternalLink, FileSpreadsheet, Printer
+  GripVertical, X, SkipForward, Users, Upload, ExternalLink, FileSpreadsheet, Printer, Eye
 } from 'lucide-react';
 import {
   DndContext,
@@ -43,9 +43,13 @@ import {
   usePaymentHistory,
   useSubAllocations,
   useSubAllocationsForSchedule,
+  useAllocationSaveStatus,
+  useSaveAllocation,
+  useSavedAllocations,
   type ScheduleEntry,
   type BankAccount,
   type SubAllocation,
+  type SavedAllocation,
 } from '@/hooks/useDailyPaymentAllocation';
 import { usePaymentObligations, usePayeeSearch, useMultiPayeeSearch, useObligationDefaultPayees, type PaymentObligation, type DefaultPayee } from '@/hooks/usePaymentObligations';
 import { useCompanies } from '@/hooks/useCompanies';
@@ -414,10 +418,24 @@ const DailyPaymentAllocation = () => {
   });
   const [historyTo, setHistoryTo] = useState(today);
 
+  // Saved allocations state
+  const [savedFrom, setSavedFrom] = useState(() => {
+    const d = new Date(); d.setDate(d.getDate() - 60);
+    return d.toISOString().split('T')[0];
+  });
+  const [savedTo, setSavedTo] = useState(today);
+  const [saveConfirmOpen, setSaveConfirmOpen] = useState(false);
+  const [saveNotes, setSaveNotes] = useState('');
+
   // Queries
   const { schedule, isLoading, markPaid, updateScheduleEntry, skipEntry, reorderSchedule, refetch } = useDailyPaymentSchedule(selectedDate, selectedHospital);
   const { funds, refetch: refetchFunds, saveActualBalance, addManualAccount } = useFundAccounts(selectedDate);
   const { data: cashCollections = 0 } = useTodayCashCollections(selectedDate);
+
+  // Save status & saved allocations
+  const { isSaved, save: currentSave } = useAllocationSaveStatus(selectedDate, selectedHospital);
+  const saveAllocation = useSaveAllocation();
+  const { data: savedAllocations = [] } = useSavedAllocations(savedFrom, savedTo, selectedHospital);
   const { obligations, createObligation, updateObligation, deleteObligation, toggleActive } = usePaymentObligations(selectedHospital);
 
   // Batch sub-allocations for all schedule entries (for table display)
@@ -913,6 +931,24 @@ table{width:100%;border-collapse:collapse;margin-top:12px}
     setIsSyncingRMOs(false);
   };
 
+  // Save/finalize day's allocation
+  const handleSaveDay = (status: 'saved' | 'finalized' | 'revised') => {
+    saveAllocation.mutate({
+      save_date: selectedDate,
+      hospital_name: selectedHospital,
+      total_due: totalDue,
+      total_paid: totalPaid,
+      total_available: totalAvailable,
+      surplus,
+      schedule_count: activeSchedule.length,
+      notes: saveNotes || undefined,
+      saved_by: user?.email || undefined,
+      status,
+    });
+    setSaveConfirmOpen(false);
+    setSaveNotes('');
+  };
+
   const startEditBalance = (acc: BankAccount) => {
     setEditingBalances(prev => ({
       ...prev,
@@ -994,6 +1030,16 @@ table{width:100%;border-collapse:collapse;margin-top:12px}
           <Button variant="outline" size="icon" onClick={handleRefreshAll} title="Reload all data">
             <RefreshCw className="h-4 w-4" />
           </Button>
+          {isSaved && currentSave && (
+            <Badge className={
+              currentSave.status === 'finalized' ? 'bg-green-100 text-green-800' :
+              currentSave.status === 'revised' ? 'bg-blue-100 text-blue-800' :
+              'bg-orange-100 text-orange-800'
+            }>
+              {currentSave.status === 'finalized' ? <CheckCircle className="h-3 w-3 mr-1" /> : <Save className="h-3 w-3 mr-1" />}
+              {currentSave.status.charAt(0).toUpperCase() + currentSave.status.slice(1)}
+            </Badge>
+          )}
         </div>
       </div>
 
@@ -1210,11 +1256,17 @@ table{width:100%;border-collapse:collapse;margin-top:12px}
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-2 md:grid-cols-4">
           <TabsTrigger value="allocation">
             Today's Allocation
             {schedule.filter(s => s.status === 'pending').length > 0 && (
               <Badge className="ml-2 bg-red-500">{schedule.filter(s => s.status === 'pending').length}</Badge>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="saved">
+            Saved Days
+            {savedAllocations.length > 0 && (
+              <Badge className="ml-2 bg-blue-500">{savedAllocations.length}</Badge>
             )}
           </TabsTrigger>
           <TabsTrigger value="master">Obligations Master</TabsTrigger>
@@ -1233,13 +1285,41 @@ table{width:100%;border-collapse:collapse;margin-top:12px}
             <Card>
               <div className="px-4 py-2 border-b bg-gray-50 flex items-center justify-between">
                 <p className="text-xs text-muted-foreground">Drag rows to reorder priority. Click pencil to edit amount. Click X to skip.</p>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <Button variant="outline" size="sm" onClick={printTodayAllocation}>
                     <Printer className="h-3 w-3 mr-1" /> Print
                   </Button>
                   <Button variant="outline" size="sm" onClick={printDetailedAllocation}>
                     <Users className="h-3 w-3 mr-1" /> Detailed Print
                   </Button>
+                  {!isSaved ? (
+                    <Button
+                      size="sm"
+                      className="bg-green-600 hover:bg-green-700 text-white"
+                      onClick={() => setSaveConfirmOpen(true)}
+                    >
+                      <Save className="h-3 w-3 mr-1" /> Save Day
+                    </Button>
+                  ) : currentSave?.status === 'saved' ? (
+                    <Button
+                      size="sm"
+                      className="bg-amber-600 hover:bg-amber-700 text-white"
+                      onClick={() => handleSaveDay('finalized')}
+                      disabled={saveAllocation.isPending}
+                    >
+                      <CheckCircle className="h-3 w-3 mr-1" /> Finalize
+                    </Button>
+                  ) : (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="border-blue-300 text-blue-700"
+                      onClick={() => handleSaveDay('revised')}
+                      disabled={saveAllocation.isPending}
+                    >
+                      <RefreshCw className="h-3 w-3 mr-1" /> Re-save
+                    </Button>
+                  )}
                 </div>
               </div>
               <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
@@ -1469,7 +1549,144 @@ table{width:100%;border-collapse:collapse;margin-top:12px}
             </Table>
           </Card>
         </TabsContent>
+
+        {/* TAB: Saved Allocations */}
+        <TabsContent value="saved" className="mt-4 space-y-4">
+          <div className="flex items-center gap-4 flex-wrap">
+            <div>
+              <Label className="text-xs">From</Label>
+              <Input type="date" value={savedFrom} onChange={(e) => setSavedFrom(e.target.value)} className="w-40" />
+            </div>
+            <div>
+              <Label className="text-xs">To</Label>
+              <Input type="date" value={savedTo} onChange={(e) => setSavedTo(e.target.value)} className="w-40" />
+            </div>
+          </div>
+          <Card>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Hospital</TableHead>
+                  <TableHead className="text-right">Total Due</TableHead>
+                  <TableHead className="text-right">Total Paid</TableHead>
+                  <TableHead className="text-right">Available</TableHead>
+                  <TableHead className="text-right">Surplus / Deficit</TableHead>
+                  <TableHead className="text-center">Items</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Saved By</TableHead>
+                  <TableHead>Saved At</TableHead>
+                  <TableHead>Notes</TableHead>
+                  <TableHead className="text-center">Action</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {savedAllocations.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={12} className="text-center py-8 text-muted-foreground">
+                      No saved allocations for this date range. Save a day's allocation from the "Today's Allocation" tab.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  savedAllocations.map((sa: SavedAllocation) => (
+                    <TableRow key={sa.id} className="hover:bg-blue-50/50 cursor-pointer">
+                      <TableCell className="font-medium">{new Date(sa.save_date).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}</TableCell>
+                      <TableCell className="capitalize text-xs">{sa.hospital_name}</TableCell>
+                      <TableCell className="text-right font-mono text-red-700">{formatINR(sa.total_due)}</TableCell>
+                      <TableCell className="text-right font-mono text-green-700">{formatINR(sa.total_paid)}</TableCell>
+                      <TableCell className="text-right font-mono">{formatINR(sa.total_available)}</TableCell>
+                      <TableCell className={`text-right font-mono font-bold ${sa.surplus >= 0 ? 'text-green-700' : 'text-red-700'}`}>
+                        {sa.surplus >= 0 ? '+' : ''}{formatINR(sa.surplus)}
+                      </TableCell>
+                      <TableCell className="text-center font-mono">{sa.schedule_count}</TableCell>
+                      <TableCell>
+                        <Badge className={
+                          sa.status === 'finalized' ? 'bg-green-100 text-green-800' :
+                          sa.status === 'revised' ? 'bg-blue-100 text-blue-800' :
+                          'bg-orange-100 text-orange-800'
+                        }>
+                          {sa.status.charAt(0).toUpperCase() + sa.status.slice(1)}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground">{sa.saved_by || '-'}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground">
+                        {new Date(sa.saved_at).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground max-w-[120px] truncate">{sa.notes || '-'}</TableCell>
+                      <TableCell className="text-center">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-xs"
+                          onClick={() => { setSelectedDate(sa.save_date); setActiveTab('allocation'); }}
+                        >
+                          <Eye className="h-3 w-3 mr-1" /> View
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </Card>
+        </TabsContent>
       </Tabs>
+
+      {/* Save Day Confirmation Dialog */}
+      <Dialog open={saveConfirmOpen} onOpenChange={setSaveConfirmOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Save className="h-5 w-5 text-green-600" />
+              Save Day's Allocation
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="text-sm text-muted-foreground">
+              Save allocation for <strong>{new Date(selectedDate).toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</strong> — <strong className="capitalize">{selectedHospital}</strong>
+            </div>
+            <div className="grid grid-cols-2 gap-3 p-3 bg-gray-50 rounded-lg">
+              <div>
+                <div className="text-xs text-muted-foreground">Total Due</div>
+                <div className="font-mono font-bold text-red-700">{formatINR(totalDue)}</div>
+              </div>
+              <div>
+                <div className="text-xs text-muted-foreground">Total Paid</div>
+                <div className="font-mono font-bold text-green-700">{formatINR(totalPaid)}</div>
+              </div>
+              <div>
+                <div className="text-xs text-muted-foreground">Available</div>
+                <div className="font-mono font-bold">{formatINR(totalAvailable)}</div>
+              </div>
+              <div>
+                <div className="text-xs text-muted-foreground">Surplus / Deficit</div>
+                <div className={`font-mono font-bold ${surplus >= 0 ? 'text-green-700' : 'text-red-700'}`}>
+                  {surplus >= 0 ? '+' : ''}{formatINR(surplus)}
+                </div>
+              </div>
+            </div>
+            <div>
+              <Label className="text-xs">Notes (optional)</Label>
+              <Input
+                value={saveNotes}
+                onChange={(e) => setSaveNotes(e.target.value)}
+                placeholder="Any remarks for this day's allocation..."
+                className="mt-1"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSaveConfirmOpen(false)}>Cancel</Button>
+            <Button
+              className="bg-green-600 hover:bg-green-700"
+              onClick={() => handleSaveDay('saved')}
+              disabled={saveAllocation.isPending}
+            >
+              {saveAllocation.isPending ? 'Saving...' : 'Save Allocation'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Pay Dialog — two-mode: Plan Payees / Confirm Payment */}
       <Dialog open={payDialogOpen} onOpenChange={(open) => { setPayDialogOpen(open); }}>

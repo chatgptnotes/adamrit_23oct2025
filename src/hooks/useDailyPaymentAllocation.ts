@@ -515,3 +515,111 @@ export const usePaymentHistory = (fromDate: string, toDate: string, hospital: st
     enabled: !!fromDate && !!toDate,
   });
 };
+
+// ── Saved Allocations (daily snapshots) ──
+
+export interface SavedAllocation {
+  id: string;
+  save_date: string;
+  hospital_name: string;
+  total_due: number;
+  total_paid: number;
+  total_available: number;
+  surplus: number;
+  schedule_count: number;
+  notes: string | null;
+  saved_by: string | null;
+  saved_at: string;
+  status: 'saved' | 'finalized' | 'revised';
+  created_at: string;
+  updated_at: string;
+}
+
+// Check if a specific date is saved
+export const useAllocationSaveStatus = (date: string, hospital: string) => {
+  const query = useQuery({
+    queryKey: ['allocation-save-status', date, hospital],
+    queryFn: async (): Promise<SavedAllocation | null> => {
+      const { data, error } = await (supabase as any)
+        .from('daily_allocation_saves')
+        .select('*')
+        .eq('save_date', date)
+        .eq('hospital_name', hospital)
+        .maybeSingle();
+      if (error) throw error;
+      return data as SavedAllocation | null;
+    },
+    enabled: !!date && !!hospital,
+  });
+
+  return {
+    isSaved: !!query.data,
+    save: query.data,
+    isLoading: query.isLoading,
+  };
+};
+
+// Save/finalize a day's allocation (upsert)
+export const useSaveAllocation = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (params: {
+      save_date: string;
+      hospital_name: string;
+      total_due: number;
+      total_paid: number;
+      total_available: number;
+      surplus: number;
+      schedule_count: number;
+      notes?: string;
+      saved_by?: string;
+      status: 'saved' | 'finalized' | 'revised';
+    }) => {
+      const { error } = await (supabase as any)
+        .from('daily_allocation_saves')
+        .upsert({
+          save_date: params.save_date,
+          hospital_name: params.hospital_name,
+          total_due: params.total_due,
+          total_paid: params.total_paid,
+          total_available: params.total_available,
+          surplus: params.surplus,
+          schedule_count: params.schedule_count,
+          notes: params.notes || null,
+          saved_by: params.saved_by || null,
+          status: params.status,
+          saved_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'save_date,hospital_name' });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['allocation-save-status'] });
+      queryClient.invalidateQueries({ queryKey: ['saved-allocations'] });
+      toast.success('Day\'s allocation saved successfully');
+    },
+    onError: (err: any) => {
+      toast.error('Failed to save allocation: ' + err.message);
+    },
+  });
+};
+
+// List saved allocations for a date range
+export const useSavedAllocations = (fromDate: string, toDate: string, hospital: string) => {
+  return useQuery({
+    queryKey: ['saved-allocations', fromDate, toDate, hospital],
+    queryFn: async (): Promise<SavedAllocation[]> => {
+      const { data, error } = await (supabase as any)
+        .from('daily_allocation_saves')
+        .select('*')
+        .eq('hospital_name', hospital)
+        .gte('save_date', fromDate)
+        .lte('save_date', toDate)
+        .order('save_date', { ascending: false });
+      if (error) throw error;
+      return (data || []) as SavedAllocation[];
+    },
+    enabled: !!fromDate && !!toDate && !!hospital,
+  });
+};
