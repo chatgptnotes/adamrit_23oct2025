@@ -169,7 +169,9 @@ const CameraUpload: React.FC<CameraUploadProps> = ({
   const [savingPrescription, setSavingPrescription] = useState(false);
   const [reviewMedicines, setReviewMedicines] = useState<{name: string; strength: string; route: string; frequency: string; duration: string; instructions: string; qty: number; checked: boolean}[]>([]);
   const [prescriptionDoctor, setPrescriptionDoctor] = useState('');
-  const [prescriptionStep, setPrescriptionStep] = useState<'review' | 'done'>('review');
+  const [prescriptionStep, setPrescriptionStep] = useState<'review' | 'saved' | 'done'>('review');
+  const [savedPrintHtml, setSavedPrintHtml] = useState<string>('');
+  const [savedPrescriptionNumber, setSavedPrescriptionNumber] = useState<string>('');
 
   // Recent uploads state
   const [recentUploads, setRecentUploads] = useState<FileUploadRecord[]>([]);
@@ -1713,18 +1715,13 @@ Rules:
 </body>
 </html>`;
 
-      const printWindow = window.open('', '_blank', 'width=800,height=900');
-      if (printWindow) {
-        printWindow.document.write(printHtml);
-        printWindow.document.close();
-      }
+      // Store print HTML for on-demand printing (don't auto-print)
+      setSavedPrintHtml(printHtml);
+      setSavedPrescriptionNumber(prescriptionNumber);
 
-      toast({ title: 'Prescription Saved', description: `${prescriptionNumber} saved and sent to print.` });
-      setShowPrescriptionModal(false);
-      setPrescriptionResult(null);
-      setPrescriptionStep('review');
-      setPrescriptionDoctor('');
-      setReviewMedicines([]);
+      toast({ title: 'Prescription Saved!', description: `${prescriptionNumber} saved successfully. You can now print it.` });
+      // Move to step 3 (saved confirmation) instead of closing
+      setPrescriptionStep('saved');
     } catch (e) {
       console.error('Error generating prescription:', e);
       toast({ title: 'Error', description: 'Could not generate prescription.', variant: 'destructive' });
@@ -1856,6 +1853,63 @@ Rules:
                       Generate Prescription
                     </>
                   )}
+                </Button>
+              </div>
+            </div>
+          ) : prescriptionStep === 'saved' ? (
+            // Step 3: Saved confirmation with print button
+            <div className="space-y-4">
+              <div className="bg-green-50 border border-green-200 rounded-lg p-6 text-center">
+                <div className="text-green-600 text-4xl mb-3">&#10003;</div>
+                <h3 className="text-lg font-bold text-green-800 mb-1">Prescription Saved Successfully!</h3>
+                <p className="text-sm text-green-700">Rx No: <strong>{savedPrescriptionNumber}</strong></p>
+                <p className="text-xs text-gray-500 mt-2">
+                  This prescription is now visible in FinalBill → Saved Data → Prescriptions tab
+                  and in the Pharmacy → Prescriptions queue.
+                </p>
+              </div>
+
+              <div className="flex gap-2 justify-center pt-2">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setShowPrescriptionModal(false);
+                    setPrescriptionResult(null);
+                    setPrescriptionStep('review');
+                    setPrescriptionDoctor('');
+                    setReviewMedicines([]);
+                    setSavedPrintHtml('');
+                    setSavedPrescriptionNumber('');
+                  }}
+                >
+                  Close
+                </Button>
+                <Button
+                  className="bg-blue-600 hover:bg-blue-700"
+                  onClick={() => {
+                    if (savedPrintHtml) {
+                      const printWindow = window.open('', '_blank', 'width=800,height=900');
+                      if (printWindow) {
+                        printWindow.document.write(savedPrintHtml);
+                        printWindow.document.close();
+                      }
+                    }
+                  }}
+                >
+                  <FileText className="h-4 w-4 mr-2" />
+                  Print Prescription
+                </Button>
+                <Button
+                  variant="outline"
+                  className="text-purple-600 border-purple-300 hover:bg-purple-50"
+                  onClick={() => {
+                    // Reset to review step for another prescription
+                    setPrescriptionStep('review');
+                    setSavedPrintHtml('');
+                    setSavedPrescriptionNumber('');
+                  }}
+                >
+                  New Prescription
                 </Button>
               </div>
             </div>
