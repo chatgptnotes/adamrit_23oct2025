@@ -1,6 +1,6 @@
 // Prescription Queue - Pharmacist view for dispensing prescriptions
 import React, { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -182,6 +182,8 @@ interface DispenseModalProps {
 
 const DispenseModal: React.FC<DispenseModalProps> = ({ prescription, onClose }) => {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [isDispensing, setIsDispensing] = useState(false);
   const [quantities, setQuantities] = useState<Record<string, number>>(
     Object.fromEntries(
       prescription.prescription_items.map((item) => [
@@ -199,12 +201,118 @@ const DispenseModal: React.FC<DispenseModalProps> = ({ prescription, onClose }) 
     setQuantities((prev) => ({ ...prev, [itemId]: clamped }));
   };
 
-  const handleCreateSaleBill = () => {
-    toast({
-      title: 'Redirecting to billing...',
-      description: `Creating sale bill for prescription ${prescription.prescription_number}`,
-    });
-    onClose();
+  const handleCreateSaleBill = async () => {
+    // Check if any quantity is being dispensed
+    const itemsToDispense = prescription.prescription_items.filter(
+      (item) => (quantities[item.id] || 0) > 0
+    );
+    if (itemsToDispense.length === 0) {
+      toast({ title: 'No items to dispense', description: 'Please enter quantity for at least one medicine.', variant: 'destructive' });
+      return;
+    }
+
+    setIsDispensing(true);
+    try {
+      // Step 1: Update quantity_dispensed on each prescription_item
+      for (const item of itemsToDispense) {
+        const qtyToDispense = quantities[item.id] || 0;
+        const newDispensed = item.quantity_dispensed + qtyToDispense;
+        const { error } = await (supabase as any)
+          .from('prescription_items')
+          .update({ quantity_dispensed: newDispensed })
+          .eq('id', item.id);
+        if (error) {
+          console.error('Error updating prescription item:', item.id, error);
+          throw new Error(`Failed to update item: ${error.message}`);
+        }
+      }
+
+      // Step 2: Determine new prescription status
+      const allFullyDispensed = prescription.prescription_items.every((item) => {
+        const qtyToDispense = quantities[item.id] || 0;
+        return (item.quantity_dispensed + qtyToDispense) >= item.quantity_prescribed;
+      });
+      const newStatus = allFullyDispensed ? 'DISPENSED' : 'PARTIALLY_DISPENSED';
+
+      // Step 3: Update prescription status
+      const { error: statusError } = await (supabase as any)
+        .from('prescriptions')
+        .update({ status: newStatus, updated_at: new Date().toISOString() })
+        .eq('id', prescription.id);
+      if (statusError) {
+        console.error('Error updating prescription status:', statusError);
+      }
+
+      // Step 4: Create pharmacy_sales record
+      const totalAmount = itemsToDispense.reduce((sum, item) => {
+        const qty = quantities[item.id] || 0;
+        return sum + qty; // Price per unit not available from prescription, just track quantity
+      }, 0);
+
+      const billNumber = `BILL${Date.now()}`;
+      const { data: saleHeader, error: saleError } = await (supabase as any)
+        .from('pharmacy_sales')
+        .insert({
+          sale_type: 'PRESCRIPTION',
+          patient_id: prescription.patient_id,
+          patient_name: prescription.patient_name,
+          prescription_number: prescription.prescription_number,
+          doctor_name: prescription.doctor_name,
+          bill_number: billNumber,
+          subtotal: 0,
+          discount: 0,
+          tax_gst: 0,
+          total_amount: 0,
+          payment_method: 'CASH',
+          payment_status: 'PENDING',
+          sale_date: new Date().toISOString(),
+          remarks: `Dispensed from prescription ${prescription.prescription_number}`,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+        .select('sale_id')
+        .single();
+
+      if (saleError) {
+        console.error('Error creating sale bill:', saleError);
+        // Don't fail — dispensing succeeded, sale bill is secondary
+      }
+
+      // Step 5: Create pharmacy_sale_items if sale was created
+      if (saleHeader?.sale_id) {
+        const saleItems = itemsToDispense.map((item) => ({
+          sale_id: saleHeader.sale_id,
+          medication_name: item.medicine_name || 'Unknown',
+          medication_id: item.medicine_id || null,
+          quantity: quantities[item.id] || 0,
+          unit_price: 0,
+          mrp: 0,
+          discount: 0,
+          tax: 0,
+          total: 0,
+          created_at: new Date().toISOString()
+        }));
+
+        await (supabase as any).from('pharmacy_sale_items').insert(saleItems);
+      }
+
+      toast({
+        title: allFullyDispensed ? 'Fully Dispensed' : 'Partially Dispensed',
+        description: `${itemsToDispense.length} medicine(s) dispensed. Bill: ${billNumber}`,
+      });
+
+      // Refresh the prescription list
+      queryClient.invalidateQueries({ queryKey: ['prescriptions'] });
+      onClose();
+    } catch (err: any) {
+      toast({
+        title: 'Dispense failed',
+        description: err.message || 'An error occurred while dispensing',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsDispensing(false);
+    }
   };
 
   return (
@@ -305,9 +413,9 @@ const DispenseModal: React.FC<DispenseModalProps> = ({ prescription, onClose }) 
         <Button variant="outline" onClick={onClose}>
           Cancel
         </Button>
-        <Button onClick={handleCreateSaleBill}>
+        <Button onClick={handleCreateSaleBill} disabled={isDispensing}>
           <Package className="h-4 w-4 mr-2" />
-          Create Sale Bill
+          {isDispensing ? 'Dispensing...' : 'Dispense & Create Bill'}
         </Button>
       </div>
     </div>
