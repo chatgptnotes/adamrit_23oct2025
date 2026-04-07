@@ -4,7 +4,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter } from "react-router-dom";
+import { BrowserRouter, useNavigate, useLocation } from "react-router-dom";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { AppRoutes } from "@/components/AppRoutes";
@@ -60,6 +60,28 @@ const getRoleDefaultRoute = (role: string): string => {
     default:
       return '/dashboard';
   }
+};
+
+// Role-based redirect component — lives inside BrowserRouter so it can use useNavigate
+// This replaces window.location.href which caused infinite reload loops on mobile
+const RoleRedirect: React.FC<{ user: { role: string; email: string } }> = ({ user }) => {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const hasRedirected = useRef(false);
+
+  useEffect(() => {
+    if (hasRedirected.current) return;
+    const genericRoutes = ['/', '/dashboard', '/login'];
+    if (genericRoutes.includes(location.pathname)) {
+      const targetRoute = getRoleDefaultRoute(user.role);
+      if (location.pathname !== targetRoute) {
+        hasRedirected.current = true;
+        navigate(targetRoute, { replace: true });
+      }
+    }
+  }, [location.pathname, user.role, navigate]);
+
+  return null;
 };
 
 // Suppress React Router v7 warnings
@@ -136,31 +158,7 @@ const AppContent = () => {
   // Always call hooks at the top level; avoid wrapping hooks in try/catch
   const counts = useCounts();
   const [selectedHospitalType, setSelectedHospitalType] = React.useState<HospitalType | null>(null);
-  const wasAuthenticated = useRef(false);
-
-  // Role-based redirect after login — use sessionStorage to prevent redirect loops on full-page reloads
-  useEffect(() => {
-    if (isAuthenticated && user && !wasAuthenticated.current) {
-      wasAuthenticated.current = true;
-      const targetRoute = getRoleDefaultRoute(user.role);
-      const currentPath = window.location.pathname;
-      // Only redirect if on a generic landing route AND not already on the target
-      // Use sessionStorage flag to avoid repeated redirects after full-page reload
-      const redirectKey = `role_redirected_${user.email}`;
-      const alreadyRedirected = sessionStorage.getItem(redirectKey);
-      if (
-        !alreadyRedirected &&
-        (currentPath === '/' || currentPath === '/dashboard' || currentPath === '/login') &&
-        currentPath !== targetRoute
-      ) {
-        sessionStorage.setItem(redirectKey, 'true');
-        window.location.href = targetRoute;
-      }
-    }
-    if (!isAuthenticated) {
-      wasAuthenticated.current = false;
-    }
-  }, [isAuthenticated, user]);
+  // Role-based redirect is handled by RoleRedirect component inside BrowserRouter (no page reloads)
 
   // Show loading while auth state is being restored from localStorage
   if (isAuthLoading) {
@@ -265,6 +263,7 @@ const AppContent = () => {
         }}
       >
         <SidebarProvider>
+          {user && <RoleRedirect user={user} />}
           <div className="min-h-screen flex w-full">
             <AppSidebar {...counts} />
             <main className="flex-1">
