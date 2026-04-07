@@ -392,6 +392,7 @@ const DailyPaymentAllocation = () => {
   // Extracted staff from uploaded Excel/CSV
   const [extractedStaff, setExtractedStaff] = useState<{ name: string; amount: number; selected: boolean }[]>([]);
   const [isImporting, setIsImporting] = useState(false);
+  const [isSyncingRMOs, setIsSyncingRMOs] = useState(false);
   const [defPayeeSearchTerm, setDefPayeeSearchTerm] = useState('');
   const { data: defPayeeResults = [] } = useMultiPayeeSearch(defPayeeSearchTerm, selectedHospital);
 
@@ -616,6 +617,48 @@ table{width:100%;border-collapse:collapse;margin-top:12px}
     return localScheduleOrder.map(id => map.get(id)).filter(Boolean) as ScheduleEntry[];
   }, [schedule, localScheduleOrder]);
 
+  // Group schedule entries by sub_category for section totals
+  const groupedSchedule = useMemo(() => {
+    const obligationMap = new Map(obligations.map(o => [o.id, o]));
+    const groups: { category: string; label: string; entries: ScheduleEntry[]; totalDaily: number; totalCarryforward: number; totalDue: number; totalPaid: number }[] = [];
+    const categoryMap = new Map<string, ScheduleEntry[]>();
+
+    for (const entry of sortedSchedule) {
+      const ob = obligationMap.get(entry.obligation_id);
+      const cat = ob?.sub_category || 'other';
+      if (!categoryMap.has(cat)) categoryMap.set(cat, []);
+      categoryMap.get(cat)!.push(entry);
+    }
+
+    const labelMap: Record<string, string> = {
+      rent: 'Rent', dialysis: 'Dialysis', electricity: 'Electricity',
+      salary: 'Staff Salary', consultant: 'Consultants', rmo: 'RMO Salary',
+      referral: 'Referrals', vendor: 'Vendors', other: 'Other',
+    };
+
+    // Maintain order: rent, dialysis, electricity, salary, consultant, rmo, referral, vendor, other
+    const order = ['rent', 'dialysis', 'electricity', 'salary', 'consultant', 'rmo', 'referral', 'vendor', 'other'];
+    const sortedCats = [...categoryMap.keys()].sort((a, b) => {
+      const ai = order.indexOf(a), bi = order.indexOf(b);
+      return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+    });
+
+    for (const cat of sortedCats) {
+      const entries = categoryMap.get(cat)!;
+      const active = entries.filter(e => e.status !== 'skipped');
+      groups.push({
+        category: cat,
+        label: labelMap[cat] || cat.charAt(0).toUpperCase() + cat.slice(1),
+        entries,
+        totalDaily: active.reduce((s, e) => s + e.daily_amount, 0),
+        totalCarryforward: active.reduce((s, e) => s + e.carryforward_amount, 0),
+        totalDue: active.reduce((s, e) => s + e.daily_amount + e.carryforward_amount, 0),
+        totalPaid: active.reduce((s, e) => s + e.paid_amount, 0),
+      });
+    }
+    return groups;
+  }, [sortedSchedule, obligations]);
+
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
@@ -802,6 +845,72 @@ table{width:100%;border-collapse:collapse;margin-top:12px}
   const handleDeleteObligation = (id: string) => {
     deleteObligation.mutate(id);
     setDeleteConfirmId(null);
+  };
+
+  // Sync active RMOs from master tables into obligations
+  const syncRMOsFromMaster = async () => {
+    setIsSyncingRMOs(true);
+    try {
+      const rmoTable = selectedHospital === 'hope' ? 'hope_rmos' : 'ayushman_rmos';
+      const { data: rmos, error: rmoError } = await (supabase as any)
+        .from(rmoTable)
+        .select('id, name, daily_remuneration, is_active')
+        .eq('is_active', true);
+
+      if (rmoError) throw rmoError;
+      if (!rmos || rmos.length === 0) {
+        toast.info('No active RMOs found in master. Add RMOs in the RMO Master page first.');
+        setIsSyncingRMOs(false);
+        return;
+      }
+
+      // Check which RMOs are already obligations
+      const existingRMONames = new Set(
+        obligations
+          .filter(o => o.sub_category === 'rmo' && o.hospital_name === selectedHospital)
+          .map(o => o.party_name.toLowerCase())
+      );
+
+      let added = 0;
+      let updated = 0;
+      for (const rmo of rmos) {
+        if (existingRMONames.has(rmo.name.toLowerCase())) {
+          // Update daily_remuneration if changed
+          const existing = obligations.find(
+            o => o.sub_category === 'rmo' && o.party_name.toLowerCase() === rmo.name.toLowerCase() && o.hospital_name === selectedHospital
+          );
+          if (existing && existing.default_daily_amount !== (rmo.daily_remuneration || 0)) {
+            await (supabase as any).from('payment_obligations').update({
+              default_daily_amount: rmo.daily_remuneration || 0,
+            }).eq('id', existing.id);
+            updated++;
+          }
+        } else {
+          // Add new RMO obligation
+          await (supabase as any).from('payment_obligations').insert({
+            party_name: rmo.name,
+            category: 'variable',
+            sub_category: 'rmo',
+            default_daily_amount: rmo.daily_remuneration || 0,
+            priority: 50,
+            is_active: true,
+            hospital_name: selectedHospital,
+            payee_search_table: rmoTable,
+          });
+          added++;
+        }
+      }
+
+      if (added > 0 || updated > 0) {
+        toast.success(`RMO sync: ${added} added, ${updated} updated from ${rmoTable}`);
+        window.location.reload();
+      } else {
+        toast.info('All active RMOs are already in obligations. No changes needed.');
+      }
+    } catch (err) {
+      toast.error('Failed to sync RMOs from master');
+    }
+    setIsSyncingRMOs(false);
   };
 
   const startEditBalance = (acc: BankAccount) => {
@@ -1152,30 +1261,60 @@ table{width:100%;border-collapse:collapse;margin-top:12px}
                   </TableHeader>
                   <SortableContext items={sortedSchedule.map(s => s.id)} strategy={verticalListSortingStrategy}>
                     <TableBody>
-                      {sortedSchedule.map((entry, idx) => (
-                        <SortableScheduleRow
-                          key={entry.id}
-                          entry={entry}
-                          idx={idx}
-                          isEditing={editingScheduleId === entry.id}
-                          editAmount={editScheduleAmount}
-                          editNotes={editScheduleNotes}
-                          skipConfirmId={skipConfirmId}
-                          subAllocations={allSubAllocations.filter(sa => sa.schedule_id === entry.id)}
-                          companyName={entry.company_id ? (companyNameMap[entry.company_id] || '') : ''}
-                          onStartEdit={() => startEditSchedule(entry)}
-                          onSaveEdit={saveEditSchedule}
-                          onCancelEdit={() => setEditingScheduleId(null)}
-                          onEditAmountChange={setEditScheduleAmount}
-                          onEditNotesChange={setEditScheduleNotes}
-                          onPay={() => handlePay(entry)}
-                          onSkipConfirm={() => setSkipConfirmId(entry.id)}
-                          onSkipCancel={() => setSkipConfirmId(null)}
-                          onSkip={() => handleSkipEntry(entry.id)}
-                        />
-                      ))}
-                      <TableRow className="bg-gray-50 font-bold">
-                        <TableCell colSpan={4}>TOTAL</TableCell>
+                      {(() => {
+                        let globalIdx = 0;
+                        return groupedSchedule.map((group) => (
+                          <React.Fragment key={group.category}>
+                            {/* Section Header */}
+                            <TableRow className="bg-blue-50 border-t-2 border-blue-200">
+                              <TableCell colSpan={11} className="py-2">
+                                <span className="font-semibold text-blue-800 text-sm uppercase tracking-wide">{group.label}</span>
+                                <span className="text-xs text-blue-600 ml-2">({group.entries.length} items)</span>
+                              </TableCell>
+                            </TableRow>
+                            {/* Section Entries */}
+                            {group.entries.map((entry) => {
+                              const idx = globalIdx++;
+                              return (
+                                <SortableScheduleRow
+                                  key={entry.id}
+                                  entry={entry}
+                                  idx={idx}
+                                  isEditing={editingScheduleId === entry.id}
+                                  editAmount={editScheduleAmount}
+                                  editNotes={editScheduleNotes}
+                                  skipConfirmId={skipConfirmId}
+                                  subAllocations={allSubAllocations.filter(sa => sa.schedule_id === entry.id)}
+                                  companyName={entry.company_id ? (companyNameMap[entry.company_id] || '') : ''}
+                                  onStartEdit={() => startEditSchedule(entry)}
+                                  onSaveEdit={saveEditSchedule}
+                                  onCancelEdit={() => setEditingScheduleId(null)}
+                                  onEditAmountChange={setEditScheduleAmount}
+                                  onEditNotesChange={setEditScheduleNotes}
+                                  onPay={() => handlePay(entry)}
+                                  onSkipConfirm={() => setSkipConfirmId(entry.id)}
+                                  onSkipCancel={() => setSkipConfirmId(null)}
+                                  onSkip={() => handleSkipEntry(entry.id)}
+                                />
+                              );
+                            })}
+                            {/* Section Subtotal */}
+                            <TableRow className="bg-blue-50/50 border-b border-blue-100">
+                              <TableCell colSpan={4} className="text-right text-xs font-semibold text-blue-700">
+                                {group.label} Subtotal
+                              </TableCell>
+                              <TableCell className="text-right font-mono text-xs font-semibold text-blue-700">{formatINR(group.totalDaily)}</TableCell>
+                              <TableCell className="text-right font-mono text-xs font-semibold text-red-600">{formatINR(group.totalCarryforward)}</TableCell>
+                              <TableCell className="text-right font-mono text-xs font-bold text-blue-800">{formatINR(group.totalDue)}</TableCell>
+                              <TableCell className="text-right font-mono text-xs font-semibold text-green-600">{formatINR(group.totalPaid)}</TableCell>
+                              <TableCell colSpan={3}></TableCell>
+                            </TableRow>
+                          </React.Fragment>
+                        ));
+                      })()}
+                      {/* Grand Total */}
+                      <TableRow className="bg-gray-100 font-bold border-t-2 border-gray-300">
+                        <TableCell colSpan={4} className="text-sm">GRAND TOTAL</TableCell>
                         <TableCell className="text-right font-mono">{formatINR(sortedSchedule.filter(e => e.status !== 'skipped').reduce((s, e) => s + e.daily_amount, 0))}</TableCell>
                         <TableCell className="text-right font-mono text-red-600">{formatINR(sortedSchedule.filter(e => e.status !== 'skipped').reduce((s, e) => s + e.carryforward_amount, 0))}</TableCell>
                         <TableCell className="text-right font-mono">{formatINR(totalDue)}</TableCell>
@@ -1192,11 +1331,22 @@ table{width:100%;border-collapse:collapse;margin-top:12px}
 
         {/* TAB 2: Obligations Master */}
         <TabsContent value="master" className="mt-4 space-y-4">
-          <div className="flex justify-between items-center">
+          <div className="flex justify-between items-center flex-wrap gap-2">
             <h3 className="text-lg font-semibold">Payment Obligations</h3>
-            <Button onClick={() => { setEditingObligationId(null); setNewObligation({ party_name: '', category: 'variable', sub_category: 'other', default_daily_amount: '', priority: '10', notes: '', payee_name: '', payee_search_table: '', attachment_url: '', google_sheet_link: '', company_id: null }); setAddDialogOpen(true); }}>
-              <Plus className="h-4 w-4 mr-1" /> Add Obligation
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                onClick={syncRMOsFromMaster}
+                disabled={isSyncingRMOs}
+                className="bg-orange-50 hover:bg-orange-100 border-orange-200 text-orange-700"
+              >
+                <RefreshCw className={`h-4 w-4 mr-1 ${isSyncingRMOs ? 'animate-spin' : ''}`} />
+                {isSyncingRMOs ? 'Syncing...' : 'Sync RMOs from Master'}
+              </Button>
+              <Button onClick={() => { setEditingObligationId(null); setNewObligation({ party_name: '', category: 'variable', sub_category: 'other', default_daily_amount: '', priority: '10', notes: '', payee_name: '', payee_search_table: '', attachment_url: '', google_sheet_link: '', company_id: null }); setAddDialogOpen(true); }}>
+                <Plus className="h-4 w-4 mr-1" /> Add Obligation
+              </Button>
+            </div>
           </div>
           <Card>
             <div className="px-4 py-2 border-b bg-gray-50">
