@@ -270,6 +270,7 @@ export default function DischargeSummaryEdit() {
   const [isCapturing, setIsCapturing] = useState(false);
   const [isProcessingOCR, setIsProcessingOCR] = useState(false);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
+  const [extractedNotes, setExtractedNotes] = useState('');
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -385,16 +386,16 @@ export default function DischargeSummaryEdit() {
 
       if (error) {
         console.error('Error saving discharge summary:', error);
-        alert('Failed to save discharge summary');
+        alert('Failed to save OPD summary');
       } else {
         setOriginalText(dischargeSummaryText);
         setIsSaved(true);
         setTimeout(() => setIsSaved(false), 2000);
-        alert('Discharge summary saved successfully!');
+        alert('OPD summary saved successfully!');
       }
     } catch (error) {
       console.error('Exception while saving:', error);
-      alert('Failed to save discharge summary');
+      alert('Failed to save OPD summary');
     } finally {
       setIsSaving(false);
     }
@@ -530,7 +531,7 @@ export default function DischargeSummaryEdit() {
       // Check if we have valid visitData with UUID for subsequent queries
       if (!visitData?.id) {
         console.error('❌ Critical: No visitData.id available for database queries');
-        alert('Error: Unable to fetch additional data - missing visit UUID. Basic discharge summary will be generated with available data.');
+        alert('Error: Unable to fetch additional data - missing visit UUID. Basic OPD summary will be generated with available data.');
       }
 
       // 5. Fetch complications using the correct UUID from visitData.id
@@ -1385,7 +1386,7 @@ export default function DischargeSummaryEdit() {
         console.log('ℹ️ No medications prescribed for this visit');
       }
 
-      medicationsTable = `Medications on Discharge:
+      medicationsTable = `Medications Prescribed:
 --------------------------------------------------------------------------------
 Name                     Strength    Route     Dosage                          Days
 --------------------------------------------------------------------------------
@@ -1412,17 +1413,17 @@ Name                     Strength    Route     Dosage                          D
 
       // Create case summary narrative
       const caseSummaryText = otNote
-        ? `This ${patientAge} year old ${patientGender.toLowerCase()} patient was admitted on ${visitDate} with ${primaryDiagnosis.toLowerCase()}. The patient underwent ${otNote.surgery_name || 'surgical procedure'} performed by ${otNote.surgeon || 'the attending surgeon'} under ${otNote.anaesthesia || 'appropriate anaesthesia'}. ${otNote.procedure_performed ? `The procedure involved ${otNote.procedure_performed.toLowerCase()}.` : ''} ${otNote.description ? `Post-operative notes indicate ${otNote.description.toLowerCase()}.` : ''} The patient's recovery was satisfactory and is now ready for discharge.`
-        : `This ${patientAge} year old ${patientGender.toLowerCase()} patient was admitted on ${visitDate} with ${primaryDiagnosis.toLowerCase()}. The patient received appropriate medical management and showed good clinical improvement. All vital parameters were stable at the time of discharge.`;
+        ? `This ${patientAge} year old ${patientGender.toLowerCase()} patient was seen on ${visitDate} with ${primaryDiagnosis.toLowerCase()}. The patient underwent ${otNote.surgery_name || 'surgical procedure'} performed by ${otNote.surgeon || 'the attending surgeon'} under ${otNote.anaesthesia || 'appropriate anaesthesia'}. ${otNote.procedure_performed ? `The procedure involved ${otNote.procedure_performed.toLowerCase()}.` : ''} ${otNote.description ? `Post-operative notes indicate ${otNote.description.toLowerCase()}.` : ''} The patient's recovery was satisfactory.`
+        : `This ${patientAge} year old ${patientGender.toLowerCase()} patient was admitted on ${visitDate} with ${primaryDiagnosis.toLowerCase()}. The patient received appropriate medical management and showed good clinical improvement. All vital parameters were stable at the time of visit.`;
 
       // Create medications narrative
       const medicationsText = visitDiagnosis?.medications && visitDiagnosis.medications.length > 0
-        ? `The patient is discharged on the following medications: ${visitDiagnosis.medications.map((med, index) => {
+        ? `The following medications were prescribed: ${visitDiagnosis.medications.map((med, index) => {
             // Convert medication format from technical to narrative
             const medText = med.replace(/•\s*/, '').replace(/दिन में दो बार/g, 'twice daily').replace(/दिन में एक बार/g, 'once daily').replace(/रात में/g, 'at bedtime').replace(/खाने के बाद/g, 'after meals').replace(/खाने से पहले/g, 'before meals');
             return index === visitDiagnosis.medications.length - 1 ? `and ${medText}` : medText;
           }).join(', ')}. All medications should be taken as prescribed and the patient should complete the full course of treatment.`
-        : `No specific medications were prescribed at discharge. The patient should continue with general supportive care as advised.`;
+        : `No specific medications were prescribed. The patient should continue with general supportive care as advised.`;
 
       // Create lab results table format
       let labResultsTable = '';
@@ -1505,8 +1506,7 @@ Test Name                       Result              Reference Range     Status
 ${formatTableField('Primary Care Provider', doctorName)} ${formatTableField('Registration ID', patient.patients?.registration_id || 'IH25I22001')}
 ${formatTableField('Sex / Age', `${patientGender} / ${patientAge} Year`)} ${formatTableField('Mobile No', patientInfo.phone || patient.patients?.phone || 'N/A')}
 ${formatTableField('Tariff', patient.patients?.tariff || 'Private')} ${formatTableField('Address', patient.patients?.address || 'N/A')}
-${formatTableField('Admission Date', visitDate)} ${formatTableField('Discharge Date', new Date().toLocaleDateString())}
-${formatTableField('Discharge Reason', 'Recovered')}
+${formatTableField('Admission Date', visitDate)} ${formatTableField('Visit Date', new Date().toLocaleDateString())}
 
 ================================================================================
 
@@ -1585,7 +1585,7 @@ Follow up after 7 days/SOS.
 
 --------------------------------------------------------------------------------
 ${formatTableField('Review on', new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toLocaleDateString())}
-${formatTableField('Resident On Discharge', doctorName.includes('Dr.') ? doctorName.replace('Dr. ', '') : doctorName)}
+${formatTableField('Attending Physician', doctorName.includes('Dr.') ? doctorName.replace('Dr. ', '') : doctorName)}
 --------------------------------------------------------------------------------
 
                                         Dr. ${doctorName.includes('Dr.') ? doctorName.replace('Dr. ', '') : doctorName} (Gastroenterologist)
@@ -1635,15 +1635,15 @@ PLEASE CONTACT: 7030974619, 9373111709.
       if (complications.length > 0) dataInfo.push(`${complications.length} complication(s)`);
 
       const message = dataInfo.length > 0
-        ? `✅ Discharge summary data fetched successfully!\n\nIncluded data:\n• ${dataInfo.join('\n• ')}\n\nTotal characters: ${summary.length}`
-        : `✅ Discharge summary generated with available database data.\n\nDiagnosis: ${visitDiagnosis ? 'Found' : 'Not found'}\nTotal characters: ${summary.length}`;
+        ? `✅ OPD summary data fetched successfully!\n\nIncluded data:\n• ${dataInfo.join('\n• ')}\n\nTotal characters: ${summary.length}`
+        : `✅ OPD summary generated with available database data.\n\nDiagnosis: ${visitDiagnosis ? 'Found' : 'Not found'}\nTotal characters: ${summary.length}`;
 
       alert(message);
 
     } catch (error) {
       console.error('Error in handleFetchData:', error);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-      alert(`❌ Failed to fetch discharge data.\n\nError: ${errorMessage}\n\nPlease check the console for detailed information.`);
+      alert(`❌ Failed to fetch OPD summary data.\n\nError: ${errorMessage}\n\nPlease check the console for detailed information.`);
     }
   };
 
@@ -1978,7 +1978,7 @@ PLEASE CONTACT: 7030974619, 9373111709.
     setEditablePatientData(patientData);
 
     // Prepare comprehensive prompt with all medical data
-    const prompt = `Generate a complete and comprehensive discharge summary in plain text format including ALL the following sections and data.
+    const prompt = `Generate a complete and comprehensive OPD summary in plain text format including ALL the following sections and data.
 
 PATIENT DATA PROVIDED:
 - Primary Diagnosis: ${patientData.primaryDiagnosis}
@@ -2001,17 +2001,16 @@ ${patientData.radiologyInvestigations && patientData.radiologyInvestigations.len
 - RADIOLOGY INVESTIGATIONS:
 ${patientData.radiologyInvestigations.map(rad => `  ${rad.name}: ${rad.findings} - ${rad.status}`).join('\n')}` : ''}
 
-GENERATE THE FOLLOWING COMPLETE DISCHARGE SUMMARY:
+GENERATE THE FOLLOWING COMPLETE OPD SUMMARY:
 
-OPD DISCHARGE SUMMARY
+OPD SUMMARY
 ================================================================================
 
 Name                  : ${(patientData.name || '').padEnd(30)}Patient ID            : ${patientData.uhId || patientData.patientId || 'UHAY25I22001'}
 Primary Care Provider : ${(patientData.consultant || '').padEnd(30)}Registration ID       : ${patientData.registrationId || 'IH25I22001'}
 Sex / Age             : ${((patientData.gender || '') + ' / ' + (patientData.age || '') + ' Year').padEnd(30)}Mobile No             : ${patientData.mobileNumber || patientData.mobile || 'N/A'}
 Tariff                : ${(patientData.tariff || '').padEnd(30)}Address               : ${patientData.address || 'N/A'}
-Admission Date        : ${(patientData.admissionDate || '').padEnd(30)}Discharge Date        : ${patientData.dischargeDate || ''}
-Discharge Reason      : Recovered
+Admission Date        : ${(patientData.admissionDate || '').padEnd(30)}Visit Date            : ${patientData.dischargeDate || ''}
 
 ================================================================================
 
@@ -2036,7 +2035,7 @@ ${patientData.radiologyInvestigations.map(rad =>
 `${rad.name.padEnd(35)}${rad.findings.padEnd(43)}${rad.status}`).join('\n')}
 ` : ''}
 
-Medications on Discharge:
+Medications Prescribed:
 --------------------------------------------------------------------------------
 Name                     Strength    Route     Dosage                          Days
 --------------------------------------------------------------------------------
@@ -2080,7 +2079,7 @@ ${patientData.otData.implant ? `Implant used         : ${patientData.otData.impl
 ` : ''}
 
 ${patientData.vitalSigns && patientData.vitalSigns.length > 0 ? `
-VITAL SIGNS AT DISCHARGE:
+VITAL SIGNS:
 ${patientData.vitalSigns.join('\n')}
 ` : ''}
 
@@ -2113,7 +2112,7 @@ Return immediately if:
 
 --------------------------------------------------------------------------------
 Review on                     : ${new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toLocaleDateString('en-GB')}
-Resident On Discharge         : ${patientData.consultant || 'Sachin Gathibandhe'}
+Attending Physician            : ${patientData.consultant || 'Sachin Gathibandhe'}
 --------------------------------------------------------------------------------
 
                                            ${patientData.consultant || 'Dr. Dr. Nikhil Khobragade (Gastroenterologist)'}
@@ -2122,7 +2121,13 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
 
 IMPORTANT: Format everything as plain text, include ALL provided investigations, lab results, radiology findings, and OT data. DO NOT skip any section.`;
 
-      setEditablePrompt(prompt);
+      // Include extracted handwritten notes in the prompt if available
+      let promptText = prompt;
+      if (extractedNotes) {
+        promptText = `IMPORTANT - EXTRACTED HANDWRITTEN NOTES FROM DOCTOR:\n${extractedNotes}\n\n---\n\nUse the above handwritten notes as the PRIMARY source of clinical information. Combine with the database data below to generate a complete OPD summary.\n\n${promptText}`;
+      }
+
+      setEditablePrompt(promptText);
       setShowGenerationModal(true);
     } catch (error) {
       console.error('💥 Error in AI generation setup:', error);
@@ -2272,9 +2277,9 @@ Please carefully read and transcribe ALL handwritten text from this image. Struc
 - Investigations (Lab tests, X-ray, ECG, etc.)
 - Treatment Given / Medications Prescribed
 - Procedures Done
-- Condition at Discharge
+- Condition at Visit
 - Follow-up Instructions
-- Advice on Discharge
+- Advice
 
 IMPORTANT:
 - Transcribe the handwritten content as accurately as possible
@@ -2331,9 +2336,13 @@ IMPORTANT:
         return;
       }
 
-      // If there's existing text, append; otherwise replace
+      // Save extracted text to dedicated panel
+      setExtractedNotes(extractedText);
+
+      // Also populate the editor
       if (dischargeSummaryText.trim()) {
-        setDischargeSummaryText(dischargeSummaryText + '\n\n--- Extracted from Handwritten OPD Summary ---\n\n' + extractedText);
+        const currentText = dischargeSummaryText;
+        setDischargeSummaryText(currentText + '\n\n--- Extracted from Handwritten Notes ---\n\n' + extractedText);
       } else {
         setDischargeSummaryText(extractedText);
       }
@@ -2381,7 +2390,7 @@ IMPORTANT:
       console.log('- About to call Gemini API...');
 
       // Comprehensive medical discharge summary request
-      const systemPrompt = 'You are an expert medical professional specializing in creating comprehensive discharge summaries for hospitals. Generate detailed, professional medical documentation following Indian medical standards and terminology. Include ALL provided medical data including investigations, lab results, radiology findings, OT notes, and complications.';
+      const systemPrompt = 'You are an expert medical professional specializing in creating comprehensive OPD summaries for hospitals. Generate detailed, professional medical documentation following Indian medical standards and terminology. Include ALL provided medical data including investigations, lab results, radiology findings, OT notes, and complications.';
 
       const requestBody = {
         contents: [{
@@ -2448,7 +2457,7 @@ IMPORTANT:
       if (hasPromptEcho) {
         console.log('🚨 AI response contains prompt echo - using fallback template');
         aiGeneratedSummary = null; // Force fallback
-      } else if (aiResponse && (aiResponse.includes('DISCHARGE SUMMARY') || aiResponse.includes('Diagnosis:'))) {
+      } else if (aiResponse && (aiResponse.includes('DISCHARGE SUMMARY') || aiResponse.includes('OPD SUMMARY') || aiResponse.includes('Diagnosis:'))) {
         // AI returned proper plain text format
         aiGeneratedSummary = aiResponse;
         console.log('✅ AI returned proper plain text format');
@@ -2459,15 +2468,14 @@ IMPORTANT:
       // Generate fallback template if needed
       if (!aiGeneratedSummary) {
         console.log('⚠️ Using fallback template with plain text formatting');
-        aiGeneratedSummary = `OPD DISCHARGE SUMMARY
+        aiGeneratedSummary = `OPD SUMMARY
 ================================================================================
 
 Name                  : ${(editablePatientData.name || 'Patient Name').padEnd(30)}Patient ID            : ${editablePatientData.uhId || editablePatientData.patientId || 'UHAY25I22001'}
 Primary Care Provider : ${(editablePatientData.consultant || 'Dr. Unknown').padEnd(30)}Registration ID       : ${editablePatientData.registrationId || 'IH25I22001'}
 Sex / Age             : ${((editablePatientData.gender || 'Gender') + ' / ' + (editablePatientData.age || 'Age') + ' Year').padEnd(30)}Mobile No             : ${editablePatientData.mobileNumber || editablePatientData.mobile || 'N/A'}
 Tariff                : ${(editablePatientData.tariff || 'Private').padEnd(30)}Address               : ${editablePatientData.address || 'N/A'}
-Admission Date        : ${(editablePatientData.admissionDate || new Date().toLocaleDateString()).padEnd(30)}Discharge Date        : ${editablePatientData.dischargeDate || new Date().toLocaleDateString()}
-Discharge Reason      : Recovered
+Admission Date        : ${(editablePatientData.admissionDate || new Date().toLocaleDateString()).padEnd(30)}Visit Date            : ${editablePatientData.dischargeDate || new Date().toLocaleDateString()}
 
 ================================================================================
 
@@ -2498,7 +2506,7 @@ ${editablePatientData.radiologyInvestigations.map(rad => {
   return `${name}${findings}${status}`;
 }).join('\n')}
 
-` : ''}Medications on Discharge:
+` : ''}Medications Prescribed:
 --------------------------------------------------------------------------------
 Name                     Strength    Route     Dosage                          Days
 --------------------------------------------------------------------------------
@@ -2543,7 +2551,7 @@ ${editablePatientData.otData.implant ? formatTableField('Implant used', editable
 ================================================================================
 ` : ''}
 
-${editablePatientData.vitalSigns && editablePatientData.vitalSigns.length > 0 ? `VITAL SIGNS AT DISCHARGE:
+${editablePatientData.vitalSigns && editablePatientData.vitalSigns.length > 0 ? `VITAL SIGNS:
 ${editablePatientData.vitalSigns.join('\n')}
 ` : `Upon thorough examination, vitals were recorded as follows:
 - Temperature: 98.6°F
@@ -2579,7 +2587,7 @@ Follow up after 7 days/SOS.
 
 --------------------------------------------------------------------------------
 Review on                     : ${new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toLocaleDateString('en-GB')}
-Resident On Discharge         : ${editablePatientData.consultant || 'Sachin Gathibandhe'}
+Attending Physician            : ${editablePatientData.consultant || 'Sachin Gathibandhe'}
 --------------------------------------------------------------------------------
 
                                            ${editablePatientData.consultant || 'Dr. Dr. Nikhil Khobragade (Gastroenterologist)'}
@@ -2601,8 +2609,8 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
       // Use safer check for existingDiagnosis with proper variable scope
       const diagnosisWasPreserved = (typeof existingDiagnosis !== 'undefined' && existingDiagnosis && existingDiagnosis.length > 0);
       const preservedMessage = diagnosisWasPreserved
-        ? '✅ AI-powered discharge summary generated successfully! Your existing diagnosis has been preserved.'
-        : '✅ AI-powered discharge summary generated successfully using edited patient data!';
+        ? '✅ AI-powered OPD summary generated successfully! Your existing diagnosis has been preserved.'
+        : '✅ AI-powered OPD summary generated successfully using edited patient data!';
       alert(preservedMessage);
 
     } catch (error) {
@@ -2625,7 +2633,7 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
   // Handle print - Create dedicated print window with clean HTML
   const handlePrint = () => {
     if (!dischargeSummaryText.trim()) {
-      alert('No discharge summary content available to print. Please generate or enter content first.');
+      alert('No OPD summary content available to print. Please generate or enter content first.');
       return;
     }
 
@@ -2665,10 +2673,10 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
 
         lines.forEach((line, index) => {
           // Check if we're entering patient details section
-          if (line.includes('Patient Details') || line.includes('DISCHARGE SUMMARY')) {
-            if (line.includes('DISCHARGE SUMMARY')) {
-              // Add the discharge summary header
-              htmlContent.push(`<h1 style="text-align: center; font-size: 16pt; font-weight: bold; margin: 20px 0; border-bottom: 2px solid #000; padding-bottom: 10px;">OPD DISCHARGE SUMMARY</h1>`);
+          if (line.includes('Patient Details') || line.includes('DISCHARGE SUMMARY') || line.includes('OPD SUMMARY')) {
+            if (line.includes('DISCHARGE SUMMARY') || line.includes('OPD SUMMARY')) {
+              // Add the OPD summary header
+              htmlContent.push(`<h1 style="text-align: center; font-size: 16pt; font-weight: bold; margin: 20px 0; border-bottom: 2px solid #000; padding-bottom: 10px;">OPD SUMMARY</h1>`);
               inPatientDetails = true;
               patientDetailsData = [];
               return; // Skip processing this line further to avoid duplicate
@@ -2683,7 +2691,7 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
             if (line.includes('Name') || line.includes('Patient ID') || line.includes('Primary Care Provider') ||
                 line.includes('Registration ID') || line.includes('Sex / Age') || line.includes('Mobile No') ||
                 line.includes('Tariff') || line.includes('Address') || line.includes('Admission Date') ||
-                line.includes('Discharge Date') || line.includes('Discharge Reason')) {
+                line.includes('Visit Date') || line.includes('Discharge Date')) {
               patientDetailsData.push(line);
               return; // Don't process this line further, it's being collected for the table
             }
@@ -2753,7 +2761,7 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
             inTable = true;
             tableHeaders = ['Test Name', 'Result', 'Reference Range', 'Status'];
             return;
-          } else if (line.includes('Review on') || line.includes('Resident On Discharge')) {
+          } else if (line.includes('Review on') || line.includes('Attending Physician') || line.includes('Resident On Discharge')) {
             // Review table
             const parts = line.split(':');
             if (parts.length === 2) {
@@ -2784,9 +2792,10 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
             return;
           }
 
-          // Check if we're entering discharge medications section
+          // Check if we're entering medications section
           if (line.includes('DISCHARGE MEDICATIONS:') || (line.includes('DISCHARGE') && line.includes('MEDICATIONS')) ||
-              line.includes('MEDICATIONS ON DISCHARGE:') || (line.includes('Medications') && line.includes('Discharge'))) {
+              line.includes('MEDICATIONS ON DISCHARGE:') || line.includes('Medications Prescribed:') ||
+              (line.includes('Medications') && line.includes('Discharge'))) {
             inDischargeMedications = true;
             dischargeMedicationsData = [];
             // Don't add the heading here - it will be included in the table
@@ -2948,7 +2957,7 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
           } else if (line.startsWith('• ') || line.startsWith('* ')) {
             // Bullet point with • or *
             htmlContent.push(`<li style="margin: 5px 0 5px 20px;">${convertMarkdownToHTML(line.substring(2))}</li>`);
-          } else if (line.match(/^(PRESENT CONDITION:|INVESTIGATIONS:|MEDICATIONS ON DISCHARGE:|RADIOLOGY INVESTIGATIONS:|LAB INVESTIGATIONS:|Present Condition|Investigations:|Medications on Discharge:|Case Summary:)/)) {
+          } else if (line.match(/^(PRESENT CONDITION:|INVESTIGATIONS:|MEDICATIONS ON DISCHARGE:|MEDICATIONS PRESCRIBED:|RADIOLOGY INVESTIGATIONS:|LAB INVESTIGATIONS:|Present Condition|Investigations:|Medications on Discharge:|Medications Prescribed:|Case Summary:)/)) {
             // Section headings with or without colons
             htmlContent.push(`<h3 style="font-size: 11pt; font-weight: bold; margin: 15px 0 8px 0;">${convertMarkdownToHTML(line)}</h3>`);
           } else if (line.includes('URGENT CARE') && line.includes('EMERGENCY CARE')) {
@@ -3034,7 +3043,7 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
           html += '<td style="width: 50%; vertical-align: top; padding-right: 20px;">';
 
           // Left column items
-          const leftColumnKeys = ['Name', 'Primary Care Provider', 'Sex / Age', 'Tariff', 'Admission Date', 'Discharge Reason'];
+          const leftColumnKeys = ['Name', 'Primary Care Provider', 'Sex / Age', 'Tariff', 'Admission Date'];
           leftColumnKeys.forEach(key => {
             const value = details[key] || 'N/A';
             html += `<div style="margin: 8px 0;"><strong>${key}:</strong> ${value}</div>`;
@@ -3044,7 +3053,7 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
           html += '<td style="width: 50%; vertical-align: top;">';
 
           // Right column items
-          const rightColumnKeys = ['Patient ID', 'Registration ID', 'Mobile No', 'Address', 'Discharge Date'];
+          const rightColumnKeys = ['Patient ID', 'Registration ID', 'Mobile No', 'Address', 'Visit Date', 'Discharge Date'];
           rightColumnKeys.forEach(key => {
             const value = details[key] || 'N/A';
             html += `<div style="margin: 8px 0;"><strong>${key}:</strong> ${value}</div>`;
@@ -3333,7 +3342,7 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
   // Handle preview toggle with payment check
   const togglePreview = () => {
     if (!canPrintAndPreview) {
-      alert('⚠️ Final Payment Required\n\nPlease complete the final payment before previewing the discharge summary.');
+      alert('⚠️ Final Payment Required\n\nPlease complete the final payment before previewing the OPD summary.');
       return;
     }
     setShowPreview(!showPreview);
@@ -3342,7 +3351,7 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
   // Handle print with payment check
   const handlePrintWithCheck = () => {
     if (!canPrintAndPreview) {
-      alert('⚠️ Final Payment Required\n\nPlease complete the final payment before printing the discharge summary.');
+      alert('⚠️ Final Payment Required\n\nPlease complete the final payment before printing the OPD summary.');
       return;
     }
     handlePrint();
@@ -3584,6 +3593,39 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
           )}
         </div>
 
+        {/* Extracted Handwritten Notes Panel */}
+        {extractedNotes && (
+          <div className="lg:col-span-2">
+            <Card className="border-purple-200 bg-purple-50/30 mb-4">
+              <CardHeader className="pb-2">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-base flex items-center gap-2 text-purple-700">
+                    <Edit3 className="h-4 w-4" />
+                    Extracted Handwritten Notes
+                  </CardTitle>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setExtractedNotes('')}
+                    className="text-gray-400 hover:text-red-500 h-7 w-7 p-0"
+                    title="Dismiss extracted notes"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="bg-white border border-purple-100 rounded-lg p-4 max-h-60 overflow-y-auto">
+                  <pre className="whitespace-pre-wrap text-sm text-gray-800 font-sans leading-relaxed">{extractedNotes}</pre>
+                </div>
+                <p className="text-xs text-purple-500 mt-2">
+                  This text was extracted from the handwritten document. It will be used when generating the AI summary.
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
         {/* Main Content */}
         <div className="lg:col-span-2">
           <Card>
@@ -3725,7 +3767,7 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
                 <div className="border rounded-lg p-8 bg-white min-h-[500px] max-w-4xl mx-auto print:p-4 print:shadow-none">
                   {/* Hospital Header */}
                   <div className="text-center border-b-2 border-gray-800 pb-4 mb-6">
-                    <h1 className="text-2xl font-bold text-gray-800 mb-2">OPD DISCHARGE SUMMARY</h1>
+                    <h1 className="text-2xl font-bold text-gray-800 mb-2">OPD SUMMARY</h1>
                     <div className="text-sm text-gray-600">
                       <div className="grid grid-cols-2 gap-4 mt-4">
                         <div className="text-left">
@@ -3734,14 +3776,13 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
                           <p><strong>Sex / Age:</strong> {patient?.patients?.gender || 'N/A'} / {patient?.patients?.age || 'N/A'} Year</p>
                           <p><strong>Tariff:</strong> {patient?.patients?.corporate || 'Private'}</p>
                           <p><strong>Admission Date:</strong> {patient?.admission_date || patient?.visit_date || new Date().toLocaleDateString()}</p>
-                          <p><strong>Discharge Reason:</strong> Recovered</p>
                         </div>
                         <div className="text-left">
                           <p><strong>Patient ID:</strong> {patient?.visit_id || 'N/A'}</p>
                           <p><strong>Registration ID:</strong> {patient?.patients?.patients_id || 'N/A'}</p>
                           <p><strong>Mobile No:</strong> {patient?.patients?.phone || 'N/A'}</p>
                           <p><strong>Address:</strong> {patient?.patients?.address || 'N/A'}</p>
-                          <p><strong>Discharge Date:</strong> {patient?.discharge_date || new Date().toLocaleDateString()}</p>
+                          <p><strong>Visit Date:</strong> {patient?.discharge_date || new Date().toLocaleDateString()}</p>
                         </div>
                       </div>
                     </div>
@@ -3784,12 +3825,12 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
                 <div className="relative">
                   <textarea
                     className="w-full min-h-[500px] p-4 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-vertical font-mono text-sm leading-relaxed"
-                    placeholder="Enter discharge summary details here...
+                    placeholder="Enter OPD summary details here...
 
 • Chief Complaints
 • Diagnosis
 • Treatment Given
-• Condition at Discharge
+• Condition at Visit
 • Follow-up Instructions
 • Medications Prescribed"
                     value={dischargeSummaryText}
@@ -3938,7 +3979,7 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
               AI OPD Summary Generation
             </DialogTitle>
             <DialogDescription>
-              Review and edit the patient data and prompt before generating the AI discharge summary.
+              Review and edit the patient data and prompt before generating the AI OPD summary.
             </DialogDescription>
           </DialogHeader>
 
@@ -4051,7 +4092,7 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
                   onChange={(e) => setEditablePrompt(e.target.value)}
                   rows={12}
                   className="text-sm"
-                  placeholder="Edit the Gemini prompt for discharge summary generation..."
+                  placeholder="Edit the Gemini prompt for OPD summary generation..."
                 />
               </div>
               <p className="text-xs text-gray-500">
