@@ -239,8 +239,12 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       console.log('🔐 Auth state change:', event, session?.user?.email);
 
-      if (event === 'SIGNED_IN' && session?.user?.email) {
-        await handleGoogleSession(session.user.email);
+      if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session?.user?.email) {
+        if (!localStorage.getItem('hmis_user')) {
+          await handleGoogleSession(session.user.email);
+        } else {
+          setIsAuthLoading(false);
+        }
       } else {
         setIsAuthLoading(false);
       }
