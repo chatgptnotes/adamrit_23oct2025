@@ -271,6 +271,8 @@ export default function DischargeSummaryEdit() {
   const [isProcessingOCR, setIsProcessingOCR] = useState(false);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [extractedNotes, setExtractedNotes] = useState('');
+  const [fetchedDataText, setFetchedDataText] = useState('');
+  const [dataFetched, setDataFetched] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -1596,8 +1598,9 @@ PLEASE CONTACT: 7030974619, 9373111709.
 ================================================================================
 `;
 
-      // Summary is already in plain text format
-      setDischargeSummaryText(summary);
+      // Save fetched data to separate panel (not the editor)
+      setFetchedDataText(summary);
+      setDataFetched(true);
 
       // Show success message with accurate data counts
       console.log('📊 Lab results for success message:', {
@@ -2121,10 +2124,13 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
 
 IMPORTANT: Format everything as plain text, include ALL provided investigations, lab results, radiology findings, and OT data. DO NOT skip any section.`;
 
-      // Include extracted handwritten notes in the prompt if available
+      // Include fetched database data and extracted handwritten notes in the prompt
       let promptText = prompt;
+      if (fetchedDataText) {
+        promptText = `FETCHED DATABASE DATA:\n${fetchedDataText}\n\n---\n\n${promptText}`;
+      }
       if (extractedNotes) {
-        promptText = `IMPORTANT - EXTRACTED HANDWRITTEN NOTES FROM DOCTOR:\n${extractedNotes}\n\n---\n\nUse the above handwritten notes as the PRIMARY source of clinical information. Combine with the database data below to generate a complete OPD summary.\n\n${promptText}`;
+        promptText = `IMPORTANT - EXTRACTED HANDWRITTEN NOTES FROM DOCTOR:\n${extractedNotes}\n\n---\n\nUse the above handwritten notes as the PRIMARY source of clinical information. Combine with the fetched database data below to generate a complete OPD summary.\n\n${promptText}`;
       }
 
       setEditablePrompt(promptText);
@@ -3626,6 +3632,39 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
           </div>
         )}
 
+        {/* Fetched Database Data Panel */}
+        {fetchedDataText && (
+          <div className="lg:col-span-2">
+            <Card className="border-green-200 bg-green-50/30 mb-4">
+              <CardHeader className="pb-2">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-base flex items-center gap-2 text-green-700">
+                    <Download className="h-4 w-4" />
+                    Fetched Database Data
+                  </CardTitle>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => { setFetchedDataText(''); setDataFetched(false); }}
+                    className="text-gray-400 hover:text-red-500 h-7 w-7 p-0"
+                    title="Clear fetched data"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="bg-white border border-green-100 rounded-lg p-4 max-h-72 overflow-y-auto">
+                  <pre className="whitespace-pre-wrap text-xs text-gray-800 font-mono leading-relaxed">{fetchedDataText}</pre>
+                </div>
+                <p className="text-xs text-green-600 mt-2">
+                  Patient data, labs, medications, and diagnosis from the database. Click "Generate by AI" to create the OPD summary.
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
         {/* Main Content */}
         <div className="lg:col-span-2">
           <Card>
@@ -3670,20 +3709,33 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
                     <Download className="h-4 w-4" />
                     Fetch Data
                   </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleAIGenerate}
-                    disabled={isGenerating || !patient}
-                    className="flex items-center gap-2"
-                  >
-                    {isGenerating ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Sparkles className="h-4 w-4" />
-                    )}
-                    {isGenerating ? 'Generating...' : 'Generate by AI'}
-                  </Button>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handleAIGenerate}
+                            disabled={isGenerating || !patient || !dataFetched}
+                            className="flex items-center gap-2"
+                          >
+                            {isGenerating ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Sparkles className="h-4 w-4" />
+                            )}
+                            {isGenerating ? 'Generating...' : 'Generate by AI'}
+                          </Button>
+                        </span>
+                      </TooltipTrigger>
+                      {!dataFetched && (
+                        <TooltipContent className="bg-orange-600 text-white border-orange-700 font-semibold">
+                          <p>Click "Fetch Data" first</p>
+                        </TooltipContent>
+                      )}
+                    </Tooltip>
+                  </TooltipProvider>
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger asChild>
@@ -3740,8 +3792,11 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
                     variant="outline"
                     size="sm"
                     onClick={() => {
-                      if (window.confirm('Clear all summary content? This cannot be undone.')) {
+                      if (window.confirm('Clear all content? This cannot be undone.')) {
                         setDischargeSummaryText('');
+                        setExtractedNotes('');
+                        setFetchedDataText('');
+                        setDataFetched(false);
                         setShowPreview(false);
                       }
                     }}
