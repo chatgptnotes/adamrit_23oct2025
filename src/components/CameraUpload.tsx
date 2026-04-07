@@ -172,6 +172,8 @@ const CameraUpload: React.FC<CameraUploadProps> = ({
   const [prescriptionStep, setPrescriptionStep] = useState<'review' | 'saved' | 'done'>('review');
   const [savedPrintHtml, setSavedPrintHtml] = useState<string>('');
   const [savedPrescriptionNumber, setSavedPrescriptionNumber] = useState<string>('');
+  // Persist patient info for prescription modal (survives clearCapture)
+  const [prescriptionPatient, setPrescriptionPatient] = useState<PatientResult | null>(null);
 
   // Recent uploads state
   const [recentUploads, setRecentUploads] = useState<FileUploadRecord[]>([]);
@@ -1000,6 +1002,8 @@ Rules:
 
       // If category is prescription or treatment_sheet and patient is selected, transcribe
       if ((category === 'prescription' || category === 'treatment_sheet') && selectedPatient) {
+        // CRITICAL: Save patient info BEFORE clearCapture() wipes selectedPatient
+        setPrescriptionPatient({ ...selectedPatient });
         setTranscribing(true);
         try {
           const transcription = category === 'treatment_sheet'
@@ -1577,7 +1581,7 @@ Rules:
         .from('prescriptions')
         .insert({
           prescription_number: prescriptionNumber,
-          patient_id: selectedPatient?.id || null,
+          patient_id: prescriptionPatient?.id || selectedPatient?.id || null,
           doctor_name: prescriptionDoctor || 'As per records',
           prescription_date: today,
           status: 'PENDING',
@@ -1623,7 +1627,7 @@ Rules:
 
       // Open print window
       const hospitalName = (hospitalConfig as any)?.name || 'Hope Multi-Specialty Hospital';
-      const patientName = selectedPatient?.name || 'As per records';
+      const patientName = prescriptionPatient?.name || selectedPatient?.name || 'As per records';
       const doctorName = prescriptionDoctor || 'As per records';
       const printDate = new Date().toLocaleString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 
@@ -1741,6 +1745,9 @@ Rules:
           setPrescriptionStep('review');
           setPrescriptionDoctor('');
           setReviewMedicines([]);
+          setPrescriptionPatient(null);
+          setSavedPrintHtml('');
+          setSavedPrescriptionNumber('');
         }
       }}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
@@ -1748,8 +1755,8 @@ Rules:
             <DialogTitle className="flex items-center gap-2">
               <Sparkles className="h-5 w-5 text-purple-600" />
               {isTreatmentSheet ? 'Review Extracted Medicines' : 'Transcribed Prescription'}
-              {selectedPatient && (
-                <Badge variant="outline" className="ml-2">{selectedPatient.name}</Badge>
+              {(prescriptionPatient || selectedPatient) && (
+                <Badge variant="outline" className="ml-2">{prescriptionPatient?.name || selectedPatient?.name}</Badge>
               )}
             </DialogTitle>
           </DialogHeader>
@@ -1863,7 +1870,7 @@ Rules:
                 <div className="text-green-600 text-4xl mb-3">&#10003;</div>
                 <h3 className="text-lg font-bold text-green-800 mb-1">Prescription Saved Successfully!</h3>
                 <p className="text-sm text-green-700">Rx No: <strong>{savedPrescriptionNumber}</strong></p>
-                <p className="text-xs text-green-600 mt-1">Patient: {selectedPatient?.name} (ID: {selectedPatient?.id?.substring(0, 8)}...)</p>
+                <p className="text-xs text-green-600 mt-1">Patient: {prescriptionPatient?.name || selectedPatient?.name || 'Unknown'} (ID: {(prescriptionPatient?.id || selectedPatient?.id || 'none').substring(0, 8)}...)</p>
                 <p className="text-xs text-gray-500 mt-2">
                   This prescription is now visible in FinalBill → Saved Data → Prescriptions tab
                   and in the Pharmacy → Prescriptions queue.
