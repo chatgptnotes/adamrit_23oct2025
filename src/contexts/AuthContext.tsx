@@ -8,7 +8,7 @@ interface User {
   id?: string;
   email: string;
   username: string;
-  role: 'superadmin' | 'super_admin' | 'admin' | 'doctor' | 'nurse' | 'user' | 'marketing_manager' | 'receptionist' | 'lab_technician' | 'pharmacy' | 'pharmacist' | 'radiology' | 'radiology_tech' | 'ot_tech' | 'cath_lab_tech' | 'billing' | 'housekeeping' | 'security' | 'driver' | 'physiotherapist' | 'lab' | 'reception' | 'maintenance' | 'hr' | 'quality' | 'consultant';
+  role: 'superadmin' | 'super_admin' | 'admin' | 'doctor' | 'nurse' | 'user' | 'marketing_manager' | 'receptionist' | 'lab_technician' | 'pharmacy' | 'pharmacist' | 'radiology' | 'radiology_tech' | 'ot_tech' | 'cath_lab_tech' | 'billing' | 'housekeeping' | 'security' | 'driver' | 'physiotherapist' | 'lab' | 'reception' | 'maintenance' | 'hr' | 'quality' | 'consultant' | 'front_office';
   hospitalType: HospitalType;
 }
 

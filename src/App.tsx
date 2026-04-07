@@ -40,6 +40,8 @@ const getRoleDefaultRoute = (role: string): string => {
     case 'receptionist':
     case 'reception':
       return '/patient-dashboard';
+    case 'front_office':
+      return '/opd-summary';
     case 'marketing':
     case 'marketing_manager':
       return '/marketing';

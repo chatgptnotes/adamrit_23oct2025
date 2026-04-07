@@ -9,7 +9,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { ArrowLeft, Save, Printer, Sparkles, Download, Eye, Loader2, Edit3, Settings, Camera, Upload, X } from 'lucide-react';
+import { ArrowLeft, Save, Printer, Sparkles, Download, Eye, Loader2, Edit3, Settings, Camera, Upload, X, Search } from 'lucide-react';
 import { useDebounce } from 'use-debounce';
 import DischargeSummary from '@/components/DischargeSummary';
 import { useVisitDiagnosis } from '@/hooks/useVisitDiagnosis';
@@ -281,6 +281,12 @@ export default function DischargeSummaryEdit() {
   const [labResults, setLabResults] = useState<any[]>([]);
   const [visitLabs, setVisitLabs] = useState<any[]>([]);
 
+  // Patient search state
+  const [patientSearchQuery, setPatientSearchQuery] = useState('');
+  const [patientSearchResults, setPatientSearchResults] = useState<Array<{visit_id: string; name: string; patients_id: string; visit_type: string; appointment_with: string; visit_date: string}>>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [showSearchResults, setShowSearchResults] = useState(false);
+
   // Debounced auto-save
   const [debouncedText] = useDebounce(dischargeSummaryText, 1500);
 
@@ -391,6 +397,68 @@ export default function DischargeSummaryEdit() {
       alert('Failed to save discharge summary');
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  // Patient search for OPD Summary
+  const handlePatientSearch = async (query: string) => {
+    setPatientSearchQuery(query);
+    if (query.length < 2) {
+      setPatientSearchResults([]);
+      setShowSearchResults(false);
+      return;
+    }
+
+    setIsSearching(true);
+    setShowSearchResults(true);
+    try {
+      // Search by patient name, patient ID, or visit ID
+      const { data, error } = await supabase
+        .from('visits')
+        .select('visit_id, visit_type, appointment_with, visit_date, patients(name, patients_id)')
+        .or(`visit_id.ilike.%${query}%,patients.name.ilike.%${query}%,patients.patients_id.ilike.%${query}%`)
+        .order('visit_date', { ascending: false })
+        .limit(10);
+
+      if (error) {
+        console.error('Search error:', error);
+        // Fallback: search visits and filter client-side
+        const { data: fallbackData } = await supabase
+          .from('visits')
+          .select('visit_id, visit_type, appointment_with, visit_date, patients(name, patients_id)')
+          .order('visit_date', { ascending: false })
+          .limit(100);
+
+        const filtered = (fallbackData || []).filter((v: any) => {
+          const name = v.patients?.name?.toLowerCase() || '';
+          const pid = v.patients?.patients_id?.toLowerCase() || '';
+          const vid = v.visit_id?.toLowerCase() || '';
+          const q = query.toLowerCase();
+          return name.includes(q) || pid.includes(q) || vid.includes(q);
+        }).slice(0, 10);
+
+        setPatientSearchResults(filtered.map((v: any) => ({
+          visit_id: v.visit_id,
+          name: v.patients?.name || 'Unknown',
+          patients_id: v.patients?.patients_id || '',
+          visit_type: v.visit_type || '',
+          appointment_with: v.appointment_with || '',
+          visit_date: v.visit_date || '',
+        })));
+      } else {
+        setPatientSearchResults((data || []).filter((v: any) => v.patients).map((v: any) => ({
+          visit_id: v.visit_id,
+          name: v.patients?.name || 'Unknown',
+          patients_id: v.patients?.patients_id || '',
+          visit_type: v.visit_type || '',
+          appointment_with: v.appointment_with || '',
+          visit_date: v.visit_date || '',
+        })));
+      }
+    } catch (err) {
+      console.error('Search error:', err);
+    } finally {
+      setIsSearching(false);
     }
   };
 
@@ -3343,6 +3411,58 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
         </div>
       </div>
 
+      {/* Patient Search Bar */}
+      <div className="mb-4 relative">
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search patient by name, ID, or visit ID..."
+              value={patientSearchQuery}
+              onChange={(e) => handlePatientSearch(e.target.value)}
+              onFocus={() => patientSearchQuery.length >= 2 && setShowSearchResults(true)}
+              onBlur={() => setTimeout(() => setShowSearchResults(false), 200)}
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+            />
+            {isSearching && (
+              <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 animate-spin" />
+            )}
+          </div>
+        </div>
+        {showSearchResults && patientSearchResults.length > 0 && (
+          <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-64 overflow-y-auto">
+            {patientSearchResults.map((result) => (
+              <button
+                key={result.visit_id}
+                onClick={() => {
+                  navigate(`/discharge-summary-edit/${result.visit_id}`);
+                  setShowSearchResults(false);
+                  setPatientSearchQuery('');
+                }}
+                className="w-full px-4 py-3 text-left hover:bg-blue-50 border-b border-gray-100 last:border-b-0 flex items-center justify-between"
+              >
+                <div>
+                  <div className="font-medium text-sm text-gray-900">{result.name}</div>
+                  <div className="text-xs text-gray-500">
+                    {result.patients_id} | {result.visit_id} | {result.visit_type}
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-xs text-gray-500">Dr. {result.appointment_with}</div>
+                  <div className="text-xs text-gray-400">{result.visit_date}</div>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+        {showSearchResults && patientSearchQuery.length >= 2 && patientSearchResults.length === 0 && !isSearching && (
+          <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg p-4 text-center text-sm text-gray-500">
+            No patients found matching "{patientSearchQuery}"
+          </div>
+        )}
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Patient Information Sidebar */}
         <div className="lg:col-span-1">
@@ -3470,7 +3590,7 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
             <CardHeader>
               <div className="flex items-center justify-between">
                 <CardTitle>OPD Summary Content</CardTitle>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap justify-end">
                   {/* Hidden file input for upload */}
                   <input
                     ref={fileInputRef}

@@ -70,6 +70,7 @@ const ExternalRequisitionCreate = lazy(() => import("../pages/ExternalRequisitio
 const GatePassPrintPage = lazy(() => import("../pages/GatePassPrint"));
 const DischargeSummaryPrint = lazy(() => import("../pages/DischargeSummaryPrint"));
 const DischargeSummaryEdit = lazy(() => import("../pages/DischargeSummaryEdit"));
+const OpdSummaryLanding = lazy(() => import("../pages/OpdSummaryLanding"));
 const IpdDischargeSummary = lazy(() => import("../pages/IpdDischargeSummary"));
 const DeathCertificate = lazy(() => import("../pages/DeathCertificate"));
 const PhysiotherapyBill = lazy(() => import("../pages/PhysiotherapyBill"));
@@ -157,6 +158,7 @@ export const AppRoutes = () => {
         <Route path="/gate-pass/:visitId" element={<Suspense fallback={<PageLoader />}><GatePassPrintPage /></Suspense>} />
         <Route path="/discharge-summary-print/:visitId" element={<Suspense fallback={<PageLoader />}><DischargeSummaryPrint /></Suspense>} />
         <Route path="/discharge-summary-edit/:visitId" element={<Suspense fallback={<PageLoader />}><DischargeSummaryEdit /></Suspense>} />
+        <Route path="/opd-summary" element={<Suspense fallback={<PageLoader />}><OpdSummaryLanding /></Suspense>} />
         <Route path="/physiotherapy-bill/:visitId" element={<Suspense fallback={<PageLoader />}><PhysiotherapyBill /></Suspense>} />
         <Route path="/admission-notes/:visitId" element={<Suspense fallback={<PageLoader />}><AdmissionNotes /></Suspense>} />
         <Route path="/opd-admission-notes/:visitId" element={<Suspense fallback={<PageLoader />}><OpdAdmissionNotes /></Suspense>} />
