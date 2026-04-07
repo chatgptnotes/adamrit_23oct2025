@@ -1004,6 +1004,24 @@ Rules:
       if ((category === 'prescription' || category === 'treatment_sheet') && selectedPatient) {
         // CRITICAL: Save patient info BEFORE clearCapture() wipes selectedPatient
         setPrescriptionPatient({ ...selectedPatient });
+
+        // Auto-fill doctor name from latest visit
+        try {
+          const { data: visitData } = await (supabase as any)
+            .from('visits')
+            .select('referring_doctor, doctor_name')
+            .eq('patient_id', selectedPatient.id)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .single();
+          if (visitData) {
+            const doctorName = visitData.referring_doctor || visitData.doctor_name || '';
+            if (doctorName) setPrescriptionDoctor(doctorName);
+          }
+        } catch (e) {
+          // Non-fatal — doctor name can be entered manually
+        }
+
         setTranscribing(true);
         try {
           const transcription = category === 'treatment_sheet'

@@ -20501,20 +20501,20 @@ Dr. Murali B K
                             {prescriptionsForPatient.length === 0 ? (
                               <div className="text-center py-4">
                                 <p className="text-sm text-gray-500">No prescriptions found for this patient.</p>
-                                <p className="text-xs text-gray-400 mt-1">Patient: {patientInfo?.name || 'unknown'} | ID: {patientInfo?.id ? patientInfo.id.substring(0, 8) + '...' : 'not loaded'}</p>
                                 <p className="text-xs text-blue-500 mt-2">Upload a treatment sheet via the camera icon to create prescriptions.</p>
                               </div>
                             ) : (
                               <div className="space-y-3">
                                 {prescriptionsForPatient.map((prescription: any) => (
                                   <div key={prescription.id} className="border border-gray-200 rounded-lg overflow-hidden">
+                                    {/* Prescription Header */}
                                     <div className="flex items-center justify-between p-3 bg-gray-50">
                                       <div>
                                         <span className="font-medium text-gray-900 text-sm">#{prescription.prescription_number}</span>
                                         <span className="ml-3 text-xs text-gray-500">
                                           {prescription.prescription_date ? new Date(prescription.prescription_date).toLocaleDateString() : new Date(prescription.created_at).toLocaleDateString()}
                                         </span>
-                                        {prescription.doctor_name && (
+                                        {prescription.doctor_name && prescription.doctor_name !== 'As per records' && (
                                           <span className="ml-3 text-xs text-gray-600">Dr. {prescription.doctor_name}</span>
                                         )}
                                       </div>
@@ -20570,35 +20570,63 @@ Dr. Murali B K
                                         {prescription.status === 'APPROVED' && (
                                           <span className="text-xs text-green-600 italic">Sent to Pharmacy</span>
                                         )}
+                                        {/* Delete button for any status */}
+                                        <button
+                                          onClick={async () => {
+                                            if (!confirm('Delete this prescription?')) return;
+                                            // Delete items first, then prescription
+                                            await (supabase as any).from('prescription_items').delete().eq('prescription_id', prescription.id);
+                                            const { error } = await (supabase as any).from('prescriptions').delete().eq('id', prescription.id);
+                                            if (error) {
+                                              toast.error('Failed to delete prescription');
+                                            } else {
+                                              toast.success('Prescription deleted');
+                                              fetchPatientPrescriptions();
+                                            }
+                                          }}
+                                          className="text-xs px-1.5 py-1 text-red-400 hover:text-red-600 hover:bg-red-50 rounded"
+                                          title="Delete prescription"
+                                        >
+                                          ✕
+                                        </button>
                                       </div>
                                     </div>
+
+                                    {/* Medicines Table */}
                                     {prescription.prescription_items && prescription.prescription_items.length > 0 && (
-                                      <div className="p-3 border-t border-gray-100">
-                                        <p className="text-xs text-gray-500 mb-2 font-medium">Medicines ({prescription.prescription_items.length})</p>
-                                        <div className="space-y-1">
-                                          {prescription.prescription_items.map((item: any) => (
-                                            <div key={item.id} className="flex items-start justify-between text-xs text-gray-700 py-1 border-b border-gray-50 last:border-0">
-                                              <div className="flex-1">
-                                                <span className="font-medium">{item.medicine_name || `Medicine #${item.medicine_id}`}</span>
-                                                {item.dosage_frequency && <span className="ml-2 text-gray-500">{item.dosage_frequency}</span>}
-                                                {item.dosage_timing && <span className="ml-1 text-gray-500">({item.dosage_timing})</span>}
-                                                {item.duration_days && <span className="ml-2 text-gray-400">{item.duration_days} days</span>}
-                                                {item.special_instructions && <span className="ml-2 text-blue-500 italic">{item.special_instructions}</span>}
-                                              </div>
-                                              <div className="ml-4 text-right">
-                                                <span className="text-gray-600">Qty: {item.quantity_prescribed}</span>
-                                                {item.quantity_dispensed != null && (
-                                                  <span className="ml-1 text-green-600">(given: {item.quantity_dispensed})</span>
-                                                )}
-                                              </div>
-                                            </div>
-                                          ))}
-                                        </div>
+                                      <div className="border-t border-gray-100">
+                                        <table className="w-full text-xs">
+                                          <thead className="bg-gray-50">
+                                            <tr>
+                                              <th className="px-3 py-1.5 text-left text-gray-600 font-medium w-8">#</th>
+                                              <th className="px-3 py-1.5 text-left text-gray-600 font-medium">Medicine</th>
+                                              <th className="px-3 py-1.5 text-left text-gray-600 font-medium">Route</th>
+                                              <th className="px-3 py-1.5 text-left text-gray-600 font-medium">Frequency</th>
+                                              <th className="px-3 py-1.5 text-left text-gray-600 font-medium">Instructions</th>
+                                              <th className="px-3 py-1.5 text-center text-gray-600 font-medium w-16">Qty</th>
+                                            </tr>
+                                          </thead>
+                                          <tbody>
+                                            {prescription.prescription_items.map((item: any, idx: number) => (
+                                              <tr key={item.id} className="border-t border-gray-50 hover:bg-blue-50/30">
+                                                <td className="px-3 py-1.5 text-gray-400">{idx + 1}</td>
+                                                <td className="px-3 py-1.5 font-medium text-gray-800">
+                                                  {(item.medicine_name || `Medicine #${item.medicine_id || '?'}`).toUpperCase()}
+                                                  {item.special_instructions && (
+                                                    <span className="ml-1 text-blue-500 font-normal italic">{item.special_instructions}</span>
+                                                  )}
+                                                </td>
+                                                <td className="px-3 py-1.5 text-gray-600">{item.dosage_timing || '-'}</td>
+                                                <td className="px-3 py-1.5 text-gray-600">{item.dosage_frequency || '-'}</td>
+                                                <td className="px-3 py-1.5 text-gray-500">{item.duration_days ? `${item.duration_days} days` : '-'}</td>
+                                                <td className="px-3 py-1.5 text-center font-medium">{item.quantity_prescribed || 0}</td>
+                                              </tr>
+                                            ))}
+                                          </tbody>
+                                        </table>
                                       </div>
                                     )}
-                                    {prescription.notes && (
-                                      <div className="px-3 pb-2 text-xs text-gray-500 italic">Note: {prescription.notes}</div>
-                                    )}
+                                    {/* No notes shown — raw AI text is not useful to display */}
                                   </div>
                                 ))}
                               </div>
