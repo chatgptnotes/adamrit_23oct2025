@@ -782,175 +782,79 @@ export default function DischargeSummaryEdit() {
       console.log('🔍 Attempting to fetch lab results from lab_results table...');
 
       // Based on database schema analysis: lab_results uses patient_name (denormalized)
-      // visit_id is optional and might be NULL, so prioritize patient_name queries
+      // visit_id is a UUID foreign key to visits.id
       const patientNameForQuery = patient?.patients?.name || visitData?.patient_name || patient?.name || '';
       console.log('🎯 Patient name for lab results query:', patientNameForQuery);
 
-      // FIRST: Try a direct, simple query for "radha" since we know this exists
-      console.log('🔍 Trying direct query for patient_name = "radha"...');
-      try {
-        const { data: directResults, error: directError } = await supabase
-          .from('lab_results')
-          .select('*')
-          .eq('patient_name', 'radha');
+      // Strategy: Try visit_id (UUID) first for exact match, then patient_name with ilike
+      const labResultsSelect = `
+        id, main_test_name, test_name, test_category, result_value, result_unit,
+        reference_range, comments, is_abnormal, result_status, technician_name,
+        pathologist_name, authenticated_result, created_at, visit_id, patient_name, visit_lab_id
+      `;
 
-        if (directError) {
-          console.error('❌ Direct query error:', directError);
-        } else if (directResults && directResults.length > 0) {
-          console.log('✅ SUCCESS! Found lab results with direct query for "radha":', directResults.length, 'results');
-          console.log('📋 Lab results found:', directResults);
-          labResultsData = directResults;
-        } else {
-          console.log('📝 No results found with direct query for "radha"');
-        }
-      } catch (error) {
-        console.log('💥 Exception in direct query:', error);
-      }
-
-      // Only try other queries if direct query didn't work
-      if (!labResultsData || labResultsData.length === 0) {
-        console.log('🔄 Direct query did not find results, trying other methods...');
-
-      const queryAttempts = [
-        { field: 'patient_name', value: patientNameForQuery, desc: `patient_name: ${patientNameForQuery}` },
-        { field: 'patient_name', value: patientNameForQuery.toLowerCase(), desc: `patient_name lowercase: ${patientNameForQuery.toLowerCase()}` },
-        { field: 'patient_name', value: 'radha', desc: `patient_name: radha (exact)` },
-        { field: 'patient_name', value: 'Radha', desc: `patient_name: Radha (capitalized)` },
-        { field: 'patient_name', value: 'RADHA', desc: `patient_name: RADHA (uppercase)` },
-        { field: 'visit_id', value: visitId, desc: `visitId parameter (${visitId})` },
-        { field: 'patient_visit_id', value: visitId, desc: `patient_visit_id: ${visitId}` },
-        { field: 'visit_id', value: 'IH25I24003', desc: `visit_id: IH25I24003 (hardcoded)` },
-        { field: 'patient_visit_id', value: 'IH25I24003', desc: `patient_visit_id: IH25I24003 (hardcoded)` },
-        { field: 'visit_id', value: visitData?.id, desc: 'visitData.id UUID' },
-        { field: 'patient_id', value: patient?.patient_id || patient?.patients?.id, desc: `patient_id: ${patient?.patient_id || patient?.patients?.id}` }
-      ];
-
-      for (let attempt = 0; attempt < queryAttempts.length; attempt++) {
-        const { field, value, desc } = queryAttempts[attempt];
-
-        if (!value) {
-          console.log(`⏭️ Skipping attempt ${attempt + 1}: ${desc} - value is null/undefined`);
-          continue;
-        }
-
+      // Attempt 1: Query by visit UUID (most precise)
+      if (visitData?.id) {
         try {
-          console.log(`🔄 Attempt ${attempt + 1}: Querying lab_results.${field} = ${value} (${desc})`);
-
           const { data: results, error: resultsError } = await supabase
-              .from('lab_results')
-              .select(`
-                id,
-                main_test_name,
-                test_name,
-                test_category,
-                result_value,
-                result_unit,
-                reference_range,
-                comments,
-                is_abnormal,
-                result_status,
-                technician_name,
-                pathologist_name,
-                authenticated_result,
-                created_at,
-                visit_id,
-                patient_visit_id,
-                patient_id
-              `)
-              .eq(field, value)
-              .order('created_at', { ascending: true });
-
-          console.log(`📊 Query result for ${desc}:`, {
-            found: results?.length || 0,
-            error: resultsError?.message || 'none',
-            sampleData: results?.[0] || 'none'
-          });
-
-          if (results && results.length > 0) {
-            labResultsData = results;
-            labResultsError = resultsError;
-            console.log(`✅ SUCCESS! Found ${results.length} lab results using ${desc}`);
-            console.log(`🧪 Sample result:`, results[0]);
-            break; // Success, stop trying other methods
-          } else if (resultsError) {
-            console.log(`❌ Query error for ${desc}:`, resultsError);
-          } else {
-            console.log(`📝 No results found for ${desc}`);
-          }
-
-        } catch (error) {
-          console.log(`💥 Exception for attempt ${attempt + 1} (${desc}):`, error);
-        }
-      }
-      } // Close the if block for other query attempts
-
-      // If no results found with .eq(), try with .ilike() for flexible matching
-      if (!labResultsData || labResultsData.length === 0) {
-        console.log('🔄 Attempting to fetch with ilike for flexible matching...');
-
-        try {
-          // Try ilike with patient name AND filter by visit_id if available
-          let query = supabase
             .from('lab_results')
-            .select(`
-              id,
-              main_test_name,
-              test_name,
-              test_category,
-              result_value,
-              result_unit,
-              reference_range,
-              comments,
-              is_abnormal,
-              result_status,
-              patient_name,
-              visit_id,
-              patient_visit_id,
-              patient_id
-            `);
+            .select(labResultsSelect)
+            .eq('visit_id', visitData.id)
+            .order('created_at', { ascending: true });
 
-          // Add patient name filter
-          query = query.ilike('patient_name', '%radha%');
-
-          // If we have visit_id, also filter by that for more specific results
-          if (visitId === 'IH25I24003') {
-            query = query.or(`visit_id.eq.${visitId},patient_visit_id.eq.${visitId}`);
-            console.log('🔍 Filtering by visit_id:', visitId);
-          }
-
-          const { data: ilikeResults, error: ilikeError } = await query;
-
-          if (ilikeError) {
-            console.error('❌ Error with ilike query:', ilikeError);
-          } else if (ilikeResults && ilikeResults.length > 0) {
-            console.log('✅ SUCCESS! Found lab results for radha:', ilikeResults.length, 'results');
-
-            // Filter to only show results for visit IH25I24003 if we have multiple visits
-            if (visitId === 'IH25I24003') {
-              const visitSpecificResults = ilikeResults.filter(r =>
-                r.visit_id === visitId || r.patient_visit_id === visitId
-              );
-              if (visitSpecificResults.length > 0) {
-                console.log('🎯 Using visit-specific results:', visitSpecificResults.length);
-                labResultsData = visitSpecificResults;
-              } else {
-                // Use all results for this patient
-                labResultsData = ilikeResults;
-              }
-            } else {
-              labResultsData = ilikeResults;
-            }
-          } else {
-            console.log('📝 No results found even with ilike for radha');
+          if (!resultsError && results && results.length > 0) {
+            console.log(`✅ Found ${results.length} lab results by visit UUID`);
+            labResultsData = results;
           }
         } catch (error) {
-          console.log('💥 Exception in ilike query:', error);
+          console.error('💥 Exception querying lab_results by visit UUID:', error);
         }
       }
 
-      // If still no results, leave empty - DO NOT show other patients' data
+      // Attempt 2: Query by patient name (case-insensitive) if visit UUID didn't work
+      if ((!labResultsData || labResultsData.length === 0) && patientNameForQuery) {
+        try {
+          const { data: results, error: resultsError } = await supabase
+            .from('lab_results')
+            .select(labResultsSelect)
+            .ilike('patient_name', patientNameForQuery.trim())
+            .order('created_at', { ascending: true });
+
+          if (!resultsError && results && results.length > 0) {
+            console.log(`✅ Found ${results.length} lab results by exact patient name (ilike)`);
+            labResultsData = results;
+          }
+        } catch (error) {
+          console.error('💥 Exception querying lab_results by patient name:', error);
+        }
+      }
+
+      // Attempt 3: Fuzzy match on patient name (contains)
+      if ((!labResultsData || labResultsData.length === 0) && patientNameForQuery) {
+        try {
+          const { data: results, error: resultsError } = await supabase
+            .from('lab_results')
+            .select(labResultsSelect)
+            .ilike('patient_name', `%${patientNameForQuery.trim()}%`)
+            .order('created_at', { ascending: true });
+
+          if (!resultsError && results && results.length > 0) {
+            console.log(`✅ Found ${results.length} lab results by fuzzy patient name`);
+            // If we have visit_id, prefer visit-specific results
+            if (visitData?.id) {
+              const visitSpecific = results.filter((r: any) => r.visit_id === visitData.id);
+              labResultsData = visitSpecific.length > 0 ? visitSpecific : results;
+            } else {
+              labResultsData = results;
+            }
+          }
+        } catch (error) {
+          console.error('💥 Exception in fuzzy lab_results query:', error);
+        }
+      }
+
       if (!labResultsData || labResultsData.length === 0) {
-        console.log('ℹ️ No lab results found for patient "radha"');
+        console.log('ℹ️ No lab results found for patient:', patientNameForQuery);
         labResultsData = [];
       }
 
