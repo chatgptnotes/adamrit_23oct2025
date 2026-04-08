@@ -3331,21 +3331,15 @@ const FinalBill = () => {
   useEffect(() => {
     if (!visitId) return;
 
-    // Initial verification after data is loaded
+    // One-time verification after data is loaded (no polling to avoid 406 floods)
     const initialVerificationTimer = setTimeout(() => {
       if (clinicalServicesInitialized && mandatoryServicesInitialized) {
         verifyServicesStateConsistency();
       }
     }, 1000);
 
-    // Periodic verification every 30 seconds
-    const periodicVerificationInterval = setInterval(() => {
-      verifyServicesStateConsistency();
-    }, 30000);
-
     return () => {
       clearTimeout(initialVerificationTimer);
-      clearInterval(periodicVerificationInterval);
     };
   }, [visitId, clinicalServicesInitialized, mandatoryServicesInitialized]); // Removed circular dependencies
 
@@ -7635,7 +7629,7 @@ INSTRUCTIONS:
       // Step 1: Get visit UUID from visit_id
       const { data: visitData, error: visitError } = await supabase
         .from('visits')
-        .select('id, visit_id, mandatory_service_id, mandatory_service:mandatory_services!visits_mandatory_service_id_fkey(id, service_name, tpa_rate, private_rate, nabh_rate, non_nabh_rate)')
+        .select('id, visit_id, mandatory_service_id')
         .eq('visit_id', visitId)
         .single();
 
