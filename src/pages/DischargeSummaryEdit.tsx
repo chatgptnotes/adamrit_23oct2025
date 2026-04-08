@@ -1132,16 +1132,61 @@ export default function DischargeSummaryEdit() {
         console.log('📊 labResultsData exists:', !!labResultsData);
         console.log('📊 labResultsData length:', labResultsData?.length || 0);
 
-      // PRIORITY: Process visit_labs data first (ordered tests from billing page)
+      // Process visit_labs enriched with actual results from lab_results
       if (visitLabsData && visitLabsData.length > 0) {
-        console.log('✅ Processing visit_labs data for AI modal:', visitLabsData);
+        console.log('✅ Processing visit_labs data enriched with lab_results:', visitLabsData.length, 'orders');
 
         visitLabsData.forEach(test => {
           const testName = test.test_name || test.lab_name || 'Unknown Test';
-          formattedLabResultsLocal.push(`• ${testName}: Ordered - Pending`);
+
+          // Check if there's an actual result in lab_results
+          let matchedResult: any = null;
+          if (labResultsData && labResultsData.length > 0) {
+            matchedResult = labResultsData.find((r: any) => r.visit_lab_id === test.id);
+            if (!matchedResult) {
+              const labName = (test.test_name || test.lab_name || '').toLowerCase();
+              matchedResult = labResultsData.find((r: any) =>
+                (r.main_test_name || '').toLowerCase().includes(labName) ||
+                labName.includes((r.test_name || '').toLowerCase())
+              );
+            }
+          }
+
+          if (matchedResult && matchedResult.result_value) {
+            const valueWithUnit = `${matchedResult.result_value}${matchedResult.result_unit ? ' ' + matchedResult.result_unit : ''}`;
+            const abnormalFlag = matchedResult.is_abnormal ? ' ⚠ ABNORMAL' : ' ✓';
+            formattedLabResultsLocal.push(`• ${testName}: ${valueWithUnit}${abnormalFlag}`);
+            if (matchedResult.is_abnormal) {
+              abnormalResultsLocal.push(`${testName}: ${valueWithUnit}`);
+            }
+          } else {
+            formattedLabResultsLocal.push(`• ${testName}: Ordered - Pending`);
+          }
         });
+
+        // Also include any extra results from lab_results not matched to visit_labs
+        if (labResultsData && labResultsData.length > 0) {
+          const visitLabIds = new Set(visitLabsData.map((t: any) => t.id));
+          const visitLabNames = new Set(visitLabsData.map((t: any) => (t.test_name || t.lab_name || '').toLowerCase()));
+          const extraResults = labResultsData.filter((r: any) => {
+            if (r.visit_lab_id && visitLabIds.has(r.visit_lab_id)) return false;
+            const rName = (r.test_name || '').toLowerCase();
+            const rMainName = (r.main_test_name || '').toLowerCase();
+            return !Array.from(visitLabNames).some((n: any) => rMainName.includes(n) || n.includes(rName));
+          });
+          extraResults.forEach((result: any) => {
+            const valueWithUnit = result.result_value
+              ? `${result.result_value}${result.result_unit ? ' ' + result.result_unit : ''}`
+              : 'N/A';
+            const abnormalFlag = result.is_abnormal ? ' ⚠ ABNORMAL' : ' ✓';
+            formattedLabResultsLocal.push(`• ${result.test_name || result.main_test_name}: ${valueWithUnit}${abnormalFlag}`);
+            if (result.is_abnormal && result.result_value) {
+              abnormalResultsLocal.push(`${result.test_name}: ${valueWithUnit}`);
+            }
+          });
+        }
       }
-      // ONLY process lab_results if visit_labs is empty
+      // Fallback: process lab_results directly if no visit_labs
       else if (labResultsData && labResultsData.length > 0) {
         console.log('✅ Processing lab results data (no visit_labs):', labResultsData);
 
@@ -1347,19 +1392,63 @@ LABORATORY INVESTIGATIONS:
 Test Name                       Result              Reference Range     Status
 --------------------------------------------------------------------------------\n`;
 
-        // PRIORITY: Add lab tests from visit_labs table (ordered tests from billing page)
-        // This is the source of truth for what tests were ordered for THIS visit
+        // PRIORITY: Add lab tests from visit_labs table, enriched with actual results from lab_results
         if (visitLabsData && visitLabsData.length > 0) {
           console.log('📊 Including lab tests from visit_labs table:', visitLabsData.length, 'tests');
           visitLabsData.forEach(test => {
             const testName = (test.test_name || test.lab_name || 'Unknown Test').substring(0, 30).padEnd(30);
-            const value = 'Ordered'.substring(0, 18).padEnd(18);
-            const range = (test.description || '-').substring(0, 18).padEnd(18);
-            const status = 'Pending';
-            labResultsTable += `${testName} ${value} ${range} ${status}\n`;
+
+            // Check if there's an actual result in lab_results for this test
+            let matchedResult: any = null;
+            if (labResultsData && labResultsData.length > 0) {
+              // Match by visit_lab_id first (most precise)
+              matchedResult = labResultsData.find((r: any) => r.visit_lab_id === test.id);
+              // Fallback: match by test name (case-insensitive)
+              if (!matchedResult) {
+                const labName = (test.test_name || test.lab_name || '').toLowerCase();
+                matchedResult = labResultsData.find((r: any) =>
+                  (r.main_test_name || '').toLowerCase().includes(labName) ||
+                  labName.includes((r.test_name || '').toLowerCase())
+                );
+              }
+            }
+
+            if (matchedResult && matchedResult.result_value) {
+              const value = `${matchedResult.result_value}${matchedResult.result_unit ? ' ' + matchedResult.result_unit : ''}`.substring(0, 18).padEnd(18);
+              const range = (matchedResult.reference_range || test.description || '-').substring(0, 18).padEnd(18);
+              const status = matchedResult.is_abnormal ? '⚠ ABNORMAL' : '✓ Normal';
+              labResultsTable += `${testName} ${value} ${range} ${status}\n`;
+            } else {
+              const value = 'Ordered'.substring(0, 18).padEnd(18);
+              const range = (test.description || '-').substring(0, 18).padEnd(18);
+              const status = 'Pending';
+              labResultsTable += `${testName} ${value} ${range} ${status}\n`;
+            }
           });
+
+          // Also add any lab_results that don't match a visit_lab (extra results)
+          if (labResultsData && labResultsData.length > 0) {
+            const visitLabIds = new Set(visitLabsData.map((t: any) => t.id));
+            const visitLabNames = new Set(visitLabsData.map((t: any) => (t.test_name || t.lab_name || '').toLowerCase()));
+            const extraResults = labResultsData.filter((r: any) => {
+              if (r.visit_lab_id && visitLabIds.has(r.visit_lab_id)) return false;
+              const rName = (r.test_name || '').toLowerCase();
+              const rMainName = (r.main_test_name || '').toLowerCase();
+              return !Array.from(visitLabNames).some((n: any) => rMainName.includes(n) || n.includes(rName));
+            });
+            if (extraResults.length > 0) {
+              console.log('📊 Adding extra lab results not in visit_labs:', extraResults.length);
+              extraResults.forEach((result: any) => {
+                const testName = (result.test_name || result.main_test_name || 'Unknown Test').substring(0, 30).padEnd(30);
+                const value = (result.result_value ? `${result.result_value}${result.result_unit ? ' ' + result.result_unit : ''}` : 'N/A').substring(0, 18).padEnd(18);
+                const range = (result.reference_range || 'N/A').substring(0, 18).padEnd(18);
+                const status = result.is_abnormal ? '⚠ ABNORMAL' : '✓ Normal';
+                labResultsTable += `${testName} ${value} ${range} ${status}\n`;
+              });
+            }
+          }
         }
-        // ONLY add lab_results if visit_labs is empty AND we have visit-specific results
+        // Fallback: use lab_results directly if no visit_labs
         else if (labResultsData && labResultsData.length > 0) {
           console.log('📊 Including lab results from lab_results table (no visit_labs found):', labResultsData.length, 'results');
           labResultsData.forEach(result => {
