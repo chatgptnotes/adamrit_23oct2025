@@ -9163,47 +9163,94 @@ INSTRUCTIONS:
   const fetchPatientPrescriptions = async () => {
     if (!patientInfo?.id && !patientInfo?.name) return;
     try {
-      // Step 1: Try by patient_id first
       let rxData: any[] = [];
+
+      // Step 1: Try by patient_id (UUID from patients table)
       if (patientInfo?.id) {
+        console.log('📋 [RX FETCH] Step 1: Querying by patient_id:', patientInfo.id);
         const { data, error } = await (supabase as any)
           .from('prescriptions')
           .select('*')
           .eq('patient_id', patientInfo.id)
           .order('created_at', { ascending: false });
-        if (!error && data) rxData = data;
+        if (!error && data && data.length > 0) {
+          rxData = data;
+          console.log('✅ [RX FETCH] Found', data.length, 'prescriptions by patient_id');
+        }
       }
 
-      // Step 2: If no results by ID, also try searching ALL recent prescriptions
-      // and match by patient name (handles ID mismatch between camera upload and visit)
+      // Step 2: Try by patient name in notes field (CameraUpload stores patient name in notes)
       if (rxData.length === 0 && patientInfo?.name) {
+        console.log('📋 [RX FETCH] Step 2: Searching by patient name in all recent prescriptions');
         const { data: allRx, error: allError } = await (supabase as any)
           .from('prescriptions')
           .select('*')
           .order('created_at', { ascending: false })
-          .limit(100);
+          .limit(200);
 
-        if (!allError && allRx) {
-          // Look up patient names for these prescriptions
+        if (!allError && allRx && allRx.length > 0) {
+          // Build patient name lookup for all prescription patient_ids
           const patientIds = [...new Set(allRx.map((rx: any) => rx.patient_id).filter(Boolean))];
+          const nameMap: Record<string, string> = {};
+
           if (patientIds.length > 0) {
             const { data: patients } = await (supabase as any)
               .from('patients')
               .select('id, name')
               .in('id', patientIds);
 
-            const nameMap: Record<string, string> = {};
             for (const p of (patients || [])) {
               nameMap[p.id] = (p.name || '').toLowerCase().trim();
             }
+          }
 
-            const searchName = (patientInfo.name || '').toLowerCase().trim();
-            rxData = allRx.filter((rx: any) =>
-              nameMap[rx.patient_id] === searchName
-            );
+          const searchName = (patientInfo.name || '').toLowerCase().trim();
+
+          // Match by patient name (exact) OR by patient name in notes
+          rxData = allRx.filter((rx: any) => {
+            // Match by patient_id → name lookup
+            if (rx.patient_id && nameMap[rx.patient_id] === searchName) return true;
+            // Match by patient name appearing in notes field
+            if (rx.notes && rx.notes.toLowerCase().includes(searchName)) return true;
+            return false;
+          });
+
+          if (rxData.length > 0) {
+            console.log('✅ [RX FETCH] Found', rxData.length, 'prescriptions by name match');
           }
         }
       }
+
+      // Step 3: If still nothing, try querying all prescriptions created today for this visit
+      if (rxData.length === 0 && visitId) {
+        console.log('📋 [RX FETCH] Step 3: Checking all prescriptions from today');
+        const today = new Date().toISOString().split('T')[0];
+        const { data: todayRx } = await (supabase as any)
+          .from('prescriptions')
+          .select('*')
+          .eq('prescription_date', today)
+          .order('created_at', { ascending: false });
+
+        if (todayRx && todayRx.length > 0 && patientInfo?.name) {
+          const searchName = (patientInfo.name || '').toLowerCase().trim();
+          // Check patient_ids
+          const pIds = todayRx.map((rx: any) => rx.patient_id).filter(Boolean);
+          if (pIds.length > 0) {
+            const { data: pts } = await (supabase as any)
+              .from('patients')
+              .select('id, name')
+              .in('id', pIds);
+            const pMap: Record<string, string> = {};
+            for (const p of (pts || [])) pMap[p.id] = (p.name || '').toLowerCase().trim();
+            rxData = todayRx.filter((rx: any) => pMap[rx.patient_id] === searchName);
+          }
+          if (rxData.length > 0) {
+            console.log('✅ [RX FETCH] Found', rxData.length, 'prescriptions from today by name');
+          }
+        }
+      }
+
+      console.log('📋 [RX FETCH] Final result:', rxData.length, 'prescriptions found');
 
       if (rxData.length === 0) {
         setPrescriptionsForPatient([]);

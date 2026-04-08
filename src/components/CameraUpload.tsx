@@ -50,6 +50,7 @@ interface PatientResult {
   id: string;
   name: string;
   patients_id?: string;
+  latest_visit_id?: string;
 }
 
 interface FileUploadRecord {
@@ -64,7 +65,7 @@ interface FileUploadRecord {
   created_at: string;
 }
 
-type UploadCategory = 'report' | 'prescription' | 'treatment_sheet' | 'opd_summary' | 'xray' | 'document' | 'photo' | 'id_proof';
+type UploadCategory = 'report' | 'prescription' | 'treatment_sheet' | 'opd_summary' | 'xray' | 'mri_report' | 'ct_scan_report' | 'document' | 'photo' | 'id_proof';
 
 interface OpdExtractedData {
   patientName: string;
@@ -101,6 +102,8 @@ const CATEGORY_OPTIONS: { value: UploadCategory; label: string }[] = [
   { value: 'opd_summary', label: 'OPD Summary' },
   { value: 'report', label: 'Report' },
   { value: 'xray', label: 'X-Ray' },
+  { value: 'mri_report', label: 'MRI Report' },
+  { value: 'ct_scan_report', label: 'CT Scan Report' },
   { value: 'document', label: 'Document' },
   { value: 'photo', label: 'Photo' },
   { value: 'id_proof', label: 'ID Proof' },
@@ -619,7 +622,29 @@ Extract patient name if mentioned. Extract any ID/UHID if mentioned. Put the doc
           console.error('Patient search error:', error);
           return;
         }
-        setPatientResults((data as PatientResult[]) || []);
+
+        // Enrich with latest visit_id for identification
+        const patientIds = (data || []).map((p: any) => p.id);
+        let visitMap: Record<string, string> = {};
+        if (patientIds.length > 0) {
+          const { data: visits } = await (supabase as any)
+            .from('visits')
+            .select('patient_id, visit_id')
+            .in('patient_id', patientIds)
+            .order('created_at', { ascending: false });
+          if (visits) {
+            for (const v of visits) {
+              if (!visitMap[v.patient_id]) visitMap[v.patient_id] = v.visit_id;
+            }
+          }
+        }
+
+        const enriched = (data || []).map((p: any) => ({
+          ...p,
+          latest_visit_id: visitMap[p.id] || undefined
+        }));
+
+        setPatientResults(enriched as PatientResult[]);
         setShowPatientDropdown(true);
       } catch (e) {
         console.error('Patient search error:', e);
@@ -1503,7 +1528,7 @@ Rules:
                   }}
                 >
                   <span>{p.name}</span>
-                  {p.patients_id && <span className="text-[10px] text-gray-400 ml-2">{p.patients_id}</span>}
+                  <span className="text-[10px] text-gray-400 ml-2">{p.latest_visit_id || p.patients_id || ''}</span>
                 </button>
               ))}
             </div>
@@ -1879,11 +1904,17 @@ Rules:
       const today = new Date().toISOString().split('T')[0];
 
       // Insert prescription record
+      const patientIdToSave = prescriptionPatient?.id || selectedPatient?.id || null;
+      const patientNameToSave = prescriptionPatient?.name || selectedPatient?.name || 'Unknown';
+      console.log('💊 [RX SAVE] Saving prescription for patient:', patientNameToSave, 'ID:', patientIdToSave);
+      console.log('💊 [RX SAVE] prescriptionPatient:', prescriptionPatient?.id, prescriptionPatient?.name);
+      console.log('💊 [RX SAVE] selectedPatient:', selectedPatient?.id, selectedPatient?.name);
+
       const { data: rxData, error: rxError } = await (supabase as any)
         .from('prescriptions')
         .insert({
           prescription_number: prescriptionNumber,
-          patient_id: prescriptionPatient?.id || selectedPatient?.id || null,
+          patient_id: patientIdToSave,
           doctor_name: prescriptionDoctor || 'As per records',
           prescription_date: today,
           status: 'PENDING',
