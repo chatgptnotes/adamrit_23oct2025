@@ -335,13 +335,20 @@ export default function DischargeSummaryEdit() {
 
         if (visitData) {
           setPatient(visitData);
-          const existingSummary = visitData.discharge_summary || '';
+          const existingSummary = visitData.opd_summary_text || visitData.discharge_summary || '';
           // Convert HTML to plain text if the summary contains HTML tags
           const summaryToSet = existingSummary.includes('<') && existingSummary.includes('>')
             ? htmlToPlainText(existingSummary)
             : existingSummary;
           setDischargeSummaryText(summaryToSet);
           setOriginalText(summaryToSet);
+          if (visitData.extracted_notes) {
+            setExtractedNotes(visitData.extracted_notes);
+          }
+          if (visitData.fetched_data_text) {
+            setFetchedDataText(visitData.fetched_data_text);
+            setDataFetched(true);
+          }
         }
       } catch (error) {
         console.error('Exception while fetching patient data:', error);
@@ -367,7 +374,12 @@ export default function DischargeSummaryEdit() {
         try {
           const { error } = await supabase
             .from('visits')
-            .update({ discharge_summary: debouncedText })
+            .update({
+              discharge_summary: debouncedText,
+              extracted_notes: extractedNotes,
+              fetched_data_text: fetchedDataText,
+              opd_summary_text: debouncedText
+            })
             .eq('visit_id', patient.visit_id);
 
           if (error) {
@@ -396,7 +408,12 @@ export default function DischargeSummaryEdit() {
     try {
       const { error } = await supabase
         .from('visits')
-        .update({ discharge_summary: dischargeSummaryText })
+        .update({
+          discharge_summary: dischargeSummaryText,
+          extracted_notes: extractedNotes,
+          fetched_data_text: fetchedDataText,
+          opd_summary_text: dischargeSummaryText
+        })
         .eq('visit_id', patient.visit_id);
 
       if (error) {
@@ -2791,6 +2808,53 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
             }
             htmlContent.push(`<h2 style="font-size: 11pt; font-weight: bold; margin: 20px 0 10px 0; border-bottom: 2px solid #000; padding-bottom: 5px;">${line}</h2>`);
             return;
+          }
+
+          // Detect markdown table rows (| col1 | col2 | col3 |)
+          if (line.trim().startsWith('|') && line.trim().endsWith('|') && line.includes('|')) {
+            // Skip separator rows (|---|---| or |:---|:---|)
+            if (line.replace(/[\s|:\-]/g, '').length === 0) {
+              return; // skip separator line
+            }
+            const cells = line.split('|').filter(c => c.trim()).map(c => c.trim());
+            if (!inTable) {
+              // First row = header
+              inTable = true;
+              tableHeaders = cells;
+            } else {
+              tableRows.push(cells.join('\t')); // store as tab-separated for createTableHTML
+            }
+            return;
+          }
+          // If we were in a markdown table and hit a non-table line, flush the table
+          if (inTable && tableHeaders.length > 0 && !line.trim().startsWith('|') &&
+              !line.includes('Name') && !line.includes('Test Name')) {
+            // Only flush if we actually used the markdown table path (headers look like cells, not standard)
+            // Detect markdown table: headers were parsed as cells (not the fixed known headers)
+            const isMarkdownTable = !tableHeaders.includes('Name') ||
+              (tableHeaders.includes('Name') && !tableHeaders.includes('Strength'));
+            if (isMarkdownTable && tableRows.length > 0) {
+              // Reconstruct rows for createTableHTML: convert tab-separated back to array
+              const parsedRows = tableRows.map(r => r.split('\t'));
+              let tableHTML = '<table style="width: 100%; border-collapse: collapse; margin: 15px 0;">';
+              tableHTML += '<thead><tr>';
+              tableHeaders.forEach(h => {
+                tableHTML += `<th style="border: 1px solid #000; padding: 8px; background-color: #f0f0f0; font-weight: bold;">${h}</th>`;
+              });
+              tableHTML += '</tr></thead><tbody>';
+              parsedRows.forEach(rowCells => {
+                tableHTML += '<tr>';
+                rowCells.forEach(cell => {
+                  tableHTML += `<td style="border: 1px solid #000; padding: 8px;">${cell || '&nbsp;'}</td>`;
+                });
+                tableHTML += '</tr>';
+              });
+              tableHTML += '</tbody></table>';
+              htmlContent.push(tableHTML);
+              inTable = false;
+              tableRows = [];
+              tableHeaders = [];
+            }
           }
 
           // Detect table headers (lines with multiple columns separated by spaces)
