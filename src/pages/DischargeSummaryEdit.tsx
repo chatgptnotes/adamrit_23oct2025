@@ -1924,14 +1924,37 @@ PLEASE CONTACT: 7030974619, 9373111709.
       console.log('Error fetching radiology data:', error);
     }
 
-    // Process lab investigations - PRIORITIZE visit_labs (ordered tests from billing page)
+    // Process lab investigations - merge visit_labs with lab_results for actual values
     if (visitLabs && visitLabs.length > 0) {
-      labInvestigationsData = visitLabs.map(test => ({
-        name: test.test_name || test.lab_name || 'Unknown Test',
-        result: 'Ordered',
-        range: test.description || '-',
-        status: 'Pending'
-      }));
+      labInvestigationsData = visitLabs.map(test => {
+        const testName = test.test_name || test.lab_name || 'Unknown Test';
+        // Check if there's an actual result in lab_results
+        let matchedResult: any = null;
+        if (labResults && labResults.length > 0) {
+          matchedResult = labResults.find((r: any) => r.visit_lab_id === test.id);
+          if (!matchedResult) {
+            const labName = (test.test_name || test.lab_name || '').toLowerCase();
+            matchedResult = labResults.find((r: any) =>
+              (r.main_test_name || '').toLowerCase().includes(labName) ||
+              labName.includes((r.test_name || '').toLowerCase())
+            );
+          }
+        }
+        if (matchedResult && matchedResult.result_value) {
+          return {
+            name: testName,
+            result: `${matchedResult.result_value}${matchedResult.result_unit ? ' ' + matchedResult.result_unit : ''}`,
+            range: matchedResult.reference_range || test.description || '-',
+            status: matchedResult.is_abnormal ? 'Abnormal' : 'Normal'
+          };
+        }
+        return {
+          name: testName,
+          result: 'Ordered',
+          range: test.description || '-',
+          status: 'Pending'
+        };
+      });
     }
     // ONLY use labResults if visitLabs is empty
     else if (labResults && labResults.length > 0) {
@@ -1986,149 +2009,129 @@ PLEASE CONTACT: 7030974619, 9373111709.
     // Set editable data
     setEditablePatientData(patientData);
 
-    // Prepare comprehensive prompt with all medical data
-    const prompt = `Generate a complete and comprehensive OPD summary in plain text format including ALL the following sections and data.
+    // Build medications section from actual data only (no dummy data)
+    const medsSection = (() => {
+      if (!patientData.medications || patientData.medications.length === 0) {
+        return 'Medications Prescribed: None recorded in database';
+      }
+      const medsLines = patientData.medications.map(med => {
+        const parsed = parseMedication(med);
+        return `* ${parsed.name} ${parsed.strength} | ${parsed.route} | ${parsed.dosage} | ${parsed.days}`;
+      }).join('\n');
+      return `Medications Prescribed:\n${medsLines}`;
+    })();
 
-PATIENT DATA PROVIDED:
-- Primary Diagnosis: ${patientData.primaryDiagnosis}
-- Secondary Diagnoses: ${patientData.secondaryDiagnoses.join(', ') || 'None'}
-- Complications: ${patientData.complications.join(', ') || 'None'}
-- Chief Complaints: ${patientData.complaints.join(', ') || 'None'}
-${patientData.otData ? `
-- SURGERY/OT DATA:
-  Surgery Name: ${patientData.otData.surgeryName}
+    // Build lab section
+    const labSection = (() => {
+      if (!patientData.labInvestigations || patientData.labInvestigations.length === 0) return '';
+      const lines = patientData.labInvestigations.map(lab => {
+        const statusIcon = lab.status === 'Pending' ? '⏳ Pending' : (lab.status === 'Abnormal' ? '⚠ Abnormal' : '✓ Normal');
+        return `  ${lab.name}: ${lab.result} (Ref: ${lab.range}) - ${statusIcon}`;
+      }).join('\n');
+      return `Lab Investigations:\n${lines}`;
+    })();
+
+    // Build radiology section
+    const radiologySection = (() => {
+      if (!patientData.radiologyInvestigations || patientData.radiologyInvestigations.length === 0) return '';
+      const lines = patientData.radiologyInvestigations.map(rad =>
+        `  ${rad.name}: ${rad.findings} - ${rad.status}`
+      ).join('\n');
+      return `Radiology Investigations:\n${lines}`;
+    })();
+
+    // Build OT section
+    const otSection = patientData.otData ? `
+Surgical Details:
+  Surgery: ${patientData.otData.surgeryName}
   Surgeon: ${patientData.otData.surgeon}
   Anaesthesia: ${patientData.otData.anaesthesia}
   Procedure: ${patientData.otData.procedurePerformed}
-  Findings: ${patientData.otData.findings}
-  Description: ${patientData.otData.description}
-  Implant: ${patientData.otData.implant || 'None'}` : ''}
-${patientData.labInvestigations && patientData.labInvestigations.length > 0 ? `
-- LAB INVESTIGATIONS:
-${patientData.labInvestigations.map(lab => `  ${lab.name}: ${lab.result} (Range: ${lab.range}) - ${lab.status}`).join('\n')}` : ''}
-${patientData.radiologyInvestigations && patientData.radiologyInvestigations.length > 0 ? `
-- RADIOLOGY INVESTIGATIONS:
-${patientData.radiologyInvestigations.map(rad => `  ${rad.name}: ${rad.findings} - ${rad.status}`).join('\n')}` : ''}
+  Findings: ${patientData.otData.findings || 'N/A'}
+  Post-op Notes: ${patientData.otData.description || 'N/A'}
+  ${patientData.otData.implant ? `Implant: ${patientData.otData.implant}` : ''}` : '';
 
-GENERATE THE FOLLOWING COMPLETE OPD SUMMARY:
+    // Build vitals section
+    const vitalsSection = patientData.vitalSigns && patientData.vitalSigns.length > 0
+      ? `Vital Signs:\n${patientData.vitalSigns.join('\n')}`
+      : '';
+
+    // Clean consultant name - remove duplicate "Dr." prefix
+    const cleanConsultant = (patientData.consultant || 'N/A').replace(/^Dr\.\s*Dr\./i, 'Dr.');
+
+    // Prepare comprehensive prompt with all medical data
+    const prompt = `You are a senior medical documentation specialist. Generate a professional, clinical OPD (Out-Patient Department) Summary based STRICTLY on the data provided below. Do NOT invent or hallucinate any clinical information. If data is missing, write "Not recorded" — never fabricate vitals, medications, or findings.
+
+RULES:
+1. Use ONLY the data provided below. Do not add generic/template vitals, medications, or advice.
+2. If medications are not available, state "Medications: As per prescription. Please refer to dispensed prescription slip."
+3. If handwritten notes contain unclear text, mark it as "[unclear from handwritten notes]" — do NOT guess.
+4. Keep the summary concise and professional. No excessive boilerplate.
+5. Use the exact lab values provided — show actual results, not "Ordered/Pending" if values are available.
+6. For advice section, generate specific advice based on the diagnosis, not generic precautions.
+
+=== PATIENT DEMOGRAPHICS ===
+Name: ${patientData.name}
+Sex / Age: ${patientData.gender} / ${patientData.age} Year
+Patient ID: ${patientData.uhId || patientData.patientId || 'N/A'}
+Registration ID: ${patientData.registrationId || 'N/A'}
+Mobile: ${patientData.mobileNumber || patientData.mobile || 'N/A'}
+Address: ${patientData.address || 'N/A'}
+Tariff: ${patientData.tariff || 'N/A'}
+Visit Date: ${patientData.admissionDate || 'N/A'}
+Primary Care Provider: ${cleanConsultant}
+
+=== CLINICAL DATA ===
+Primary Diagnosis: ${patientData.primaryDiagnosis || 'Not recorded'}
+Secondary Diagnoses: ${patientData.secondaryDiagnoses.join(', ') || 'None'}
+Chief Complaints: ${patientData.complaints.join(', ') || 'Not recorded'}
+Complications: ${patientData.complications.join(', ') || 'None'}
+${vitalsSection ? `\n${vitalsSection}` : ''}
+${patientData.clinicalHistory ? `\nClinical History: ${patientData.clinicalHistory}` : ''}
+${patientData.examinationFindings ? `\nExamination Findings: ${patientData.examinationFindings}` : ''}
+
+=== INVESTIGATIONS ===
+${labSection || 'Lab Investigations: None ordered'}
+${radiologySection || ''}
+${otSection || ''}
+
+=== MEDICATIONS ===
+${medsSection}
+
+${patientData.treatmentCourse && patientData.treatmentCourse.length > 0 ? `=== TREATMENT COURSE ===\n${patientData.treatmentCourse.join('\n')}` : ''}
+
+=== OUTPUT FORMAT ===
+Generate the OPD Summary in this exact structure:
 
 OPD SUMMARY
 ================================================================================
 
-Name                  : ${(patientData.name || '').padEnd(30)}Patient ID            : ${patientData.uhId || patientData.patientId || 'UHAY25I22001'}
-Primary Care Provider : ${(patientData.consultant || '').padEnd(30)}Registration ID       : ${patientData.registrationId || 'IH25I22001'}
+Name                  : ${(patientData.name || '').padEnd(30)}Patient ID            : ${patientData.uhId || patientData.patientId || 'N/A'}
+Primary Care Provider : ${cleanConsultant.padEnd(30)}Registration ID       : ${patientData.registrationId || 'N/A'}
 Sex / Age             : ${((patientData.gender || '') + ' / ' + (patientData.age || '') + ' Year').padEnd(30)}Mobile No             : ${patientData.mobileNumber || patientData.mobile || 'N/A'}
 Tariff                : ${(patientData.tariff || '').padEnd(30)}Address               : ${patientData.address || 'N/A'}
 Admission Date        : ${(patientData.admissionDate || '').padEnd(30)}Visit Date            : ${patientData.dischargeDate || ''}
 
 ================================================================================
 
-Present Condition
+Then include these sections (only include sections where data is available):
+1. Present Condition & Diagnosis
+2. Chief Complaints (use actual complaints, not generic text)
+3. Vital Signs (ONLY if recorded — do NOT invent default values)
+4. Investigations (Lab + Radiology with actual values)
+5. Surgical Details (only if OT data exists)
+6. Medications Prescribed (use actual medications — if none available, refer to prescription slip)
+7. Case Summary (2-3 sentences summarizing the visit based on actual data)
+8. Condition at Visit (based on actual clinical data)
+9. Advice (specific to the diagnosis — not generic boilerplate)
+10. Follow-up Date and Attending Physician
 
-Diagnosis: ${patientData.primaryDiagnosis}${patientData.secondaryDiagnoses.length > 0 ? ', ' + patientData.secondaryDiagnoses.join(', ') : ''}
+Footer:
+Review on: ${new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toLocaleDateString('en-GB')}
+Attending Physician: ${cleanConsultant}
+Emergency Contact: 7030974619, 9373111709
 
-${patientData.labInvestigations && patientData.labInvestigations.length > 0 ? `
-Investigations:
---------------------------------------------------------------------------------
-LAB INVESTIGATIONS:
-Name                              Result                  Range              Status
---------------------------------------------------------------------------------
-${patientData.labInvestigations.map(lab =>
-`${lab.name.padEnd(35)}${lab.result.padEnd(24)}${lab.range.padEnd(19)}${lab.status}`).join('\n')}
-` : ''}
-${patientData.radiologyInvestigations && patientData.radiologyInvestigations.length > 0 ? `
-RADIOLOGY INVESTIGATIONS:
-Name                              Findings                                   Status
---------------------------------------------------------------------------------
-${patientData.radiologyInvestigations.map(rad =>
-`${rad.name.padEnd(35)}${rad.findings.padEnd(43)}${rad.status}`).join('\n')}
-` : ''}
-
-Medications Prescribed:
---------------------------------------------------------------------------------
-Name                     Strength    Route     Dosage                          Days
---------------------------------------------------------------------------------
-${(() => {
-  const medsToUse = patientData.medications && patientData.medications.length > 0
-    ? patientData.medications
-    : [
-        'Paracetamol 500mg oral twice-daily 5days',
-        'Amoxicillin 250mg oral thrice-daily 7days',
-        'Omeprazole 20mg oral once-daily 10days',
-        'Vitamin-C 500mg oral once-daily 30days',
-        'Diclofenac 50mg oral twice-daily 3days'
-      ];
-  return medsToUse.map(med => {
-    const parsed = parseMedication(med);
-    const name = parsed.name.padEnd(24);
-    const strength = parsed.strength.padEnd(11);
-    const route = parsed.route.padEnd(9);
-    const dosage = parsed.dosage.padEnd(31);
-    const days = parsed.days;
-    return `${name} ${strength} ${route} ${dosage} ${days}`;
-  }).join('\n');
-})()}
-
-Case Summary:
-
-The patient was admitted with complaints of ${patientData.complaints.join(', ')}.
-
-${patientData.otData ? `
-================================================================================
-SURGICAL DETAILS:
-================================================================================
-Surgery Name          : ${patientData.otData.surgeryName}
-Surgeon              : ${patientData.otData.surgeon}
-Anaesthesia          : ${patientData.otData.anaesthesia}
-Procedure performed  : ${patientData.otData.procedurePerformed}
-Intraoperative findings: ${patientData.otData.findings || 'N/A'}
-Post-operative notes : ${patientData.otData.description || 'Recovery was satisfactory'}
-${patientData.otData.implant ? `Implant used         : ${patientData.otData.implant}` : ''}
-================================================================================
-` : ''}
-
-${patientData.vitalSigns && patientData.vitalSigns.length > 0 ? `
-VITAL SIGNS:
-${patientData.vitalSigns.join('\n')}
-` : ''}
-
-${patientData.treatmentCourse && patientData.treatmentCourse.length > 0 ? `
-TREATMENT COURSE:
-${patientData.treatmentCourse.join('\n')}
-` : 'The patient responded well to treatment and showed significant improvement.'}
-
-${patientData.complications && patientData.complications.length > 0 ? `
-COMPLICATIONS DURING STAY:
-${patientData.complications.join('\n')}
-` : 'No complications noted during hospital stay.'}
-
-ADVICE
-
-Advice:
-Follow up after 7 days/SOS.
-
-Precautions:
-- Take medications as prescribed
-- Maintain proper hygiene
-- Adequate rest and hydration
-- Monitor for warning signs
-
-Return immediately if:
-- Symptoms worsen or recur
-- Severe pain or discomfort
-- Persistent fever
-- Any concerning symptoms
-
---------------------------------------------------------------------------------
-Review on                     : ${new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toLocaleDateString('en-GB')}
-Attending Physician            : ${patientData.consultant || 'Sachin Gathibandhe'}
---------------------------------------------------------------------------------
-
-                                           ${patientData.consultant || 'Dr. Dr. Nikhil Khobragade (Gastroenterologist)'}
-
-URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 9373111709.
-
-IMPORTANT: Format everything as plain text, include ALL provided investigations, lab results, radiology findings, and OT data. DO NOT skip any section.`;
+IMPORTANT: Output plain text only. Be professional and concise. Include ALL provided data. Do NOT fabricate any information not provided above.`;
 
       // Include fetched database data and extracted handwritten notes in the prompt
       let promptText = prompt;
