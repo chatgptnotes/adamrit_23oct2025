@@ -37,6 +37,7 @@ interface AuthContextType {
   showHospitalSelection: boolean;
   setShowHospitalSelection: (show: boolean) => void;
   authError: string | null;
+  switchHospital: (hospitalType: HospitalType) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -374,6 +375,13 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     supabase.auth.signOut().catch(() => {});
   }, []);
 
+  const switchHospital = useCallback((newHospitalType: HospitalType) => {
+    if (!user) return;
+    const updatedUser = { ...user, hospitalType: newHospitalType };
+    setUser(updatedUser);
+    localStorage.setItem('hmis_user', JSON.stringify(updatedUser));
+  }, [user]);
+
   const hospitalConfig = useMemo(() => getHospitalConfig(user?.hospitalType), [user?.hospitalType]);
 
   const value: AuthContextType = useMemo(() => ({
@@ -392,7 +400,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     setShowLanding,
     showHospitalSelection,
     setShowHospitalSelection,
-    authError
+    authError,
+    switchHospital
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [user, isAuthLoading, hospitalConfig, showLanding, showHospitalSelection, authError]);
 

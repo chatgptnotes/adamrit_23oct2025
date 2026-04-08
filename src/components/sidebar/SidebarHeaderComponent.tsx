@@ -1,17 +1,33 @@
 
 import { useNavigate } from 'react-router-dom';
-import { Menu, LogOut } from 'lucide-react';
+import { LogOut, ArrowLeftRight } from 'lucide-react';
 import { SidebarHeader } from '@/components/ui/sidebar';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
+import { HOSPITAL_CONFIGS, HospitalType } from '@/types/hospital';
 
 export const SidebarHeaderComponent = () => {
   const navigate = useNavigate();
-  const { user, logout, hospitalConfig } = useAuth();
+  const { user, logout, hospitalConfig, isSuperAdmin, isAdmin, switchHospital } = useAuth();
 
   const handleLogout = () => {
     logout();
   };
+
+  const handleSwitchHospital = () => {
+    if (!user) return;
+    // Toggle between hospitals
+    const allHospitals = Object.keys(HOSPITAL_CONFIGS) as HospitalType[];
+    const otherHospitals = allHospitals.filter(h => h !== user.hospitalType);
+    if (otherHospitals.length === 1) {
+      switchHospital(otherHospitals[0]);
+    }
+  };
+
+  const otherHospitalName = user
+    ? Object.entries(HOSPITAL_CONFIGS)
+        .find(([key]) => key !== user.hospitalType)?.[1]?.fullName
+    : null;
 
   return (
     <SidebarHeader className="p-4">
@@ -30,6 +46,18 @@ export const SidebarHeaderComponent = () => {
             <span className="text-sm text-muted-foreground">
               {user.username}
             </span>
+          )}
+          {(isSuperAdmin || isAdmin) && otherHospitalName && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleSwitchHospital}
+              className="h-8 px-2 hover:bg-blue-50 hover:border-blue-200 flex items-center gap-1"
+              title={`Switch to ${otherHospitalName}`}
+            >
+              <ArrowLeftRight className="h-4 w-4 text-blue-600" />
+              <span className="text-xs text-blue-600 hidden sm:inline">Switch</span>
+            </Button>
           )}
           <Button
             variant="outline"

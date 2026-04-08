@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -63,7 +64,27 @@ interface FileUploadRecord {
   created_at: string;
 }
 
-type UploadCategory = 'report' | 'prescription' | 'treatment_sheet' | 'xray' | 'document' | 'photo' | 'id_proof';
+type UploadCategory = 'report' | 'prescription' | 'treatment_sheet' | 'opd_summary' | 'xray' | 'document' | 'photo' | 'id_proof';
+
+interface OpdExtractedData {
+  patientName: string;
+  age: string;
+  gender: string;
+  phone: string;
+  chiefComplaint: string;
+  diagnosis: string;
+  doctorName: string;
+  vitals: {
+    bp: string;
+    pulse: string;
+    temperature: string;
+    weight: string;
+    spo2: string;
+  };
+  medicines: string[];
+  advice: string;
+  followUp: string;
+}
 
 type AiUploadStep = 'idle' | 'ai_input' | 'ai_loading' | 'ai_confirm' | 'manual';
 
@@ -77,6 +98,7 @@ interface AiParseResult {
 const CATEGORY_OPTIONS: { value: UploadCategory; label: string }[] = [
   { value: 'treatment_sheet', label: 'Treatment Sheet' },
   { value: 'prescription', label: 'Prescription' },
+  { value: 'opd_summary', label: 'OPD Summary' },
   { value: 'report', label: 'Report' },
   { value: 'xray', label: 'X-Ray' },
   { value: 'document', label: 'Document' },
@@ -131,6 +153,7 @@ const CameraUpload: React.FC<CameraUploadProps> = ({
 }) => {
   const { toast } = useToast();
   const { hospitalConfig } = useAuth();
+  const navigate = useNavigate();
 
   // Camera state
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -174,6 +197,11 @@ const CameraUpload: React.FC<CameraUploadProps> = ({
   const [savedPrescriptionNumber, setSavedPrescriptionNumber] = useState<string>('');
   // Persist patient info for prescription modal (survives clearCapture)
   const [prescriptionPatient, setPrescriptionPatient] = useState<PatientResult | null>(null);
+
+  // OPD Summary extraction state
+  const [opdExtracted, setOpdExtracted] = useState<OpdExtractedData | null>(null);
+  const [showOpdModal, setShowOpdModal] = useState(false);
+  const [savingOpd, setSavingOpd] = useState(false);
 
   // Recent uploads state
   const [recentUploads, setRecentUploads] = useState<FileUploadRecord[]>([]);
@@ -916,6 +944,202 @@ Rules:
   }, [selectedPatient, toast]);
 
   // -------------------------------------------------------------------------
+  // OPD Summary: extract patient & consultation data using Gemini Vision
+  // -------------------------------------------------------------------------
+
+  const transcribeOpdSummary = useCallback(async (imageBlob: Blob): Promise<OpdExtractedData | null> => {
+    const geminiApiKey = import.meta.env.VITE_GEMINI_API_KEY;
+    if (!geminiApiKey) {
+      toast({ title: 'AI Unavailable', description: 'Gemini API key not configured.', variant: 'destructive' });
+      return null;
+    }
+
+    const base64 = await new Promise<string>((resolve) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const result = reader.result as string;
+        resolve(result.split(',')[1]);
+      };
+      reader.readAsDataURL(imageBlob);
+    });
+
+    const mimeType = imageBlob.type || 'image/jpeg';
+
+    const systemPrompt = `You are an expert medical records analyst. Analyze this OPD (Out-Patient Department) consultation summary/slip image and extract ALL patient and consultation information.
+
+Return ONLY a valid JSON object (no markdown, no code fences, no extra text) in this EXACT format:
+{
+  "patientName": "Patient full name or empty string if not visible",
+  "age": "Age with unit e.g. '45 years' or empty string",
+  "gender": "Male/Female/Other or empty string",
+  "phone": "Phone number or empty string",
+  "chiefComplaint": "Main complaint/reason for visit",
+  "diagnosis": "Diagnosis if mentioned",
+  "doctorName": "Consulting doctor name",
+  "vitals": {
+    "bp": "Blood pressure e.g. 120/80 mmHg or empty string",
+    "pulse": "Pulse rate or empty string",
+    "temperature": "Temperature or empty string",
+    "weight": "Weight or empty string",
+    "spo2": "SpO2 or empty string"
+  },
+  "medicines": ["Medicine 1 - dose - frequency", "Medicine 2 - dose - frequency"],
+  "advice": "Doctor advice/instructions",
+  "followUp": "Follow-up date or instructions"
+}
+
+Rules:
+- Extract EVERY piece of information visible in the image
+- If a field is not visible, use an empty string ""
+- For medicines, include dose and frequency if visible
+- Return ONLY the JSON object, nothing else`;
+
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiApiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{
+            parts: [
+              { text: systemPrompt },
+              { inline_data: { mime_type: mimeType, data: base64 } }
+            ]
+          }],
+          generationConfig: { temperature: 0.1, maxOutputTokens: 3000 },
+        }),
+      }
+    );
+
+    if (!response.ok) throw new Error(`Gemini API error: ${response.status}`);
+
+    const data = await response.json();
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+
+    try {
+      // Strip markdown code fences if present
+      const cleaned = text.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+      return JSON.parse(cleaned) as OpdExtractedData;
+    } catch (e) {
+      console.error('Failed to parse OPD extraction JSON:', e, text);
+      toast({ title: 'Extraction Partial', description: 'Could not fully parse OPD data. Please enter details manually.', variant: 'destructive' });
+      return null;
+    }
+  }, [toast]);
+
+  /** Save OPD extracted data: find/create patient, create OPD visit, navigate to profile */
+  const handleSaveOpdSummary = useCallback(async () => {
+    if (!opdExtracted) return;
+    setSavingOpd(true);
+
+    try {
+      const today = new Date().toISOString().split('T')[0];
+
+      // Step 1: Find or create patient
+      let patientId: string | null = null;
+      let visitId: string | null = null;
+
+      // If a patient was selected from search, use that
+      if (prescriptionPatient?.id) {
+        patientId = prescriptionPatient.id;
+      } else if (opdExtracted.patientName) {
+        // Search for existing patient by name
+        const { data: existing } = await (supabase as any)
+          .from('patients')
+          .select('id, patients_id')
+          .ilike('name', opdExtracted.patientName.trim())
+          .limit(1)
+          .single();
+
+        if (existing) {
+          patientId = existing.id;
+        } else {
+          // Create new patient
+          const { data: newPatient, error: patientError } = await (supabase as any)
+            .from('patients')
+            .insert({
+              name: opdExtracted.patientName.trim(),
+              age: parseInt(opdExtracted.age) || null,
+              gender: opdExtracted.gender || null,
+              phone: opdExtracted.phone || null,
+            })
+            .select('id, patients_id')
+            .single();
+
+          if (patientError) {
+            console.error('Error creating patient:', patientError);
+            toast({ title: 'Error', description: 'Could not create patient record.', variant: 'destructive' });
+            setSavingOpd(false);
+            return;
+          }
+          patientId = newPatient.id;
+        }
+      }
+
+      // Step 2: Create OPD visit
+      if (patientId) {
+        const visitPayload: Record<string, unknown> = {
+          patient_id: patientId,
+          visit_type: 'OPD',
+          visit_date: today,
+          appointment_with: opdExtracted.doctorName || 'Doctor',
+          status: 'active',
+          notes: [
+            opdExtracted.chiefComplaint ? `Chief Complaint: ${opdExtracted.chiefComplaint}` : '',
+            opdExtracted.diagnosis ? `Diagnosis: ${opdExtracted.diagnosis}` : '',
+            opdExtracted.advice ? `Advice: ${opdExtracted.advice}` : '',
+            opdExtracted.followUp ? `Follow-up: ${opdExtracted.followUp}` : '',
+            opdExtracted.vitals.bp ? `BP: ${opdExtracted.vitals.bp}` : '',
+            opdExtracted.vitals.pulse ? `Pulse: ${opdExtracted.vitals.pulse}` : '',
+            opdExtracted.vitals.temperature ? `Temp: ${opdExtracted.vitals.temperature}` : '',
+            opdExtracted.vitals.weight ? `Weight: ${opdExtracted.vitals.weight}` : '',
+            opdExtracted.vitals.spo2 ? `SpO2: ${opdExtracted.vitals.spo2}` : '',
+            opdExtracted.medicines.length > 0 ? `Medicines: ${opdExtracted.medicines.join(', ')}` : '',
+          ].filter(Boolean).join('\n'),
+        };
+
+        const { data: visitData, error: visitError } = await (supabase as any)
+          .from('visits')
+          .insert(visitPayload)
+          .select('id, visit_id')
+          .single();
+
+        if (visitError) {
+          console.error('Error creating visit:', visitError);
+          // Non-fatal — patient was still created/found
+        } else {
+          visitId = visitData.visit_id || visitData.id;
+        }
+      }
+
+      toast({
+        title: 'OPD Summary Saved',
+        description: `${opdExtracted.patientName || 'Patient'} consultation recorded successfully.`,
+      });
+
+      setShowOpdModal(false);
+      setOpdExtracted(null);
+
+      // Navigate to patient profile
+      if (patientId) {
+        const navUrl = visitId
+          ? `/patient-profile?patient=${patientId}&visit=${visitId}`
+          : `/patient-profile?patient=${patientId}`;
+        if (navigate) {
+          // Close the dialog first
+          onOpenChange?.(false);
+          navigate(navUrl);
+        }
+      }
+    } catch (e) {
+      console.error('Error saving OPD summary:', e);
+      toast({ title: 'Save Failed', description: 'Could not save OPD summary.', variant: 'destructive' });
+    } finally {
+      setSavingOpd(false);
+    }
+  }, [opdExtracted, prescriptionPatient, toast, navigate, onOpenChange]);
+
+  // -------------------------------------------------------------------------
   // Upload logic
   // -------------------------------------------------------------------------
 
@@ -1040,6 +1264,26 @@ Rules:
         }
       }
 
+      // If category is opd_summary, extract OPD consultation data
+      if (category === 'opd_summary') {
+        if (selectedPatient) {
+          setPrescriptionPatient({ ...selectedPatient });
+        }
+        setTranscribing(true);
+        try {
+          const extracted = await transcribeOpdSummary(fileToUpload);
+          if (extracted) {
+            setOpdExtracted(extracted);
+            setShowOpdModal(true);
+          }
+        } catch (err) {
+          console.error('OPD extraction error:', err);
+          toast({ title: 'Extraction Failed', description: 'Could not extract OPD data. File was uploaded successfully.', variant: 'destructive' });
+        } finally {
+          setTranscribing(false);
+        }
+      }
+
       // Reset form and refresh gallery
       clearCapture();
       fetchRecentUploads();
@@ -1064,6 +1308,7 @@ Rules:
     fetchRecentUploads,
     transcribePrescription,
     transcribeTreatmentSheet,
+    transcribeOpdSummary,
   ]);
 
   // -------------------------------------------------------------------------
@@ -1996,6 +2241,142 @@ Rules:
     );
   };
 
+  /** OPD Summary review & save modal */
+  const renderOpdModal = () => {
+    if (!opdExtracted) return null;
+
+    return (
+      <Dialog open={showOpdModal} onOpenChange={(open) => {
+        if (!open) {
+          setShowOpdModal(false);
+          setOpdExtracted(null);
+        }
+      }}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-blue-600" />
+              OPD Summary - Extracted Data
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {/* Patient Info */}
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-2">
+              <h4 className="text-sm font-semibold text-blue-800">Patient Information</h4>
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <div>
+                  <span className="text-gray-500">Name:</span>{' '}
+                  <span className="font-medium">{opdExtracted.patientName || '-'}</span>
+                </div>
+                <div>
+                  <span className="text-gray-500">Age:</span>{' '}
+                  <span className="font-medium">{opdExtracted.age || '-'}</span>
+                </div>
+                <div>
+                  <span className="text-gray-500">Gender:</span>{' '}
+                  <span className="font-medium">{opdExtracted.gender || '-'}</span>
+                </div>
+                <div>
+                  <span className="text-gray-500">Phone:</span>{' '}
+                  <span className="font-medium">{opdExtracted.phone || '-'}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Consultation Details */}
+            <div className="bg-green-50 border border-green-200 rounded-lg p-4 space-y-2">
+              <h4 className="text-sm font-semibold text-green-800">Consultation Details</h4>
+              <div className="space-y-1 text-sm">
+                <div>
+                  <span className="text-gray-500">Doctor:</span>{' '}
+                  <span className="font-medium">{opdExtracted.doctorName || '-'}</span>
+                </div>
+                <div>
+                  <span className="text-gray-500">Chief Complaint:</span>{' '}
+                  <span className="font-medium">{opdExtracted.chiefComplaint || '-'}</span>
+                </div>
+                <div>
+                  <span className="text-gray-500">Diagnosis:</span>{' '}
+                  <span className="font-medium">{opdExtracted.diagnosis || '-'}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Vitals */}
+            {(opdExtracted.vitals.bp || opdExtracted.vitals.pulse || opdExtracted.vitals.temperature || opdExtracted.vitals.weight || opdExtracted.vitals.spo2) && (
+              <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 space-y-2">
+                <h4 className="text-sm font-semibold text-orange-800">Vitals</h4>
+                <div className="grid grid-cols-3 gap-2 text-sm">
+                  {opdExtracted.vitals.bp && (
+                    <div><span className="text-gray-500">BP:</span> <span className="font-medium">{opdExtracted.vitals.bp}</span></div>
+                  )}
+                  {opdExtracted.vitals.pulse && (
+                    <div><span className="text-gray-500">Pulse:</span> <span className="font-medium">{opdExtracted.vitals.pulse}</span></div>
+                  )}
+                  {opdExtracted.vitals.temperature && (
+                    <div><span className="text-gray-500">Temp:</span> <span className="font-medium">{opdExtracted.vitals.temperature}</span></div>
+                  )}
+                  {opdExtracted.vitals.weight && (
+                    <div><span className="text-gray-500">Weight:</span> <span className="font-medium">{opdExtracted.vitals.weight}</span></div>
+                  )}
+                  {opdExtracted.vitals.spo2 && (
+                    <div><span className="text-gray-500">SpO2:</span> <span className="font-medium">{opdExtracted.vitals.spo2}</span></div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Medicines */}
+            {opdExtracted.medicines.length > 0 && (
+              <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 space-y-2">
+                <h4 className="text-sm font-semibold text-purple-800">Medicines Prescribed</h4>
+                <ul className="text-sm space-y-1">
+                  {opdExtracted.medicines.map((med, idx) => (
+                    <li key={idx} className="flex items-start gap-2">
+                      <span className="text-purple-400 mt-0.5">&#8226;</span>
+                      <span>{med}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {/* Advice & Follow-up */}
+            {(opdExtracted.advice || opdExtracted.followUp) && (
+              <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-1 text-sm">
+                {opdExtracted.advice && (
+                  <div><span className="text-gray-500">Advice:</span> <span className="font-medium">{opdExtracted.advice}</span></div>
+                )}
+                {opdExtracted.followUp && (
+                  <div><span className="text-gray-500">Follow-up:</span> <span className="font-medium">{opdExtracted.followUp}</span></div>
+                )}
+              </div>
+            )}
+
+            {/* Action buttons */}
+            <div className="flex gap-2 justify-end pt-2">
+              <Button variant="outline" onClick={() => { setShowOpdModal(false); setOpdExtracted(null); }}>
+                Cancel
+              </Button>
+              <Button
+                className="bg-blue-600 hover:bg-blue-700"
+                onClick={handleSaveOpdSummary}
+                disabled={savingOpd}
+              >
+                {savingOpd ? (
+                  <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Saving &amp; Opening Profile...</>
+                ) : (
+                  'Save & Open Patient Profile'
+                )}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    );
+  };
+
   const content = (
     <div className="space-y-4">
       {renderCamera()}
@@ -2006,7 +2387,9 @@ Rules:
         <div className="flex items-center justify-center gap-3 p-4 bg-purple-50 border border-purple-200 rounded-lg">
           <Loader2 className="h-5 w-5 animate-spin text-purple-600" />
           <span className="text-sm font-medium text-purple-700">
-            {category === 'treatment_sheet' ? 'Extracting medicines from treatment sheet...' : 'Transcribing prescription with AI...'}
+            {category === 'treatment_sheet' ? 'Extracting medicines from treatment sheet...'
+              : category === 'opd_summary' ? 'Extracting OPD consultation data...'
+              : 'Transcribing prescription with AI...'}
           </span>
         </div>
       )}
@@ -2040,6 +2423,7 @@ Rules:
           </DialogContent>
         </Dialog>
         {renderPrescriptionModal()}
+        {renderOpdModal()}
       </>
     );
   }
@@ -2056,6 +2440,7 @@ Rules:
         <CardContent>{content}</CardContent>
       </Card>
       {renderPrescriptionModal()}
+      {renderOpdModal()}
     </>
   );
 };
