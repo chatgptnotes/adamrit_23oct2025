@@ -4231,18 +4231,46 @@ DD/MM/YYYY:-Test Category: Test1:Value1 unit, Test2:Value2 unit`);
                       `Surgery ${i + 1}: ${s.procedurePerformed || 'Not specified'} (Surgeon: ${s.surgeon || 'Not specified'}, Anesthesia: ${s.anesthesia || 'Not specified'})`
                     ).join('\n');
 
-                    const prompt = `You are a medical specialist. Write a comprehensive, detailed surgical summary for each procedure listed below:
-${allProcedures}
-${sharedSurgeryDescription ? `\nADDITIONAL SURGERY DESCRIPTION FROM DOCTOR:\n${sharedSurgeryDescription}\n\nIMPORTANT: The above doctor-provided description contains the ACTUAL procedure details as observed during surgery. Use this as the PRIMARY source for writing the operative note. Incorporate these specific findings, techniques, and observations into the generated summary.\n` : ''}
-For EACH surgery, write a separate detailed paragraph (3-5 sentences) including:
-1. Full procedure name and indication/reason for surgery
-2. Surgical approach and technique used
-3. Key intraoperative findings
-4. Any implants/hardware used (if applicable)
-5. Estimated blood loss and patient's hemodynamic stability
-6. Immediate post-operative condition and recovery status
+                    const prompt = `You are an experienced surgeon at an Indian hospital. Generate a professional, print-ready OPERATIVE NOTE for the following surgeries:
 
-Write in professional medical terminology. Do NOT use placeholders like "[insert reason]" - if information is not provided, write general medical facts about the procedure. Write each surgery as "Surgery 1:", "Surgery 2:", etc.`;
+${allProcedures}
+${sharedSurgeryDescription ? `\nDOCTOR'S DESCRIPTION (PRIMARY SOURCE — use these details as-is):\n${sharedSurgeryDescription}\n` : ''}
+Generate the operative note in this EXACT structure:
+
+## Operative Note
+
+**Procedure(s):** [from data with codes]
+**Surgeon:** [from data]
+**Anaesthesia:** [from data]
+
+**Pre-operative Diagnosis:** [Specific diagnosis]
+**Post-operative Diagnosis:** [Same or updated]
+
+**Indications for Surgery:** [2-3 sentences]
+
+**Pre-operative Findings:** [Detailed — sizes in cm, location, tissue condition. Bullet points for multiple sites.]
+
+**Surgical Procedure(s) Performed:**
+[Detailed numbered steps for each procedure:
+- Patient positioning, preparation (antiseptic, draping)
+- Step-by-step technique with instrument names, cautery settings
+- Irrigation volumes and solutions
+- Hemostasis method
+- Wound closure/dressing details with specific materials]
+
+**Implants Used:** [With quantities/sizes, or "N/A"]
+**Estimated Blood Loss:** [Specific mL]
+**Specimens Sent:** [Details or "None"]
+**Complications:** [Specific or "None. Procedure performed without incident."]
+
+**Post-operative Condition:** [Alert/oriented, vitals, motor/sensory status]
+
+**Post-operative Instructions:**
+[Numbered: wound care, medications in INDIAN BRAND names (Dolo, Augmentin, Chymoral Forte, Dynapar, Monocef), activity restrictions, follow-up, diet, warning signs]
+
+**Prognosis:** [1-2 sentences]
+
+RULES: Minimum 800 words. Use medical terminology. Include measurements (cm), volumes (mL), instrument names. Indian brand names for medications. No placeholders. If doctor's description is provided, use those exact details as primary source.`;
 
                     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${import.meta.env.VITE_GEMINI_API_KEY}`, {
                       method: 'POST',
@@ -4257,7 +4285,7 @@ Write in professional medical terminology. Do NOT use placeholders like "[insert
                         }],
                         generationConfig: {
                           temperature: 0.7,
-                          maxOutputTokens: 1000
+                          maxOutputTokens: 4000
                         }
                       })
                     });

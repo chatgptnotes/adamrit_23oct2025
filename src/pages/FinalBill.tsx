@@ -5301,32 +5301,87 @@ Surgery ${index + 1}:
 - Implant: ${surgery.implant || 'N/A'}
 - Date: ${surgery.date || new Date().toISOString()}`).join('\n');
 
-      const surgeryPrompt = `OT Notes: Act like a surgeon. Make a detailed combined surgery/OT note for ALL the following surgeries. Include the implants used and the quantities. Come up with creative detailed surgery notes based on the following information:
+      const surgeryPrompt = `Generate a professional, print-ready OPERATIVE NOTE based on the data below. Make up specific clinical details (wound sizes, locations, findings, technique steps) that are realistic and consistent with the procedure. The output must read as if written by the operating surgeon immediately after the procedure.
 
-PATIENT INFORMATION:
+=== PATIENT DATA ===
 Patient Name: ${visitData.patients?.name || '[Patient Name]'}
 Age: ${visitData.patients?.age || '[Age]'}
 Gender: ${visitData.patients?.gender || '[Gender]'}
+Date of Surgery: ${otNotesDataList[0]?.date || new Date().toLocaleDateString('en-IN')}
 
-SURGERY DETAILS FROM PATIENT RECORDS:
+=== SURGERY DETAILS FROM RECORDS ===
 ${surgeryInfo}
 
-ALL SURGERIES PERFORMED:
+=== ALL SURGERIES PERFORMED ===
 ${allSurgeriesInfo}
-${sharedDescription ? `\nADDITIONAL SURGERY DESCRIPTION FROM DOCTOR:\n${sharedDescription}\n\nIMPORTANT: The above doctor-provided description contains the ACTUAL procedure details as observed during surgery. Use this as the PRIMARY source for writing the operative note. Incorporate these specific findings, techniques, and observations into the generated summary.\n` : ''}
-Generate a comprehensive COMBINED surgical note that covers ALL surgeries listed above. Include:
-- Pre-operative findings
-- Surgical technique and steps for each procedure
-- Implants used (with specific quantities and sizes)
-- Post-operative condition
-- Complications (if any)
-- Instructions for post-operative care
+${sharedDescription ? `\n=== DOCTOR'S DESCRIPTION (PRIMARY SOURCE — use these details as-is) ===\n${sharedDescription}\n` : ''}
+=== OUTPUT FORMAT ===
+Generate the operative note in EXACTLY this structure with proper headings:
 
-Make it detailed and professional as if written by an experienced surgeon.`;
+## Operative Note
+
+**Patient Name:** [from data]
+**Age/Gender:** [from data]
+**Date of Surgery:** [from data]
+**Surgeon:** [from data]
+**Anaesthetist:** [from data]
+**Anaesthesia:** [from data]
+**Procedure(s):** [from data with code]
+
+**Pre-operative Diagnosis:** [Specific diagnosis warranting the procedure]
+
+**Post-operative Diagnosis:** [Same or updated based on intra-op findings]
+
+**Indications for Surgery:** [2-3 sentences explaining why surgery was needed for this patient]
+
+**Pre-operative Findings:** [Detailed description of wound/pathology — sizes in cm, location, tissue condition, foreign material if any. Use bullet points for multiple sites.]
+
+**Surgical Procedure(s) Performed:**
+[For each procedure, write detailed numbered steps including:
+- Patient positioning and preparation (antiseptic used, draping)
+- Time-out confirmation
+- Step-by-step surgical technique with instrument names (scalpel size, scissors type, cautery settings)
+- Irrigation volumes and solutions used
+- Hemostasis method
+- Wound closure or dressing details (specific dressing materials and layers)]
+
+**Implants Used:** [List with quantities and sizes, or "N/A"]
+
+**Estimated Blood Loss:** [Specific amount in mL]
+
+**Specimens Sent:** [Pathology/culture details or "None"]
+
+**Complications:** [Specific or "None. Procedure performed without incident."]
+
+**Post-operative Condition:** [Patient's status — alert/oriented, vitals stable, motor/sensory function]
+
+**Post-operative Instructions:**
+[Numbered list including:
+1. Wound care instructions with dressing change frequency
+2. Medications prescribed (use Indian brand names — e.g., Dolo 650, Augmentin, Chymoral Forte)
+3. Activity restrictions with duration
+4. Follow-up appointment timing
+5. Diet instructions
+6. Warning signs to watch for
+7. Emergency contact instructions]
+
+**Prognosis:** [1-2 sentences]
+
+**[Surgeon Name]**
+**Surgeon**
+
+=== RULES ===
+1. Output must be minimum 800 words, detailed and specific.
+2. Use proper medical terminology throughout.
+3. Include specific measurements (cm), volumes (mL), instrument names, and cautery settings.
+4. Medications in Post-operative Instructions must use INDIAN BRAND names (e.g., Dolo, Augmentin, Chymoral Forte, Dynapar, Monocef, Emeset).
+5. If doctor's description is provided above, incorporate those exact details as the primary source.
+6. Do NOT use placeholder text like "[insert here]" — fill in realistic details.
+7. Output plain text with markdown headings (**bold** and ##). No code blocks.`;
 
       console.log('Generating combined AI notes for all surgeries...');
 
-      const systemPrompt = 'You are an experienced surgeon writing detailed operative notes. Generate comprehensive, professional surgical documentation with specific details about implants, quantities, and surgical techniques. When multiple surgeries are performed, include details for all procedures in a single combined note.';
+      const systemPrompt = 'You are an experienced surgeon at an Indian hospital writing formal operative notes. Generate print-ready, comprehensive surgical documentation following standard Indian hospital operative note format. Include specific clinical details — measurements, instrument names, cautery settings, irrigation volumes, dressing materials. Use Indian pharmaceutical brand names for medications. The note must be professional, detailed (minimum 800 words), and ready to be printed and filed in the patient record.';
 
       const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiApiKey}`, {
         method: 'POST',
@@ -5341,7 +5396,7 @@ Make it detailed and professional as if written by an experienced surgeon.`;
           }],
           generationConfig: {
             temperature: 0.7,
-            maxOutputTokens: 2000
+            maxOutputTokens: 4000
           }
         })
       });
