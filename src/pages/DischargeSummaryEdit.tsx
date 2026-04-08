@@ -259,6 +259,10 @@ export default function DischargeSummaryEdit() {
   const [formattedLabResults, setFormattedLabResults] = useState<string[]>([]);
   const [abnormalResults, setAbnormalResults] = useState<string[]>([]);
 
+  // Fetch Data loading state
+  const [isFetchingData, setIsFetchingData] = useState(false);
+  const [fetchProgress, setFetchProgress] = useState('');
+
   // AI Generation states
   const [isGenerating, setIsGenerating] = useState(false);
   const [showGenerationModal, setShowGenerationModal] = useState(false);
@@ -482,6 +486,8 @@ export default function DischargeSummaryEdit() {
     }
 
     try {
+      setIsFetchingData(true);
+      setFetchProgress('Fetching patient demographics...');
       console.log('Fetching comprehensive discharge data for patient:', visitId);
 
       // 1. Fetch complete patient data from patients table
@@ -506,6 +512,7 @@ export default function DischargeSummaryEdit() {
         console.error('Error fetching visit data:', visitError);
       }
 
+      setFetchProgress('Fetching visit data & OT notes...');
       // 3. Fetch OT notes for surgery details
       let { data: otNote, error: otError } = await supabase
         .from('ot_notes')
@@ -545,6 +552,7 @@ export default function DischargeSummaryEdit() {
         alert('Error: Unable to fetch additional data - missing visit UUID. Basic OPD summary will be generated with available data.');
       }
 
+      setFetchProgress('Fetching diagnoses & complications...');
       // 5. Fetch complications using the correct UUID from visitData.id
       let visitComplications = null;
       let compError = null;
@@ -677,6 +685,7 @@ export default function DischargeSummaryEdit() {
         console.log('❌ No visitData.id available for complications query');
       }
 
+      setFetchProgress('Fetching lab reports & results...');
       // 6. Fetch lab orders - try multiple approaches
       let labOrders = null;
       let labError = null;
@@ -929,6 +938,7 @@ export default function DischargeSummaryEdit() {
       // Store visit_labs in state for AI generation
       setVisitLabs(visitLabsData || []);
 
+      setFetchProgress('Fetching radiology reports...');
       // 7. Fetch radiology orders using the correct UUID from visitData.id
       let radiologyOrders = null;
       let radError = null;
@@ -965,6 +975,7 @@ export default function DischargeSummaryEdit() {
         radiologyOrders = [];
       }
 
+      setFetchProgress('Fetching prescriptions & medications...');
       // 8. Fetch pharmacy/prescription data
       let prescriptionData = null;
       let prescriptionError = null;
@@ -1040,6 +1051,7 @@ export default function DischargeSummaryEdit() {
         }
       }
 
+      setFetchProgress('Processing & formatting all data...');
       // Process the fetched data
       const patientInfo = fullPatientData || patient.patients || {};
       const visit = visitData || patient;
@@ -1145,29 +1157,47 @@ export default function DischargeSummaryEdit() {
       if (visitLabsData && visitLabsData.length > 0) {
         console.log('✅ Processing visit_labs data enriched with lab_results:', visitLabsData.length, 'orders');
 
+        // Track which lab_results have been matched to avoid duplicates
+        const matchedLabResultIds = new Set<string>();
+
         visitLabsData.forEach(test => {
           const testName = test.test_name || test.lab_name || 'Unknown Test';
 
-          // Check if there's an actual result in lab_results
-          let matchedResult: any = null;
+          // Find ALL matching results for this test (panel tests have multiple sub-tests like CBC -> Hb, WBC, ESR, etc.)
+          let matchedResults: any[] = [];
           if (labResultsData && labResultsData.length > 0) {
-            matchedResult = labResultsData.find((r: any) => r.visit_lab_id === test.id);
-            if (!matchedResult) {
+            // Match by visit_lab_id (most precise)
+            matchedResults = labResultsData.filter((r: any) => r.visit_lab_id === test.id);
+
+            // If no visit_lab_id match, match by name (panel name -> main_test_name)
+            if (matchedResults.length === 0) {
               const labName = (test.test_name || test.lab_name || '').toLowerCase();
-              matchedResult = labResultsData.find((r: any) =>
+              matchedResults = labResultsData.filter((r: any) =>
                 (r.main_test_name || '').toLowerCase().includes(labName) ||
-                labName.includes((r.test_name || '').toLowerCase())
+                labName.includes((r.main_test_name || '').toLowerCase()) ||
+                (r.visit_lab_id === null && (r.test_name || '').toLowerCase().includes(labName))
               );
             }
+
+            // Track matched IDs
+            matchedResults.forEach((r: any) => matchedLabResultIds.add(r.id));
           }
 
-          if (matchedResult && matchedResult.result_value) {
-            const valueWithUnit = `${matchedResult.result_value}${matchedResult.result_unit ? ' ' + matchedResult.result_unit : ''}`;
-            const abnormalFlag = matchedResult.is_abnormal ? ' ⚠ ABNORMAL' : ' ✓';
-            formattedLabResultsLocal.push(`• ${testName}: ${valueWithUnit}${abnormalFlag}`);
-            if (matchedResult.is_abnormal) {
-              abnormalResultsLocal.push(`${testName}: ${valueWithUnit}`);
-            }
+          if (matchedResults.length > 0) {
+            // Panel test with sub-results — show heading then each sub-test
+            formattedLabResultsLocal.push(`\n**${testName}:**`);
+            matchedResults.forEach((result: any) => {
+              if (result.result_value) {
+                const subTestName = result.test_name || result.main_test_name || testName;
+                const valueWithUnit = `${result.result_value}${result.result_unit ? ' ' + result.result_unit : ''}`;
+                const refRange = result.reference_range ? ` (Ref: ${result.reference_range})` : '';
+                const abnormalFlag = result.is_abnormal ? ' ⚠ ABNORMAL' : ' ✓';
+                formattedLabResultsLocal.push(`  • ${subTestName}: ${valueWithUnit}${refRange}${abnormalFlag}`);
+                if (result.is_abnormal) {
+                  abnormalResultsLocal.push(`${subTestName}: ${valueWithUnit}`);
+                }
+              }
+            });
           } else {
             formattedLabResultsLocal.push(`• ${testName}: Ordered - Pending`);
           }
@@ -1175,24 +1205,21 @@ export default function DischargeSummaryEdit() {
 
         // Also include any extra results from lab_results not matched to visit_labs
         if (labResultsData && labResultsData.length > 0) {
-          const visitLabIds = new Set(visitLabsData.map((t: any) => t.id));
-          const visitLabNames = new Set(visitLabsData.map((t: any) => (t.test_name || t.lab_name || '').toLowerCase()));
-          const extraResults = labResultsData.filter((r: any) => {
-            if (r.visit_lab_id && visitLabIds.has(r.visit_lab_id)) return false;
-            const rName = (r.test_name || '').toLowerCase();
-            const rMainName = (r.main_test_name || '').toLowerCase();
-            return !Array.from(visitLabNames).some((n: any) => rMainName.includes(n) || n.includes(rName));
-          });
-          extraResults.forEach((result: any) => {
-            const valueWithUnit = result.result_value
-              ? `${result.result_value}${result.result_unit ? ' ' + result.result_unit : ''}`
-              : 'N/A';
-            const abnormalFlag = result.is_abnormal ? ' ⚠ ABNORMAL' : ' ✓';
-            formattedLabResultsLocal.push(`• ${result.test_name || result.main_test_name}: ${valueWithUnit}${abnormalFlag}`);
-            if (result.is_abnormal && result.result_value) {
-              abnormalResultsLocal.push(`${result.test_name}: ${valueWithUnit}`);
-            }
-          });
+          const extraResults = labResultsData.filter((r: any) => !matchedLabResultIds.has(r.id));
+          if (extraResults.length > 0) {
+            console.log(`📋 Found ${extraResults.length} extra lab results not matched to visit_labs`);
+            extraResults.forEach((result: any) => {
+              const valueWithUnit = result.result_value
+                ? `${result.result_value}${result.result_unit ? ' ' + result.result_unit : ''}`
+                : 'N/A';
+              const refRange = result.reference_range ? ` (Ref: ${result.reference_range})` : '';
+              const abnormalFlag = result.is_abnormal ? ' ⚠ ABNORMAL' : ' ✓';
+              formattedLabResultsLocal.push(`• ${result.test_name || result.main_test_name}: ${valueWithUnit}${refRange}${abnormalFlag}`);
+              if (result.is_abnormal && result.result_value) {
+                abnormalResultsLocal.push(`${result.test_name}: ${valueWithUnit}`);
+              }
+            });
+          }
         }
       }
       // Fallback: process lab_results directly if no visit_labs
@@ -1653,6 +1680,9 @@ PLEASE CONTACT: 7030974619, 9373111709.
       console.error('Error in handleFetchData:', error);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
       alert(`❌ Failed to fetch OPD summary data.\n\nError: ${errorMessage}\n\nPlease check the console for detailed information.`);
+    } finally {
+      setIsFetchingData(false);
+      setFetchProgress('');
     }
   };
 
@@ -3684,11 +3714,24 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
             variant="outline"
             size="sm"
             onClick={handleFetchData}
-            className="flex items-center gap-2 bg-green-50 hover:bg-green-100 border-green-200 text-green-700"
+            disabled={isFetchingData}
+            className="flex items-center gap-2 bg-green-50 hover:bg-green-100 border-green-200 text-green-700 disabled:opacity-60"
           >
-            <Download className="h-4 w-4" />
-            Fetch Data
+            {isFetchingData ? (
+              <>
+                <span className="h-4 w-4 border-2 border-green-500 border-t-transparent rounded-full animate-spin" />
+                Fetching...
+              </>
+            ) : (
+              <>
+                <Download className="h-4 w-4" />
+                Fetch Data
+              </>
+            )}
           </Button>
+          {isFetchingData && fetchProgress && (
+            <span className="text-xs text-green-600 animate-pulse">{fetchProgress}</span>
+          )}
         </div>
 
         {/* Panel 2: Fetched Database Data - ALWAYS VISIBLE */}
