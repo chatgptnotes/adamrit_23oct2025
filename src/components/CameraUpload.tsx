@@ -1117,19 +1117,42 @@ Rules:
         description: `${opdExtracted.patientName || 'Patient'} consultation recorded successfully.`,
       });
 
+      // Format extracted OPD data as text for Panel 1
+      const opdNotesText = [
+        opdExtracted.patientName ? `Patient: ${opdExtracted.patientName}` : '',
+        opdExtracted.age ? `Age: ${opdExtracted.age}` : '',
+        opdExtracted.gender ? `Gender: ${opdExtracted.gender}` : '',
+        opdExtracted.doctorName ? `Doctor: ${opdExtracted.doctorName}` : '',
+        '',
+        opdExtracted.chiefComplaint ? `Chief Complaint: ${opdExtracted.chiefComplaint}` : '',
+        opdExtracted.diagnosis ? `Diagnosis: ${opdExtracted.diagnosis}` : '',
+        '',
+        (opdExtracted.vitals.bp || opdExtracted.vitals.pulse || opdExtracted.vitals.temperature || opdExtracted.vitals.weight || opdExtracted.vitals.spo2) ? 'Vitals:' : '',
+        opdExtracted.vitals.bp ? `  BP: ${opdExtracted.vitals.bp}` : '',
+        opdExtracted.vitals.pulse ? `  Pulse: ${opdExtracted.vitals.pulse}` : '',
+        opdExtracted.vitals.temperature ? `  Temperature: ${opdExtracted.vitals.temperature}` : '',
+        opdExtracted.vitals.weight ? `  Weight: ${opdExtracted.vitals.weight}` : '',
+        opdExtracted.vitals.spo2 ? `  SpO2: ${opdExtracted.vitals.spo2}` : '',
+        '',
+        opdExtracted.medicines.length > 0 ? `Medicines:\n${opdExtracted.medicines.map(m => `  - ${m}`).join('\n')}` : '',
+        '',
+        opdExtracted.advice ? `Advice: ${opdExtracted.advice}` : '',
+        opdExtracted.followUp ? `Follow-up: ${opdExtracted.followUp}` : '',
+      ].filter(line => line !== '').join('\n');
+
+      // Store in localStorage so DischargeSummaryEdit can pick it up in Panel 1
+      localStorage.setItem('opd_extracted_notes', opdNotesText);
+
       setShowOpdModal(false);
       setOpdExtracted(null);
 
-      // Navigate to patient profile
-      if (patientId) {
-        const navUrl = visitId
-          ? `/patient-profile?patient=${patientId}&visit=${visitId}`
-          : `/patient-profile?patient=${patientId}`;
-        if (navigate) {
-          // Close the dialog first
-          onOpenChange?.(false);
-          navigate(navUrl);
-        }
+      // Navigate to discharge summary edit page with the visit
+      if (visitId) {
+        onOpenChange?.(false);
+        navigate(`/discharge-summary-edit/${visitId}`);
+      } else if (patientId) {
+        onOpenChange?.(false);
+        navigate(`/patient-profile?patient=${patientId}`);
       }
     } catch (e) {
       console.error('Error saving OPD summary:', e);

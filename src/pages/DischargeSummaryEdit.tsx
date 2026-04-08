@@ -293,6 +293,15 @@ export default function DischargeSummaryEdit() {
   // Debounced auto-save
   const [debouncedText] = useDebounce(dischargeSummaryText, 1500);
 
+  // Load pending OPD extracted notes from CameraUpload (if navigated from OPD Summary)
+  useEffect(() => {
+    const pendingNotes = localStorage.getItem('opd_extracted_notes');
+    if (pendingNotes) {
+      setExtractedNotes(pendingNotes);
+      localStorage.removeItem('opd_extracted_notes');
+    }
+  }, []);
+
   // Fetch patient and visit data
   useEffect(() => {
     const fetchPatientData = async () => {
