@@ -3507,6 +3507,39 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
           )}
         </div>
 
+        {/* Hidden file input for upload */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*,application/pdf"
+          className="hidden"
+          onChange={handleFileUpload}
+        />
+
+        {/* Buttons above Panel 1: Scan OPD + Upload OPD */}
+        <div className="lg:col-span-2 flex items-center gap-2 mb-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={startCamera}
+            className="flex items-center gap-2 bg-purple-50 hover:bg-purple-100 border-purple-200 text-purple-700"
+            title="Take photo of handwritten OPD summary"
+          >
+            <Camera className="h-4 w-4" />
+            Scan OPD
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => fileInputRef.current?.click()}
+            className="flex items-center gap-2 bg-indigo-50 hover:bg-indigo-100 border-indigo-200 text-indigo-700"
+            title="Upload photo of handwritten OPD summary"
+          >
+            <Upload className="h-4 w-4" />
+            Upload OPD
+          </Button>
+        </div>
+
         {/* Panel 1: Extracted Handwritten Notes - ALWAYS VISIBLE */}
         <div className="lg:col-span-2">
           <Card className="border-purple-200 bg-purple-50/30 mb-4">
@@ -3542,6 +3575,19 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
               </p>
             </CardContent>
           </Card>
+        </div>
+
+        {/* Button above Panel 2: Fetch Data */}
+        <div className="lg:col-span-2 flex items-center gap-2 mb-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleFetchData}
+            className="flex items-center gap-2 bg-green-50 hover:bg-green-100 border-green-200 text-green-700"
+          >
+            <Download className="h-4 w-4" />
+            Fetch Data
+          </Button>
         </div>
 
         {/* Panel 2: Fetched Database Data - ALWAYS VISIBLE */}
@@ -3581,6 +3627,115 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
           </Card>
         </div>
 
+        {/* Buttons above Panel 3: Generate by AI, Preview, Print, Clear, Save */}
+        <div className="lg:col-span-2 flex items-center gap-2 flex-wrap mb-2">
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleAIGenerate}
+                    disabled={isGenerating || !patient || !dataFetched}
+                    className="flex items-center gap-2"
+                  >
+                    {isGenerating ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Sparkles className="h-4 w-4" />
+                    )}
+                    {isGenerating ? 'Generating...' : 'Generate by AI'}
+                  </Button>
+                </span>
+              </TooltipTrigger>
+              {!dataFetched && (
+                <TooltipContent className="bg-orange-600 text-white border-orange-700 font-semibold">
+                  <p>Click "Fetch Data" first</p>
+                </TooltipContent>
+              )}
+            </Tooltip>
+          </TooltipProvider>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={togglePreview}
+                    className="flex items-center gap-2"
+                    disabled={!canPrintAndPreview}
+                  >
+                    <Eye className="h-4 w-4" />
+                    {showPreview ? 'Edit' : 'Preview'}
+                  </Button>
+                </span>
+              </TooltipTrigger>
+              {!canPrintAndPreview && (
+                <TooltipContent className="bg-red-600 text-white border-red-700 font-semibold">
+                  <p className="flex items-center gap-2">
+                    <span className="text-lg">⚠️</span>
+                    Please complete final payment
+                  </p>
+                </TooltipContent>
+              )}
+            </Tooltip>
+          </TooltipProvider>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handlePrintWithCheck}
+                    className="flex items-center gap-2"
+                    disabled={!canPrintAndPreview}
+                  >
+                    <Printer className="h-4 w-4" />
+                    Print
+                  </Button>
+                </span>
+              </TooltipTrigger>
+              {!canPrintAndPreview && (
+                <TooltipContent className="bg-red-600 text-white border-red-700 font-semibold">
+                  <p className="flex items-center gap-2">
+                    <span className="text-lg">⚠️</span>
+                    Please complete final payment
+                  </p>
+                </TooltipContent>
+              )}
+            </Tooltip>
+          </TooltipProvider>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              if (window.confirm('Clear all content? This cannot be undone.')) {
+                setDischargeSummaryText('');
+                setExtractedNotes('');
+                setFetchedDataText('');
+                setDataFetched(false);
+                setShowPreview(false);
+              }
+            }}
+            className="flex items-center gap-2 text-red-600 hover:bg-red-50 border-red-200"
+            title="Clear all content to start fresh"
+          >
+            <Trash2 className="h-4 w-4" />
+            Clear
+          </Button>
+          <Button
+            onClick={handleSave}
+            disabled={isSaving}
+            className="flex items-center gap-2"
+          >
+            <Save className="h-4 w-4" />
+            Save
+          </Button>
+        </div>
+
         {/* Panel 3: AI Generated OPD Summary - ALWAYS VISIBLE */}
         <div className="lg:col-span-2">
           <Card className="border-blue-200 bg-blue-50/10">
@@ -3590,150 +3745,6 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
                   <Sparkles className="h-5 w-5" />
                   Panel 3: OPD Summary (AI Generated)
                 </CardTitle>
-                <div className="flex items-center gap-2 flex-wrap justify-end">
-                  {/* Hidden file input for upload */}
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/*,application/pdf"
-                    className="hidden"
-                    onChange={handleFileUpload}
-                  />
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={startCamera}
-                    className="flex items-center gap-2 bg-purple-50 hover:bg-purple-100 border-purple-200 text-purple-700"
-                    title="Take photo of handwritten OPD summary"
-                  >
-                    <Camera className="h-4 w-4" />
-                    Scan OPD
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => fileInputRef.current?.click()}
-                    className="flex items-center gap-2 bg-indigo-50 hover:bg-indigo-100 border-indigo-200 text-indigo-700"
-                    title="Upload photo of handwritten OPD summary"
-                  >
-                    <Upload className="h-4 w-4" />
-                    Upload OPD
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleFetchData}
-                    className="flex items-center gap-2 bg-green-50 hover:bg-green-100 border-green-200 text-green-700"
-                  >
-                    <Download className="h-4 w-4" />
-                    Fetch Data
-                  </Button>
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <span>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={handleAIGenerate}
-                            disabled={isGenerating || !patient || !dataFetched}
-                            className="flex items-center gap-2"
-                          >
-                            {isGenerating ? (
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                            ) : (
-                              <Sparkles className="h-4 w-4" />
-                            )}
-                            {isGenerating ? 'Generating...' : 'Generate by AI'}
-                          </Button>
-                        </span>
-                      </TooltipTrigger>
-                      {!dataFetched && (
-                        <TooltipContent className="bg-orange-600 text-white border-orange-700 font-semibold">
-                          <p>Click "Fetch Data" first</p>
-                        </TooltipContent>
-                      )}
-                    </Tooltip>
-                  </TooltipProvider>
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <span>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={togglePreview}
-                            className="flex items-center gap-2"
-                            disabled={!canPrintAndPreview}
-                          >
-                            <Eye className="h-4 w-4" />
-                            {showPreview ? 'Edit' : 'Preview'}
-                          </Button>
-                        </span>
-                      </TooltipTrigger>
-                      {!canPrintAndPreview && (
-                        <TooltipContent className="bg-red-600 text-white border-red-700 font-semibold">
-                          <p className="flex items-center gap-2">
-                            <span className="text-lg">⚠️</span>
-                            Please complete final payment
-                          </p>
-                        </TooltipContent>
-                      )}
-                    </Tooltip>
-                  </TooltipProvider>
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <span>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={handlePrintWithCheck}
-                            className="flex items-center gap-2"
-                            disabled={!canPrintAndPreview}
-                          >
-                            <Printer className="h-4 w-4" />
-                            Print
-                          </Button>
-                        </span>
-                      </TooltipTrigger>
-                      {!canPrintAndPreview && (
-                        <TooltipContent className="bg-red-600 text-white border-red-700 font-semibold">
-                          <p className="flex items-center gap-2">
-                            <span className="text-lg">⚠️</span>
-                            Please complete final payment
-                          </p>
-                        </TooltipContent>
-                      )}
-                    </Tooltip>
-                  </TooltipProvider>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      if (window.confirm('Clear all content? This cannot be undone.')) {
-                        setDischargeSummaryText('');
-                        setExtractedNotes('');
-                        setFetchedDataText('');
-                        setDataFetched(false);
-                        setShowPreview(false);
-                      }
-                    }}
-                    className="flex items-center gap-2 text-red-600 hover:bg-red-50 border-red-200"
-                    title="Clear all content to start fresh"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                    Clear
-                  </Button>
-                  <Button
-                    onClick={handleSave}
-                    disabled={isSaving}
-                    className="flex items-center gap-2"
-                  >
-                    <Save className="h-4 w-4" />
-                    Save
-                  </Button>
-                </div>
               </div>
             </CardHeader>
             <CardContent>
