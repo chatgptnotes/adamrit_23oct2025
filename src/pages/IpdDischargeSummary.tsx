@@ -4233,7 +4233,7 @@ DD/MM/YYYY:-Test Category: Test1:Value1 unit, Test2:Value2 unit`);
 
                     const prompt = `You are a medical specialist. Write a comprehensive, detailed surgical summary for each procedure listed below:
 ${allProcedures}
-
+${sharedSurgeryDescription ? `\nADDITIONAL SURGERY DESCRIPTION FROM DOCTOR:\n${sharedSurgeryDescription}\n\nIMPORTANT: The above doctor-provided description contains the ACTUAL procedure details as observed during surgery. Use this as the PRIMARY source for writing the operative note. Incorporate these specific findings, techniques, and observations into the generated summary.\n` : ''}
 For EACH surgery, write a separate detailed paragraph (3-5 sentences) including:
 1. Full procedure name and indication/reason for surgery
 2. Surgical approach and technique used

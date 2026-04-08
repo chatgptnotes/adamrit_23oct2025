@@ -5221,13 +5221,10 @@ Generated on: ${new Date().toLocaleDateString('en-IN')}`);
       return;
     }
 
-    // Check if OpenAI API key is available
-    const openaiApiKey = import.meta.env.VITE_OPENAI_API_KEY;
-    console.log('OpenAI API Key status:', openaiApiKey ? 'Found' : 'Not found');
-    console.log('API Key preview:', openaiApiKey ? `${openaiApiKey.substring(0, 7)}...` : 'None');
-
-    if (!openaiApiKey) {
-      toast.error('OpenAI API key not configured. Please add VITE_OPENAI_API_KEY to your environment variables.');
+    // Check if Gemini API key is available
+    const geminiApiKey = import.meta.env.VITE_GEMINI_API_KEY;
+    if (!geminiApiKey) {
+      toast.error('Gemini API key not configured. Please add VITE_GEMINI_API_KEY to your environment variables.');
       return;
     }
 
@@ -5316,7 +5313,7 @@ ${surgeryInfo}
 
 ALL SURGERIES PERFORMED:
 ${allSurgeriesInfo}
-
+${sharedDescription ? `\nADDITIONAL SURGERY DESCRIPTION FROM DOCTOR:\n${sharedDescription}\n\nIMPORTANT: The above doctor-provided description contains the ACTUAL procedure details as observed during surgery. Use this as the PRIMARY source for writing the operative note. Incorporate these specific findings, techniques, and observations into the generated summary.\n` : ''}
 Generate a comprehensive COMBINED surgical note that covers ALL surgeries listed above. Include:
 - Pre-operative findings
 - Surgical technique and steps for each procedure
@@ -5329,58 +5326,58 @@ Make it detailed and professional as if written by an experienced surgeon.`;
 
       console.log('Generating combined AI notes for all surgeries...');
 
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      const systemPrompt = 'You are an experienced surgeon writing detailed operative notes. Generate comprehensive, professional surgical documentation with specific details about implants, quantities, and surgical techniques. When multiple surgeries are performed, include details for all procedures in a single combined note.';
+
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiApiKey}`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${import.meta.env.VITE_OPENAI_API_KEY}`
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          model: 'gpt-3.5-turbo',
-          messages: [
-            {
-              role: 'system',
-              content: 'You are an experienced surgeon writing detailed operative notes. Generate comprehensive, professional surgical documentation with specific details about implants, quantities, and surgical techniques. When multiple surgeries are performed, include details for all procedures in a single combined note.'
-            },
-            {
-              role: 'user',
-              content: surgeryPrompt
-            }
-          ],
-          max_tokens: 2000,
-          temperature: 0.7
+          contents: [{
+            parts: [{
+              text: systemPrompt + '\n\n' + surgeryPrompt
+            }]
+          }],
+          generationConfig: {
+            temperature: 0.7,
+            maxOutputTokens: 2000
+          }
         })
       });
 
       if (!response.ok) {
-        const errorText = await response.text();
-        console.error('OpenAI API Response Error:', response.status, errorText);
-        throw new Error(`OpenAI API error: ${response.status} - ${errorText}`);
+        const errorData = await response.json();
+        console.error('Gemini API Response Error:', response.status, errorData);
+        throw new Error(`Gemini API error: ${errorData.error?.message || response.statusText}`);
       }
 
       const data = await response.json();
-      console.log('OpenAI API Response:', data);
+      console.log('Gemini API Response:', data);
 
-      if (!data.choices || !data.choices[0] || !data.choices[0].message) {
-        throw new Error('Invalid response format from OpenAI API');
+      const generatedText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!generatedText) {
+        throw new Error('No response from Gemini API');
       }
 
       // Set the single shared description
-      setSharedDescription(data.choices[0].message.content);
+      setSharedDescription(generatedText);
       toast.success('AI surgery notes generated successfully!');
 
     } catch (error) {
       console.error('Error generating surgery notes:', error);
 
       // More detailed error handling
-      if (error.message?.includes('401')) {
-        toast.error('OpenAI API key is invalid or expired. Please check your API key.');
-      } else if (error.message?.includes('429')) {
-        toast.error('OpenAI API rate limit exceeded. Please try again later.');
-      } else if (error.message?.includes('Network')) {
+      const errMsg = error instanceof Error ? error.message : String(error);
+      console.error('Surgery notes generation error details:', errMsg);
+      if (errMsg.includes('401') || errMsg.includes('API_KEY')) {
+        toast.error('Gemini API key is invalid or expired. Please check your API key.');
+      } else if (errMsg.includes('429')) {
+        toast.error('API rate limit exceeded. Please try again later.');
+      } else if (errMsg.includes('Network') || errMsg.includes('fetch')) {
         toast.error('Network error. Please check your internet connection.');
       } else {
-        toast.error('Failed to generate surgery notes. Please try again.');
+        toast.error(`Failed to generate surgery notes: ${errMsg.substring(0, 100)}`);
       }
 
       // Fallback combined surgery notes
@@ -13746,7 +13743,7 @@ Format the response as JSON:
       // works correctly for both patient types.
       const { data: existingSurgeries, error: checkError } = await supabase
         .from('visit_surgeries' as any)
-        .select('surgery_id, yojana_procedure_id')
+        .select('*')
         .eq('visit_id', visitData.id);
 
       if (checkError) {

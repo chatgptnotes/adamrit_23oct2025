@@ -4175,10 +4175,18 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
                 <Textarea
                   id="prompt"
                   value={editablePrompt}
-                  onChange={(e) => setEditablePrompt(e.target.value)}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val.includes(':summary:')) {
+                      const summaryPrompt = `Act like a medical specialist. Make a professionally written OPD summary. Make up facts. Add findings which are not provided to you. Come up with creative complaints, events during visit to hospital and relevant examination findings. Add medications to be taken at home in Indian BRANDS. The entire summary should be a minimum of 800 words. Do not mention the name, sex or age of the patient. The person who is going to read what you share will be a doctor. Start the summary with the Diagnosis, followed by medication. These should be at the beginning of the summary and in table form with columns for Name, Strength, Route, Dosage, and Number of Days to be taken. Another line in Hindi should be added in the column of dosage in addition to English. This patient does not have comorbidities other than what is mentioned.`;
+                      setEditablePrompt(val.replace(':summary:', '\n\n' + summaryPrompt + '\n\n'));
+                    } else {
+                      setEditablePrompt(val);
+                    }
+                  }}
                   rows={12}
                   className="text-sm"
-                  placeholder="Edit the Gemini prompt for OPD summary generation..."
+                  placeholder="Edit the Gemini prompt for OPD summary generation... (Type :summary: to insert the specialist prompt)"
                 />
               </div>
               <p className="text-xs text-gray-500">
