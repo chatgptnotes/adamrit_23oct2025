@@ -374,7 +374,10 @@ const DispenseModal: React.FC<DispenseModalProps> = ({ prescription, onClose, ho
               return (
                 <TableRow key={item.id}>
                   <TableCell>
-                    <p className="font-medium text-sm">{item.medicine_name}</p>
+                    <p className="font-bold text-sm">{(item as any).generic_name || item.medicine_name}</p>
+                    {(item as any).brand_name && (
+                      <p className="text-[10px] text-gray-500">({(item as any).brand_name})</p>
+                    )}
                     {item.dosage_frequency && (
                       <p className="text-xs text-muted-foreground">{item.dosage_frequency}</p>
                     )}

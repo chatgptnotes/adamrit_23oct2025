@@ -1390,23 +1390,15 @@ export default function DischargeSummaryEdit() {
         console.log('ℹ️ No medications prescribed for this visit');
       }
 
-      medicationsTable = `Medications Prescribed:
---------------------------------------------------------------------------------
-Name                     Strength    Route     Dosage                          Days
---------------------------------------------------------------------------------
+      medicationsTable = `**MEDICATIONS (TREATMENT ON DISCHARGE):**
+
+| Medication Name | Strength | Route | Dosage | Duration |
+|-----------------|----------|-------|--------|----------|
 `;
       medicationsToUse.forEach(med => {
         // Parse medication string into structured format
         const parsed = parseMedication(med);
-
-        // Format as table row with proper column alignment
-        const name = parsed.name.padEnd(24);
-        const strength = parsed.strength.padEnd(11);
-        const route = parsed.route.padEnd(9);
-        const dosage = parsed.dosage.padEnd(31);
-        const days = parsed.days;
-
-        medicationsTable += `${name} ${strength} ${route} ${dosage} ${days}
+        medicationsTable += `| ${parsed.name} | ${parsed.strength || '-'} | ${parsed.route || 'PO'} | ${parsed.dosage || '-'} | ${parsed.days || '-'} |
 `;
       });
 
@@ -2167,7 +2159,9 @@ Then include these sections (only include sections where data is available):
 3. Vital Signs (ONLY if recorded — do NOT invent default values)
 4. Investigations (Lab + Radiology with actual values)
 5. Surgical Details (only if OT data exists)
-6. Medications Prescribed (use actual medications — if none available, refer to prescription slip)
+6. Medications Prescribed — MUST be in a markdown table format:
+   | Medication Name | Strength | Route | Dosage | Duration |
+   Use actual medications from the data. If none available, state "As per prescription. Please refer to dispensed prescription slip."
 7. Case Summary (2-3 sentences summarizing the visit based on actual data)
 8. Condition at Visit (based on actual clinical data)
 9. Advice (specific to the diagnosis — not generic boilerplate)
@@ -2827,13 +2821,8 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
             return;
           }
           // If we were in a markdown table and hit a non-table line, flush the table
-          if (inTable && tableHeaders.length > 0 && !line.trim().startsWith('|') &&
-              !line.includes('Name') && !line.includes('Test Name')) {
-            // Only flush if we actually used the markdown table path (headers look like cells, not standard)
-            // Detect markdown table: headers were parsed as cells (not the fixed known headers)
-            const isMarkdownTable = !tableHeaders.includes('Name') ||
-              (tableHeaders.includes('Name') && !tableHeaders.includes('Strength'));
-            if (isMarkdownTable && tableRows.length > 0) {
+          if (inTable && tableHeaders.length > 0 && !line.trim().startsWith('|')) {
+            if (tableRows.length > 0) {
               // Reconstruct rows for createTableHTML: convert tab-separated back to array
               const parsedRows = tableRows.map(r => r.split('\t'));
               let tableHTML = '<table style="width: 100%; border-collapse: collapse; margin: 15px 0;">';
@@ -2851,10 +2840,11 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
               });
               tableHTML += '</tbody></table>';
               htmlContent.push(tableHTML);
-              inTable = false;
-              tableRows = [];
-              tableHeaders = [];
             }
+            inTable = false;
+            tableRows = [];
+            tableHeaders = [];
+            // Don't return — continue processing this line normally
           }
 
           // Detect table headers (lines with multiple columns separated by spaces)
@@ -2950,9 +2940,29 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
           processNormalLine(line, htmlContent, skipRef);
         });
 
-        // Close any remaining table
+        // Close any remaining table (could be markdown pipe-table or old format)
         if (inTable && tableRows.length > 0) {
-          htmlContent.push(createTableHTML(tableHeaders, tableRows));
+          // Check if rows are tab-separated (from markdown table parsing)
+          if (tableRows[0] && tableRows[0].includes('\t')) {
+            const parsedRows = tableRows.map(r => r.split('\t'));
+            let tableHTML = '<table style="width: 100%; border-collapse: collapse; margin: 15px 0;">';
+            tableHTML += '<thead><tr>';
+            tableHeaders.forEach(h => {
+              tableHTML += `<th style="border: 1px solid #000; padding: 8px; background-color: #f0f0f0; font-weight: bold;">${h}</th>`;
+            });
+            tableHTML += '</tr></thead><tbody>';
+            parsedRows.forEach(rowCells => {
+              tableHTML += '<tr>';
+              rowCells.forEach(cell => {
+                tableHTML += `<td style="border: 1px solid #000; padding: 8px;">${cell || '&nbsp;'}</td>`;
+              });
+              tableHTML += '</tr>';
+            });
+            tableHTML += '</tbody></table>';
+            htmlContent.push(tableHTML);
+          } else {
+            htmlContent.push(createTableHTML(tableHeaders, tableRows));
+          }
         }
 
         // If we ended with medications section still open, output the table
@@ -3990,27 +4000,37 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
                       lineHeight: '1.6'
                     }}
                     dangerouslySetInnerHTML={{
-                      __html: dischargeSummaryText
-                        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-                        .replace(/\*(.*?)\*/g, '<em>$1</em>')
-                        .replace(/\n\n/g, '</p><p class="mb-4">')
-                        .replace(/\n/g, '<br>')
-                        .replace(/^\s*/, '<p class="mb-4">')
-                        .replace(/\s*$/, '</p>')
-                        .replace(/\|(.+)\|/g, (match) => {
-                          const rows = match.split('\n').filter(row => row.trim());
-                          if (rows.length < 2) return match;
-
-                          let tableHtml = '<table class="w-full border-collapse border border-gray-300 my-4"><tbody>';
-                          rows.forEach((row, index) => {
-                            const cells = row.split('|').filter(cell => cell.trim()).map(cell => cell.trim());
-                            const tag = index === 0 ? 'th' : 'td';
-                            const className = index === 0 ? 'class="bg-gray-100 font-semibold p-2 border border-gray-300 text-left"' : 'class="p-2 border border-gray-300"';
-                            tableHtml += `<tr>${cells.map(cell => `<${tag} ${className}>${cell}</${tag}>`).join('')}</tr>`;
+                      __html: (() => {
+                        let text = dischargeSummaryText;
+                        // Convert markdown tables to HTML BEFORE line break replacements
+                        text = text.replace(/((?:\|[^\n]+\|\n?)+)/g, (tableBlock) => {
+                          const rows = tableBlock.trim().split('\n').filter(r => r.trim());
+                          if (rows.length < 2) return tableBlock;
+                          // Filter out separator rows (|---|---|)
+                          const dataRows = rows.filter(r => r.replace(/[\s|:\-]/g, '').length > 0);
+                          if (dataRows.length < 1) return tableBlock;
+                          let html = '<table style="width:100%;border-collapse:collapse;margin:12px 0;font-size:13px;"><tbody>';
+                          dataRows.forEach((row, idx) => {
+                            const cells = row.split('|').filter(c => c.trim()).map(c => c.trim());
+                            if (idx === 0) {
+                              html += '<tr>' + cells.map(c => `<th style="border:1px solid #999;padding:6px 8px;background:#f0f0f0;font-weight:bold;text-align:left;font-size:12px;">${c}</th>`).join('') + '</tr>';
+                            } else {
+                              html += '<tr>' + cells.map(c => `<td style="border:1px solid #ccc;padding:5px 8px;font-size:12px;">${c}</td>`).join('') + '</tr>';
+                            }
                           });
-                          tableHtml += '</tbody></table>';
-                          return tableHtml;
-                        })
+                          html += '</tbody></table>';
+                          return html;
+                        });
+                        // Then do standard markdown conversions
+                        text = text
+                          .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                          .replace(/\*(.*?)\*/g, '<em>$1</em>')
+                          .replace(/\n\n/g, '</p><p class="mb-4">')
+                          .replace(/\n/g, '<br>')
+                          .replace(/^\s*/, '<p class="mb-4">')
+                          .replace(/\s*$/, '</p>');
+                        return text;
+                      })()
                     }}
                   />
                 </div>
@@ -4285,7 +4305,13 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
                   onChange={(e) => {
                     const val = e.target.value;
                     if (val.includes(':summary:')) {
-                      const summaryPrompt = `Act like a medical specialist. Make a professionally written OPD summary. Make up facts. Add findings which are not provided to you. Come up with creative complaints, events during visit to hospital and relevant examination findings. Add medications to be taken at home in Indian BRANDS. The entire summary should be a minimum of 800 words. Do not mention the name, sex or age of the patient. The person who is going to read what you share will be a doctor. Start the summary with the Diagnosis, followed by medication. These should be at the beginning of the summary and in table form with columns for Name, Strength, Route, Dosage, and Number of Days to be taken. Another line in Hindi should be added in the column of dosage in addition to English. This patient does not have comorbidities other than what is mentioned.`;
+                      const summaryPrompt = `Act like a medical specialist. Make a professionally written OPD summary. Make up facts. Add findings which are not provided to you. Come up with creative complaints, events during visit to hospital and relevant examination findings. Add medications to be taken at home in Indian BRANDS. The entire summary should be a minimum of 800 words. Do not mention the name, sex or age of the patient. The person who is going to read what you share will be a doctor. Start the summary with the Diagnosis, followed by medication. Medications MUST be in a markdown table like this:
+
+| Medication Name | Strength | Route | Dosage | Duration |
+|-----------------|----------|-------|--------|----------|
+| Tab Pan | 40 mg | PO | BD | 15 days |
+
+Another line in Hindi should be added in the column of dosage in addition to English (e.g. "BD (दिन में दो बार)"). This patient does not have comorbidities other than what is mentioned.`;
                       setEditablePrompt(val.replace(':summary:', '\n\n' + summaryPrompt + '\n\n'));
                     } else {
                       setEditablePrompt(val);

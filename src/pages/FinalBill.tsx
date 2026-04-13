@@ -2646,7 +2646,7 @@ const FinalBill = () => {
   const [prescriptionsForPatient, setPrescriptionsForPatient] = useState<any[]>([]);
   const [prescriptionsLoaded, setPrescriptionsLoaded] = useState(false);
   const [addMedicineToRxId, setAddMedicineToRxId] = useState<string | null>(null);
-  const [newMedicine, setNewMedicine] = useState({ name: '', route: 'IV', frequency: 'BD', duration: '', qty: 3, instructions: '' });
+  const [newMedicine, setNewMedicine] = useState({ name: '', generic_name: '', brand_name: '', route: 'IV', frequency: 'BD', duration: '', qty: 3, instructions: '' });
 
   // State initialization flags to prevent duplicate fetches
   const [clinicalServicesInitialized, setClinicalServicesInitialized] = useState(false);
@@ -5301,87 +5301,30 @@ Surgery ${index + 1}:
 - Implant: ${surgery.implant || 'N/A'}
 - Date: ${surgery.date || new Date().toISOString()}`).join('\n');
 
-      const surgeryPrompt = `Generate a professional, print-ready OPERATIVE NOTE based on the data below. Make up specific clinical details (wound sizes, locations, findings, technique steps) that are realistic and consistent with the procedure. The output must read as if written by the operating surgeon immediately after the procedure.
+      const surgeryPrompt = `OT Notes: Act like a surgeon. Make a detailed combined surgery/OT note for ALL the following surgeries. Include the implants used and the quantities. Come up with creative detailed surgery notes based on the following information:
 
-=== PATIENT DATA ===
+PATIENT INFORMATION:
 Patient Name: ${visitData.patients?.name || '[Patient Name]'}
 Age: ${visitData.patients?.age || '[Age]'}
 Gender: ${visitData.patients?.gender || '[Gender]'}
-Date of Surgery: ${otNotesDataList[0]?.date || new Date().toLocaleDateString('en-IN')}
 
-=== SURGERY DETAILS FROM RECORDS ===
+SURGERY DETAILS FROM PATIENT RECORDS:
 ${surgeryInfo}
 
-=== ALL SURGERIES PERFORMED ===
+ALL SURGERIES PERFORMED:
 ${allSurgeriesInfo}
-${sharedDescription ? `\n=== DOCTOR'S DESCRIPTION (PRIMARY SOURCE — use these details as-is) ===\n${sharedDescription}\n` : ''}
-=== OUTPUT FORMAT ===
-Generate the operative note in EXACTLY this structure with proper headings:
 
-## Operative Note
+Generate a comprehensive COMBINED surgical note that covers ALL surgeries listed above. Include:
+- Pre-operative findings
+- Surgical technique and steps for each procedure
+- Implants used (with specific quantities and sizes)
+- Post-operative condition
+- Complications (if any)
+- Instructions for post-operative care
 
-**Patient Name:** [from data]
-**Age/Gender:** [from data]
-**Date of Surgery:** [from data]
-**Surgeon:** [from data]
-**Anaesthetist:** [from data]
-**Anaesthesia:** [from data]
-**Procedure(s):** [from data with code]
-
-**Pre-operative Diagnosis:** [Specific diagnosis warranting the procedure]
-
-**Post-operative Diagnosis:** [Same or updated based on intra-op findings]
-
-**Indications for Surgery:** [2-3 sentences explaining why surgery was needed for this patient]
-
-**Pre-operative Findings:** [Detailed description of wound/pathology — sizes in cm, location, tissue condition, foreign material if any. Use bullet points for multiple sites.]
-
-**Surgical Procedure(s) Performed:**
-[For each procedure, write detailed numbered steps including:
-- Patient positioning and preparation (antiseptic used, draping)
-- Time-out confirmation
-- Step-by-step surgical technique with instrument names (scalpel size, scissors type, cautery settings)
-- Irrigation volumes and solutions used
-- Hemostasis method
-- Wound closure or dressing details (specific dressing materials and layers)]
-
-**Implants Used:** [List with quantities and sizes, or "N/A"]
-
-**Estimated Blood Loss:** [Specific amount in mL]
-
-**Specimens Sent:** [Pathology/culture details or "None"]
-
-**Complications:** [Specific or "None. Procedure performed without incident."]
-
-**Post-operative Condition:** [Patient's status — alert/oriented, vitals stable, motor/sensory function]
-
-**Post-operative Instructions:**
-[Numbered list including:
-1. Wound care instructions with dressing change frequency
-2. Medications prescribed (use Indian brand names — e.g., Dolo 650, Augmentin, Chymoral Forte)
-3. Activity restrictions with duration
-4. Follow-up appointment timing
-5. Diet instructions
-6. Warning signs to watch for
-7. Emergency contact instructions]
-
-**Prognosis:** [1-2 sentences]
-
-**[Surgeon Name]**
-**Surgeon**
-
-=== RULES ===
-1. Output must be minimum 800 words, detailed and specific.
-2. Use proper medical terminology throughout.
-3. Include specific measurements (cm), volumes (mL), instrument names, and cautery settings.
-4. Medications in Post-operative Instructions must use INDIAN BRAND names (e.g., Dolo, Augmentin, Chymoral Forte, Dynapar, Monocef, Emeset).
-5. If doctor's description is provided above, incorporate those exact details as the primary source.
-6. Do NOT use placeholder text like "[insert here]" — fill in realistic details.
-7. Output plain text with markdown headings (**bold** and ##). No code blocks.`;
+Make it detailed and professional as if written by an experienced surgeon.`;
 
       console.log('Generating combined AI notes for all surgeries...');
-
-      const systemPrompt = 'You are an experienced surgeon at an Indian hospital writing formal operative notes. Generate print-ready, comprehensive surgical documentation following standard Indian hospital operative note format. Include specific clinical details — measurements, instrument names, cautery settings, irrigation volumes, dressing materials. Use Indian pharmaceutical brand names for medications. The note must be professional, detailed (minimum 800 words), and ready to be printed and filed in the patient record.';
 
       const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiApiKey}`, {
         method: 'POST',
@@ -5391,12 +5334,12 @@ Generate the operative note in EXACTLY this structure with proper headings:
         body: JSON.stringify({
           contents: [{
             parts: [{
-              text: systemPrompt + '\n\n' + surgeryPrompt
+              text: 'You are an experienced surgeon writing detailed operative notes. Generate comprehensive, professional surgical documentation with specific details about implants, quantities, and surgical techniques. When multiple surgeries are performed, include details for all procedures in a single combined note.\n\n' + surgeryPrompt
             }]
           }],
           generationConfig: {
             temperature: 0.7,
-            maxOutputTokens: 4000
+            maxOutputTokens: 2000
           }
         })
       });
@@ -20705,10 +20648,15 @@ Dr. Murali B K
                                           {(prescription.prescription_items || []).map((item: any, idx: number) => (
                                             <tr key={item.id} className="border-t border-gray-50 hover:bg-blue-50/30">
                                               <td className="px-3 py-1.5 text-gray-400">{idx + 1}</td>
-                                              <td className="px-3 py-1.5 font-medium text-gray-800">
-                                                {(item.medicine_name || `Medicine #${item.medicine_id || '?'}`).toUpperCase()}
+                                              <td className="px-3 py-1.5 text-gray-800">
+                                                <div className="font-bold text-xs">
+                                                  {(item.generic_name || item.medicine_name || `Medicine #${item.medicine_id || '?'}`).toUpperCase()}
+                                                </div>
+                                                {item.brand_name && (
+                                                  <div className="text-[10px] text-gray-500">({item.brand_name})</div>
+                                                )}
                                                 {item.special_instructions && (
-                                                  <span className="ml-1 text-blue-500 font-normal italic">{item.special_instructions}</span>
+                                                  <span className="text-[10px] text-blue-500 italic">{item.special_instructions}</span>
                                                 )}
                                               </td>
                                               <td className="px-3 py-1.5 text-gray-600">{item.dosage_timing || '-'}</td>
@@ -20736,11 +20684,18 @@ Dr. Murali B K
                                               <td className="px-2 py-1">
                                                 <input
                                                   type="text"
-                                                  placeholder="Medicine name..."
-                                                  value={newMedicine.name}
-                                                  onChange={(e) => setNewMedicine(prev => ({ ...prev, name: e.target.value }))}
-                                                  className="w-full h-6 text-xs border border-blue-300 rounded px-1.5 bg-white"
+                                                  placeholder="Molecule name (e.g. AMOXICILLIN)..."
+                                                  value={newMedicine.generic_name}
+                                                  onChange={(e) => setNewMedicine(prev => ({ ...prev, generic_name: e.target.value, name: e.target.value }))}
+                                                  className="w-full h-6 text-xs border border-blue-300 rounded px-1.5 bg-white font-bold"
                                                   autoFocus
+                                                />
+                                                <input
+                                                  type="text"
+                                                  placeholder="Brand name (e.g. Augmentin)..."
+                                                  value={newMedicine.brand_name}
+                                                  onChange={(e) => setNewMedicine(prev => ({ ...prev, brand_name: e.target.value }))}
+                                                  className="w-full h-5 text-[10px] border border-blue-200 rounded px-1.5 bg-white mt-0.5 text-gray-500"
                                                 />
                                               </td>
                                               <td className="px-2 py-1">
@@ -20802,6 +20757,8 @@ Dr. Murali B K
                                                         prescription_id: prescription.id,
                                                         medicine_id: null,
                                                         medicine_name: newMedicine.name.trim(),
+                                                        generic_name: newMedicine.generic_name.trim().toUpperCase() || newMedicine.name.trim().toUpperCase(),
+                                                        brand_name: newMedicine.brand_name.trim(),
                                                         quantity_prescribed: newMedicine.qty,
                                                         dosage_frequency: newMedicine.frequency,
                                                         dosage_timing: newMedicine.route,
@@ -20812,7 +20769,7 @@ Dr. Murali B K
                                                       toast.error('Failed to add medicine: ' + error.message);
                                                     } else {
                                                       toast.success(`Added ${newMedicine.name}`);
-                                                      setNewMedicine({ name: '', route: 'IV', frequency: 'BD', duration: '', qty: 3, instructions: '' });
+                                                      setNewMedicine({ name: '', generic_name: '', brand_name: '', route: 'IV', frequency: 'BD', duration: '', qty: 3, instructions: '' });
                                                       fetchPatientPrescriptions();
                                                     }
                                                   }}
@@ -20822,7 +20779,7 @@ Dr. Murali B K
                                                 <button
                                                   onClick={() => {
                                                     setAddMedicineToRxId(null);
-                                                    setNewMedicine({ name: '', route: 'IV', frequency: 'BD', duration: '', qty: 3, instructions: '' });
+                                                    setNewMedicine({ name: '', generic_name: '', brand_name: '', route: 'IV', frequency: 'BD', duration: '', qty: 3, instructions: '' });
                                                   }}
                                                   className="text-gray-400 hover:text-gray-600 text-sm"
                                                   title="Cancel"

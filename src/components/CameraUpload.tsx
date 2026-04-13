@@ -193,7 +193,7 @@ const CameraUpload: React.FC<CameraUploadProps> = ({
   const [showPrescriptionModal, setShowPrescriptionModal] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
   const [savingPrescription, setSavingPrescription] = useState(false);
-  const [reviewMedicines, setReviewMedicines] = useState<{name: string; strength: string; route: string; frequency: string; duration: string; instructions: string; qty: number; checked: boolean}[]>([]);
+  const [reviewMedicines, setReviewMedicines] = useState<{name: string; generic_name: string; brand_name: string; strength: string; route: string; frequency: string; duration: string; instructions: string; qty: number; checked: boolean}[]>([]);
   const [prescriptionDoctor, setPrescriptionDoctor] = useState('');
   const [prescriptionStep, setPrescriptionStep] = useState<'review' | 'saved' | 'done'>('review');
   const [savedPrintHtml, setSavedPrintHtml] = useState<string>('');
@@ -666,6 +666,8 @@ Extract patient name if mentioned. Extract any ID/UHID if mentioned. Put the doc
           const parsed = JSON.parse(jsonMatch[1]);
           setReviewMedicines(parsed.map((m: any) => ({
             name: m.name || '',
+            generic_name: (m.generic_name || '').toUpperCase(),
+            brand_name: m.brand_name || '',
             strength: m.strength || '',
             route: m.route || 'Oral',
             frequency: m.frequency || 'OD',
@@ -836,7 +838,7 @@ Medicines:
 ALSO return a JSON block at the end in this format (after the text):
 ===JSON===
 [
-  {"name": "Medicine Name", "strength": "500mg", "route": "Oral", "frequency": "BD", "duration": "5 days", "instructions": "after food"},
+  {"name": "Medicine Name", "generic_name": "PARACETAMOL", "brand_name": "Dolo 650", "strength": "500mg", "route": "Oral", "frequency": "BD", "duration": "5 days", "instructions": "after food"},
   ...
 ]
 ===END_JSON===
@@ -847,7 +849,8 @@ Rules:
 - Frequency codes: OD=once daily, BD=twice daily, TDS=thrice daily, QID=4 times, SOS=as needed, HS=bedtime, STAT=immediately
 - Route: Oral, IV, IM, SC, Topical, Inhaler, Nebulization, etc.
 - If any field is unclear, write "as directed"
-- The JSON block must be valid JSON`;
+- The JSON block must be valid JSON
+- IMPORTANT: For each medicine, identify the generic/molecule name (e.g. PARACETAMOL, AMOXICILLIN+CLAVULANATE) and the brand name (e.g. Dolo 650, Augmentin). Put molecule in "generic_name" in UPPERCASE and brand in "brand_name". For combination drugs, list all molecules separated by + (e.g. "AMOXICILLIN+CLAVULANATE"). If only brand is visible, still try to identify the generic molecule. If only generic is visible, leave brand_name empty.
 
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiApiKey}`,
@@ -1940,6 +1943,8 @@ Rules:
             prescription_id: prescriptionId,
             medicine_id: null,
             medicine_name: m.name || 'Unknown',
+            generic_name: m.generic_name || '',
+            brand_name: m.brand_name || '',
             quantity_prescribed: m.qty,
             dosage_frequency: m.frequency,
             dosage_timing: m.route,
@@ -1964,17 +1969,21 @@ Rules:
       const doctorName = prescriptionDoctor || 'As per records';
       const printDate = new Date().toLocaleString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 
-      const medicineRows = checkedMedicines.map((m, idx) => `
+      const medicineRows = checkedMedicines.map((m, idx) => {
+        const genericDisplay = m.generic_name ? m.generic_name.toUpperCase() : m.name.toUpperCase();
+        const brandDisplay = m.brand_name ? `<div style="font-size:10px;color:#555;font-weight:normal;margin-top:1px;">(${m.brand_name})</div>` : '';
+        return `
         <tr>
           <td>${idx + 1}</td>
-          <td><strong>${m.name.toUpperCase()}</strong></td>
+          <td><strong style="font-size:13px;">${genericDisplay}</strong>${brandDisplay}</td>
           <td>${m.strength || '-'}</td>
           <td>${m.route || '-'}</td>
           <td>${m.frequency || '-'}</td>
           <td>${m.duration || '-'}</td>
           <td>${m.qty}</td>
         </tr>
-      `).join('');
+      `;
+      }).join('');
 
       const printHtml = `<!DOCTYPE html>
 <html>
@@ -2135,7 +2144,10 @@ Rules:
                             className="h-4 w-4 cursor-pointer"
                           />
                         </td>
-                        <td className="px-3 py-2 font-bold">{med.name}</td>
+                        <td className="px-3 py-2">
+                          <div className="font-bold text-sm">{med.generic_name || med.name.toUpperCase()}</div>
+                          {med.brand_name && <div className="text-xs text-gray-500">({med.brand_name})</div>}
+                        </td>
                         <td className="px-3 py-2 text-gray-600">{med.strength || '-'}</td>
                         <td className="px-3 py-2 text-gray-600">{med.route || '-'}</td>
                         <td className="px-3 py-2 text-gray-600">{med.frequency || '-'}</td>

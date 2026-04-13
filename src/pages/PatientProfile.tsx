@@ -21,15 +21,13 @@ const PatientProfile = () => {
       
       console.log('Fetching patient with ID:', patientId);
       
+      // Use select('*') to avoid FK join failures when diagnosis_id is null
       const { data, error } = await supabase
         .from('patients')
-        .select(`
-          *,
-          diagnoses(name)
-        `)
+        .select('*')
         .eq('id', patientId)
         .single();
-      
+
       if (error) {
         console.error('Error fetching patient:', error);
         throw error;
