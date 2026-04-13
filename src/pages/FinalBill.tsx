@@ -1713,6 +1713,8 @@ const FinalBill = () => {
   // Track if draft was loaded from localStorage (using ref for synchronous updates)
   const draftLoadedRef = useRef(false);
   const billDataLoadedRef = useRef(false);
+  const isAutoAddingRef = useRef(false);
+  const autoAddTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Draft: load from localStorage on mount/visit change
   useEffect(() => {
@@ -3346,6 +3348,8 @@ const FinalBill = () => {
   // Auto-add daily clinical services (Doctor Charges & Nursing Charges)
   const autoAddDailyServices = async () => {
     if (!visitData?.id || !visitData?.admission_date || !visitId) return;
+    if (isAutoAddingRef.current) return; // prevent concurrent runs
+    isAutoAddingRef.current = true;
 
     try {
       const admissionDate = new Date(visitData.admission_date);
@@ -3399,11 +3403,10 @@ const FinalBill = () => {
       );
 
       if (dailyServices.length === 0) {
-        console.log('⚠️ [AUTO-DAILY] No Doctor Charges or Nursing services found');
-        return;
+        console.log('⚠️ [AUTO-DAILY] No Doctor Charges or Nursing services found — skipping daily loop only');
       }
 
-      console.log('🔄 [AUTO-DAILY] Auto-adding daily services:', dailyServices.map(s => s.service_name), 'Days:', days);
+      if (dailyServices.length > 0) console.log('🔄 [AUTO-DAILY] Auto-adding daily services:', dailyServices.map(s => s.service_name), 'Days:', days);
 
       for (const service of dailyServices) {
         // Select correct rate based on patient type
@@ -3474,6 +3477,124 @@ const FinalBill = () => {
         }
       }
 
+      // Auto-add one-time charges (Emergency Charges, Consultation Charges, MLC Charges)
+      const oneTimeServices = allActiveServices.filter(s =>
+        s.service_name?.toLowerCase().includes('emergency charge') ||
+        s.service_name?.toLowerCase().includes('consultation charge') ||
+        s.service_name?.toLowerCase().includes('mlc processing')
+      );
+
+      if (oneTimeServices.length > 0) {
+        console.log('🔄 [AUTO-ONETIME] Auto-adding one-time charges:', oneTimeServices.map(s => s.service_name));
+
+        for (const service of oneTimeServices) {
+          let rate = 0;
+          if (usesPrivateRate) {
+            rate = service.private_rate || service.tpa_rate || 0;
+          } else if (rateType === 'tpa') {
+            rate = service.tpa_rate || service.private_rate || 0;
+          } else if (rateType === 'cghs') {
+            rate = service.nabh_rate || service.private_rate || 0;
+          } else if (rateType === 'non_cghs') {
+            rate = service.non_nabh_rate || service.private_rate || 0;
+          } else {
+            rate = service.private_rate || service.tpa_rate || 0;
+          }
+
+          const numericRate = typeof rate === 'string' ? parseFloat(rate) : rate;
+          if (!numericRate || numericRate <= 0) continue;
+
+          // Only insert if not already present — user may have manually adjusted
+          const { data: existingRows } = await supabase
+            .from('visit_clinical_services')
+            .select('id')
+            .eq('visit_id', visitData.id)
+            .eq('clinical_service_id', service.id)
+            .limit(1);
+
+          const alreadyExists = existingRows && existingRows.length > 0;
+          if (alreadyExists) continue;
+
+          const { error } = await supabase
+            .from('visit_clinical_services')
+            .insert({
+              visit_id: visitData.id,
+              clinical_service_id: service.id,
+              quantity: 1,
+              rate_used: numericRate,
+              rate_type: rateType,
+              amount: numericRate,
+              start_date: visitData.admission_date,
+              end_date: visitData.discharge_date || new Date().toISOString().split('T')[0],
+            });
+
+          if (error) {
+            console.error(`❌ [AUTO-ONETIME] Failed to insert ${service.service_name}:`, error);
+          } else {
+            console.log(`✅ [AUTO-ONETIME] Inserted ${service.service_name}: ₹${numericRate}`);
+          }
+        }
+      }
+
+      // Auto-add MLC from mandatory_services table
+      const { data: allMandatoryActive } = await supabase
+        .from('mandatory_services')
+        .select('*')
+        .eq('status', 'Active');
+
+      const mlcServices = (allMandatoryActive || []).filter(s =>
+        s.service_name?.toLowerCase().includes('medico legal') ||
+        (s.service_name?.toLowerCase().includes('mlc') &&
+         !s.service_name?.toLowerCase().includes('processing charges'))
+      );
+
+      if (mlcServices && mlcServices.length > 0) {
+        for (const mlcService of mlcServices) {
+          let mlcRate = 0;
+          if (usesPrivateRate) {
+            mlcRate = mlcService.private_rate || mlcService.tpa_rate || 0;
+          } else if (rateType === 'tpa') {
+            mlcRate = mlcService.tpa_rate || mlcService.private_rate || 0;
+          } else if (rateType === 'cghs') {
+            mlcRate = mlcService.cghs_rate || mlcService.private_rate || 0;
+          } else if (rateType === 'non_cghs') {
+            mlcRate = mlcService.non_cghs_rate || mlcService.private_rate || 0;
+          } else {
+            mlcRate = mlcService.private_rate || mlcService.tpa_rate || 0;
+          }
+
+          const numericMlcRate = typeof mlcRate === 'string' ? parseFloat(mlcRate) : mlcRate;
+          if (!numericMlcRate || numericMlcRate <= 0) continue;
+
+          const { data: existingMlc } = await supabase
+            .from('visit_mandatory_services')
+            .select('id')
+            .eq('visit_id', visitData.id)
+            .eq('mandatory_service_id', mlcService.id)
+            .limit(1);
+
+          if (existingMlc && existingMlc.length > 0) continue;
+
+          const { error: mlcError } = await supabase
+            .from('visit_mandatory_services')
+            .insert({
+              visit_id: visitData.id,
+              mandatory_service_id: mlcService.id,
+              quantity: 1,
+              rate_used: numericMlcRate,
+              rate_type: rateType,
+              amount: numericMlcRate,
+              selected_at: new Date().toISOString(),
+            });
+
+          if (mlcError) {
+            console.error(`❌ [AUTO-MLC] Failed to insert ${mlcService.service_name}:`, mlcError);
+          } else {
+            console.log(`✅ [AUTO-MLC] Inserted ${mlcService.service_name}: ₹${numericMlcRate}`);
+          }
+        }
+      }
+
       // Refresh saved clinical services data and financial summary
       await fetchSavedClinicalServicesData();
       if (autoPopulateFinancialData) {
@@ -3481,14 +3602,29 @@ const FinalBill = () => {
       }
     } catch (error) {
       console.error('❌ [AUTO-DAILY] Error auto-adding daily services:', error);
+    } finally {
+      isAutoAddingRef.current = false;
     }
   };
 
+  // Reset lock when visit changes so a new bill always runs auto-add fresh
+  useEffect(() => {
+    isAutoAddingRef.current = false;
+    if (autoAddTimerRef.current) clearTimeout(autoAddTimerRef.current);
+  }, [visitId]);
+
   // Trigger auto-add of daily services when visit data loads or discharge date changes
+  // Debounced to prevent duplicate inserts from rapid re-renders
   useEffect(() => {
     if (visitData?.id && visitData?.admission_date && patientInfo) {
-      autoAddDailyServices();
+      if (autoAddTimerRef.current) clearTimeout(autoAddTimerRef.current);
+      autoAddTimerRef.current = setTimeout(() => {
+        autoAddDailyServices();
+      }, 800);
     }
+    return () => {
+      if (autoAddTimerRef.current) clearTimeout(autoAddTimerRef.current);
+    };
   }, [visitData?.id, visitData?.admission_date, visitData?.discharge_date, patientInfo]);
 
   // Function to refresh saved data
