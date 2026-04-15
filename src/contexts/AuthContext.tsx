@@ -25,7 +25,7 @@ interface AuthContextType {
   login: (credentials: { email: string; password: string }) => Promise<boolean>;
   loginWithGoogle: () => Promise<void>;
   signup: (userData: { email: string; password: string; role: string; hospitalType: HospitalType }) => Promise<{ success: boolean; error?: string }>;
-  logout: () => void;
+  logout: () => Promise<void>;
   isAuthenticated: boolean;
   isAuthLoading: boolean;
   isSuperAdmin: boolean;
@@ -367,12 +367,18 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     }
   };
 
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
     setUser(null);
     localStorage.removeItem('hmis_user');
     setShowHospitalSelection(false);
     // Also sign out of Supabase Auth (for Google OAuth sessions)
-    supabase.auth.signOut().catch(() => {});
+    // Must be awaited — otherwise the session may still be active on next page load,
+    // causing the user to be silently re-authenticated via getSession() in the init effect.
+    try {
+      await supabase.auth.signOut();
+    } catch {
+      // Ignore signOut errors — local state is already cleared
+    }
   }, []);
 
   const switchHospital = useCallback((newHospitalType: HospitalType) => {
