@@ -3768,15 +3768,14 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
               </div>
             </CardHeader>
             <CardContent>
-              <div className="bg-white border border-purple-100 rounded-lg p-4 min-h-[80px] max-h-60 overflow-y-auto">
-                {extractedNotes ? (
-                  <pre className="whitespace-pre-wrap text-sm text-gray-800 font-sans leading-relaxed">{extractedNotes}</pre>
-                ) : (
-                  <p className="text-sm text-gray-400 italic">No handwritten notes extracted yet. Use "Scan OPD" or "Upload OPD" to capture handwritten doctor notes.</p>
-                )}
-              </div>
+              <textarea
+                className="w-full bg-white border border-purple-100 rounded-lg p-4 min-h-[80px] max-h-60 overflow-y-auto text-sm text-gray-800 font-sans leading-relaxed resize-y focus:outline-none focus:ring-2 focus:ring-purple-300"
+                placeholder='Type handwritten notes here, or use "Scan OPD" / "Upload OPD" to extract via OCR...'
+                value={extractedNotes}
+                onChange={(e) => setExtractedNotes(e.target.value)}
+              />
               <p className="text-xs text-purple-500 mt-2">
-                This text is extracted from the handwritten document via OCR. It will be included when generating the AI summary.
+                Type notes directly or extract from a handwritten document via OCR. This text will be included when generating the AI summary.
               </p>
             </CardContent>
           </Card>

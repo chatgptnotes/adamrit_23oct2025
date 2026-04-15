@@ -85,6 +85,7 @@ const AdvanceStatementReport = () => {
           reason_for_visit,
           package_days,
           package_amount,
+          ipd_admission_notes,
           patients!inner (
             id,
             name,
@@ -781,9 +782,16 @@ const AdvanceStatementReport = () => {
 
                 const directDiagnosis = item.diagnoses?.name;
                 const junctionDiagnoses = item.visit_diagnoses?.map(vd => vd.diagnoses?.name).filter(Boolean) || [];
+                const admissionNotesDiagnosis = (item.ipd_admission_notes as any)?.provisional_diagnosis;
+                const reasonForVisit = item.reason_for_visit;
                 const diagnoses = directDiagnosis ? [directDiagnosis, ...junctionDiagnoses] : junctionDiagnoses;
-                const diagnosisText = diagnoses.length > 0 ?
-                  diagnoses.map(diagnosis => `<div class="diagnosis-item">${diagnosis}</div>`).join('') :
+                const allDiagnoses = [
+                  ...diagnoses,
+                  ...(admissionNotesDiagnosis ? [admissionNotesDiagnosis] : []),
+                  ...(diagnoses.length === 0 && !admissionNotesDiagnosis && reasonForVisit ? [reasonForVisit] : []),
+                ];
+                const diagnosisText = allDiagnoses.length > 0 ?
+                  allDiagnoses.map(diagnosis => `<div class="diagnosis-item">${diagnosis}</div>`).join('') :
                   'No diagnosis recorded';
 
                 const surgeries = item.visit_surgeries?.map(vs => vs.cghs_surgery ? {
@@ -906,7 +914,8 @@ const AdvanceStatementReport = () => {
         // Corporate Type
         const corporate = patient?.corporate || 'N/A';
 
-        const diagnoses = item.diagnoses?.name || item.visit_diagnoses?.map(vd => vd.diagnoses?.name).filter(Boolean).join(', ') || 'No diagnosis';
+        const admissionNotesDiagnosis = (item.ipd_admission_notes as any)?.provisional_diagnosis;
+        const diagnoses = item.diagnoses?.name || item.visit_diagnoses?.map(vd => vd.diagnoses?.name).filter(Boolean).join(', ') || admissionNotesDiagnosis || item.reason_for_visit || 'No diagnosis';
         const surgeries = item.visit_surgeries?.map(vs => {
           if (!vs.cghs_surgery) return null;
           let surgeryInfo = `${vs.cghs_surgery.name} (Code: ${vs.cghs_surgery.code})`;
@@ -1165,10 +1174,17 @@ const AdvanceStatementReport = () => {
 
                     const directDiagnosis = item.diagnoses?.name;
                     const junctionDiagnoses = item.visit_diagnoses?.map(vd => vd.diagnoses?.name).filter(Boolean) || [];
+                    const admissionNotesDiagnosis = (item.ipd_admission_notes as any)?.provisional_diagnosis;
+                    const reasonForVisit = item.reason_for_visit;
                     const diagnoses = directDiagnosis ? [directDiagnosis, ...junctionDiagnoses] : junctionDiagnoses;
-                    const diagnosisDisplay = diagnoses.length > 0 ? (
+                    const allDiagnoses = [
+                      ...diagnoses,
+                      ...(admissionNotesDiagnosis ? [admissionNotesDiagnosis] : []),
+                      ...(diagnoses.length === 0 && !admissionNotesDiagnosis && reasonForVisit ? [reasonForVisit] : []),
+                    ];
+                    const diagnosisDisplay = allDiagnoses.length > 0 ? (
                       <div className="space-y-1">
-                        {diagnoses.map((diagnosis, idx) => (
+                        {allDiagnoses.map((diagnosis, idx) => (
                           <div key={idx} className="text-sm bg-blue-50 px-2 py-1 rounded">{diagnosis}</div>
                         ))}
                       </div>
