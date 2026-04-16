@@ -117,16 +117,7 @@ export const SalesDetails: React.FC = () => {
   // Selected bills for printing prescriptions
   const [selectedBills, setSelectedBills] = useState<number[]>([]);
 
-  // Pagination state
-  const [currentPage, setCurrentPage] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
-  const pageSize = 25;
-  const totalPages = Math.ceil(totalCount / pageSize);
-
-  // Reset to page 1 when search filters change
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [billNo, patientName, date]);
 
   // Fetch patients as user types
   useEffect(() => {
@@ -162,13 +153,9 @@ export const SalesDetails: React.FC = () => {
   // Fetch all sales on component mount and group by patient
   useEffect(() => {
     const fetchAllSales = async () => {
-      // Calculate pagination range
-      const from = (currentPage - 1) * pageSize;
-      const to = from + pageSize - 1;
-
       let query = supabase
         .from('pharmacy_sales')
-        .select('*', { count: 'exact' })  // Get total count for pagination
+        .select('*', { count: 'exact' })
         .order('sale_date', { ascending: false });
 
       // Filter by hospital if configured
@@ -198,9 +185,6 @@ export const SalesDetails: React.FC = () => {
         endDate.setHours(23, 59, 59, 999);
         query = query.gte('sale_date', startDate.toISOString()).lte('sale_date', endDate.toISOString());
       }
-
-      // Apply pagination
-      query = query.range(from, to);
 
       const { data, error, count } = await query;
 
@@ -264,7 +248,7 @@ export const SalesDetails: React.FC = () => {
       }
     };
     fetchAllSales();
-  }, [hospitalConfig?.name, currentPage, billNo, patientName, date]);
+  }, [hospitalConfig?.name, billNo, patientName, date]);
 
   // Auto-open sidebar when returning from Edit Sale Bill with saleId in URL
   useEffect(() => {
@@ -1872,33 +1856,13 @@ export const SalesDetails: React.FC = () => {
             </table>
           </div>
 
-          {/* Pagination */}
+          {/* Record count */}
           {totalCount > 0 && (
-            <div className="flex items-center justify-between px-4 py-3 border-t bg-gray-50">
+            <div className="px-4 py-3 border-t bg-gray-50">
               <p className="text-sm text-gray-600">
-                Showing <span className="font-medium">{patientGroups.length}</span> of <span className="font-medium">{totalCount}</span> records
+                Showing <span className="font-medium">{patientGroups.length}</span> of{' '}
+                <span className="font-medium">{totalCount}</span> records
               </p>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={currentPage === 1}
-                  onClick={() => setCurrentPage(p => p - 1)}
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                  Previous
-                </Button>
-                <span className="text-sm text-gray-600 px-2">Page {currentPage} of {totalPages || 1}</span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={currentPage >= totalPages}
-                  onClick={() => setCurrentPage(p => p + 1)}
-                >
-                  Next
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
-              </div>
             </div>
           )}
         </Card>
