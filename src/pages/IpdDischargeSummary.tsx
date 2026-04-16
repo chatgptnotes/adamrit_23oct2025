@@ -4231,18 +4231,15 @@ DD/MM/YYYY:-Test Category: Test1:Value1 unit, Test2:Value2 unit`);
                       `Surgery ${i + 1}: ${s.procedurePerformed || 'Not specified'} (Surgeon: ${s.surgeon || 'Not specified'}, Anesthesia: ${s.anesthesia || 'Not specified'})`
                     ).join('\n');
 
-                    const prompt = `You are a medical specialist. Write a comprehensive, detailed surgical summary for each procedure listed below:
+                    const prompt = `You are a senior medical documentation specialist. Write a concise, professional surgical summary for the procedure(s) listed below:
 ${allProcedures}
 
-For EACH surgery, write a separate detailed paragraph (3-5 sentences) including:
-1. Full procedure name and indication/reason for surgery
-2. Surgical approach and technique used
-3. Key intraoperative findings
-4. Any implants/hardware used (if applicable)
-5. Estimated blood loss and patient's hemodynamic stability
-6. Immediate post-operative condition and recovery status
-
-Write in professional medical terminology. Do NOT use placeholders like "[insert reason]" - if information is not provided, write general medical facts about the procedure. Write each surgery as "Surgery 1:", "Surgery 2:", etc.`;
+Rules:
+- Total summary must NOT exceed 200 words.
+- Write in formal clinical terminology.
+- Cover: procedure performed, surgical approach, key intraoperative findings, hemodynamic stability, and immediate post-op condition.
+- If multiple surgeries, combine into one cohesive paragraph — do NOT list them separately.
+- Do NOT use bullet points, headings, or placeholders. Plain paragraph only.`;
 
                     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${import.meta.env.VITE_GEMINI_API_KEY}`, {
                       method: 'POST',
@@ -4256,8 +4253,8 @@ Write in professional medical terminology. Do NOT use placeholders like "[insert
                           }]
                         }],
                         generationConfig: {
-                          temperature: 0.7,
-                          maxOutputTokens: 1000
+                          temperature: 0.4,
+                          maxOutputTokens: 300
                         }
                       })
                     });
