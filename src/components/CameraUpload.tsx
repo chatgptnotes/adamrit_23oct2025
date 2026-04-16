@@ -850,7 +850,7 @@ Rules:
 - Route: Oral, IV, IM, SC, Topical, Inhaler, Nebulization, etc.
 - If any field is unclear, write "as directed"
 - The JSON block must be valid JSON
-- IMPORTANT: For each medicine, identify the generic/molecule name (e.g. PARACETAMOL, AMOXICILLIN+CLAVULANATE) and the brand name (e.g. Dolo 650, Augmentin). Put molecule in "generic_name" in UPPERCASE and brand in "brand_name". For combination drugs, list all molecules separated by + (e.g. "AMOXICILLIN+CLAVULANATE"). If only brand is visible, still try to identify the generic molecule. If only generic is visible, leave brand_name empty.
+- IMPORTANT: For each medicine, identify the generic/molecule name (e.g. PARACETAMOL, AMOXICILLIN+CLAVULANATE) and the brand name (e.g. Dolo 650, Augmentin). Put molecule in "generic_name" in UPPERCASE and brand in "brand_name". For combination drugs, list all molecules separated by + (e.g. "AMOXICILLIN+CLAVULANATE"). If only brand is visible, still try to identify the generic molecule. If only generic is visible, leave brand_name empty.`;
 
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiApiKey}`,
