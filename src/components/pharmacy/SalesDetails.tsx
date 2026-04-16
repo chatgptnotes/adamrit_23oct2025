@@ -1938,7 +1938,24 @@ export const SalesDetails: React.FC = () => {
                     <th className="px-2 py-2 text-right text-xs font-semibold">Disc</th>
                     <th className="px-2 py-2 text-right text-xs font-semibold">Net Amt</th>
                     <th className="px-2 py-2 text-center text-xs font-semibold">Action</th>
-                    <th className="px-1 py-2"></th>
+                    <th className="px-1 py-2 text-center">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 rounded border-gray-300 text-cyan-600 focus:ring-cyan-500"
+                        title="Select all"
+                        checked={
+                          selectedPatient?.bills?.length > 0 &&
+                          selectedPatient.bills.every((b: any) => selectedBills.includes(b.sale_id))
+                        }
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedBills(selectedPatient.bills.map((b: any) => b.sale_id));
+                          } else {
+                            setSelectedBills([]);
+                          }
+                        }}
+                      />
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
