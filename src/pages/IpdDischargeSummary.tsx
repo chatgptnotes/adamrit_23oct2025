@@ -2654,7 +2654,7 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
     // Hospital Stay Notes - prefer AI-generated from ot_notes, fallback to database field
     // First try to extract from ot_notes (AI-generated)
     if (summaryData.ot_notes) {
-      const match = summaryData.ot_notes.match(/HOSPITAL STAY NOTES:?\s*([\s\S]*?)(?=ADVICE|$)/i);
+      const match = summaryData.ot_notes.match(/HOSPITAL STAY NOTES:?\s*([\s\S]*?)(?=MEDICATIONS ON DISCHARGE|MEDICATIONS:|ADVICE|$)/i);
       if (match && match[1]?.trim()) {
         return '<div class="section"><div class="section-subtitle">HOSPITAL STAY NOTES:</div><div class="section-content">' + match[1].trim().replace(/\n/g, '<br>') + '</div></div>';
       }
@@ -2814,7 +2814,31 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
         formattedText += '\n';
       }
 
-      // NOTE: MEDICATIONS are NOT included here - displayed separately in their own section
+      // Include medications from medicationRows state (already loaded from DB)
+      const dbMeds = summaryData.discharge_medications;
+      const stateMeds = medicationRows.filter(m => m.name && m.name.trim());
+      const medsSource = stateMeds.length > 0 ? stateMeds : (Array.isArray(dbMeds) ? dbMeds.map((m: any) => ({
+        name: m.name || '',
+        unit: m.unit || '',
+        route: m.route || '',
+        dose: m.dose || '',
+        days: m.days || ''
+      })).filter((m: any) => m.name) : []);
+
+      if (medsSource.length > 0) {
+        formattedText += `MEDICATIONS ON DISCHARGE:\n`;
+        medsSource.forEach((med: any) => {
+          const parts = [
+            med.name,
+            med.unit,
+            med.route && med.route !== 'Select' ? med.route : '',
+            med.dose && med.dose !== 'Select' ? med.dose : '',
+            med.days ? `${med.days} days` : ''
+          ].filter(Boolean);
+          formattedText += `* ${parts.join(' | ')}\n`;
+        });
+        formattedText += '\n';
+      }
 
       // Surgery Details - from current form state (surgeryRows)
       if (surgeryRows && surgeryRows.length > 0) {
@@ -4530,7 +4554,24 @@ Rules:
                             description: "Sending request to Gemini AI...",
                           });
 
-                          console.log('🤖 Sending to Gemini:', newTemplateContent);
+                          // Always ensure medications are included in content sent to AI
+                          let contentToSend = newTemplateContent;
+                          const validMeds = medicationRows.filter(m => m.name && m.name.trim());
+                          if (validMeds.length > 0 && !contentToSend.includes('MEDICATIONS ON DISCHARGE')) {
+                            contentToSend += '\n\nMEDICATIONS ON DISCHARGE:\n';
+                            validMeds.forEach(med => {
+                              const parts = [
+                                med.name,
+                                med.unit,
+                                med.route && med.route !== 'Select' ? med.route : '',
+                                med.dose && med.dose !== 'Select' ? med.dose : '',
+                                med.days ? `${med.days} days` : ''
+                              ].filter(Boolean);
+                              contentToSend += `* ${parts.join(' | ')}\n`;
+                            });
+                          }
+
+                          console.log('🤖 Sending to Gemini:', contentToSend);
 
                           // System prompt for Gemini
                           const systemPrompt = `You are a medical documentation assistant.
@@ -4547,16 +4588,19 @@ CRITICAL - DO NOT INCLUDE PATIENT DETAILS:
 - If input contains patient details, IGNORE them completely
 
 IMPORTANT INSTRUCTIONS:
-1. ALWAYS follow this EXACT section order: DIAGNOSIS → CLINICAL HISTORY → EXAMINATION → HOSPITAL STAY NOTES → ADVICE. Do NOT include empty sections.
+1. ALWAYS follow this EXACT section order: DIAGNOSIS → CLINICAL HISTORY → EXAMINATION → HOSPITAL STAY NOTES → MEDICATIONS ON DISCHARGE → ADVICE. Do NOT include empty sections.
 2. Do NOT include SURGERY DETAILS or OPERATION NOTES - they are displayed separately in a table.
 3. Do NOT include INVESTIGATIONS section - it is displayed separately from the database.
-4. Do NOT include MEDICATIONS section - it is displayed separately in a table.
+4. If MEDICATIONS ON DISCHARGE data is provided in the input, include ALL medications under "MEDICATIONS ON DISCHARGE:" formatted as a pipe table with these exact columns:
+| Medicine | Route | Dose/Frequency | Days |
+|----------|-------|----------------|------|
+Do NOT omit any medication. Each medication = one row. Use the data exactly as provided.
 5. Do NOT include the emergency contact line in the ADVICE section.
 6. For DIAGNOSIS: Keep as is in simple format. Do NOT expand into detailed sentences.
 7. For CLINICAL HISTORY: Write a comprehensive 4-5 sentence medical paragraph. Include: presenting complaints with severity, associated symptoms, time of onset, duration, aggravating/relieving factors, relevant past medical history, and any risk factors. Use professional medical terminology.
 8. For EXAMINATION: Write a comprehensive 4-5 sentence medical paragraph. Include: general appearance, vital signs with clinical interpretation (e.g., "tachycardia suggesting..." or "normotensive"), systemic examination findings, and overall clinical impression. Use professional medical terminology.
 9. For HOSPITAL STAY NOTES: Write a brief 2-3 sentence summary of the patient's hospital stay and treatment. Keep it concise.
-10. For ADVICE: Write ONLY a SHORT 2-3 sentence paragraph with general post-operative care instructions. Example: "The patient is advised to follow up after 3 days or sooner if symptoms worsen. They are instructed to perform dressing changes and to use an LS belt for support. Follow up after 7 days/SOS." Do NOT include medications list, do NOT include numbered lists, do NOT include detailed wound care instructions.`;
+10. For ADVICE: If specific advice is provided in the input, use it EXACTLY as given — do NOT paraphrase or shorten it. Only write a generic 2-3 sentence advice paragraph if NO advice data is present in the input.`;
 
                           // Call Google Gemini API
                           const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${import.meta.env.VITE_GEMINI_API_KEY}`, {
@@ -4567,7 +4611,7 @@ IMPORTANT INSTRUCTIONS:
                             body: JSON.stringify({
                               contents: [{
                                 parts: [{
-                                  text: systemPrompt + '\n\nUser Request:\n' + newTemplateContent
+                                  text: systemPrompt + '\n\nUser Request:\n' + contentToSend
                                 }]
                               }],
                               generationConfig: {
