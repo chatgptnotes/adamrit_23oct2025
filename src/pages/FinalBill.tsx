@@ -23583,10 +23583,10 @@ Dr. Murali B K
                   variant="outline"
                   size="lg"
                   className="px-6 py-2"
-                  disabled={isBillSubmitted || isAmountReceived}
-                  title={isBillSubmitted ? 'Print disabled - Bill already submitted' : isAmountReceived ? 'Print disabled - Amount already received' : 'Print / Save PDF'}
+                  disabled={isBillSubmitted || isAmountReceived || (billData?.id && (billData as any)?.status !== 'APPROVED')}
+                  title={isBillSubmitted ? 'Print disabled - Bill already submitted' : isAmountReceived ? 'Print disabled - Amount already received' : (billData?.id && (billData as any)?.status !== 'APPROVED') ? 'Print disabled - Awaiting approval' : 'Print / Save PDF'}
                 >
-                  {isBillSubmitted || isAmountReceived ? '🔒 Print Locked' : '🖨️ Print / Save PDF'}
+                  {isBillSubmitted || isAmountReceived ? '🔒 Print Locked' : (billData?.id && (billData as any)?.status !== 'APPROVED') ? '🔒 Awaiting Approval' : '🖨️ Print / Save PDF'}
                 </Button>
                 {billData?.id && (billData as any)?.status !== 'PENDING_APPROVAL' && (billData as any)?.status !== 'APPROVED' && (
                   <Button

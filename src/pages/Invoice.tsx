@@ -2,8 +2,9 @@ import React, { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { format } from 'date-fns';
 import { useNavigate, useParams } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 
 // Convert amount to words (Indian format)
 const convertAmountToWords = (amount: number): string => {
@@ -32,6 +33,7 @@ const Invoice = () => {
   const [chargeFilter, setChargeFilter] = useState('all'); // 'all', 'lab', 'radiology', 'surgery'
   const [hideLabRadiology, setHideLabRadiology] = useState(false);
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { visitId } = useParams<{ visitId: string }>();
   const { hospitalConfig } = useAuth();
   const hospitalName = hospitalConfig?.name === 'ayushman' ? 'Ayushman Hospital Nagpur' : 'Hope Hospital Nagpur';
@@ -2155,23 +2157,83 @@ const Invoice = () => {
     }, 500);
   };
 
+  // Request approval — flips bills.status to PENDING_APPROVAL so admin/superadmin
+  // can review it from the /bill-approvals tab. Print stays locked until APPROVED.
+  const handleRequestApproval = async () => {
+    if (!billData?.id) {
+      toast.error('Please save the bill first before requesting approval.');
+      return;
+    }
+
+    try {
+      const raw = localStorage.getItem('hmis_user');
+      const currentUser = raw ? JSON.parse(raw) : {};
+      const requestedBy = currentUser.email || currentUser.username || 'Unknown';
+
+      const { error } = await supabase
+        .from('bills')
+        .update({ status: 'PENDING_APPROVAL', created_by: requestedBy } as any)
+        .eq('id', billData.id);
+
+      if (error) throw error;
+
+      toast.success('Bill submitted for approval successfully!');
+      queryClient.invalidateQueries({ queryKey: ['invoice-bill', visitId] });
+      queryClient.invalidateQueries({ queryKey: ['pending-bill-count'] });
+    } catch (error) {
+      console.error('Error requesting approval:', error);
+      toast.error('Failed to submit bill for approval.');
+    }
+  };
+
+  const billStatus = (billData as any)?.status as string | undefined;
+  const isApproved = billStatus === 'APPROVED';
+  const isPendingApproval = billStatus === 'PENDING_APPROVAL';
+  const printDisabled = !!billData?.id && !isApproved;
+
   return (
     <div className="min-h-screen bg-white p-4">
       <div className="max-w-4xl mx-auto">
         {/* Print and Close Buttons */}
-        <div className="flex justify-between mb-4">
+        <div className="flex justify-between items-center mb-4 no-print">
             <button
               onClick={() => navigate(-1)}
               className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600 transition-colors"
             >
               Close
             </button>
-            <button
-              onClick={handlePrint}
-              className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
-            >
-              Print
-            </button>
+            <div className="flex items-center gap-3">
+              {billData?.id && !isPendingApproval && !isApproved && (
+                <button
+                  onClick={handleRequestApproval}
+                  className="px-4 py-2 bg-orange-500 text-white rounded hover:bg-orange-600 transition-colors"
+                >
+                  Request Approval
+                </button>
+              )}
+              {isPendingApproval && (
+                <span className="text-orange-600 font-medium px-2">
+                  Pending Approval
+                </span>
+              )}
+              {isApproved && (
+                <span className="text-green-600 font-medium px-2">
+                  Approved
+                </span>
+              )}
+              <button
+                onClick={handlePrint}
+                disabled={printDisabled}
+                title={printDisabled ? 'Print disabled - Awaiting approval' : 'Print'}
+                className={`px-4 py-2 text-white rounded transition-colors ${
+                  printDisabled
+                    ? 'bg-gray-400 cursor-not-allowed'
+                    : 'bg-blue-500 hover:bg-blue-600'
+                }`}
+              >
+                {printDisabled ? '🔒 Awaiting Approval' : 'Print'}
+              </button>
+            </div>
           </div>
 
           {/* Invoice Form */}

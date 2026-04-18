@@ -14,47 +14,54 @@ import { logActivity } from '@/lib/activity-logger';
 import { CheckCircle, XCircle, FileText, Clock, IndianRupee, Search, Percent, ExternalLink, Eye, Package } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
-// Helper to enrich bills with patient info
+// Two-step enrichment: fetch bills first, then batch-fetch all referenced
+// patients in a single .in() query. Avoids PostgREST relationship ambiguity
+// from inline joins and avoids N+1 round-trips from per-row lookups.
 const enrichBillsWithPatients = async (bills: any[]) => {
   if (!bills || bills.length === 0) return [];
-  return Promise.all(
-    bills.map(async (bill: any) => {
-      let patientName = 'Unknown';
-      let visitId = bill.visit_id;
-      let registrationNumber = '';
 
-      if (bill.visit_id) {
-        const { data: visit } = await supabase
-          .from('visits')
-          .select('visit_id, patient_id, patients(name, registration_number)')
-          .eq('visit_id', bill.visit_id)
-          .single() as { data: any };
-        if (visit?.patients) {
-          patientName = visit.patients.name || 'Unknown';
-          registrationNumber = visit.patients.registration_number || '';
-        }
-      } else if (bill.patient_id) {
-        const { data: patient } = await supabase
-          .from('patients')
-          .select('name, registration_number')
-          .eq('id', bill.patient_id)
-          .single() as { data: any };
-        if (patient) {
-          patientName = patient.name || 'Unknown';
-          registrationNumber = patient.registration_number || '';
-        }
-      }
+  const patientIds = Array.from(
+    new Set(bills.map((b: any) => b.patient_id).filter(Boolean))
+  );
 
-      if (patientName === 'Unknown' && bill.bill_patient_data) {
+  const patientMap = new Map<string, { name?: string; registration_number?: string }>();
+  if (patientIds.length > 0) {
+    const { data: patients, error } = await supabase
+      .from('patients')
+      .select('id, name, registration_number')
+      .in('id', patientIds);
+    if (error) {
+      console.warn('[BillApprovals] batch patients lookup failed:', error.message);
+    }
+    (patients || []).forEach((p: any) => patientMap.set(p.id, p));
+  }
+
+  return bills.map((bill: any) => {
+    const patient = bill.patient_id ? patientMap.get(bill.patient_id) : undefined;
+    let patientName: string = patient?.name || 'Unknown';
+    let registrationNumber: string = patient?.registration_number || '';
+
+    if (patientName === 'Unknown' && bill.bill_patient_data) {
+      try {
         const pd = typeof bill.bill_patient_data === 'string'
           ? JSON.parse(bill.bill_patient_data)
           : bill.bill_patient_data;
-        patientName = pd.name || pd.patient_name || patientName;
+        patientName = pd?.name || pd?.patient_name || patientName;
+        if (!registrationNumber) {
+          registrationNumber = pd?.registration_number || '';
+        }
+      } catch (e) {
+        console.warn('[BillApprovals] bill_patient_data parse failed for', bill.id, e);
       }
+    }
 
-      return { ...bill, patientName, visitId, registrationNumber };
-    })
-  );
+    return {
+      ...bill,
+      patientName,
+      visitId: bill.visit_id,
+      registrationNumber,
+    };
+  });
 };
 
 const BillApprovals = () => {
