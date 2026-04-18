@@ -2842,6 +2842,18 @@ const FinalBill = () => {
       // Build update object
       const updateData: any = { [field]: value };
 
+      // If changing quantity directly, recalculate amount
+      if (field === 'quantity') {
+        const currentService = savedClinicalServicesData.find(s => s.junction_id === junctionId);
+        if (currentService) {
+          const qty = parseInt(value) || 0;
+          updateData.quantity = qty;
+          const rate = currentService.rate_used || currentService.selectedRate || 0;
+          const numericRate = typeof rate === 'string' ? parseFloat(rate) : rate;
+          updateData.amount = numericRate * qty;
+        }
+      }
+
       // If changing a date, recalculate quantity from the date pair
       if (field === 'start_date' || field === 'end_date') {
         const currentService = savedClinicalServicesData.find(s => s.junction_id === junctionId);
@@ -3366,12 +3378,12 @@ const FinalBill = () => {
     }
   };
 
-  // Trigger auto-add of daily services when visit data loads or discharge date changes
-  useEffect(() => {
-    if (visitData?.id && visitData?.admission_date && patientInfo) {
-      autoAddDailyServices();
-    }
-  }, [visitData?.id, visitData?.admission_date, visitData?.discharge_date, patientInfo]);
+  // Auto-add of daily services disabled - user manages clinical services manually
+  // useEffect(() => {
+  //   if (visitData?.id && visitData?.admission_date && patientInfo) {
+  //     autoAddDailyServices();
+  //   }
+  // }, [visitData?.id, visitData?.admission_date, visitData?.discharge_date, patientInfo]);
 
   // Function to refresh saved data
   const refreshSavedData = async () => {
@@ -9314,6 +9326,12 @@ INSTRUCTIONS:
 
   // Function to delete saved clinical service
   const handleDeleteClinicalService = async (junctionId: string) => {
+    if (!junctionId) {
+      console.error('❌ [CLINICAL DELETE] No junction ID provided');
+      toast.error('Failed to delete: missing service ID');
+      return;
+    }
+
     if (!confirm('Are you sure you want to delete this clinical service?')) {
       return;
     }
@@ -9322,32 +9340,21 @@ INSTRUCTIONS:
       console.log('🗑️ [CLINICAL DELETE] Deleting service with junction ID:', junctionId);
 
       // Delete from junction table only
-      const { error: deleteError } = await supabase
+      const { error: deleteError, count } = await supabase
         .from('visit_clinical_services')
         .delete()
         .eq('id', junctionId);
 
       if (deleteError) {
         console.error('❌ [CLINICAL DELETE] Error:', deleteError);
-        toast.error('Failed to delete clinical service');
+        toast.error('Failed to delete clinical service: ' + deleteError.message);
         return;
       }
 
-      console.log('✅ [CLINICAL DELETE] Service deleted successfully');
+      console.log('✅ [CLINICAL DELETE] Service deleted successfully, rows affected:', count);
 
-      // Update local state immediately
+      // Update local state immediately - no re-fetch needed
       setSavedClinicalServicesData(prev => prev.filter(s => s.junction_id !== junctionId));
-
-      // Conditional fetch based on remaining count
-      const remainingCount = savedClinicalServicesData.filter(s => s.junction_id !== junctionId).length;
-
-      if (remainingCount > 0) {
-        try {
-          await fetchSavedClinicalServicesData();
-        } catch (fetchError) {
-          console.log('⚠️ [CLINICAL DELETE] Fetch after delete failed (expected if no services remain)');
-        }
-      }
 
       toast.success('Clinical service deleted successfully');
     } catch (error) {
@@ -19472,20 +19479,18 @@ Dr. Murali B K
                                           ₹{parseFloat(service.selectedRate || service.rate_used || service.amount) || 0}
                                         </td>
                                         <td className="border border-gray-300 px-2 py-2 text-sm text-center font-medium">
-                                          {(() => {
-                                            if (!service.start_date || !service.end_date) return 0;
-                                            const start = new Date(service.start_date);
-                                            const end = new Date(service.end_date);
-                                            return Math.max(1, Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1);
-                                          })()}
+                                          <input
+                                            type="number"
+                                            min="0"
+                                            className="w-16 text-center border border-gray-300 rounded px-1 py-1 text-sm"
+                                            value={service.quantity || 0}
+                                            onChange={(e) => updateClinicalServiceField(service.junction_id, 'quantity', e.target.value)}
+                                          />
                                         </td>
                                         <td className="border border-gray-300 px-4 py-2 text-sm font-medium text-green-600">
                                           ₹{(() => {
-                                            if (!service.start_date || !service.end_date) return 0;
                                             const rate = parseFloat(service.selectedRate || service.rate_used || service.amount) || 0;
-                                            const start = new Date(service.start_date);
-                                            const end = new Date(service.end_date);
-                                            const qty = Math.max(1, Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+                                            const qty = service.quantity || 0;
                                             return (rate * qty).toLocaleString('en-IN');
                                           })()}
                                         </td>

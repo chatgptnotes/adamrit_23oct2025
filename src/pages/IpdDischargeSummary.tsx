@@ -4216,7 +4216,7 @@ For EACH surgery, write a separate detailed paragraph (3-5 sentences) including:
 
 Write in professional medical terminology. Do NOT use placeholders like "[insert reason]" - if information is not provided, write general medical facts about the procedure. Write each surgery as "Surgery 1:", "Surgery 2:", etc.`;
 
-                    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${import.meta.env.VITE_GEMINI_API_KEY}`, {
+                    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${import.meta.env.VITE_GEMINI_API_KEY}`, {
                       method: 'POST',
                       headers: {
                         'Content-Type': 'application/json'
@@ -4534,7 +4534,7 @@ IMPORTANT INSTRUCTIONS:
 10. For ADVICE: Write ONLY a SHORT 2-3 sentence paragraph with general post-operative care instructions. Example: "The patient is advised to follow up after 3 days or sooner if symptoms worsen. They are instructed to perform dressing changes and to use an LS belt for support. Follow up after 7 days/SOS." Do NOT include medications list, do NOT include numbered lists, do NOT include detailed wound care instructions.`;
 
                           // Call Google Gemini API
-                          const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${import.meta.env.VITE_GEMINI_API_KEY}`, {
+                          const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${import.meta.env.VITE_GEMINI_API_KEY}`, {
                             method: 'POST',
                             headers: {
                               'Content-Type': 'application/json'
