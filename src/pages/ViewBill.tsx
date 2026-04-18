@@ -171,7 +171,7 @@ const ViewBill = () => {
               </Button>
               <div>
                 <h1 className="text-2xl font-bold text-gray-900">
-                  Bill #{billData.bill_no || billData.id.slice(0, 8)}
+                  Bill #{billData.formatted_bill_no || billData.bill_no || billData.id.slice(0, 8)}
                 </h1>
                 <p className="text-sm text-gray-600">
                   Created on {format(new Date(billData.created_at), 'dd/MM/yyyy')} at {format(new Date(billData.created_at), 'HH:mm:ss')}
@@ -206,7 +206,7 @@ const ViewBill = () => {
             <div className="space-y-2">
               <div className="grid grid-cols-2 gap-2 text-sm">
                 <div><span className="font-semibold">BILL NO:</span></div>
-                <div>{billData.bill_no || billData.id.slice(0, 8)}</div>
+                <div>{billData.formatted_bill_no || billData.bill_no || billData.id.slice(0, 8)}</div>
 
                 <div><span className="font-semibold">REGISTRATION NO:</span></div>
                 <div>{patientData?.patient_id || patientData?.patients_id || 'N/A'}</div>

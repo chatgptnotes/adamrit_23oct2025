@@ -1,0 +1,322 @@
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
+
+export interface PaymentObligation {
+  id: string;
+  party_name: string;
+  category: 'fixed' | 'variable';
+  sub_category: string | null;
+  default_daily_amount: number;
+  priority: number;
+  chart_of_accounts_id: string | null;
+  is_active: boolean;
+  notes: string | null;
+  hospital_name: string;
+  payee_name: string | null; // specific payee e.g. "Dr Pramod Gandhi" for rent
+  payee_search_table: string | null; // e.g. hope_consultants, staff_members
+  attachment_url: string | null; // uploaded Excel/Doc file URL
+  google_sheet_link: string | null; // Google Sheets link for outstanding payments
+  company_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type NewObligation = Omit<PaymentObligation, 'id' | 'created_at' | 'updated_at'>;
+
+export const usePaymentObligations = (hospital: string = 'hope') => {
+  const queryClient = useQueryClient();
+
+  const obligations = useQuery({
+    queryKey: ['payment-obligations', hospital],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from('payment_obligations')
+        .select('*')
+        .eq('hospital_name', hospital)
+        .order('priority', { ascending: true });
+      if (error) throw error;
+      return (data || []) as PaymentObligation[];
+    },
+  });
+
+  const createObligation = useMutation({
+    mutationFn: async (obligation: Partial<NewObligation>) => {
+      const { data, error } = await (supabase as any)
+        .from('payment_obligations')
+        .insert({
+          party_name: obligation.party_name,
+          category: obligation.category || 'variable',
+          sub_category: obligation.sub_category || 'other',
+          default_daily_amount: obligation.default_daily_amount || 0,
+          priority: obligation.priority || 10,
+          chart_of_accounts_id: obligation.chart_of_accounts_id || null,
+          is_active: true,
+          notes: obligation.notes || null,
+          hospital_name: obligation.hospital_name || hospital,
+          payee_name: obligation.payee_name || null,
+          payee_search_table: obligation.payee_search_table || null,
+          attachment_url: obligation.attachment_url || null,
+          google_sheet_link: obligation.google_sheet_link || null,
+        })
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['payment-obligations'] });
+      toast.success('Obligation added successfully');
+    },
+    onError: (err: any) => {
+      toast.error('Failed to add obligation: ' + err.message);
+    },
+  });
+
+  const updateObligation = useMutation({
+    mutationFn: async ({ id, ...updates }: Partial<PaymentObligation> & { id: string }) => {
+      const { data, error } = await (supabase as any)
+        .from('payment_obligations')
+        .update({ ...updates, updated_at: new Date().toISOString() })
+        .eq('id', id)
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['payment-obligations'] });
+      queryClient.invalidateQueries({ queryKey: ['daily-payment-schedule'] });
+      toast.success('Obligation updated');
+    },
+    onError: (err: any) => {
+      toast.error('Failed to update: ' + err.message);
+    },
+  });
+
+  const deleteObligation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await (supabase as any)
+        .from('payment_obligations')
+        .delete()
+        .eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['payment-obligations'] });
+      toast.success('Obligation deleted');
+    },
+    onError: (err: any) => {
+      toast.error('Failed to delete: ' + err.message);
+    },
+  });
+
+  const toggleActive = useMutation({
+    mutationFn: async ({ id, is_active }: { id: string; is_active: boolean }) => {
+      const { error } = await (supabase as any)
+        .from('payment_obligations')
+        .update({ is_active, updated_at: new Date().toISOString() })
+        .eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['payment-obligations'] });
+      toast.success('Status updated');
+    },
+    onError: (err: any) => {
+      toast.error('Failed to toggle: ' + err.message);
+    },
+  });
+
+  return {
+    obligations: obligations.data || [],
+    isLoading: obligations.isLoading,
+    error: obligations.error,
+    createObligation,
+    updateObligation,
+    deleteObligation,
+    toggleActive,
+  };
+};
+
+// Search consultants/surgeons/anaesthetists/staff for sub-payment payee
+export const usePayeeSearch = (searchTable: string, searchTerm: string) => {
+  return useQuery({
+    queryKey: ['payee-search', searchTable, searchTerm],
+    queryFn: async () => {
+      if (!searchTable || !searchTerm || searchTerm.length < 2) return [];
+
+      const { data, error } = await (supabase as any)
+        .from(searchTable)
+        .select('id, name, specialty, department')
+        .ilike('name', `%${searchTerm}%`)
+        .limit(20);
+
+      if (error) {
+        console.error('Payee search error:', error);
+        return [];
+      }
+      return (data || []) as { id: string; name: string; specialty?: string; department?: string }[];
+    },
+    enabled: !!searchTable && searchTerm.length >= 2,
+  });
+};
+
+// Multi-table payee search — searches across consultants, surgeons, and Tally ledgers
+export const useMultiPayeeSearch = (searchTerm: string, hospital: string = 'hope') => {
+  return useQuery({
+    queryKey: ['multi-payee-search', searchTerm, hospital],
+    queryFn: async () => {
+      if (!searchTerm || searchTerm.length < 2) return [];
+
+      const results: { id: string; name: string; specialty?: string; source: string; amount?: number }[] = [];
+
+      // Search consultants
+      const consultTable = hospital === 'hope' ? 'hope_consultants' : 'ayushman_consultants';
+      const { data: consultants } = await (supabase as any)
+        .from(consultTable)
+        .select('id, name, specialty')
+        .ilike('name', `%${searchTerm}%`)
+        .limit(10);
+      if (consultants) {
+        for (const c of consultants) {
+          results.push({ id: c.id, name: c.name, specialty: c.specialty, source: 'Consultant' });
+        }
+      }
+
+      // Search surgeons
+      const surgeonTable = hospital === 'hope' ? 'hope_surgeons' : 'ayushman_surgeons';
+      const { data: surgeons } = await (supabase as any)
+        .from(surgeonTable)
+        .select('id, name, specialty')
+        .ilike('name', `%${searchTerm}%`)
+        .limit(10);
+      if (surgeons) {
+        for (const s of surgeons) {
+          // Avoid duplicates (same name from consultants)
+          if (!results.find(r => r.name === s.name)) {
+            results.push({ id: s.id, name: s.name, specialty: s.specialty, source: 'Surgeon' });
+          }
+        }
+      }
+
+      // Search RMOs (include daily_remuneration for auto-fill)
+      const rmoTable = hospital === 'hope' ? 'hope_rmos' : 'ayushman_rmos';
+      const { data: rmos } = await (supabase as any)
+        .from(rmoTable)
+        .select('id, name, specialty, daily_remuneration')
+        .ilike('name', `%${searchTerm}%`)
+        .limit(10);
+      if (rmos) {
+        for (const r of rmos) {
+          if (!results.find(x => x.name === r.name)) {
+            results.push({ id: r.id, name: r.name, specialty: r.specialty, source: 'RMO', amount: r.daily_remuneration || 0 });
+          }
+        }
+      }
+
+      // Search Tally ledgers (vendors, expenses)
+      const { data: ledgers } = await (supabase as any)
+        .from('tally_ledgers')
+        .select('id, name, parent_group')
+        .ilike('name', `%${searchTerm}%`)
+        .limit(10);
+      if (ledgers) {
+        for (const l of ledgers) {
+          if (!results.find(r => r.name === l.name)) {
+            results.push({ id: l.id, name: l.name, specialty: l.parent_group, source: 'Ledger' });
+          }
+        }
+      }
+
+      return results;
+    },
+    enabled: searchTerm.length >= 2,
+  });
+};
+
+// ── Default payees for an obligation (template) ──
+export interface DefaultPayee {
+  id: string;
+  obligation_id: string;
+  payee_name: string;
+  amount: number;
+  created_at: string;
+}
+
+export const useObligationDefaultPayees = (obligationId: string | null) => {
+  const queryClient = useQueryClient();
+
+  const payees = useQuery({
+    queryKey: ['obligation-default-payees', obligationId],
+    queryFn: async () => {
+      if (!obligationId) return [];
+      const { data, error } = await (supabase as any)
+        .from('obligation_default_payees')
+        .select('*')
+        .eq('obligation_id', obligationId)
+        .order('created_at', { ascending: true });
+      if (error) throw error;
+      return (data || []) as DefaultPayee[];
+    },
+    enabled: !!obligationId,
+  });
+
+  const addPayee = useMutation({
+    mutationFn: async ({ payee_name, amount }: { payee_name: string; amount: number }) => {
+      const { data, error } = await (supabase as any)
+        .from('obligation_default_payees')
+        .insert({ obligation_id: obligationId, payee_name, amount })
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['obligation-default-payees', obligationId] });
+    },
+    onError: (err: any) => {
+      toast.error('Failed to add payee: ' + err.message);
+    },
+  });
+
+  const removePayee = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await (supabase as any)
+        .from('obligation_default_payees')
+        .delete()
+        .eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['obligation-default-payees', obligationId] });
+    },
+    onError: (err: any) => {
+      toast.error('Failed to remove payee: ' + err.message);
+    },
+  });
+
+  const updatePayee = useMutation({
+    mutationFn: async ({ id, payee_name, amount }: { id: string; payee_name: string; amount: number }) => {
+      const { error } = await (supabase as any)
+        .from('obligation_default_payees')
+        .update({ payee_name, amount })
+        .eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['obligation-default-payees', obligationId] });
+    },
+    onError: (err: any) => {
+      toast.error('Failed to update payee: ' + err.message);
+    },
+  });
+
+  return {
+    defaultPayees: payees.data || [],
+    isLoading: payees.isLoading,
+    addPayee,
+    removePayee,
+    updatePayee,
+  };
+};

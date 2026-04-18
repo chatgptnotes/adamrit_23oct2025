@@ -63,6 +63,10 @@ interface Visit {
   referral_payment_status: string | null;
   referee_discharge_amt_paid: number | null;
   discharge_intimation_at: string | null;
+  bill_preparation: {
+    bill_amount: number | null;
+    date_of_submission: string | null;
+  } | null;
   referees: {
     name: string;
   } | null;
@@ -83,6 +87,110 @@ interface CorporateOption {
   id: string;
   name: string;
 }
+
+// Inline editable Bill Amount cell
+const BillAmountCell = ({ visit, onUpdate }: { visit: Visit; onUpdate: () => void }) => {
+  const [isEditing, setIsEditing] = useState(false);
+  const [value, setValue] = useState(visit.bill_preparation?.bill_amount?.toString() || '');
+  const [isSaving, setIsSaving] = useState(false);
+
+  const handleSave = async () => {
+    setIsEditing(false);
+    const numValue = parseFloat(value) || 0;
+    if (numValue === (visit.bill_preparation?.bill_amount || 0)) return;
+    setIsSaving(true);
+    try {
+      const { error } = await supabase
+        .from('bill_preparation')
+        .upsert({ visit_id: visit.visit_id, bill_amount: numValue, updated_at: new Date().toISOString() }, { onConflict: 'visit_id' });
+      if (error) throw error;
+      toast({ title: 'Bill amount saved' });
+      onUpdate();
+    } catch (err: any) {
+      toast({ title: 'Error', description: err.message, variant: 'destructive' });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  if (isSaving) return <Loader2 className="h-4 w-4 animate-spin" />;
+
+  if (isEditing) {
+    return (
+      <Input
+        type="number"
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onBlur={handleSave}
+        onKeyDown={(e) => { if (e.key === 'Enter') handleSave(); }}
+        className="w-28 h-8 text-sm"
+        autoFocus
+      />
+    );
+  }
+
+  return (
+    <span
+      className="cursor-pointer hover:text-blue-600 hover:underline"
+      onClick={() => { setValue(visit.bill_preparation?.bill_amount?.toString() || ''); setIsEditing(true); }}
+    >
+      {visit.bill_preparation?.bill_amount != null
+        ? `₹${Number(visit.bill_preparation.bill_amount).toLocaleString('en-IN')}`
+        : '—'}
+    </span>
+  );
+};
+
+// Inline editable Bill Submission Date cell
+const BillSubmissionDateCell = ({ visit, onUpdate }: { visit: Visit; onUpdate: () => void }) => {
+  const [isEditing, setIsEditing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+
+  const handleSave = async (dateValue: string) => {
+    setIsEditing(false);
+    if (!dateValue) return;
+    if (dateValue === visit.bill_preparation?.date_of_submission) return;
+    setIsSaving(true);
+    try {
+      const { error } = await supabase
+        .from('bill_preparation')
+        .upsert({ visit_id: visit.visit_id, date_of_submission: dateValue, updated_at: new Date().toISOString() }, { onConflict: 'visit_id' });
+      if (error) throw error;
+      toast({ title: 'Bill submission date saved' });
+      onUpdate();
+    } catch (err: any) {
+      toast({ title: 'Error', description: err.message, variant: 'destructive' });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  if (isSaving) return <Loader2 className="h-4 w-4 animate-spin" />;
+
+  if (isEditing) {
+    return (
+      <Input
+        type="date"
+        defaultValue={visit.bill_preparation?.date_of_submission || ''}
+        onChange={(e) => handleSave(e.target.value)}
+        onBlur={() => setIsEditing(false)}
+        className="w-36 h-8 text-sm"
+        autoFocus
+      />
+    );
+  }
+
+  return (
+    <span
+      className="cursor-pointer hover:text-blue-600 hover:underline"
+      onClick={() => setIsEditing(true)}
+    >
+      {visit.bill_preparation?.date_of_submission
+        ? new Date(visit.bill_preparation.date_of_submission).toLocaleDateString('en-IN')
+        : '—'}
+    </span>
+  );
+};
 
 // Referee Discharge Amount Cell with Payment Modal and Referral Tooltip
 const RefereeAmountCell = ({
@@ -675,6 +783,10 @@ const DischargedPatients = () => {
           ),
           ipd_discharge_summary!visit_id(
             status
+          ),
+          bill_preparation!visit_id(
+            bill_amount,
+            date_of_submission
           )
         `)
         .not('discharge_date', 'is', null) // Only show discharged patients
@@ -1189,8 +1301,9 @@ const DischargedPatients = () => {
                   <th>Admission Date</th>
                   <th>Discharge Date</th>
                   <th>Days</th>
-                  <th>Billing Status</th>
                   <th>Corporate</th>
+                  <th>Bill Amount</th>
+                  <th>Bill Submission Date</th>
                 </tr>
               </thead>
               <tbody>
@@ -1203,10 +1316,11 @@ const DischargedPatients = () => {
                     <td>${visit.admission_date ? format(new Date(visit.admission_date), 'dd MMM yyyy') : '-'}</td>
                     <td>${visit.discharge_date ? format(new Date(visit.discharge_date), 'dd MMM yyyy') : '-'}</td>
                     <td class="text-center">${calculateDaysAdmitted(visit.admission_date, visit.discharge_date)}</td>
-                    <td>${visit.billing_status || '-'}</td>
                     <td>${getCorporateShortForm(visit.patients?.corporate)}</td>
+                    <td>${visit.bill_preparation?.bill_amount != null ? '₹' + Number(visit.bill_preparation.bill_amount).toLocaleString('en-IN') : '-'}</td>
+                    <td>${visit.bill_preparation?.date_of_submission ? new Date(visit.bill_preparation.date_of_submission).toLocaleDateString('en-IN') : '-'}</td>
                   </tr>
-                `).join('') || '<tr><td colspan="9" class="text-center">No data</td></tr>'}
+                `).join('') || '<tr><td colspan="10" class="text-center">No data</td></tr>'}
               </tbody>
             </table>
           </body>
@@ -1689,6 +1803,8 @@ const DischargedPatients = () => {
                     <TableHead>Days Admitted</TableHead>
                     <TableHead>Billing Status</TableHead>
                     <TableHead>Corporate</TableHead>
+                    <TableHead>Bill Amount</TableHead>
+                    <TableHead>Bill Submission Date</TableHead>
                     {/* Only show referral-related columns for marketing managers */}
                     {canSeeReferralColumn && <TableHead>Referral Doctor/Relationship Manager</TableHead>}
                     {isMarketingManager && <TableHead>Discharge Amt Paid</TableHead>}
@@ -1773,6 +1889,12 @@ const DischargedPatients = () => {
                       </TableCell>
                       <TableCell>
                         {visit.patients?.corporate || '—'}
+                      </TableCell>
+                      <TableCell>
+                        <BillAmountCell visit={visit} onUpdate={() => refetch()} />
+                      </TableCell>
+                      <TableCell>
+                        <BillSubmissionDateCell visit={visit} onUpdate={() => refetch()} />
                       </TableCell>
                       {/* Only show referral-related cells for marketing managers */}
                       {canSeeReferralColumn && (

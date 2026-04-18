@@ -7,6 +7,12 @@ export interface MandatoryService {
   nabh_bhopal?: number | null;
   non_nabh_rate?: number | null;
   non_nabh_bhopal?: number | null;
+  tpa_rate_ipd?: number | null;
+  private_rate_ipd?: number | null;
+  nabh_rate_ipd?: number | null;
+  nabh_bhopal_ipd?: number | null;
+  non_nabh_rate_ipd?: number | null;
+  non_nabh_bhopal_ipd?: number | null;
   status: string;
   created_at: string;
   updated_at: string;
@@ -15,10 +21,16 @@ export interface MandatoryService {
 
 export interface CreateMandatoryServiceData {
   service_name: string;
-  tpa_rate?: number;
-  private_rate?: number;
-  nabh_rate?: number;
-  nabh_bhopal?: number;
-  non_nabh_rate?: number;
-  non_nabh_bhopal?: number;
+  tpa_rate?: number | null;
+  private_rate?: number | null;
+  nabh_rate?: number | null;
+  nabh_bhopal?: number | null;
+  non_nabh_rate?: number | null;
+  non_nabh_bhopal?: number | null;
+  tpa_rate_ipd?: number | null;
+  private_rate_ipd?: number | null;
+  nabh_rate_ipd?: number | null;
+  nabh_bhopal_ipd?: number | null;
+  non_nabh_rate_ipd?: number | null;
+  non_nabh_bhopal_ipd?: number | null;
 }

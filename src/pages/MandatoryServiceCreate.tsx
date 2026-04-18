@@ -18,7 +18,13 @@ const MandatoryServiceCreate = () => {
     nabhRate: '',
     nabhBhopal: '',
     nonNabhRate: '',
-    nonNabhBhopal: ''
+    nonNabhBhopal: '',
+    tpaRateIpd: '',
+    privateRateIpd: '',
+    nabhRateIpd: '',
+    nabhBhopalIpd: '',
+    nonNabhRateIpd: '',
+    nonNabhBhopalIpd: ''
   });
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
@@ -42,8 +48,13 @@ const MandatoryServiceCreate = () => {
         nabh_rate: formData.nabhRate ? parseFloat(formData.nabhRate) : null,
         nabh_bhopal: formData.nabhBhopal ? parseFloat(formData.nabhBhopal) : null,
         non_nabh_rate: formData.nonNabhRate ? parseFloat(formData.nonNabhRate) : null,
-        non_nabh_bhopal: formData.nonNabhBhopal ? parseFloat(formData.nonNabhBhopal) : null
-        // Removed created_by to avoid foreign key constraint issues
+        non_nabh_bhopal: formData.nonNabhBhopal ? parseFloat(formData.nonNabhBhopal) : null,
+        tpa_rate_ipd: formData.tpaRateIpd ? parseFloat(formData.tpaRateIpd) : null,
+        private_rate_ipd: formData.privateRateIpd ? parseFloat(formData.privateRateIpd) : null,
+        nabh_rate_ipd: formData.nabhRateIpd ? parseFloat(formData.nabhRateIpd) : null,
+        nabh_bhopal_ipd: formData.nabhBhopalIpd ? parseFloat(formData.nabhBhopalIpd) : null,
+        non_nabh_rate_ipd: formData.nonNabhRateIpd ? parseFloat(formData.nonNabhRateIpd) : null,
+        non_nabh_bhopal_ipd: formData.nonNabhBhopalIpd ? parseFloat(formData.nonNabhBhopalIpd) : null
       };
 
       const { data, error } = await supabase
@@ -206,6 +217,109 @@ const MandatoryServiceCreate = () => {
                     onChange={handleInputChange}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                     placeholder="Enter Non-NABH Bhopal rate"
+                    min="0"
+                    step="1"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* IPD Rate Fields Section */}
+            <div className="border-t pt-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-1">IPD Rates</h3>
+              <p className="text-sm text-gray-500 mb-4">Leave blank to use the same rate as OPD</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    TPA Rate IPD (₹)
+                  </label>
+                  <input
+                    type="number"
+                    name="tpaRateIpd"
+                    value={formData.tpaRateIpd}
+                    onChange={handleInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder={formData.tpaRate || 'Same as OPD'}
+                    min="0"
+                    step="1"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Private Rate IPD (₹)
+                  </label>
+                  <input
+                    type="number"
+                    name="privateRateIpd"
+                    value={formData.privateRateIpd}
+                    onChange={handleInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder={formData.privateRate || 'Same as OPD'}
+                    min="0"
+                    step="1"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    NABH Rate IPD (₹)
+                  </label>
+                  <input
+                    type="number"
+                    name="nabhRateIpd"
+                    value={formData.nabhRateIpd}
+                    onChange={handleInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder={formData.nabhRate || 'Same as OPD'}
+                    min="0"
+                    step="1"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    NABH Bhopal IPD (₹)
+                  </label>
+                  <input
+                    type="number"
+                    name="nabhBhopalIpd"
+                    value={formData.nabhBhopalIpd}
+                    onChange={handleInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder={formData.nabhBhopal || 'Same as OPD'}
+                    min="0"
+                    step="1"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Non-NABH Rate IPD (₹)
+                  </label>
+                  <input
+                    type="number"
+                    name="nonNabhRateIpd"
+                    value={formData.nonNabhRateIpd}
+                    onChange={handleInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder={formData.nonNabhRate || 'Same as OPD'}
+                    min="0"
+                    step="1"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Non-NABH Bhopal IPD (₹)
+                  </label>
+                  <input
+                    type="number"
+                    name="nonNabhBhopalIpd"
+                    value={formData.nonNabhBhopalIpd}
+                    onChange={handleInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder={formData.nonNabhBhopal || 'Same as OPD'}
                     min="0"
                     step="1"
                   />

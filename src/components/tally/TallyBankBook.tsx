@@ -32,10 +32,8 @@ export default function TallyBankBook({ serverUrl, companyName, companyId }) {
   const [page, setPage] = useState(0)
 
   const now = new Date()
-  const [dateFrom, setDateFrom] = useState(
-    `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
-  )
-  const [dateTo, setDateTo] = useState(now.toISOString().split('T')[0])
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
 
   // Load bank ledgers
   useEffect(() => {
@@ -157,9 +155,14 @@ export default function TallyBankBook({ serverUrl, companyName, companyId }) {
       withdrawal += wd
       runningBalance = runningBalance + dep - wd
 
-      const against = entries.find(e => (e.ledger || '').toLowerCase() !== bankName)
+      const nonBankParty = (v.party_ledger && (v.party_ledger || '').toLowerCase() !== bankName)
+        ? v.party_ledger
+        : null
+      const against = nonBankParty
+        || (entries.find(e => (e.ledger || '').toLowerCase() !== bankName))?.ledger
+        || null
 
-      return { ...v, deposit: dep, withdrawal: wd, runningBalance, againstLedger: against?.ledger || '-' }
+      return { ...v, deposit: dep, withdrawal: wd, runningBalance, againstLedger: against || '-' }
     })
 
     return {
@@ -311,7 +314,7 @@ export default function TallyBankBook({ serverUrl, companyName, companyId }) {
                     </span>
                   </td>
                   <td className="py-2 px-3 text-gray-900 max-w-[200px] truncate">
-                    {row.party_ledger || row.againstLedger || '-'}
+                    {row.againstLedger && row.againstLedger !== '-' ? row.againstLedger : (row.party_ledger || '-')}
                   </td>
                   <td className="py-2 px-3 text-right text-green-700 font-medium whitespace-nowrap">
                     {row.deposit > 0 ? formatCurrency(row.deposit) : ''}

@@ -6,6 +6,7 @@ import { EnhancedDatePicker } from '@/components/ui/enhanced-date-picker';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { useDiagnoses } from '@/hooks/useDiagnoses';
 
 interface VisitDetailsSectionProps {
   visitDate: Date;
@@ -23,9 +24,12 @@ interface VisitDetailsSectionProps {
     relationshipManager?: string;
     claimId?: string;
     cardNo?: string;
+    diagnosisId?: string;
+    billingCategoryOverride?: string;
   };
   handleInputChange: (field: string, value: string) => void;
   existingVisit?: any; // Optional existing visit data for edit mode
+  patientCorporate?: string; // Patient's original corporate/yojna category
 }
 
 export const VisitDetailsSection: React.FC<VisitDetailsSectionProps> = ({
@@ -33,9 +37,11 @@ export const VisitDetailsSection: React.FC<VisitDetailsSectionProps> = ({
   setVisitDate,
   formData,
   handleInputChange,
-  existingVisit
+  existingVisit,
+  patientCorporate
 }) => {
   const { hospitalConfig } = useAuth();
+  const { diagnoses, isLoading: isLoadingDiagnoses } = useDiagnoses();
   const [doctors, setDoctors] = useState<Array<{ id: string; name: string; specialty: string }>>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -338,6 +344,35 @@ export const VisitDetailsSection: React.FC<VisitDetailsSectionProps> = ({
           </Select>
         </div>
 
+        {/* Billing Category Override - only for Yojna/corporate patients */}
+        {patientCorporate && patientCorporate.toLowerCase().trim() !== 'private' && (
+          <div className="space-y-2 md:col-span-2">
+            <Label htmlFor="billingCategoryOverride" className="text-sm font-medium">
+              Billing Category
+            </Label>
+            <p className="text-xs text-gray-500">
+              Patient registered as: <span className="font-semibold text-blue-700">{patientCorporate}</span>
+            </p>
+            {(formData.visitType === 'follow-up' || formData.visitType === 'routine-checkup') && (
+              <div className="bg-yellow-50 border border-yellow-300 rounded p-2 text-xs text-yellow-800">
+                Review visits for Yojna patients are typically billed at private rates
+              </div>
+            )}
+            <Select
+              value={formData.billingCategoryOverride || ''}
+              onValueChange={(value) => handleInputChange('billingCategoryOverride', value)}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Same as registration" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="same_as_registration">Same as registration</SelectItem>
+                <SelectItem value="private">Private</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+
         <div className="space-y-2">
           <Label htmlFor="appointmentWith" className="text-sm font-medium">
             Appointment With <span className="text-red-500">*</span>
@@ -386,6 +421,33 @@ export const VisitDetailsSection: React.FC<VisitDetailsSectionProps> = ({
             placeholder="Reason for visit"
             value={formData.reasonForVisit}
             onChange={(e) => handleInputChange('reasonForVisit', e.target.value)}
+          />
+        </div>
+
+        {/* Diagnosis */}
+        <div className="space-y-2">
+          <Label htmlFor="diagnosisId" className="text-sm font-medium">
+            Diagnosis
+          </Label>
+          <SearchableSelect
+            options={[
+              { value: 'none', label: 'None' },
+              ...diagnoses.map((d) => ({
+                value: d.id,
+                label: d.name
+              }))
+            ]}
+            value={formData.diagnosisId || ''}
+            onValueChange={(value) => handleInputChange('diagnosisId', value === 'none' ? '' : value)}
+            placeholder={
+              isLoadingDiagnoses
+                ? "Loading diagnoses..."
+                : diagnoses.length === 0
+                ? "No diagnoses available"
+                : "Select Diagnosis"
+            }
+            searchPlaceholder="Search diagnoses..."
+            emptyText="No diagnosis found."
           />
         </div>
 

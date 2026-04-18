@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -9,10 +9,11 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { ArrowLeft, Save, Printer, Sparkles, Download, Eye, Loader2, Edit3, Settings } from 'lucide-react';
+import { ArrowLeft, Save, Printer, Sparkles, Download, Eye, Loader2, Edit3, Settings, Camera, Upload, X, Search, Trash2 } from 'lucide-react';
 import { useDebounce } from 'use-debounce';
 import DischargeSummary from '@/components/DischargeSummary';
 import { useVisitDiagnosis } from '@/hooks/useVisitDiagnosis';
+import { useToast } from '@/hooks/use-toast';
 
 interface Patient {
   id: string;
@@ -258,18 +259,52 @@ export default function DischargeSummaryEdit() {
   const [formattedLabResults, setFormattedLabResults] = useState<string[]>([]);
   const [abnormalResults, setAbnormalResults] = useState<string[]>([]);
 
+  // Fetch Data loading state
+  const [isFetchingData, setIsFetchingData] = useState(false);
+  const [fetchProgress, setFetchProgress] = useState('');
+
   // AI Generation states
   const [isGenerating, setIsGenerating] = useState(false);
   const [showGenerationModal, setShowGenerationModal] = useState(false);
   const [editablePrompt, setEditablePrompt] = useState('');
   const [editablePatientData, setEditablePatientData] = useState<any>({});
 
+  // Camera/Upload OCR states
+  const [showCameraDialog, setShowCameraDialog] = useState(false);
+  const [isCapturing, setIsCapturing] = useState(false);
+  const [isProcessingOCR, setIsProcessingOCR] = useState(false);
+  const [capturedImage, setCapturedImage] = useState<string | null>(null);
+  const [extractedNotes, setExtractedNotes] = useState('');
+  const [fetchedDataText, setFetchedDataText] = useState('');
+  const [dataFetched, setDataFetched] = useState(false);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const { toast } = useToast();
+
   // Lab results state
   const [labResults, setLabResults] = useState<any[]>([]);
   const [visitLabs, setVisitLabs] = useState<any[]>([]);
 
+  // Patient search state
+  const [patientSearchQuery, setPatientSearchQuery] = useState('');
+  const [patientSearchResults, setPatientSearchResults] = useState<Array<{visit_id: string; name: string; patients_id: string; visit_type: string; appointment_with: string; visit_date: string}>>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [showSearchResults, setShowSearchResults] = useState(false);
+
   // Debounced auto-save
   const [debouncedText] = useDebounce(dischargeSummaryText, 1500);
+
+  // Load pending OPD extracted notes from CameraUpload (if navigated from OPD Summary)
+  useEffect(() => {
+    const pendingNotes = localStorage.getItem('opd_extracted_notes');
+    if (pendingNotes) {
+      setExtractedNotes(pendingNotes);
+      localStorage.removeItem('opd_extracted_notes');
+    }
+  }, []);
 
   // Fetch patient and visit data
   useEffect(() => {
@@ -300,13 +335,20 @@ export default function DischargeSummaryEdit() {
 
         if (visitData) {
           setPatient(visitData);
-          const existingSummary = visitData.discharge_summary || '';
+          const existingSummary = visitData.opd_summary_text || visitData.discharge_summary || '';
           // Convert HTML to plain text if the summary contains HTML tags
           const summaryToSet = existingSummary.includes('<') && existingSummary.includes('>')
             ? htmlToPlainText(existingSummary)
             : existingSummary;
           setDischargeSummaryText(summaryToSet);
           setOriginalText(summaryToSet);
+          if (visitData.extracted_notes) {
+            setExtractedNotes(visitData.extracted_notes);
+          }
+          if (visitData.fetched_data_text) {
+            setFetchedDataText(visitData.fetched_data_text);
+            setDataFetched(true);
+          }
         }
       } catch (error) {
         console.error('Exception while fetching patient data:', error);
@@ -332,7 +374,12 @@ export default function DischargeSummaryEdit() {
         try {
           const { error } = await supabase
             .from('visits')
-            .update({ discharge_summary: debouncedText })
+            .update({
+              discharge_summary: debouncedText,
+              extracted_notes: extractedNotes,
+              fetched_data_text: fetchedDataText,
+              opd_summary_text: debouncedText
+            })
             .eq('visit_id', patient.visit_id);
 
           if (error) {
@@ -361,23 +408,90 @@ export default function DischargeSummaryEdit() {
     try {
       const { error } = await supabase
         .from('visits')
-        .update({ discharge_summary: dischargeSummaryText })
+        .update({
+          discharge_summary: dischargeSummaryText,
+          extracted_notes: extractedNotes,
+          fetched_data_text: fetchedDataText,
+          opd_summary_text: dischargeSummaryText
+        })
         .eq('visit_id', patient.visit_id);
 
       if (error) {
         console.error('Error saving discharge summary:', error);
-        alert('Failed to save discharge summary');
+        alert('Failed to save OPD summary');
       } else {
         setOriginalText(dischargeSummaryText);
         setIsSaved(true);
         setTimeout(() => setIsSaved(false), 2000);
-        alert('Discharge summary saved successfully!');
+        alert('OPD summary saved successfully!');
       }
     } catch (error) {
       console.error('Exception while saving:', error);
-      alert('Failed to save discharge summary');
+      alert('Failed to save OPD summary');
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  // Patient search for OPD Summary
+  const handlePatientSearch = async (query: string) => {
+    setPatientSearchQuery(query);
+    if (query.length < 2) {
+      setPatientSearchResults([]);
+      setShowSearchResults(false);
+      return;
+    }
+
+    setIsSearching(true);
+    setShowSearchResults(true);
+    try {
+      // Search by patient name, patient ID, or visit ID
+      const { data, error } = await supabase
+        .from('visits')
+        .select('visit_id, visit_type, appointment_with, visit_date, patients(name, patients_id)')
+        .or(`visit_id.ilike.%${query}%,patients.name.ilike.%${query}%,patients.patients_id.ilike.%${query}%`)
+        .order('visit_date', { ascending: false })
+        .limit(10);
+
+      if (error) {
+        console.error('Search error:', error);
+        // Fallback: search visits and filter client-side
+        const { data: fallbackData } = await supabase
+          .from('visits')
+          .select('visit_id, visit_type, appointment_with, visit_date, patients(name, patients_id)')
+          .order('visit_date', { ascending: false })
+          .limit(100);
+
+        const filtered = (fallbackData || []).filter((v: any) => {
+          const name = v.patients?.name?.toLowerCase() || '';
+          const pid = v.patients?.patients_id?.toLowerCase() || '';
+          const vid = v.visit_id?.toLowerCase() || '';
+          const q = query.toLowerCase();
+          return name.includes(q) || pid.includes(q) || vid.includes(q);
+        }).slice(0, 10);
+
+        setPatientSearchResults(filtered.map((v: any) => ({
+          visit_id: v.visit_id,
+          name: v.patients?.name || 'Unknown',
+          patients_id: v.patients?.patients_id || '',
+          visit_type: v.visit_type || '',
+          appointment_with: v.appointment_with || '',
+          visit_date: v.visit_date || '',
+        })));
+      } else {
+        setPatientSearchResults((data || []).filter((v: any) => v.patients).map((v: any) => ({
+          visit_id: v.visit_id,
+          name: v.patients?.name || 'Unknown',
+          patients_id: v.patients?.patients_id || '',
+          visit_type: v.visit_type || '',
+          appointment_with: v.appointment_with || '',
+          visit_date: v.visit_date || '',
+        })));
+      }
+    } catch (err) {
+      console.error('Search error:', err);
+    } finally {
+      setIsSearching(false);
     }
   };
 
@@ -389,6 +503,8 @@ export default function DischargeSummaryEdit() {
     }
 
     try {
+      setIsFetchingData(true);
+      setFetchProgress('Fetching patient demographics...');
       console.log('Fetching comprehensive discharge data for patient:', visitId);
 
       // 1. Fetch complete patient data from patients table
@@ -413,6 +529,7 @@ export default function DischargeSummaryEdit() {
         console.error('Error fetching visit data:', visitError);
       }
 
+      setFetchProgress('Fetching visit data & OT notes...');
       // 3. Fetch OT notes for surgery details
       let { data: otNote, error: otError } = await supabase
         .from('ot_notes')
@@ -449,9 +566,10 @@ export default function DischargeSummaryEdit() {
       // Check if we have valid visitData with UUID for subsequent queries
       if (!visitData?.id) {
         console.error('❌ Critical: No visitData.id available for database queries');
-        alert('Error: Unable to fetch additional data - missing visit UUID. Basic discharge summary will be generated with available data.');
+        alert('Error: Unable to fetch additional data - missing visit UUID. Basic OPD summary will be generated with available data.');
       }
 
+      setFetchProgress('Fetching diagnoses & complications...');
       // 5. Fetch complications using the correct UUID from visitData.id
       let visitComplications = null;
       let compError = null;
@@ -584,6 +702,7 @@ export default function DischargeSummaryEdit() {
         console.log('❌ No visitData.id available for complications query');
       }
 
+      setFetchProgress('Fetching lab reports & results...');
       // 6. Fetch lab orders - try multiple approaches
       let labOrders = null;
       let labError = null;
@@ -698,175 +817,79 @@ export default function DischargeSummaryEdit() {
       console.log('🔍 Attempting to fetch lab results from lab_results table...');
 
       // Based on database schema analysis: lab_results uses patient_name (denormalized)
-      // visit_id is optional and might be NULL, so prioritize patient_name queries
+      // visit_id is a UUID foreign key to visits.id
       const patientNameForQuery = patient?.patients?.name || visitData?.patient_name || patient?.name || '';
       console.log('🎯 Patient name for lab results query:', patientNameForQuery);
 
-      // FIRST: Try a direct, simple query for "radha" since we know this exists
-      console.log('🔍 Trying direct query for patient_name = "radha"...');
-      try {
-        const { data: directResults, error: directError } = await supabase
-          .from('lab_results')
-          .select('*')
-          .eq('patient_name', 'radha');
+      // Strategy: Try visit_id (UUID) first for exact match, then patient_name with ilike
+      const labResultsSelect = `
+        id, main_test_name, test_name, test_category, result_value, result_unit,
+        reference_range, comments, is_abnormal, result_status, technician_name,
+        pathologist_name, authenticated_result, created_at, visit_id, patient_name, visit_lab_id
+      `;
 
-        if (directError) {
-          console.error('❌ Direct query error:', directError);
-        } else if (directResults && directResults.length > 0) {
-          console.log('✅ SUCCESS! Found lab results with direct query for "radha":', directResults.length, 'results');
-          console.log('📋 Lab results found:', directResults);
-          labResultsData = directResults;
-        } else {
-          console.log('📝 No results found with direct query for "radha"');
-        }
-      } catch (error) {
-        console.log('💥 Exception in direct query:', error);
-      }
-
-      // Only try other queries if direct query didn't work
-      if (!labResultsData || labResultsData.length === 0) {
-        console.log('🔄 Direct query did not find results, trying other methods...');
-
-      const queryAttempts = [
-        { field: 'patient_name', value: patientNameForQuery, desc: `patient_name: ${patientNameForQuery}` },
-        { field: 'patient_name', value: patientNameForQuery.toLowerCase(), desc: `patient_name lowercase: ${patientNameForQuery.toLowerCase()}` },
-        { field: 'patient_name', value: 'radha', desc: `patient_name: radha (exact)` },
-        { field: 'patient_name', value: 'Radha', desc: `patient_name: Radha (capitalized)` },
-        { field: 'patient_name', value: 'RADHA', desc: `patient_name: RADHA (uppercase)` },
-        { field: 'visit_id', value: visitId, desc: `visitId parameter (${visitId})` },
-        { field: 'patient_visit_id', value: visitId, desc: `patient_visit_id: ${visitId}` },
-        { field: 'visit_id', value: 'IH25I24003', desc: `visit_id: IH25I24003 (hardcoded)` },
-        { field: 'patient_visit_id', value: 'IH25I24003', desc: `patient_visit_id: IH25I24003 (hardcoded)` },
-        { field: 'visit_id', value: visitData?.id, desc: 'visitData.id UUID' },
-        { field: 'patient_id', value: patient?.patient_id || patient?.patients?.id, desc: `patient_id: ${patient?.patient_id || patient?.patients?.id}` }
-      ];
-
-      for (let attempt = 0; attempt < queryAttempts.length; attempt++) {
-        const { field, value, desc } = queryAttempts[attempt];
-
-        if (!value) {
-          console.log(`⏭️ Skipping attempt ${attempt + 1}: ${desc} - value is null/undefined`);
-          continue;
-        }
-
+      // Attempt 1: Query by visit UUID (most precise)
+      if (visitData?.id) {
         try {
-          console.log(`🔄 Attempt ${attempt + 1}: Querying lab_results.${field} = ${value} (${desc})`);
-
           const { data: results, error: resultsError } = await supabase
-              .from('lab_results')
-              .select(`
-                id,
-                main_test_name,
-                test_name,
-                test_category,
-                result_value,
-                result_unit,
-                reference_range,
-                comments,
-                is_abnormal,
-                result_status,
-                technician_name,
-                pathologist_name,
-                authenticated_result,
-                created_at,
-                visit_id,
-                patient_visit_id,
-                patient_id
-              `)
-              .eq(field, value)
-              .order('created_at', { ascending: true });
-
-          console.log(`📊 Query result for ${desc}:`, {
-            found: results?.length || 0,
-            error: resultsError?.message || 'none',
-            sampleData: results?.[0] || 'none'
-          });
-
-          if (results && results.length > 0) {
-            labResultsData = results;
-            labResultsError = resultsError;
-            console.log(`✅ SUCCESS! Found ${results.length} lab results using ${desc}`);
-            console.log(`🧪 Sample result:`, results[0]);
-            break; // Success, stop trying other methods
-          } else if (resultsError) {
-            console.log(`❌ Query error for ${desc}:`, resultsError);
-          } else {
-            console.log(`📝 No results found for ${desc}`);
-          }
-
-        } catch (error) {
-          console.log(`💥 Exception for attempt ${attempt + 1} (${desc}):`, error);
-        }
-      }
-      } // Close the if block for other query attempts
-
-      // If no results found with .eq(), try with .ilike() for flexible matching
-      if (!labResultsData || labResultsData.length === 0) {
-        console.log('🔄 Attempting to fetch with ilike for flexible matching...');
-
-        try {
-          // Try ilike with patient name AND filter by visit_id if available
-          let query = supabase
             .from('lab_results')
-            .select(`
-              id,
-              main_test_name,
-              test_name,
-              test_category,
-              result_value,
-              result_unit,
-              reference_range,
-              comments,
-              is_abnormal,
-              result_status,
-              patient_name,
-              visit_id,
-              patient_visit_id,
-              patient_id
-            `);
+            .select(labResultsSelect)
+            .eq('visit_id', visitData.id)
+            .order('created_at', { ascending: true });
 
-          // Add patient name filter
-          query = query.ilike('patient_name', '%radha%');
-
-          // If we have visit_id, also filter by that for more specific results
-          if (visitId === 'IH25I24003') {
-            query = query.or(`visit_id.eq.${visitId},patient_visit_id.eq.${visitId}`);
-            console.log('🔍 Filtering by visit_id:', visitId);
-          }
-
-          const { data: ilikeResults, error: ilikeError } = await query;
-
-          if (ilikeError) {
-            console.error('❌ Error with ilike query:', ilikeError);
-          } else if (ilikeResults && ilikeResults.length > 0) {
-            console.log('✅ SUCCESS! Found lab results for radha:', ilikeResults.length, 'results');
-
-            // Filter to only show results for visit IH25I24003 if we have multiple visits
-            if (visitId === 'IH25I24003') {
-              const visitSpecificResults = ilikeResults.filter(r =>
-                r.visit_id === visitId || r.patient_visit_id === visitId
-              );
-              if (visitSpecificResults.length > 0) {
-                console.log('🎯 Using visit-specific results:', visitSpecificResults.length);
-                labResultsData = visitSpecificResults;
-              } else {
-                // Use all results for this patient
-                labResultsData = ilikeResults;
-              }
-            } else {
-              labResultsData = ilikeResults;
-            }
-          } else {
-            console.log('📝 No results found even with ilike for radha');
+          if (!resultsError && results && results.length > 0) {
+            console.log(`✅ Found ${results.length} lab results by visit UUID`);
+            labResultsData = results;
           }
         } catch (error) {
-          console.log('💥 Exception in ilike query:', error);
+          console.error('💥 Exception querying lab_results by visit UUID:', error);
         }
       }
 
-      // If still no results, leave empty - DO NOT show other patients' data
+      // Attempt 2: Query by patient name (case-insensitive) if visit UUID didn't work
+      if ((!labResultsData || labResultsData.length === 0) && patientNameForQuery) {
+        try {
+          const { data: results, error: resultsError } = await supabase
+            .from('lab_results')
+            .select(labResultsSelect)
+            .ilike('patient_name', patientNameForQuery.trim())
+            .order('created_at', { ascending: true });
+
+          if (!resultsError && results && results.length > 0) {
+            console.log(`✅ Found ${results.length} lab results by exact patient name (ilike)`);
+            labResultsData = results;
+          }
+        } catch (error) {
+          console.error('💥 Exception querying lab_results by patient name:', error);
+        }
+      }
+
+      // Attempt 3: Fuzzy match on patient name (contains)
+      if ((!labResultsData || labResultsData.length === 0) && patientNameForQuery) {
+        try {
+          const { data: results, error: resultsError } = await supabase
+            .from('lab_results')
+            .select(labResultsSelect)
+            .ilike('patient_name', `%${patientNameForQuery.trim()}%`)
+            .order('created_at', { ascending: true });
+
+          if (!resultsError && results && results.length > 0) {
+            console.log(`✅ Found ${results.length} lab results by fuzzy patient name`);
+            // If we have visit_id, prefer visit-specific results
+            if (visitData?.id) {
+              const visitSpecific = results.filter((r: any) => r.visit_id === visitData.id);
+              labResultsData = visitSpecific.length > 0 ? visitSpecific : results;
+            } else {
+              labResultsData = results;
+            }
+          }
+        } catch (error) {
+          console.error('💥 Exception in fuzzy lab_results query:', error);
+        }
+      }
+
       if (!labResultsData || labResultsData.length === 0) {
-        console.log('ℹ️ No lab results found for patient "radha"');
+        console.log('ℹ️ No lab results found for patient:', patientNameForQuery);
         labResultsData = [];
       }
 
@@ -932,6 +955,7 @@ export default function DischargeSummaryEdit() {
       // Store visit_labs in state for AI generation
       setVisitLabs(visitLabsData || []);
 
+      setFetchProgress('Fetching radiology reports...');
       // 7. Fetch radiology orders using the correct UUID from visitData.id
       let radiologyOrders = null;
       let radError = null;
@@ -968,6 +992,7 @@ export default function DischargeSummaryEdit() {
         radiologyOrders = [];
       }
 
+      setFetchProgress('Fetching prescriptions & medications...');
       // 8. Fetch pharmacy/prescription data
       let prescriptionData = null;
       let prescriptionError = null;
@@ -1043,6 +1068,7 @@ export default function DischargeSummaryEdit() {
         }
       }
 
+      setFetchProgress('Processing & formatting all data...');
       // Process the fetched data
       const patientInfo = fullPatientData || patient.patients || {};
       const visit = visitData || patient;
@@ -1144,16 +1170,76 @@ export default function DischargeSummaryEdit() {
         console.log('📊 labResultsData exists:', !!labResultsData);
         console.log('📊 labResultsData length:', labResultsData?.length || 0);
 
-      // PRIORITY: Process visit_labs data first (ordered tests from billing page)
+      // Process visit_labs enriched with actual results from lab_results
       if (visitLabsData && visitLabsData.length > 0) {
-        console.log('✅ Processing visit_labs data for AI modal:', visitLabsData);
+        console.log('✅ Processing visit_labs data enriched with lab_results:', visitLabsData.length, 'orders');
+
+        // Track which lab_results have been matched to avoid duplicates
+        const matchedLabResultIds = new Set<string>();
 
         visitLabsData.forEach(test => {
           const testName = test.test_name || test.lab_name || 'Unknown Test';
-          formattedLabResultsLocal.push(`• ${testName}: Ordered - Pending`);
+
+          // Find ALL matching results for this test (panel tests have multiple sub-tests like CBC -> Hb, WBC, ESR, etc.)
+          let matchedResults: any[] = [];
+          if (labResultsData && labResultsData.length > 0) {
+            // Match by visit_lab_id (most precise)
+            matchedResults = labResultsData.filter((r: any) => r.visit_lab_id === test.id);
+
+            // If no visit_lab_id match, match by name (panel name -> main_test_name)
+            if (matchedResults.length === 0) {
+              const labName = (test.test_name || test.lab_name || '').toLowerCase();
+              matchedResults = labResultsData.filter((r: any) =>
+                (r.main_test_name || '').toLowerCase().includes(labName) ||
+                labName.includes((r.main_test_name || '').toLowerCase()) ||
+                (r.visit_lab_id === null && (r.test_name || '').toLowerCase().includes(labName))
+              );
+            }
+
+            // Track matched IDs
+            matchedResults.forEach((r: any) => matchedLabResultIds.add(r.id));
+          }
+
+          if (matchedResults.length > 0) {
+            // Panel test with sub-results — show heading then each sub-test
+            formattedLabResultsLocal.push(`\n**${testName}:**`);
+            matchedResults.forEach((result: any) => {
+              if (result.result_value) {
+                const subTestName = result.test_name || result.main_test_name || testName;
+                const valueWithUnit = `${result.result_value}${result.result_unit ? ' ' + result.result_unit : ''}`;
+                const refRange = result.reference_range ? ` (Ref: ${result.reference_range})` : '';
+                const abnormalFlag = result.is_abnormal ? ' ⚠ ABNORMAL' : ' ✓';
+                formattedLabResultsLocal.push(`  • ${subTestName}: ${valueWithUnit}${refRange}${abnormalFlag}`);
+                if (result.is_abnormal) {
+                  abnormalResultsLocal.push(`${subTestName}: ${valueWithUnit}`);
+                }
+              }
+            });
+          } else {
+            formattedLabResultsLocal.push(`• ${testName}: Ordered - Pending`);
+          }
         });
+
+        // Also include any extra results from lab_results not matched to visit_labs
+        if (labResultsData && labResultsData.length > 0) {
+          const extraResults = labResultsData.filter((r: any) => !matchedLabResultIds.has(r.id));
+          if (extraResults.length > 0) {
+            console.log(`📋 Found ${extraResults.length} extra lab results not matched to visit_labs`);
+            extraResults.forEach((result: any) => {
+              const valueWithUnit = result.result_value
+                ? `${result.result_value}${result.result_unit ? ' ' + result.result_unit : ''}`
+                : 'N/A';
+              const refRange = result.reference_range ? ` (Ref: ${result.reference_range})` : '';
+              const abnormalFlag = result.is_abnormal ? ' ⚠ ABNORMAL' : ' ✓';
+              formattedLabResultsLocal.push(`• ${result.test_name || result.main_test_name}: ${valueWithUnit}${refRange}${abnormalFlag}`);
+              if (result.is_abnormal && result.result_value) {
+                abnormalResultsLocal.push(`${result.test_name}: ${valueWithUnit}`);
+              }
+            });
+          }
+        }
       }
-      // ONLY process lab_results if visit_labs is empty
+      // Fallback: process lab_results directly if no visit_labs
       else if (labResultsData && labResultsData.length > 0) {
         console.log('✅ Processing lab results data (no visit_labs):', labResultsData);
 
@@ -1304,23 +1390,15 @@ export default function DischargeSummaryEdit() {
         console.log('ℹ️ No medications prescribed for this visit');
       }
 
-      medicationsTable = `Medications on Discharge:
---------------------------------------------------------------------------------
-Name                     Strength    Route     Dosage                          Days
---------------------------------------------------------------------------------
+      medicationsTable = `**MEDICATIONS (TREATMENT ON DISCHARGE):**
+
+| Medication Name | Strength | Route | Dosage | Duration |
+|-----------------|----------|-------|--------|----------|
 `;
       medicationsToUse.forEach(med => {
         // Parse medication string into structured format
         const parsed = parseMedication(med);
-
-        // Format as table row with proper column alignment
-        const name = parsed.name.padEnd(24);
-        const strength = parsed.strength.padEnd(11);
-        const route = parsed.route.padEnd(9);
-        const dosage = parsed.dosage.padEnd(31);
-        const days = parsed.days;
-
-        medicationsTable += `${name} ${strength} ${route} ${dosage} ${days}
+        medicationsTable += `| ${parsed.name} | ${parsed.strength || '-'} | ${parsed.route || 'PO'} | ${parsed.dosage || '-'} | ${parsed.days || '-'} |
 `;
       });
 
@@ -1331,17 +1409,17 @@ Name                     Strength    Route     Dosage                          D
 
       // Create case summary narrative
       const caseSummaryText = otNote
-        ? `This ${patientAge} year old ${patientGender.toLowerCase()} patient was admitted on ${visitDate} with ${primaryDiagnosis.toLowerCase()}. The patient underwent ${otNote.surgery_name || 'surgical procedure'} performed by ${otNote.surgeon || 'the attending surgeon'} under ${otNote.anaesthesia || 'appropriate anaesthesia'}. ${otNote.procedure_performed ? `The procedure involved ${otNote.procedure_performed.toLowerCase()}.` : ''} ${otNote.description ? `Post-operative notes indicate ${otNote.description.toLowerCase()}.` : ''} The patient's recovery was satisfactory and is now ready for discharge.`
-        : `This ${patientAge} year old ${patientGender.toLowerCase()} patient was admitted on ${visitDate} with ${primaryDiagnosis.toLowerCase()}. The patient received appropriate medical management and showed good clinical improvement. All vital parameters were stable at the time of discharge.`;
+        ? `This ${patientAge} year old ${patientGender.toLowerCase()} patient was seen on ${visitDate} with ${primaryDiagnosis.toLowerCase()}. The patient underwent ${otNote.surgery_name || 'surgical procedure'} performed by ${otNote.surgeon || 'the attending surgeon'} under ${otNote.anaesthesia || 'appropriate anaesthesia'}. ${otNote.procedure_performed ? `The procedure involved ${otNote.procedure_performed.toLowerCase()}.` : ''} ${otNote.description ? `Post-operative notes indicate ${otNote.description.toLowerCase()}.` : ''} The patient's recovery was satisfactory.`
+        : `This ${patientAge} year old ${patientGender.toLowerCase()} patient was admitted on ${visitDate} with ${primaryDiagnosis.toLowerCase()}. The patient received appropriate medical management and showed good clinical improvement. All vital parameters were stable at the time of visit.`;
 
       // Create medications narrative
       const medicationsText = visitDiagnosis?.medications && visitDiagnosis.medications.length > 0
-        ? `The patient is discharged on the following medications: ${visitDiagnosis.medications.map((med, index) => {
+        ? `The following medications were prescribed: ${visitDiagnosis.medications.map((med, index) => {
             // Convert medication format from technical to narrative
             const medText = med.replace(/•\s*/, '').replace(/दिन में दो बार/g, 'twice daily').replace(/दिन में एक बार/g, 'once daily').replace(/रात में/g, 'at bedtime').replace(/खाने के बाद/g, 'after meals').replace(/खाने से पहले/g, 'before meals');
             return index === visitDiagnosis.medications.length - 1 ? `and ${medText}` : medText;
           }).join(', ')}. All medications should be taken as prescribed and the patient should complete the full course of treatment.`
-        : `No specific medications were prescribed at discharge. The patient should continue with general supportive care as advised.`;
+        : `No specific medications were prescribed. The patient should continue with general supportive care as advised.`;
 
       // Create lab results table format
       let labResultsTable = '';
@@ -1359,19 +1437,63 @@ LABORATORY INVESTIGATIONS:
 Test Name                       Result              Reference Range     Status
 --------------------------------------------------------------------------------\n`;
 
-        // PRIORITY: Add lab tests from visit_labs table (ordered tests from billing page)
-        // This is the source of truth for what tests were ordered for THIS visit
+        // PRIORITY: Add lab tests from visit_labs table, enriched with actual results from lab_results
         if (visitLabsData && visitLabsData.length > 0) {
           console.log('📊 Including lab tests from visit_labs table:', visitLabsData.length, 'tests');
           visitLabsData.forEach(test => {
             const testName = (test.test_name || test.lab_name || 'Unknown Test').substring(0, 30).padEnd(30);
-            const value = 'Ordered'.substring(0, 18).padEnd(18);
-            const range = (test.description || '-').substring(0, 18).padEnd(18);
-            const status = 'Pending';
-            labResultsTable += `${testName} ${value} ${range} ${status}\n`;
+
+            // Check if there's an actual result in lab_results for this test
+            let matchedResult: any = null;
+            if (labResultsData && labResultsData.length > 0) {
+              // Match by visit_lab_id first (most precise)
+              matchedResult = labResultsData.find((r: any) => r.visit_lab_id === test.id);
+              // Fallback: match by test name (case-insensitive)
+              if (!matchedResult) {
+                const labName = (test.test_name || test.lab_name || '').toLowerCase();
+                matchedResult = labResultsData.find((r: any) =>
+                  (r.main_test_name || '').toLowerCase().includes(labName) ||
+                  labName.includes((r.test_name || '').toLowerCase())
+                );
+              }
+            }
+
+            if (matchedResult && matchedResult.result_value) {
+              const value = `${matchedResult.result_value}${matchedResult.result_unit ? ' ' + matchedResult.result_unit : ''}`.substring(0, 18).padEnd(18);
+              const range = (matchedResult.reference_range || test.description || '-').substring(0, 18).padEnd(18);
+              const status = matchedResult.is_abnormal ? '⚠ ABNORMAL' : '✓ Normal';
+              labResultsTable += `${testName} ${value} ${range} ${status}\n`;
+            } else {
+              const value = 'Ordered'.substring(0, 18).padEnd(18);
+              const range = (test.description || '-').substring(0, 18).padEnd(18);
+              const status = 'Pending';
+              labResultsTable += `${testName} ${value} ${range} ${status}\n`;
+            }
           });
+
+          // Also add any lab_results that don't match a visit_lab (extra results)
+          if (labResultsData && labResultsData.length > 0) {
+            const visitLabIds = new Set(visitLabsData.map((t: any) => t.id));
+            const visitLabNames = new Set(visitLabsData.map((t: any) => (t.test_name || t.lab_name || '').toLowerCase()));
+            const extraResults = labResultsData.filter((r: any) => {
+              if (r.visit_lab_id && visitLabIds.has(r.visit_lab_id)) return false;
+              const rName = (r.test_name || '').toLowerCase();
+              const rMainName = (r.main_test_name || '').toLowerCase();
+              return !Array.from(visitLabNames).some((n: any) => rMainName.includes(n) || n.includes(rName));
+            });
+            if (extraResults.length > 0) {
+              console.log('📊 Adding extra lab results not in visit_labs:', extraResults.length);
+              extraResults.forEach((result: any) => {
+                const testName = (result.test_name || result.main_test_name || 'Unknown Test').substring(0, 30).padEnd(30);
+                const value = (result.result_value ? `${result.result_value}${result.result_unit ? ' ' + result.result_unit : ''}` : 'N/A').substring(0, 18).padEnd(18);
+                const range = (result.reference_range || 'N/A').substring(0, 18).padEnd(18);
+                const status = result.is_abnormal ? '⚠ ABNORMAL' : '✓ Normal';
+                labResultsTable += `${testName} ${value} ${range} ${status}\n`;
+              });
+            }
+          }
         }
-        // ONLY add lab_results if visit_labs is empty AND we have visit-specific results
+        // Fallback: use lab_results directly if no visit_labs
         else if (labResultsData && labResultsData.length > 0) {
           console.log('📊 Including lab results from lab_results table (no visit_labs found):', labResultsData.length, 'results');
           labResultsData.forEach(result => {
@@ -1424,8 +1546,7 @@ Test Name                       Result              Reference Range     Status
 ${formatTableField('Primary Care Provider', doctorName)} ${formatTableField('Registration ID', patient.patients?.registration_id || 'IH25I22001')}
 ${formatTableField('Sex / Age', `${patientGender} / ${patientAge} Year`)} ${formatTableField('Mobile No', patientInfo.phone || patient.patients?.phone || 'N/A')}
 ${formatTableField('Tariff', patient.patients?.tariff || 'Private')} ${formatTableField('Address', patient.patients?.address || 'N/A')}
-${formatTableField('Admission Date', visitDate)} ${formatTableField('Discharge Date', new Date().toLocaleDateString())}
-${formatTableField('Discharge Reason', 'Recovered')}
+${formatTableField('Admission Date', visitDate)} ${formatTableField('Visit Date', new Date().toLocaleDateString())}
 
 ================================================================================
 
@@ -1504,7 +1625,7 @@ Follow up after 7 days/SOS.
 
 --------------------------------------------------------------------------------
 ${formatTableField('Review on', new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toLocaleDateString())}
-${formatTableField('Resident On Discharge', doctorName.includes('Dr.') ? doctorName.replace('Dr. ', '') : doctorName)}
+${formatTableField('Attending Physician', doctorName.includes('Dr.') ? doctorName.replace('Dr. ', '') : doctorName)}
 --------------------------------------------------------------------------------
 
                                         Dr. ${doctorName.includes('Dr.') ? doctorName.replace('Dr. ', '') : doctorName} (Gastroenterologist)
@@ -1515,8 +1636,13 @@ PLEASE CONTACT: 7030974619, 9373111709.
 ================================================================================
 `;
 
-      // Summary is already in plain text format
-      setDischargeSummaryText(summary);
+      // Save fetched data to separate panel (not the editor)
+      // Include extracted handwritten notes at the top if available
+      const fullFetchedData = extractedNotes
+        ? `=== EXTRACTED HANDWRITTEN NOTES ===\n${extractedNotes}\n\n=== DATABASE DATA ===\n${summary}`
+        : summary;
+      setFetchedDataText(fullFetchedData);
+      setDataFetched(true);
 
       // Show success message with accurate data counts
       console.log('📊 Lab results for success message:', {
@@ -1554,15 +1680,18 @@ PLEASE CONTACT: 7030974619, 9373111709.
       if (complications.length > 0) dataInfo.push(`${complications.length} complication(s)`);
 
       const message = dataInfo.length > 0
-        ? `✅ Discharge summary data fetched successfully!\n\nIncluded data:\n• ${dataInfo.join('\n• ')}\n\nTotal characters: ${summary.length}`
-        : `✅ Discharge summary generated with available database data.\n\nDiagnosis: ${visitDiagnosis ? 'Found' : 'Not found'}\nTotal characters: ${summary.length}`;
+        ? `✅ OPD summary data fetched successfully!\n\nIncluded data:\n• ${dataInfo.join('\n• ')}\n\nTotal characters: ${summary.length}`
+        : `✅ OPD summary generated with available database data.\n\nDiagnosis: ${visitDiagnosis ? 'Found' : 'Not found'}\nTotal characters: ${summary.length}`;
 
       alert(message);
 
     } catch (error) {
       console.error('Error in handleFetchData:', error);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-      alert(`❌ Failed to fetch discharge data.\n\nError: ${errorMessage}\n\nPlease check the console for detailed information.`);
+      alert(`❌ Failed to fetch OPD summary data.\n\nError: ${errorMessage}\n\nPlease check the console for detailed information.`);
+    } finally {
+      setIsFetchingData(false);
+      setFetchProgress('');
     }
   };
 
@@ -1834,14 +1963,37 @@ PLEASE CONTACT: 7030974619, 9373111709.
       console.log('Error fetching radiology data:', error);
     }
 
-    // Process lab investigations - PRIORITIZE visit_labs (ordered tests from billing page)
+    // Process lab investigations - merge visit_labs with lab_results for actual values
     if (visitLabs && visitLabs.length > 0) {
-      labInvestigationsData = visitLabs.map(test => ({
-        name: test.test_name || test.lab_name || 'Unknown Test',
-        result: 'Ordered',
-        range: test.description || '-',
-        status: 'Pending'
-      }));
+      labInvestigationsData = visitLabs.map(test => {
+        const testName = test.test_name || test.lab_name || 'Unknown Test';
+        // Check if there's an actual result in lab_results
+        let matchedResult: any = null;
+        if (labResults && labResults.length > 0) {
+          matchedResult = labResults.find((r: any) => r.visit_lab_id === test.id);
+          if (!matchedResult) {
+            const labName = (test.test_name || test.lab_name || '').toLowerCase();
+            matchedResult = labResults.find((r: any) =>
+              (r.main_test_name || '').toLowerCase().includes(labName) ||
+              labName.includes((r.test_name || '').toLowerCase())
+            );
+          }
+        }
+        if (matchedResult && matchedResult.result_value) {
+          return {
+            name: testName,
+            result: `${matchedResult.result_value}${matchedResult.result_unit ? ' ' + matchedResult.result_unit : ''}`,
+            range: matchedResult.reference_range || test.description || '-',
+            status: matchedResult.is_abnormal ? 'Abnormal' : 'Normal'
+          };
+        }
+        return {
+          name: testName,
+          result: 'Ordered',
+          range: test.description || '-',
+          status: 'Pending'
+        };
+      });
     }
     // ONLY use labResults if visitLabs is empty
     else if (labResults && labResults.length > 0) {
@@ -1896,152 +2048,142 @@ PLEASE CONTACT: 7030974619, 9373111709.
     // Set editable data
     setEditablePatientData(patientData);
 
-    // Prepare comprehensive prompt with all medical data
-    const prompt = `Generate a complete and comprehensive discharge summary in plain text format including ALL the following sections and data.
+    // Build medications section from actual data only (no dummy data)
+    const medsSection = (() => {
+      if (!patientData.medications || patientData.medications.length === 0) {
+        return 'Medications Prescribed: None recorded in database';
+      }
+      const medsLines = patientData.medications.map(med => {
+        const parsed = parseMedication(med);
+        return `* ${parsed.name} ${parsed.strength} | ${parsed.route} | ${parsed.dosage} | ${parsed.days}`;
+      }).join('\n');
+      return `Medications Prescribed:\n${medsLines}`;
+    })();
 
-PATIENT DATA PROVIDED:
-- Primary Diagnosis: ${patientData.primaryDiagnosis}
-- Secondary Diagnoses: ${patientData.secondaryDiagnoses.join(', ') || 'None'}
-- Complications: ${patientData.complications.join(', ') || 'None'}
-- Chief Complaints: ${patientData.complaints.join(', ') || 'None'}
-${patientData.otData ? `
-- SURGERY/OT DATA:
-  Surgery Name: ${patientData.otData.surgeryName}
+    // Build lab section
+    const labSection = (() => {
+      if (!patientData.labInvestigations || patientData.labInvestigations.length === 0) return '';
+      const lines = patientData.labInvestigations.map(lab => {
+        const statusIcon = lab.status === 'Pending' ? '⏳ Pending' : (lab.status === 'Abnormal' ? '⚠ Abnormal' : '✓ Normal');
+        return `  ${lab.name}: ${lab.result} (Ref: ${lab.range}) - ${statusIcon}`;
+      }).join('\n');
+      return `Lab Investigations:\n${lines}`;
+    })();
+
+    // Build radiology section
+    const radiologySection = (() => {
+      if (!patientData.radiologyInvestigations || patientData.radiologyInvestigations.length === 0) return '';
+      const lines = patientData.radiologyInvestigations.map(rad =>
+        `  ${rad.name}: ${rad.findings} - ${rad.status}`
+      ).join('\n');
+      return `Radiology Investigations:\n${lines}`;
+    })();
+
+    // Build OT section
+    const otSection = patientData.otData ? `
+Surgical Details:
+  Surgery: ${patientData.otData.surgeryName}
   Surgeon: ${patientData.otData.surgeon}
   Anaesthesia: ${patientData.otData.anaesthesia}
   Procedure: ${patientData.otData.procedurePerformed}
-  Findings: ${patientData.otData.findings}
-  Description: ${patientData.otData.description}
-  Implant: ${patientData.otData.implant || 'None'}` : ''}
-${patientData.labInvestigations && patientData.labInvestigations.length > 0 ? `
-- LAB INVESTIGATIONS:
-${patientData.labInvestigations.map(lab => `  ${lab.name}: ${lab.result} (Range: ${lab.range}) - ${lab.status}`).join('\n')}` : ''}
-${patientData.radiologyInvestigations && patientData.radiologyInvestigations.length > 0 ? `
-- RADIOLOGY INVESTIGATIONS:
-${patientData.radiologyInvestigations.map(rad => `  ${rad.name}: ${rad.findings} - ${rad.status}`).join('\n')}` : ''}
+  Findings: ${patientData.otData.findings || 'N/A'}
+  Post-op Notes: ${patientData.otData.description || 'N/A'}
+  ${patientData.otData.implant ? `Implant: ${patientData.otData.implant}` : ''}` : '';
 
-GENERATE THE FOLLOWING COMPLETE DISCHARGE SUMMARY:
+    // Build vitals section
+    const vitalsSection = patientData.vitalSigns && patientData.vitalSigns.length > 0
+      ? `Vital Signs:\n${patientData.vitalSigns.join('\n')}`
+      : '';
 
-OPD DISCHARGE SUMMARY
+    // Clean consultant name - remove duplicate "Dr." prefix
+    const cleanConsultant = (patientData.consultant || 'N/A').replace(/^Dr\.\s*Dr\./i, 'Dr.');
+
+    // Prepare comprehensive prompt with all medical data
+    const prompt = `You are a senior medical documentation specialist. Generate a professional, clinical OPD (Out-Patient Department) Summary based STRICTLY on the data provided below. Do NOT invent or hallucinate any clinical information. If data is missing, write "Not recorded" — never fabricate vitals, medications, or findings.
+
+RULES:
+1. Use ONLY the data provided below. Do not add generic/template vitals, medications, or advice.
+2. If medications are not available, state "Medications: As per prescription. Please refer to dispensed prescription slip."
+3. If handwritten notes contain unclear text, mark it as "[unclear from handwritten notes]" — do NOT guess.
+4. Keep the summary concise and professional. No excessive boilerplate.
+5. Use the exact lab values provided — show actual results, not "Ordered/Pending" if values are available.
+6. For advice section, generate specific advice based on the diagnosis, not generic precautions.
+
+=== PATIENT DEMOGRAPHICS ===
+Name: ${patientData.name}
+Sex / Age: ${patientData.gender} / ${patientData.age} Year
+Patient ID: ${patientData.uhId || patientData.patientId || 'N/A'}
+Registration ID: ${patientData.registrationId || 'N/A'}
+Mobile: ${patientData.mobileNumber || patientData.mobile || 'N/A'}
+Address: ${patientData.address || 'N/A'}
+Tariff: ${patientData.tariff || 'N/A'}
+Visit Date: ${patientData.admissionDate || 'N/A'}
+Primary Care Provider: ${cleanConsultant}
+
+=== CLINICAL DATA ===
+Primary Diagnosis: ${patientData.primaryDiagnosis || 'Not recorded'}
+Secondary Diagnoses: ${patientData.secondaryDiagnoses.join(', ') || 'None'}
+Chief Complaints: ${patientData.complaints.join(', ') || 'Not recorded'}
+Complications: ${patientData.complications.join(', ') || 'None'}
+${vitalsSection ? `\n${vitalsSection}` : ''}
+${patientData.clinicalHistory ? `\nClinical History: ${patientData.clinicalHistory}` : ''}
+${patientData.examinationFindings ? `\nExamination Findings: ${patientData.examinationFindings}` : ''}
+
+=== INVESTIGATIONS ===
+${labSection || 'Lab Investigations: None ordered'}
+${radiologySection || ''}
+${otSection || ''}
+
+=== MEDICATIONS ===
+${medsSection}
+
+${patientData.treatmentCourse && patientData.treatmentCourse.length > 0 ? `=== TREATMENT COURSE ===\n${patientData.treatmentCourse.join('\n')}` : ''}
+
+=== OUTPUT FORMAT ===
+Generate the OPD Summary in this exact structure:
+
+OPD SUMMARY
 ================================================================================
 
-Name                  : ${(patientData.name || '').padEnd(30)}Patient ID            : ${patientData.uhId || patientData.patientId || 'UHAY25I22001'}
-Primary Care Provider : ${(patientData.consultant || '').padEnd(30)}Registration ID       : ${patientData.registrationId || 'IH25I22001'}
+Name                  : ${(patientData.name || '').padEnd(30)}Patient ID            : ${patientData.uhId || patientData.patientId || 'N/A'}
+Primary Care Provider : ${cleanConsultant.padEnd(30)}Registration ID       : ${patientData.registrationId || 'N/A'}
 Sex / Age             : ${((patientData.gender || '') + ' / ' + (patientData.age || '') + ' Year').padEnd(30)}Mobile No             : ${patientData.mobileNumber || patientData.mobile || 'N/A'}
 Tariff                : ${(patientData.tariff || '').padEnd(30)}Address               : ${patientData.address || 'N/A'}
-Admission Date        : ${(patientData.admissionDate || '').padEnd(30)}Discharge Date        : ${patientData.dischargeDate || ''}
-Discharge Reason      : Recovered
+Admission Date        : ${(patientData.admissionDate || '').padEnd(30)}Visit Date            : ${patientData.dischargeDate || ''}
 
 ================================================================================
 
-Present Condition
+Then include these sections (only include sections where data is available):
+1. Present Condition & Diagnosis
+2. Chief Complaints (use actual complaints, not generic text)
+3. Vital Signs (ONLY if recorded — do NOT invent default values)
+4. Investigations (Lab + Radiology with actual values)
+5. Surgical Details (only if OT data exists)
+6. Medications Prescribed — MUST be in a markdown table format:
+   | Medication Name | Strength | Route | Dosage | Duration |
+   Use actual medications from the data. If none available, state "As per prescription. Please refer to dispensed prescription slip."
+7. Case Summary (2-3 sentences summarizing the visit based on actual data)
+8. Condition at Visit (based on actual clinical data)
+9. Advice (specific to the diagnosis — not generic boilerplate)
+10. Follow-up Date and Attending Physician
 
-Diagnosis: ${patientData.primaryDiagnosis}${patientData.secondaryDiagnoses.length > 0 ? ', ' + patientData.secondaryDiagnoses.join(', ') : ''}
+Footer:
+Review on: ${new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toLocaleDateString('en-GB')}
+Attending Physician: ${cleanConsultant}
+Emergency Contact: 7030974619, 9373111709
 
-${patientData.labInvestigations && patientData.labInvestigations.length > 0 ? `
-Investigations:
---------------------------------------------------------------------------------
-LAB INVESTIGATIONS:
-Name                              Result                  Range              Status
---------------------------------------------------------------------------------
-${patientData.labInvestigations.map(lab =>
-`${lab.name.padEnd(35)}${lab.result.padEnd(24)}${lab.range.padEnd(19)}${lab.status}`).join('\n')}
-` : ''}
-${patientData.radiologyInvestigations && patientData.radiologyInvestigations.length > 0 ? `
-RADIOLOGY INVESTIGATIONS:
-Name                              Findings                                   Status
---------------------------------------------------------------------------------
-${patientData.radiologyInvestigations.map(rad =>
-`${rad.name.padEnd(35)}${rad.findings.padEnd(43)}${rad.status}`).join('\n')}
-` : ''}
+IMPORTANT: Output plain text only. Be professional and concise. Include ALL provided data. Do NOT fabricate any information not provided above.`;
 
-Medications on Discharge:
---------------------------------------------------------------------------------
-Name                     Strength    Route     Dosage                          Days
---------------------------------------------------------------------------------
-${(() => {
-  const medsToUse = patientData.medications && patientData.medications.length > 0
-    ? patientData.medications
-    : [
-        'Paracetamol 500mg oral twice-daily 5days',
-        'Amoxicillin 250mg oral thrice-daily 7days',
-        'Omeprazole 20mg oral once-daily 10days',
-        'Vitamin-C 500mg oral once-daily 30days',
-        'Diclofenac 50mg oral twice-daily 3days'
-      ];
-  return medsToUse.map(med => {
-    const parsed = parseMedication(med);
-    const name = parsed.name.padEnd(24);
-    const strength = parsed.strength.padEnd(11);
-    const route = parsed.route.padEnd(9);
-    const dosage = parsed.dosage.padEnd(31);
-    const days = parsed.days;
-    return `${name} ${strength} ${route} ${dosage} ${days}`;
-  }).join('\n');
-})()}
+      // Include fetched database data and extracted handwritten notes in the prompt
+      let promptText = prompt;
+      if (fetchedDataText) {
+        promptText = `FETCHED DATABASE DATA:\n${fetchedDataText}\n\n---\n\n${promptText}`;
+      }
+      if (extractedNotes) {
+        promptText = `IMPORTANT - EXTRACTED HANDWRITTEN NOTES FROM DOCTOR:\n${extractedNotes}\n\n---\n\nUse the above handwritten notes as the PRIMARY source of clinical information. Combine with the fetched database data below to generate a complete OPD summary.\n\n${promptText}`;
+      }
 
-Case Summary:
-
-The patient was admitted with complaints of ${patientData.complaints.join(', ')}.
-
-${patientData.otData ? `
-================================================================================
-SURGICAL DETAILS:
-================================================================================
-Surgery Name          : ${patientData.otData.surgeryName}
-Surgeon              : ${patientData.otData.surgeon}
-Anaesthesia          : ${patientData.otData.anaesthesia}
-Procedure performed  : ${patientData.otData.procedurePerformed}
-Intraoperative findings: ${patientData.otData.findings || 'N/A'}
-Post-operative notes : ${patientData.otData.description || 'Recovery was satisfactory'}
-${patientData.otData.implant ? `Implant used         : ${patientData.otData.implant}` : ''}
-================================================================================
-` : ''}
-
-${patientData.vitalSigns && patientData.vitalSigns.length > 0 ? `
-VITAL SIGNS AT DISCHARGE:
-${patientData.vitalSigns.join('\n')}
-` : ''}
-
-${patientData.treatmentCourse && patientData.treatmentCourse.length > 0 ? `
-TREATMENT COURSE:
-${patientData.treatmentCourse.join('\n')}
-` : 'The patient responded well to treatment and showed significant improvement.'}
-
-${patientData.complications && patientData.complications.length > 0 ? `
-COMPLICATIONS DURING STAY:
-${patientData.complications.join('\n')}
-` : 'No complications noted during hospital stay.'}
-
-ADVICE
-
-Advice:
-Follow up after 7 days/SOS.
-
-Precautions:
-- Take medications as prescribed
-- Maintain proper hygiene
-- Adequate rest and hydration
-- Monitor for warning signs
-
-Return immediately if:
-- Symptoms worsen or recur
-- Severe pain or discomfort
-- Persistent fever
-- Any concerning symptoms
-
---------------------------------------------------------------------------------
-Review on                     : ${new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toLocaleDateString('en-GB')}
-Resident On Discharge         : ${patientData.consultant || 'Sachin Gathibandhe'}
---------------------------------------------------------------------------------
-
-                                           ${patientData.consultant || 'Dr. Dr. Nikhil Khobragade (Gastroenterologist)'}
-
-URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 9373111709.
-
-IMPORTANT: Format everything as plain text, include ALL provided investigations, lab results, radiology findings, and OT data. DO NOT skip any section.`;
-
-      setEditablePrompt(prompt);
+      setEditablePrompt(promptText);
       setShowGenerationModal(true);
     } catch (error) {
       console.error('💥 Error in AI generation setup:', error);
@@ -2055,6 +2197,238 @@ IMPORTANT: Format everything as plain text, include ALL provided investigations,
       });
       alert(`Error setting up AI generation.\n\nError: ${errorMsg}\n\nPlease check the console for details.`);
     }
+  };
+
+  // ---------------------------------------------------------------------------
+  // Camera & OCR Functions
+  // ---------------------------------------------------------------------------
+
+  const startCamera = async () => {
+    try {
+      setShowCameraDialog(true);
+      setIsCapturing(true);
+      setCapturedImage(null);
+
+      // Small delay to ensure dialog is mounted
+      setTimeout(async () => {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } },
+          });
+          streamRef.current = stream;
+          if (videoRef.current) {
+            videoRef.current.srcObject = stream;
+            videoRef.current.onloadedmetadata = () => {
+              videoRef.current?.play().catch(() => {});
+            };
+          }
+        } catch (err) {
+          console.error('Camera access error:', err);
+          toast({
+            title: 'Camera Error',
+            description: 'Unable to access camera. Please check permissions.',
+            variant: 'destructive',
+          });
+          setShowCameraDialog(false);
+          setIsCapturing(false);
+        }
+      }, 300);
+    } catch (err) {
+      console.error('Camera error:', err);
+    }
+  };
+
+  const stopCamera = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+    }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
+    setIsCapturing(false);
+  };
+
+  const capturePhoto = () => {
+    if (!videoRef.current || !canvasRef.current) return;
+
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+
+    if (!video.videoWidth || !video.videoHeight) {
+      toast({
+        title: 'Camera loading',
+        description: 'Camera is still loading. Please try again.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      ctx.drawImage(video, 0, 0);
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+      setCapturedImage(dataUrl);
+      stopCamera();
+    }
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/') && file.type !== 'application/pdf') {
+      toast({
+        title: 'Invalid file',
+        description: 'Please upload an image (JPEG, PNG) or PDF file.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+      toast({
+        title: 'File too large',
+        description: 'Maximum file size is 10 MB.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+      setCapturedImage(dataUrl);
+      setShowCameraDialog(true);
+    };
+    reader.readAsDataURL(file);
+
+    // Reset input so same file can be selected again
+    e.target.value = '';
+  };
+
+  const processImageWithOCR = async (imageDataUrl: string) => {
+    try {
+      setIsProcessingOCR(true);
+
+      // Extract base64 data from data URL
+      const base64Data = imageDataUrl.split(',')[1];
+      const mimeType = imageDataUrl.split(';')[0].split(':')[1] || 'image/jpeg';
+
+      const patientName = patient?.patients?.name || 'Unknown';
+      const patientId = patient?.visit_id || 'Unknown';
+      const doctor = patient?.appointment_with || 'Unknown';
+
+      const ocrPrompt = `You are a medical document OCR specialist. This is a photo of a handwritten OPD (Outpatient Department) summary for patient "${patientName}" (ID: ${patientId}), attending doctor: Dr. ${doctor}.
+
+Please carefully read and transcribe ALL handwritten text from this image. Structure the output as a proper OPD summary with the following sections (include only sections that are present in the handwriting):
+
+- Chief Complaints
+- History of Present Illness
+- Past History
+- Examination Findings / Vitals
+- Diagnosis / Provisional Diagnosis
+- Investigations (Lab tests, X-ray, ECG, etc.)
+- Treatment Given / Medications Prescribed
+- Procedures Done
+- Condition at Visit
+- Follow-up Instructions
+- Advice
+
+IMPORTANT:
+- Transcribe the handwritten content as accurately as possible
+- Use proper medical terminology
+- If something is unclear, write it with [unclear] notation
+- Format medications as: Drug Name - Strength - Route - Dosage - Duration
+- Keep the formatting clean with bullet points where appropriate
+- Do NOT add information that is not in the handwritten document
+- Output ONLY the transcribed and structured text, no explanations`;
+
+      const requestBody = {
+        contents: [{
+          parts: [
+            {
+              inline_data: {
+                mime_type: mimeType,
+                data: base64Data,
+              }
+            },
+            {
+              text: ocrPrompt
+            }
+          ]
+        }],
+        generationConfig: {
+          temperature: 0.2,
+          maxOutputTokens: 4000
+        }
+      };
+
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${import.meta.env.VITE_GEMINI_API_KEY}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(requestBody),
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => null);
+        throw new Error(`Gemini API error: ${response.status} - ${errorData?.error?.message || response.statusText}`);
+      }
+
+      const data = await response.json();
+      const extractedText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+
+      if (!extractedText) {
+        toast({
+          title: 'No text detected',
+          description: 'Could not extract any text from the image. Please try again with a clearer image.',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      // Save extracted text to dedicated panel
+      setExtractedNotes(extractedText);
+
+      // Also populate the editor
+      if (dischargeSummaryText.trim()) {
+        const currentText = dischargeSummaryText;
+        setDischargeSummaryText(currentText + '\n\n--- Extracted from Handwritten Notes ---\n\n' + extractedText);
+      } else {
+        setDischargeSummaryText(extractedText);
+      }
+
+      toast({
+        title: 'Text extracted successfully',
+        description: 'Handwritten OPD summary has been processed and added to the editor.',
+      });
+
+      // Close the dialog
+      setShowCameraDialog(false);
+      setCapturedImage(null);
+
+    } catch (error) {
+      console.error('OCR processing error:', error);
+      toast({
+        title: 'OCR Processing Failed',
+        description: error instanceof Error ? error.message : 'Failed to process image. Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsProcessingOCR(false);
+    }
+  };
+
+  const closeCameraDialog = () => {
+    stopCamera();
+    setShowCameraDialog(false);
+    setCapturedImage(null);
+    setIsProcessingOCR(false);
   };
 
   // Actual AI generation function
@@ -2072,7 +2446,7 @@ IMPORTANT: Format everything as plain text, include ALL provided investigations,
       console.log('- About to call Gemini API...');
 
       // Comprehensive medical discharge summary request
-      const systemPrompt = 'You are an expert medical professional specializing in creating comprehensive discharge summaries for hospitals. Generate detailed, professional medical documentation following Indian medical standards and terminology. Include ALL provided medical data including investigations, lab results, radiology findings, OT notes, and complications.';
+      const systemPrompt = 'You are an expert medical professional specializing in creating comprehensive OPD summaries for hospitals. Generate detailed, professional medical documentation following Indian medical standards and terminology. Include ALL provided medical data including investigations, lab results, radiology findings, OT notes, and complications.';
 
       const requestBody = {
         contents: [{
@@ -2139,7 +2513,7 @@ IMPORTANT: Format everything as plain text, include ALL provided investigations,
       if (hasPromptEcho) {
         console.log('🚨 AI response contains prompt echo - using fallback template');
         aiGeneratedSummary = null; // Force fallback
-      } else if (aiResponse && (aiResponse.includes('DISCHARGE SUMMARY') || aiResponse.includes('Diagnosis:'))) {
+      } else if (aiResponse && (aiResponse.includes('DISCHARGE SUMMARY') || aiResponse.includes('OPD SUMMARY') || aiResponse.includes('Diagnosis:'))) {
         // AI returned proper plain text format
         aiGeneratedSummary = aiResponse;
         console.log('✅ AI returned proper plain text format');
@@ -2150,15 +2524,14 @@ IMPORTANT: Format everything as plain text, include ALL provided investigations,
       // Generate fallback template if needed
       if (!aiGeneratedSummary) {
         console.log('⚠️ Using fallback template with plain text formatting');
-        aiGeneratedSummary = `OPD DISCHARGE SUMMARY
+        aiGeneratedSummary = `OPD SUMMARY
 ================================================================================
 
 Name                  : ${(editablePatientData.name || 'Patient Name').padEnd(30)}Patient ID            : ${editablePatientData.uhId || editablePatientData.patientId || 'UHAY25I22001'}
 Primary Care Provider : ${(editablePatientData.consultant || 'Dr. Unknown').padEnd(30)}Registration ID       : ${editablePatientData.registrationId || 'IH25I22001'}
 Sex / Age             : ${((editablePatientData.gender || 'Gender') + ' / ' + (editablePatientData.age || 'Age') + ' Year').padEnd(30)}Mobile No             : ${editablePatientData.mobileNumber || editablePatientData.mobile || 'N/A'}
 Tariff                : ${(editablePatientData.tariff || 'Private').padEnd(30)}Address               : ${editablePatientData.address || 'N/A'}
-Admission Date        : ${(editablePatientData.admissionDate || new Date().toLocaleDateString()).padEnd(30)}Discharge Date        : ${editablePatientData.dischargeDate || new Date().toLocaleDateString()}
-Discharge Reason      : Recovered
+Admission Date        : ${(editablePatientData.admissionDate || new Date().toLocaleDateString()).padEnd(30)}Visit Date            : ${editablePatientData.dischargeDate || new Date().toLocaleDateString()}
 
 ================================================================================
 
@@ -2189,7 +2562,7 @@ ${editablePatientData.radiologyInvestigations.map(rad => {
   return `${name}${findings}${status}`;
 }).join('\n')}
 
-` : ''}Medications on Discharge:
+` : ''}Medications Prescribed:
 --------------------------------------------------------------------------------
 Name                     Strength    Route     Dosage                          Days
 --------------------------------------------------------------------------------
@@ -2234,7 +2607,7 @@ ${editablePatientData.otData.implant ? formatTableField('Implant used', editable
 ================================================================================
 ` : ''}
 
-${editablePatientData.vitalSigns && editablePatientData.vitalSigns.length > 0 ? `VITAL SIGNS AT DISCHARGE:
+${editablePatientData.vitalSigns && editablePatientData.vitalSigns.length > 0 ? `VITAL SIGNS:
 ${editablePatientData.vitalSigns.join('\n')}
 ` : `Upon thorough examination, vitals were recorded as follows:
 - Temperature: 98.6°F
@@ -2270,7 +2643,7 @@ Follow up after 7 days/SOS.
 
 --------------------------------------------------------------------------------
 Review on                     : ${new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toLocaleDateString('en-GB')}
-Resident On Discharge         : ${editablePatientData.consultant || 'Sachin Gathibandhe'}
+Attending Physician            : ${editablePatientData.consultant || 'Sachin Gathibandhe'}
 --------------------------------------------------------------------------------
 
                                            ${editablePatientData.consultant || 'Dr. Dr. Nikhil Khobragade (Gastroenterologist)'}
@@ -2292,8 +2665,8 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
       // Use safer check for existingDiagnosis with proper variable scope
       const diagnosisWasPreserved = (typeof existingDiagnosis !== 'undefined' && existingDiagnosis && existingDiagnosis.length > 0);
       const preservedMessage = diagnosisWasPreserved
-        ? '✅ AI-powered discharge summary generated successfully! Your existing diagnosis has been preserved.'
-        : '✅ AI-powered discharge summary generated successfully using edited patient data!';
+        ? '✅ AI-powered OPD summary generated successfully! Your existing diagnosis has been preserved.'
+        : '✅ AI-powered OPD summary generated successfully using edited patient data!';
       alert(preservedMessage);
 
     } catch (error) {
@@ -2316,7 +2689,7 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
   // Handle print - Create dedicated print window with clean HTML
   const handlePrint = () => {
     if (!dischargeSummaryText.trim()) {
-      alert('No discharge summary content available to print. Please generate or enter content first.');
+      alert('No OPD summary content available to print. Please generate or enter content first.');
       return;
     }
 
@@ -2356,10 +2729,10 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
 
         lines.forEach((line, index) => {
           // Check if we're entering patient details section
-          if (line.includes('Patient Details') || line.includes('DISCHARGE SUMMARY')) {
-            if (line.includes('DISCHARGE SUMMARY')) {
-              // Add the discharge summary header
-              htmlContent.push(`<h1 style="text-align: center; font-size: 16pt; font-weight: bold; margin: 20px 0; border-bottom: 2px solid #000; padding-bottom: 10px;">OPD DISCHARGE SUMMARY</h1>`);
+          if (line.includes('Patient Details') || line.includes('DISCHARGE SUMMARY') || line.includes('OPD SUMMARY')) {
+            if (line.includes('DISCHARGE SUMMARY') || line.includes('OPD SUMMARY')) {
+              // Add the OPD summary header
+              htmlContent.push(`<h1 style="text-align: center; font-size: 16pt; font-weight: bold; margin: 20px 0; border-bottom: 2px solid #000; padding-bottom: 10px;">OPD SUMMARY</h1>`);
               inPatientDetails = true;
               patientDetailsData = [];
               return; // Skip processing this line further to avoid duplicate
@@ -2374,7 +2747,7 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
             if (line.includes('Name') || line.includes('Patient ID') || line.includes('Primary Care Provider') ||
                 line.includes('Registration ID') || line.includes('Sex / Age') || line.includes('Mobile No') ||
                 line.includes('Tariff') || line.includes('Address') || line.includes('Admission Date') ||
-                line.includes('Discharge Date') || line.includes('Discharge Reason')) {
+                line.includes('Visit Date') || line.includes('Discharge Date')) {
               patientDetailsData.push(line);
               return; // Don't process this line further, it's being collected for the table
             }
@@ -2431,6 +2804,49 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
             return;
           }
 
+          // Detect markdown table rows (| col1 | col2 | col3 |)
+          if (line.trim().startsWith('|') && line.trim().endsWith('|') && line.includes('|')) {
+            // Skip separator rows (|---|---| or |:---|:---|)
+            if (line.replace(/[\s|:\-]/g, '').length === 0) {
+              return; // skip separator line
+            }
+            const cells = line.split('|').filter(c => c.trim()).map(c => c.trim());
+            if (!inTable) {
+              // First row = header
+              inTable = true;
+              tableHeaders = cells;
+            } else {
+              tableRows.push(cells.join('\t')); // store as tab-separated for createTableHTML
+            }
+            return;
+          }
+          // If we were in a markdown table and hit a non-table line, flush the table
+          if (inTable && tableHeaders.length > 0 && !line.trim().startsWith('|')) {
+            if (tableRows.length > 0) {
+              // Reconstruct rows for createTableHTML: convert tab-separated back to array
+              const parsedRows = tableRows.map(r => r.split('\t'));
+              let tableHTML = '<table style="width: 100%; border-collapse: collapse; margin: 15px 0;">';
+              tableHTML += '<thead><tr>';
+              tableHeaders.forEach(h => {
+                tableHTML += `<th style="border: 1px solid #000; padding: 8px; background-color: #f0f0f0; font-weight: bold;">${h}</th>`;
+              });
+              tableHTML += '</tr></thead><tbody>';
+              parsedRows.forEach(rowCells => {
+                tableHTML += '<tr>';
+                rowCells.forEach(cell => {
+                  tableHTML += `<td style="border: 1px solid #000; padding: 8px;">${cell || '&nbsp;'}</td>`;
+                });
+                tableHTML += '</tr>';
+              });
+              tableHTML += '</tbody></table>';
+              htmlContent.push(tableHTML);
+            }
+            inTable = false;
+            tableRows = [];
+            tableHeaders = [];
+            // Don't return — continue processing this line normally
+          }
+
           // Detect table headers (lines with multiple columns separated by spaces)
           // Make sure it's actually a medication table header, not just any line with "Name"
           if (line.includes('Name') && line.includes('Strength') && line.includes('Route') &&
@@ -2444,7 +2860,7 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
             inTable = true;
             tableHeaders = ['Test Name', 'Result', 'Reference Range', 'Status'];
             return;
-          } else if (line.includes('Review on') || line.includes('Resident On Discharge')) {
+          } else if (line.includes('Review on') || line.includes('Attending Physician') || line.includes('Resident On Discharge')) {
             // Review table
             const parts = line.split(':');
             if (parts.length === 2) {
@@ -2475,9 +2891,10 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
             return;
           }
 
-          // Check if we're entering discharge medications section
+          // Check if we're entering medications section
           if (line.includes('DISCHARGE MEDICATIONS:') || (line.includes('DISCHARGE') && line.includes('MEDICATIONS')) ||
-              line.includes('MEDICATIONS ON DISCHARGE:') || (line.includes('Medications') && line.includes('Discharge'))) {
+              line.includes('MEDICATIONS ON DISCHARGE:') || line.includes('Medications Prescribed:') ||
+              (line.includes('Medications') && line.includes('Discharge'))) {
             inDischargeMedications = true;
             dischargeMedicationsData = [];
             // Don't add the heading here - it will be included in the table
@@ -2523,9 +2940,29 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
           processNormalLine(line, htmlContent, skipRef);
         });
 
-        // Close any remaining table
+        // Close any remaining table (could be markdown pipe-table or old format)
         if (inTable && tableRows.length > 0) {
-          htmlContent.push(createTableHTML(tableHeaders, tableRows));
+          // Check if rows are tab-separated (from markdown table parsing)
+          if (tableRows[0] && tableRows[0].includes('\t')) {
+            const parsedRows = tableRows.map(r => r.split('\t'));
+            let tableHTML = '<table style="width: 100%; border-collapse: collapse; margin: 15px 0;">';
+            tableHTML += '<thead><tr>';
+            tableHeaders.forEach(h => {
+              tableHTML += `<th style="border: 1px solid #000; padding: 8px; background-color: #f0f0f0; font-weight: bold;">${h}</th>`;
+            });
+            tableHTML += '</tr></thead><tbody>';
+            parsedRows.forEach(rowCells => {
+              tableHTML += '<tr>';
+              rowCells.forEach(cell => {
+                tableHTML += `<td style="border: 1px solid #000; padding: 8px;">${cell || '&nbsp;'}</td>`;
+              });
+              tableHTML += '</tr>';
+            });
+            tableHTML += '</tbody></table>';
+            htmlContent.push(tableHTML);
+          } else {
+            htmlContent.push(createTableHTML(tableHeaders, tableRows));
+          }
         }
 
         // If we ended with medications section still open, output the table
@@ -2639,7 +3076,7 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
           } else if (line.startsWith('• ') || line.startsWith('* ')) {
             // Bullet point with • or *
             htmlContent.push(`<li style="margin: 5px 0 5px 20px;">${convertMarkdownToHTML(line.substring(2))}</li>`);
-          } else if (line.match(/^(PRESENT CONDITION:|INVESTIGATIONS:|MEDICATIONS ON DISCHARGE:|RADIOLOGY INVESTIGATIONS:|LAB INVESTIGATIONS:|Present Condition|Investigations:|Medications on Discharge:|Case Summary:)/)) {
+          } else if (line.match(/^(PRESENT CONDITION:|INVESTIGATIONS:|MEDICATIONS ON DISCHARGE:|MEDICATIONS PRESCRIBED:|RADIOLOGY INVESTIGATIONS:|LAB INVESTIGATIONS:|Present Condition|Investigations:|Medications on Discharge:|Medications Prescribed:|Case Summary:)/)) {
             // Section headings with or without colons
             htmlContent.push(`<h3 style="font-size: 11pt; font-weight: bold; margin: 15px 0 8px 0;">${convertMarkdownToHTML(line)}</h3>`);
           } else if (line.includes('URGENT CARE') && line.includes('EMERGENCY CARE')) {
@@ -2725,7 +3162,7 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
           html += '<td style="width: 50%; vertical-align: top; padding-right: 20px;">';
 
           // Left column items
-          const leftColumnKeys = ['Name', 'Primary Care Provider', 'Sex / Age', 'Tariff', 'Admission Date', 'Discharge Reason'];
+          const leftColumnKeys = ['Name', 'Primary Care Provider', 'Sex / Age', 'Tariff', 'Admission Date'];
           leftColumnKeys.forEach(key => {
             const value = details[key] || 'N/A';
             html += `<div style="margin: 8px 0;"><strong>${key}:</strong> ${value}</div>`;
@@ -2735,7 +3172,7 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
           html += '<td style="width: 50%; vertical-align: top;">';
 
           // Right column items
-          const rightColumnKeys = ['Patient ID', 'Registration ID', 'Mobile No', 'Address', 'Discharge Date'];
+          const rightColumnKeys = ['Patient ID', 'Registration ID', 'Mobile No', 'Address', 'Visit Date', 'Discharge Date'];
           rightColumnKeys.forEach(key => {
             const value = details[key] || 'N/A';
             html += `<div style="margin: 8px 0;"><strong>${key}:</strong> ${value}</div>`;
@@ -3012,10 +3449,19 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
     }
   };
 
+  // Check if this is an OPD/outpatient visit (no payment gate needed)
+  const isOpdVisit = (() => {
+    const vt = (patient?.visit_type || '').toLowerCase();
+    return vt === 'consultation' || vt === 'follow-up' || vt === 'follow up' || vt === 'opd' || vt === 'new' || vt === 'review';
+  })();
+
+  // OPD visits can always print/preview; IPD visits require bill_paid
+  const canPrintAndPreview = isOpdVisit || !!patient?.bill_paid;
+
   // Handle preview toggle with payment check
   const togglePreview = () => {
-    if (!patient?.bill_paid) {
-      alert('⚠️ Final Payment Required\n\nPlease complete the final payment before previewing the discharge summary.');
+    if (!canPrintAndPreview) {
+      alert('⚠️ Final Payment Required\n\nPlease complete the final payment before previewing the OPD summary.');
       return;
     }
     setShowPreview(!showPreview);
@@ -3023,8 +3469,8 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
 
   // Handle print with payment check
   const handlePrintWithCheck = () => {
-    if (!patient?.bill_paid) {
-      alert('⚠️ Final Payment Required\n\nPlease complete the final payment before printing the discharge summary.');
+    if (!canPrintAndPreview) {
+      alert('⚠️ Final Payment Required\n\nPlease complete the final payment before printing the OPD summary.');
       return;
     }
     handlePrint();
@@ -3046,7 +3492,7 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
         <div className="text-center">
           <h1 className="text-2xl font-bold text-red-600 mb-4">Patient Not Found</h1>
           <p className="text-gray-600 mb-4">Could not find patient data for visit ID: {visitId}</p>
-          <Button onClick={() => navigate('/todays-opd')}>
+          <Button onClick={() => navigate('/opd-summary')}>
             <ArrowLeft className="mr-2 h-4 w-4" />
             Back to OPD Dashboard
           </Button>
@@ -3063,7 +3509,7 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
           <div className="flex items-center gap-4">
             <Button
               variant="outline"
-              onClick={() => navigate('/todays-opd')}
+              onClick={() => navigate('/opd-summary')}
               className="flex items-center gap-2"
             >
               <ArrowLeft className="h-4 w-4" />
@@ -3091,6 +3537,58 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
             )}
           </div>
         </div>
+      </div>
+
+      {/* Patient Search Bar */}
+      <div className="mb-4 relative">
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search patient by name, ID, or visit ID..."
+              value={patientSearchQuery}
+              onChange={(e) => handlePatientSearch(e.target.value)}
+              onFocus={() => patientSearchQuery.length >= 2 && setShowSearchResults(true)}
+              onBlur={() => setTimeout(() => setShowSearchResults(false), 200)}
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+            />
+            {isSearching && (
+              <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 animate-spin" />
+            )}
+          </div>
+        </div>
+        {showSearchResults && patientSearchResults.length > 0 && (
+          <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-64 overflow-y-auto">
+            {patientSearchResults.map((result) => (
+              <button
+                key={result.visit_id}
+                onClick={() => {
+                  navigate(`/discharge-summary-edit/${result.visit_id}`);
+                  setShowSearchResults(false);
+                  setPatientSearchQuery('');
+                }}
+                className="w-full px-4 py-3 text-left hover:bg-blue-50 border-b border-gray-100 last:border-b-0 flex items-center justify-between"
+              >
+                <div>
+                  <div className="font-medium text-sm text-gray-900">{result.name}</div>
+                  <div className="text-xs text-gray-500">
+                    {result.patients_id} | {result.visit_id} | {result.visit_type}
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-xs text-gray-500">Dr. {result.appointment_with}</div>
+                  <div className="text-xs text-gray-400">{result.visit_date}</div>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+        {showSearchResults && patientSearchQuery.length >= 2 && patientSearchResults.length === 0 && !isSearching && (
+          <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg p-4 text-center text-sm text-gray-500">
+            No patients found matching "{patientSearchQuery}"
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -3214,27 +3712,149 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
           )}
         </div>
 
-        {/* Main Content */}
+        {/* Hidden file input for upload */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*,application/pdf"
+          className="hidden"
+          onChange={handleFileUpload}
+        />
+
+        {/* Buttons above Panel 1: Scan OPD + Upload OPD */}
+        <div className="lg:col-span-2 flex items-center gap-2 mb-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={startCamera}
+            className="flex items-center gap-2 bg-purple-50 hover:bg-purple-100 border-purple-200 text-purple-700"
+            title="Take photo of handwritten OPD summary"
+          >
+            <Camera className="h-4 w-4" />
+            Scan OPD
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => fileInputRef.current?.click()}
+            className="flex items-center gap-2 bg-indigo-50 hover:bg-indigo-100 border-indigo-200 text-indigo-700"
+            title="Upload photo of handwritten OPD summary"
+          >
+            <Upload className="h-4 w-4" />
+            Upload OPD
+          </Button>
+        </div>
+
+        {/* Panel 1: Extracted Handwritten Notes - ALWAYS VISIBLE */}
         <div className="lg:col-span-2">
-          <Card>
-            <CardHeader>
+          <Card className="border-purple-200 bg-purple-50/30 mb-4">
+            <CardHeader className="pb-2">
               <div className="flex items-center justify-between">
-                <CardTitle>OPD Summary Content</CardTitle>
-                <div className="flex items-center gap-2">
+                <CardTitle className="text-base flex items-center gap-2 text-purple-700">
+                  <Edit3 className="h-4 w-4" />
+                  Panel 1: Extracted Handwritten Notes
+                </CardTitle>
+                {extractedNotes && (
                   <Button
-                    variant="outline"
+                    variant="ghost"
                     size="sm"
-                    onClick={handleFetchData}
-                    className="flex items-center gap-2 bg-green-50 hover:bg-green-100 border-green-200 text-green-700"
+                    onClick={() => setExtractedNotes('')}
+                    className="text-gray-400 hover:text-red-500 h-7 w-7 p-0"
+                    title="Clear extracted notes"
                   >
-                    <Download className="h-4 w-4" />
-                    Fetch Data
+                    <X className="h-4 w-4" />
                   </Button>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent>
+              <textarea
+                className="w-full bg-white border border-purple-100 rounded-lg p-4 min-h-[80px] max-h-60 overflow-y-auto text-sm text-gray-800 font-sans leading-relaxed resize-y focus:outline-none focus:ring-2 focus:ring-purple-300"
+                placeholder='Type handwritten notes here, or use "Scan OPD" / "Upload OPD" to extract via OCR...'
+                value={extractedNotes}
+                onChange={(e) => setExtractedNotes(e.target.value)}
+              />
+              <p className="text-xs text-purple-500 mt-2">
+                Type notes directly or extract from a handwritten document via OCR. This text will be included when generating the AI summary.
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Button above Panel 2: Fetch Data */}
+        <div className="lg:col-span-2 flex items-center gap-2 mb-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleFetchData}
+            disabled={isFetchingData}
+            className="flex items-center gap-2 bg-green-50 hover:bg-green-100 border-green-200 text-green-700 disabled:opacity-60"
+          >
+            {isFetchingData ? (
+              <>
+                <span className="h-4 w-4 border-2 border-green-500 border-t-transparent rounded-full animate-spin" />
+                Fetching...
+              </>
+            ) : (
+              <>
+                <Download className="h-4 w-4" />
+                Fetch Data
+              </>
+            )}
+          </Button>
+          {isFetchingData && fetchProgress && (
+            <span className="text-xs text-green-600 animate-pulse">{fetchProgress}</span>
+          )}
+        </div>
+
+        {/* Panel 2: Fetched Database Data - ALWAYS VISIBLE */}
+        <div className="lg:col-span-2">
+          <Card className="border-green-200 bg-green-50/30 mb-4">
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base flex items-center gap-2 text-green-700">
+                  <Download className="h-4 w-4" />
+                  Panel 2: Fetched Data (Extracted Notes + Lab/Radiology + Demographics)
+                </CardTitle>
+                {fetchedDataText && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => { setFetchedDataText(''); setDataFetched(false); }}
+                    className="text-gray-400 hover:text-red-500 h-7 w-7 p-0"
+                    title="Clear fetched data"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="bg-white border border-green-100 rounded-lg p-4 min-h-[80px] max-h-72 overflow-y-auto">
+                {fetchedDataText ? (
+                  <pre className="whitespace-pre-wrap text-xs text-gray-800 font-mono leading-relaxed">{fetchedDataText}</pre>
+                ) : (
+                  <p className="text-sm text-gray-400 italic">No data fetched yet. Click "Fetch Data" to load patient demographics, lab results, radiology reports, and extracted notes.</p>
+                )}
+              </div>
+              <p className="text-xs text-green-600 mt-2">
+                Combined data: patient demographics, lab results, radiology, medications, and diagnosis. Click "Generate by AI" after fetching.
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Buttons above Panel 3: Generate by AI, Preview, Print, Clear, Save */}
+        <div className="lg:col-span-2 flex items-center gap-2 flex-wrap mb-2">
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span>
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={handleAIGenerate}
-                    disabled={isGenerating || !patient}
+                    disabled={isGenerating || !patient || !dataFetched}
                     className="flex items-center gap-2"
                   >
                     {isGenerating ? (
@@ -3244,67 +3864,104 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
                     )}
                     {isGenerating ? 'Generating...' : 'Generate by AI'}
                   </Button>
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <span>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={togglePreview}
-                            className="flex items-center gap-2"
-                            disabled={!patient?.bill_paid}
-                          >
-                            <Eye className="h-4 w-4" />
-                            {showPreview ? 'Edit' : 'Preview'}
-                          </Button>
-                        </span>
-                      </TooltipTrigger>
-                      {!patient?.bill_paid && (
-                        <TooltipContent className="bg-red-600 text-white border-red-700 font-semibold">
-                          <p className="flex items-center gap-2">
-                            <span className="text-lg">⚠️</span>
-                            Please complete final payment
-                          </p>
-                        </TooltipContent>
-                      )}
-                    </Tooltip>
-                  </TooltipProvider>
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <span>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={handlePrintWithCheck}
-                            className="flex items-center gap-2"
-                            disabled={!patient?.bill_paid}
-                          >
-                            <Printer className="h-4 w-4" />
-                            Print
-                          </Button>
-                        </span>
-                      </TooltipTrigger>
-                      {!patient?.bill_paid && (
-                        <TooltipContent className="bg-red-600 text-white border-red-700 font-semibold">
-                          <p className="flex items-center gap-2">
-                            <span className="text-lg">⚠️</span>
-                            Please complete final payment
-                          </p>
-                        </TooltipContent>
-                      )}
-                    </Tooltip>
-                  </TooltipProvider>
+                </span>
+              </TooltipTrigger>
+              {!dataFetched && (
+                <TooltipContent className="bg-orange-600 text-white border-orange-700 font-semibold">
+                  <p>Click "Fetch Data" first</p>
+                </TooltipContent>
+              )}
+            </Tooltip>
+          </TooltipProvider>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span>
                   <Button
-                    onClick={handleSave}
-                    disabled={isSaving}
+                    variant="outline"
+                    size="sm"
+                    onClick={togglePreview}
                     className="flex items-center gap-2"
+                    disabled={!canPrintAndPreview}
                   >
-                    <Save className="h-4 w-4" />
-                    Save
+                    <Eye className="h-4 w-4" />
+                    {showPreview ? 'Edit' : 'Preview'}
                   </Button>
-                </div>
+                </span>
+              </TooltipTrigger>
+              {!canPrintAndPreview && (
+                <TooltipContent className="bg-red-600 text-white border-red-700 font-semibold">
+                  <p className="flex items-center gap-2">
+                    <span className="text-lg">⚠️</span>
+                    Please complete final payment
+                  </p>
+                </TooltipContent>
+              )}
+            </Tooltip>
+          </TooltipProvider>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handlePrintWithCheck}
+                    className="flex items-center gap-2"
+                    disabled={!canPrintAndPreview}
+                  >
+                    <Printer className="h-4 w-4" />
+                    Print
+                  </Button>
+                </span>
+              </TooltipTrigger>
+              {!canPrintAndPreview && (
+                <TooltipContent className="bg-red-600 text-white border-red-700 font-semibold">
+                  <p className="flex items-center gap-2">
+                    <span className="text-lg">⚠️</span>
+                    Please complete final payment
+                  </p>
+                </TooltipContent>
+              )}
+            </Tooltip>
+          </TooltipProvider>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              if (window.confirm('Clear all content? This cannot be undone.')) {
+                setDischargeSummaryText('');
+                setExtractedNotes('');
+                setFetchedDataText('');
+                setDataFetched(false);
+                setShowPreview(false);
+              }
+            }}
+            className="flex items-center gap-2 text-red-600 hover:bg-red-50 border-red-200"
+            title="Clear all content to start fresh"
+          >
+            <Trash2 className="h-4 w-4" />
+            Clear
+          </Button>
+          <Button
+            onClick={handleSave}
+            disabled={isSaving}
+            className="flex items-center gap-2"
+          >
+            <Save className="h-4 w-4" />
+            Save
+          </Button>
+        </div>
+
+        {/* Panel 3: AI Generated OPD Summary - ALWAYS VISIBLE */}
+        <div className="lg:col-span-2">
+          <Card className="border-blue-200 bg-blue-50/10">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center gap-2 text-blue-700">
+                  <Sparkles className="h-5 w-5" />
+                  Panel 3: OPD Summary (AI Generated)
+                </CardTitle>
               </div>
             </CardHeader>
             <CardContent>
@@ -3312,7 +3969,7 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
                 <div className="border rounded-lg p-8 bg-white min-h-[500px] max-w-4xl mx-auto print:p-4 print:shadow-none">
                   {/* Hospital Header */}
                   <div className="text-center border-b-2 border-gray-800 pb-4 mb-6">
-                    <h1 className="text-2xl font-bold text-gray-800 mb-2">OPD DISCHARGE SUMMARY</h1>
+                    <h1 className="text-2xl font-bold text-gray-800 mb-2">OPD SUMMARY</h1>
                     <div className="text-sm text-gray-600">
                       <div className="grid grid-cols-2 gap-4 mt-4">
                         <div className="text-left">
@@ -3321,14 +3978,13 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
                           <p><strong>Sex / Age:</strong> {patient?.patients?.gender || 'N/A'} / {patient?.patients?.age || 'N/A'} Year</p>
                           <p><strong>Tariff:</strong> {patient?.patients?.corporate || 'Private'}</p>
                           <p><strong>Admission Date:</strong> {patient?.admission_date || patient?.visit_date || new Date().toLocaleDateString()}</p>
-                          <p><strong>Discharge Reason:</strong> Recovered</p>
                         </div>
                         <div className="text-left">
                           <p><strong>Patient ID:</strong> {patient?.visit_id || 'N/A'}</p>
                           <p><strong>Registration ID:</strong> {patient?.patients?.patients_id || 'N/A'}</p>
                           <p><strong>Mobile No:</strong> {patient?.patients?.phone || 'N/A'}</p>
                           <p><strong>Address:</strong> {patient?.patients?.address || 'N/A'}</p>
-                          <p><strong>Discharge Date:</strong> {patient?.discharge_date || new Date().toLocaleDateString()}</p>
+                          <p><strong>Visit Date:</strong> {patient?.discharge_date || new Date().toLocaleDateString()}</p>
                         </div>
                       </div>
                     </div>
@@ -3343,27 +3999,37 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
                       lineHeight: '1.6'
                     }}
                     dangerouslySetInnerHTML={{
-                      __html: dischargeSummaryText
-                        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-                        .replace(/\*(.*?)\*/g, '<em>$1</em>')
-                        .replace(/\n\n/g, '</p><p class="mb-4">')
-                        .replace(/\n/g, '<br>')
-                        .replace(/^\s*/, '<p class="mb-4">')
-                        .replace(/\s*$/, '</p>')
-                        .replace(/\|(.+)\|/g, (match) => {
-                          const rows = match.split('\n').filter(row => row.trim());
-                          if (rows.length < 2) return match;
-
-                          let tableHtml = '<table class="w-full border-collapse border border-gray-300 my-4"><tbody>';
-                          rows.forEach((row, index) => {
-                            const cells = row.split('|').filter(cell => cell.trim()).map(cell => cell.trim());
-                            const tag = index === 0 ? 'th' : 'td';
-                            const className = index === 0 ? 'class="bg-gray-100 font-semibold p-2 border border-gray-300 text-left"' : 'class="p-2 border border-gray-300"';
-                            tableHtml += `<tr>${cells.map(cell => `<${tag} ${className}>${cell}</${tag}>`).join('')}</tr>`;
+                      __html: (() => {
+                        let text = dischargeSummaryText;
+                        // Convert markdown tables to HTML BEFORE line break replacements
+                        text = text.replace(/((?:\|[^\n]+\|\n?)+)/g, (tableBlock) => {
+                          const rows = tableBlock.trim().split('\n').filter(r => r.trim());
+                          if (rows.length < 2) return tableBlock;
+                          // Filter out separator rows (|---|---|)
+                          const dataRows = rows.filter(r => r.replace(/[\s|:\-]/g, '').length > 0);
+                          if (dataRows.length < 1) return tableBlock;
+                          let html = '<table style="width:100%;border-collapse:collapse;margin:12px 0;font-size:13px;"><tbody>';
+                          dataRows.forEach((row, idx) => {
+                            const cells = row.split('|').filter(c => c.trim()).map(c => c.trim());
+                            if (idx === 0) {
+                              html += '<tr>' + cells.map(c => `<th style="border:1px solid #999;padding:6px 8px;background:#f0f0f0;font-weight:bold;text-align:left;font-size:12px;">${c}</th>`).join('') + '</tr>';
+                            } else {
+                              html += '<tr>' + cells.map(c => `<td style="border:1px solid #ccc;padding:5px 8px;font-size:12px;">${c}</td>`).join('') + '</tr>';
+                            }
                           });
-                          tableHtml += '</tbody></table>';
-                          return tableHtml;
-                        })
+                          html += '</tbody></table>';
+                          return html;
+                        });
+                        // Then do standard markdown conversions
+                        text = text
+                          .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                          .replace(/\*(.*?)\*/g, '<em>$1</em>')
+                          .replace(/\n\n/g, '</p><p class="mb-4">')
+                          .replace(/\n/g, '<br>')
+                          .replace(/^\s*/, '<p class="mb-4">')
+                          .replace(/\s*$/, '</p>');
+                        return text;
+                      })()
                     }}
                   />
                 </div>
@@ -3371,12 +4037,12 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
                 <div className="relative">
                   <textarea
                     className="w-full min-h-[500px] p-4 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-vertical font-mono text-sm leading-relaxed"
-                    placeholder="Enter discharge summary details here...
+                    placeholder="Enter OPD summary details here...
 
 • Chief Complaints
 • Diagnosis
 • Treatment Given
-• Condition at Discharge
+• Condition at Visit
 • Follow-up Instructions
 • Medications Prescribed"
                     value={dischargeSummaryText}
@@ -3406,6 +4072,116 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
       </div>
 
 
+      {/* Camera/Upload OCR Dialog */}
+      <Dialog open={showCameraDialog} onOpenChange={(open) => {
+        if (!open) closeCameraDialog();
+      }}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Camera className="h-5 w-5" />
+              {capturedImage ? 'Review Captured Image' : 'Capture Handwritten OPD Summary'}
+            </DialogTitle>
+            <DialogDescription>
+              {capturedImage
+                ? 'Review the image and click "Extract Text" to process the handwritten content.'
+                : 'Position the handwritten OPD summary in front of the camera and capture it.'}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {/* Camera View */}
+            {isCapturing && !capturedImage && (
+              <div className="relative">
+                <video
+                  ref={videoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  className="w-full rounded-lg bg-black"
+                  style={{ maxHeight: '400px', objectFit: 'contain' }}
+                />
+                <canvas ref={canvasRef} className="hidden" />
+                <div className="flex justify-center gap-3 mt-4">
+                  <Button
+                    onClick={capturePhoto}
+                    className="flex items-center gap-2 bg-red-500 hover:bg-red-600 text-white rounded-full px-6"
+                  >
+                    <Camera className="h-5 w-5" />
+                    Capture
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={closeCameraDialog}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* Captured/Uploaded Image Preview */}
+            {capturedImage && (
+              <div className="space-y-4">
+                <div className="border rounded-lg overflow-hidden">
+                  <img
+                    src={capturedImage}
+                    alt="Captured OPD Summary"
+                    className="w-full object-contain"
+                    style={{ maxHeight: '400px' }}
+                  />
+                </div>
+                <div className="flex justify-center gap-3">
+                  <Button
+                    onClick={() => processImageWithOCR(capturedImage)}
+                    disabled={isProcessingOCR}
+                    className="flex items-center gap-2"
+                  >
+                    {isProcessingOCR ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Sparkles className="h-4 w-4" />
+                    )}
+                    {isProcessingOCR ? 'Extracting Text...' : 'Extract Text'}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setCapturedImage(null);
+                      startCamera();
+                    }}
+                    disabled={isProcessingOCR}
+                  >
+                    Retake
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={closeCameraDialog}
+                    disabled={isProcessingOCR}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+                {isProcessingOCR && (
+                  <div className="text-center text-sm text-blue-600 bg-blue-50 p-3 rounded-lg">
+                    <Loader2 className="h-4 w-4 animate-spin inline mr-2" />
+                    Processing handwritten text with AI... This may take a few seconds.
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Initial state - no camera yet */}
+            {!isCapturing && !capturedImage && (
+              <div className="text-center py-8 text-gray-500">
+                <Camera className="h-12 w-12 mx-auto mb-3 text-gray-400" />
+                <p>Starting camera...</p>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* AI Generation Modal */}
       <Dialog open={showGenerationModal} onOpenChange={setShowGenerationModal}>
         <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
@@ -3415,7 +4191,7 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
               AI OPD Summary Generation
             </DialogTitle>
             <DialogDescription>
-              Review and edit the patient data and prompt before generating the AI discharge summary.
+              Review and edit the patient data and prompt before generating the AI OPD summary.
             </DialogDescription>
           </DialogHeader>
 
@@ -3442,7 +4218,10 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
                   <Input
                     id="admissionDate"
                     value={editablePatientData.admissionDate || ''}
-                    onChange={(e) => setEditablePatientData({...editablePatientData, admissionDate: e.target.value})}
+                    readOnly
+                    disabled
+                    className="bg-gray-100 cursor-not-allowed"
+                    title="Date of admission cannot be changed"
                   />
                 </div>
               </div>
@@ -3522,10 +4301,24 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
                 <Textarea
                   id="prompt"
                   value={editablePrompt}
-                  onChange={(e) => setEditablePrompt(e.target.value)}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val.includes(':summary:')) {
+                      const summaryPrompt = `Act like a medical specialist. Make a professionally written OPD summary. Make up facts. Add findings which are not provided to you. Come up with creative complaints, events during visit to hospital and relevant examination findings. Add medications to be taken at home in Indian BRANDS. The entire summary should be a minimum of 800 words. Do not mention the name, sex or age of the patient. The person who is going to read what you share will be a doctor. Start the summary with the Diagnosis, followed by medication. Medications MUST be in a markdown table like this:
+
+| Medication Name | Strength | Route | Dosage | Duration |
+|-----------------|----------|-------|--------|----------|
+| Tab Pan | 40 mg | PO | BD | 15 days |
+
+Another line in Hindi should be added in the column of dosage in addition to English (e.g. "BD (दिन में दो बार)"). This patient does not have comorbidities other than what is mentioned.`;
+                      setEditablePrompt(val.replace(':summary:', '\n\n' + summaryPrompt + '\n\n'));
+                    } else {
+                      setEditablePrompt(val);
+                    }
+                  }}
                   rows={12}
                   className="text-sm"
-                  placeholder="Edit the Gemini prompt for discharge summary generation..."
+                  placeholder="Edit the Gemini prompt for OPD summary generation... (Type :summary: to insert the specialist prompt)"
                 />
               </div>
               <p className="text-xs text-gray-500">

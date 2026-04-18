@@ -13,6 +13,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { QuickCaptureCard } from '@/components/CameraUpload';
 
 const Index = () => {
   const { hospitalConfig } = useAuth();
@@ -36,57 +37,27 @@ const Index = () => {
 
   const { toast } = useToast();
 
-  // 🚨 DEBUG: Check hospital config in Index
-  console.log('📊 INDEX DEBUG: hospitalConfig =', hospitalConfig);
-  console.log('📊 INDEX DEBUG: hospitalConfig.name =', hospitalConfig.name);
-
-  // 🏥 EXPLICIT HOSPITAL FILTERING - If-Else Condition for Patient Data
-  let currentHospital = '';
-  if (hospitalConfig.name === 'hope') {
-    currentHospital = 'hope';
-    console.log('📊 HOPE Hospital - fetching patient_data records');
-  } else if (hospitalConfig.name === 'ayushman') {
-    currentHospital = 'ayushman';
-    console.log('📊 AYUSHMAN Hospital - fetching patient_data records');
-  } else {
-    currentHospital = 'hope'; // default fallback
-    console.log('📊 Unknown hospital, defaulting to hope patient_data records');
-    console.log('📊 DEBUG: hospitalConfig.name was:', hospitalConfig.name);
-  }
+  const currentHospital = hospitalConfig.name === 'ayushman' ? 'ayushman' : 'hope';
 
   // Fetch patient_data table data with hospital filtering
   const { data: patientDataRecords = [] } = useQuery({
-    queryKey: ['patient-data-records', currentHospital, hospitalConfig.name], // Include hospital name in cache key
+    queryKey: ['patient-data-records', currentHospital],
     queryFn: async () => {
-      console.log('🚨 INDEX QUERY DEBUG: currentHospital =', currentHospital);
-      console.log('🚨 INDEX QUERY DEBUG: About to query patients for hospital:', currentHospital);
-      
-      // Get patient IDs based on hospital_name column
-      let patientsQuery = supabase
+      // Get patient IDs for this hospital
+      const { data: patientsData, error: patientsError } = await supabase
         .from('patients')
-        .select('patients_id, hospital_name')
+        .select('patients_id')
         .eq('hospital_name', currentHospital);
-      
-      console.log('🏥 Filtering patients by hospital_name =', currentHospital);
-      
-      const { data: patientsData, error: patientsError } = await patientsQuery;
-      
+
       if (patientsError) {
         console.error('Error fetching patients for hospital filtering:', patientsError);
         return [];
       }
-      
+
       const patientIds = patientsData?.map(p => p.patients_id) || [];
-      
-      console.log('🚨 INDEX QUERY RESULT: Found patients for hospital filtering:', patientsData);
-      console.log('🚨 INDEX QUERY RESULT: Patient IDs for', currentHospital, ':', patientIds.slice(0, 5));
-      
-      if (patientIds.length === 0) {
-        console.log('🚨 INDEX QUERY RESULT: No patients found for hospital:', currentHospital);
-        return []; // Return empty if no patients for this hospital
-      }
-      
-      // Then get patient_data for those hospital-specific patient IDs only
+
+      if (patientIds.length === 0) return [];
+
       const { data, error } = await supabase
         .from('patient_data')
         .select('*')
@@ -98,7 +69,6 @@ const Index = () => {
         throw error;
       }
 
-      console.log(`Found ${data?.length || 0} patient_data records for hospital: ${hospitalConfig.name}`);
       return data || [];
     }
   });
@@ -229,11 +199,15 @@ const Index = () => {
     'COLORECTAL PROCEDURES'
   ];
 
+  const unwantedCategories = [
+    'ESIC', 'Private', 'Patient Data Records', 'SST', '-',
+    'Superspeciality Treatmention 2', 'Secondary (ST)', 'Secondary ( ST)',
+    'Superspeciality Treatment 2', 'Superspeciality Treatmention', 'Superspeciality Treatment',
+    'SST Treatment'
+  ];
+
   // Filter patients based on search term with improved search logic
   const filteredPatients = useMemo(() => {
-    console.log('Filtering patients with search term:', searchTerm);
-    console.log('Total combined patients before filtering:', combinedPatients);
-
     // Start with static categories
     const result: Record<string, any[]> = {};
     staticCategories.forEach(category => {
@@ -241,13 +215,6 @@ const Index = () => {
     });
 
     // Add any existing categories that are not in static list and not in unwanted list
-    const unwantedCategories = [
-      'ESIC', 'Private', 'Patient Data Records', 'SST', '-',
-      'Superspeciality Treatmention 2', 'Secondary (ST)', 'Secondary ( ST)',
-      'Superspeciality Treatment 2', 'Superspeciality Treatmention', 'Superspeciality Treatment',
-      'SST Treatment'
-    ];
-
     Object.entries(combinedPatients).forEach(([surgery, patientList]) => {
       if (!staticCategories.includes(surgery) && !unwantedCategories.includes(surgery)) {
         result[surgery] = Array.isArray(patientList) ? patientList : [];
@@ -255,7 +222,6 @@ const Index = () => {
     });
 
     if (!searchTerm || searchTerm.trim() === '') {
-      console.log('No search term, returning all patients with static categories');
       return result;
     }
 
@@ -264,10 +230,9 @@ const Index = () => {
 
     Object.entries(result).forEach(([surgery, patientList]) => {
       const patientArray = Array.isArray(patientList) ? patientList : [];
-      console.log(`Searching in surgery "${surgery}" with ${patientArray.length} patients`);
 
       const matchingPatients = patientArray.filter((patient: any) => {
-        const matches = [
+        return [
           patient.name?.toLowerCase().includes(searchLower),
           patient.primaryDiagnosis?.toLowerCase().includes(searchLower),
           patient.surgeon?.toLowerCase().includes(searchLower),
@@ -278,30 +243,14 @@ const Index = () => {
           patient.complications?.toLowerCase().includes(searchLower),
           surgery.toLowerCase().includes(searchLower)
         ].some(match => match === true);
-
-        if (matches) {
-          console.log('Found matching patient:', patient.name);
-        }
-        return matches;
       });
-
-      // Include category if it has matching patients OR if it's a static category OR if surgery name matches search
-      // But exclude unwanted categories
-      const unwantedCategories = [
-        'ESIC', 'Private', 'Patient Data Records', 'SST', '-',
-        'Superspeciality Treatmention 2', 'Secondary (ST)', 'Secondary ( ST)',
-        'Superspeciality Treatment 2', 'Superspeciality Treatmention', 'Superspeciality Treatment',
-        'SST Treatment'
-      ];
 
       if (!unwantedCategories.includes(surgery) &&
           (matchingPatients.length > 0 || staticCategories.includes(surgery) || surgery.toLowerCase().includes(searchLower))) {
         filtered[surgery] = matchingPatients;
-        console.log(`Added ${matchingPatients.length} patients to filtered results for surgery "${surgery}"`);
       }
     });
 
-    console.log('Filtered results:', filtered);
     return filtered;
   }, [combinedPatients, searchTerm]);
 
@@ -333,7 +282,9 @@ const Index = () => {
   };
 
   const handleDeletePatient = (patientId: string) => {
-    deletePatient(patientId);
+    if (window.confirm('Mark this patient as inactive? The record will be preserved for audit purposes.')) {
+      deletePatient(patientId);
+    }
   };
 
   const handleAddPatientClick = (surgery?: string) => {
@@ -410,8 +361,15 @@ const Index = () => {
           </p>
         </div>
 
-        <ClinicalKPIs />
-        <StatisticsCards 
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+          <div className="md:col-span-3">
+            <ClinicalKPIs />
+          </div>
+          <div>
+            <QuickCaptureCard />
+          </div>
+        </div>
+        <StatisticsCards
           totalPatients={totalPatients}
         />
 

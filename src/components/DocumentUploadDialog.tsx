@@ -1,12 +1,29 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Upload, FileText, Check, X, AlertCircle, Printer, Eye, Download, Image } from 'lucide-react';
+import { Upload, FileText, Check, X, AlertCircle, Printer, Eye, Download, Image, GripVertical, Plus, Edit2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { supabase } from '@/integrations/supabase/client';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 interface DocumentUploadDialogProps {
   isOpen: boolean;
@@ -27,6 +44,7 @@ interface DocumentStatus {
   filePreview?: string; // Base64 preview for images
   remarkOnly?: boolean; // For items that only have remark, no upload
   remarkStatus?: 'Yes' | 'No' | '' | 'Select'; // For remark-only items yes/no status
+  isEditingName?: boolean; // Whether the name field is in edit mode
 }
 
 interface PatientDocument {
@@ -76,6 +94,286 @@ const MEDICAL_DOCUMENTS: DocumentStatus[] = [
   { id: 26, name: "Portal Submission", isUploaded: false, remarkOnly: true },
   { id: 27, name: "Admission Notes", isUploaded: false, remarkOnly: true }
 ];
+// ─── SortableDocumentRow ────────────────────────────────────────────────────
+
+interface SortableDocumentRowProps {
+  doc: DocumentStatus;
+  index: number;
+  uploadingId: number | null;
+  visitId: string;
+  onNameChange: (id: number, name: string) => void;
+  onNameEditToggle: (id: number, editing: boolean) => void;
+  onFileUpload: (id: number, e: React.ChangeEvent<HTMLInputElement>) => void;
+  onRemoveFile: (id: number) => void;
+  onRemarkReasonChange: (id: number, reason: string) => void;
+  onRemarkStatusChange: (id: number, status: 'Yes' | 'No') => void;
+  onPreviewClick: (doc: DocumentStatus) => void;
+  onDownloadClick: (doc: DocumentStatus) => void;
+}
+
+const SortableDocumentRow: React.FC<SortableDocumentRowProps> = ({
+  doc,
+  index,
+  uploadingId,
+  visitId,
+  onNameChange,
+  onNameEditToggle,
+  onFileUpload,
+  onRemoveFile,
+  onRemarkReasonChange,
+  onRemarkStatusChange,
+  onPreviewClick,
+  onDownloadClick,
+}) => {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: doc.id });
+
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  const nameInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (doc.isEditingName && nameInputRef.current) {
+      nameInputRef.current.focus();
+      nameInputRef.current.select();
+    }
+  }, [doc.isEditingName]);
+
+  return (
+    <TableRow ref={setNodeRef} style={style} className="group">
+      {/* Drag handle */}
+      <TableCell className="w-8 p-1">
+        <button
+          {...attributes}
+          {...listeners}
+          className="cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600 flex items-center justify-center w-full"
+          title="Drag to reorder"
+        >
+          <GripVertical className="h-4 w-4" />
+        </button>
+      </TableCell>
+
+      {/* Sr. No */}
+      <TableCell className="font-medium">{index + 1}</TableCell>
+
+      {/* Document Name — editable */}
+      <TableCell>
+        <div className="space-y-2">
+          {doc.isEditingName ? (
+            <Input
+              ref={nameInputRef}
+              value={doc.name}
+              onChange={(e) => onNameChange(doc.id, e.target.value)}
+              onBlur={() => onNameEditToggle(doc.id, false)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') onNameEditToggle(doc.id, false);
+                if (e.key === 'Escape') onNameEditToggle(doc.id, false);
+              }}
+              className="h-7 text-sm font-medium"
+            />
+          ) : (
+            <div className="flex items-start gap-1 group/name">
+              <p className="text-sm font-medium flex-1">{doc.name || <em className="text-gray-400">Unnamed document</em>}</p>
+              <button
+                onClick={() => onNameEditToggle(doc.id, true)}
+                className="opacity-0 group-hover/name:opacity-100 transition-opacity text-gray-400 hover:text-blue-600 flex-shrink-0 mt-0.5"
+                title="Edit document name"
+              >
+                <Edit2 className="h-3 w-3" />
+              </button>
+            </div>
+          )}
+          {doc.fileName && (
+            <div className="flex items-center gap-2">
+              <p className="text-xs text-muted-foreground">📎 {doc.fileName}</p>
+              <Badge variant="outline" className="text-xs">
+                {doc.fileType?.split('/')[1]?.toUpperCase() || 'FILE'}
+              </Badge>
+            </div>
+          )}
+          {doc.uploadedAt && (
+            <p className="text-xs text-green-600">
+              ✓ Uploaded on {new Date(doc.uploadedAt).toLocaleDateString()}
+            </p>
+          )}
+        </div>
+      </TableCell>
+
+      {/* Remark Reason */}
+      <TableCell>
+        <Input
+          type="text"
+          placeholder="Enter reason..."
+          value={doc.remarkReason || ''}
+          onChange={(e) => onRemarkReasonChange(doc.id, e.target.value)}
+          className="h-8 text-sm"
+        />
+      </TableCell>
+
+      {/* Upload */}
+      <TableCell>
+        <div className="flex items-center gap-2">
+          {doc.remarkOnly ? (
+            <span className="text-sm text-muted-foreground px-3 py-2">Remark only</span>
+          ) : !doc.isUploaded ? (
+            <>
+              <Input
+                type="file"
+                accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                onChange={(e) => onFileUpload(doc.id, e)}
+                disabled={uploadingId === doc.id}
+                className="hidden"
+                id={`file-${doc.id}`}
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => document.getElementById(`file-${doc.id}`)?.click()}
+                disabled={uploadingId === doc.id}
+                className="h-8"
+              >
+                <Upload className="h-3 w-3 mr-1" />
+                {uploadingId === doc.id ? 'Uploading...' : 'Upload'}
+              </Button>
+            </>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onRemoveFile(doc.id)}
+              className="h-8 text-red-600 hover:text-red-700"
+            >
+              <X className="h-3 w-3 mr-1" />
+              Remove
+            </Button>
+          )}
+        </div>
+      </TableCell>
+
+      {/* Remark status */}
+      <TableCell>
+        <div className="flex items-center justify-center">
+          {doc.remarkOnly ? (
+            <Select
+              value={doc.remarkStatus || 'Select'}
+              onValueChange={(value: 'Yes' | 'No' | 'Select') => {
+                if (value !== 'Select') onRemarkStatusChange(doc.id, value as 'Yes' | 'No');
+              }}
+            >
+              <SelectTrigger className="w-20 h-8">
+                <SelectValue placeholder="Select" />
+              </SelectTrigger>
+              <SelectContent
+                className="bg-white border shadow-lg z-50"
+                onPointerDownOutside={(e) => e.preventDefault()}
+                onInteractOutside={(e) => e.preventDefault()}
+              >
+                <SelectItem value="Yes">Yes</SelectItem>
+                <SelectItem value="No">No</SelectItem>
+              </SelectContent>
+            </Select>
+          ) : doc.isUploaded ? (
+            <Badge className="bg-green-100 text-green-800 hover:bg-green-100">
+              <Check className="h-3 w-3 mr-1" />
+              Yes
+            </Badge>
+          ) : (
+            <Badge variant="secondary" className="bg-red-100 text-red-800">
+              <X className="h-3 w-3 mr-1" />
+              No
+            </Badge>
+          )}
+        </div>
+      </TableCell>
+
+      {/* Preview */}
+      <TableCell>
+        <div className="flex items-center justify-center">
+          {doc.isUploaded ? (
+            <div className="relative group/preview">
+              {doc.filePreview && doc.fileType?.includes('image') ? (
+                <div className="relative">
+                  <img
+                    src={doc.filePreview}
+                    alt={doc.fileName}
+                    className="w-12 h-12 rounded border object-cover cursor-pointer hover:scale-105 transition-transform"
+                    onClick={() => onPreviewClick(doc)}
+                  />
+                  <div className="absolute inset-0 bg-black bg-opacity-0 group-hover/preview:bg-opacity-30 rounded flex items-center justify-center transition-all duration-200">
+                    <Eye className="h-4 w-4 text-white opacity-0 group-hover/preview:opacity-100 transition-opacity" />
+                  </div>
+                </div>
+              ) : (
+                <div
+                  className="w-12 h-12 rounded border flex items-center justify-center bg-gray-100 cursor-pointer hover:bg-gray-200 transition-colors"
+                  onClick={() => onPreviewClick(doc)}
+                >
+                  {doc.fileType?.includes('pdf') ? (
+                    <FileText className="h-6 w-6 text-red-500" />
+                  ) : doc.fileType?.includes('image') ? (
+                    <Image className="h-6 w-6 text-green-500" />
+                  ) : (
+                    <FileText className="h-6 w-6 text-blue-500" />
+                  )}
+                </div>
+              )}
+              <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover/preview:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-10">
+                {doc.fileType?.includes('pdf') ? 'Click to preview PDF' : 'Click to view full size'}
+              </div>
+            </div>
+          ) : (
+            <div className="w-12 h-12 rounded border-2 border-dashed border-gray-300 flex items-center justify-center bg-gray-50">
+              <Upload className="h-4 w-4 text-gray-400" />
+            </div>
+          )}
+        </div>
+      </TableCell>
+
+      {/* Download */}
+      <TableCell>
+        <div className="flex items-center justify-center">
+          {doc.remarkOnly ? (
+            <span className="text-sm text-muted-foreground">-</span>
+          ) : doc.isUploaded && doc.fileUrl ? (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 flex items-center gap-1"
+              title={`Download ${doc.fileName}`}
+              onClick={() => onDownloadClick(doc)}
+            >
+              <Download className="h-4 w-4" />
+              Download
+            </Button>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 opacity-50 cursor-not-allowed"
+              disabled
+            >
+              <Download className="h-4 w-4" />
+              Download
+            </Button>
+          )}
+        </div>
+      </TableCell>
+    </TableRow>
+  );
+};
+
+// ─── Main Component ──────────────────────────────────────────────────────────
+
 export const DocumentUploadDialog: React.FC<DocumentUploadDialogProps> = ({
   isOpen,
   onClose,
@@ -87,6 +385,44 @@ export const DocumentUploadDialog: React.FC<DocumentUploadDialogProps> = ({
   const [alertMessage, setAlertMessage] = useState<{ type: 'success' | 'error', message: string } | null>(null);
   const [srNo, setSrNo] = useState<string>('');
   const [bunchNo] = useState<string>(''); // Placeholder for bunch number
+
+  // DnD sensors
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (over && active.id !== over.id) {
+      setDocuments((prev) => {
+        const oldIndex = prev.findIndex((d) => d.id === active.id);
+        const newIndex = prev.findIndex((d) => d.id === over.id);
+        return arrayMove(prev, oldIndex, newIndex);
+      });
+    }
+  };
+
+  // Name editing handlers
+  const handleNameChange = (id: number, name: string) => {
+    setDocuments((prev) => prev.map((d) => (d.id === id ? { ...d, name } : d)));
+  };
+
+  const handleNameEditToggle = (id: number, editing: boolean) => {
+    setDocuments((prev) => prev.map((d) => (d.id === id ? { ...d, isEditingName: editing } : d)));
+  };
+
+  // Add new document row
+  const handleAddDocument = () => {
+    const maxId = documents.reduce((max, d) => Math.max(max, d.id), 0);
+    const newDoc: DocumentStatus = {
+      id: maxId + 1,
+      name: '',
+      isUploaded: false,
+      isEditingName: true,
+    };
+    setDocuments((prev) => [...prev, newDoc]);
+  };
 
   const fetchVisitDetails = useCallback(async () => {
     try {
@@ -233,8 +569,8 @@ export const DocumentUploadDialog: React.FC<DocumentUploadDialogProps> = ({
         });
       }
 
-      // Get document name
-      const documentName = MEDICAL_DOCUMENTS.find(d => d.id === documentId)?.name || `Document ${documentId}`;
+      // Get document name from current state (supports renamed/custom docs)
+      const documentName = documents.find(d => d.id === documentId)?.name || `Document ${documentId}`;
 
       // Create file path for Supabase Storage
       const fileExtension = file.name.split('.').pop();
@@ -399,7 +735,7 @@ export const DocumentUploadDialog: React.FC<DocumentUploadDialogProps> = ({
 
     // Save to database immediately for all remark changes
     try {
-      const documentName = MEDICAL_DOCUMENTS.find(d => d.id === documentId)?.name || `Document ${documentId}`;
+      const documentName = documents.find(d => d.id === documentId)?.name || `Document ${documentId}`;
 
       await supabase
         .from('patient_documents')
@@ -440,7 +776,7 @@ export const DocumentUploadDialog: React.FC<DocumentUploadDialogProps> = ({
     try {
       console.log('🔸 Saving remark status:', { documentId, status, visitId });
 
-      const documentName = MEDICAL_DOCUMENTS.find(d => d.id === documentId)?.name || `Document ${documentId}`;
+      const documentName = documents.find(d => d.id === documentId)?.name || `Document ${documentId}`;
 
       // Get current remark reason from state
       const currentDoc = documents.find(d => d.id === documentId);
@@ -517,6 +853,73 @@ export const DocumentUploadDialog: React.FC<DocumentUploadDialogProps> = ({
       });
     }
   };
+  const handlePreviewClick = (doc: DocumentStatus) => {
+    if (!doc.fileUrl && !doc.filePreview) return;
+    if (doc.filePreview && doc.fileType?.includes('image')) {
+      const newWindow = window.open();
+      if (newWindow) {
+        newWindow.document.write(`
+          <html>
+            <head><title>${doc.fileName}</title></head>
+            <body style="margin:0; display:flex; justify-content:center; align-items:center; min-height:100vh; background:#f0f0f0;">
+              <img src="${doc.filePreview}" style="max-width:100%; max-height:100%; object-fit:contain;" alt="${doc.fileName}" />
+            </body>
+          </html>`);
+      }
+    } else if (doc.fileUrl) {
+      if (doc.fileType?.includes('pdf')) {
+        const newWindow = window.open();
+        if (newWindow) {
+          newWindow.document.write(`
+            <html>
+              <head>
+                <title>Preview: ${doc.fileName}</title>
+                <style>
+                  body { margin: 0; padding: 20px; background: #f5f5f5; font-family: Arial, sans-serif; }
+                  .header { background: white; padding: 15px; margin-bottom: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+                  .pdf-container { background: white; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); overflow: hidden; }
+                  iframe { width: 100%; height: 80vh; border: none; }
+                  .download-btn { background: #3b82f6; color: white; padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer; margin-left: 10px; }
+                  .download-btn:hover { background: #2563eb; }
+                </style>
+              </head>
+              <body>
+                <div class="header">
+                  <h2>📄 ${doc.fileName}</h2>
+                  <p>Document Preview - Visit ID: ${visitId}</p>
+                  <button class="download-btn" onclick="window.open('${doc.fileUrl}', '_blank')">Download Original</button>
+                </div>
+                <div class="pdf-container">
+                  <iframe src="${doc.fileUrl}" type="application/pdf"></iframe>
+                </div>
+              </body>
+            </html>`);
+        }
+      } else {
+        window.open(doc.fileUrl, '_blank');
+      }
+    }
+  };
+
+  const handleDownloadClick = async (doc: DocumentStatus) => {
+    if (!doc.fileUrl) return;
+    try {
+      const response = await fetch(doc.fileUrl);
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = doc.fileName || 'document';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Download failed:', error);
+      setAlertMessage({ type: 'error', message: 'Download failed. Please try again.' });
+    }
+  };
+
   const uploadedCount = documents.filter(doc => doc.isUploaded).length;
   const totalCount = documents.length;
 
@@ -540,7 +943,7 @@ export const DocumentUploadDialog: React.FC<DocumentUploadDialogProps> = ({
       const remarkOnlyDocs = documents.filter(doc => doc.remarkOnly && (doc.remarkStatus || doc.remarkReason));
 
       for (const doc of remarkOnlyDocs) {
-        const documentName = MEDICAL_DOCUMENTS.find(d => d.id === doc.id)?.name || `Document ${doc.id}`;
+        const documentName = doc.name || `Document ${doc.id}`;
 
         await supabase
           .from('patient_documents')
@@ -899,12 +1302,14 @@ export const DocumentUploadDialog: React.FC<DocumentUploadDialogProps> = ({
         )}
 
                 {/* Main Content: Document Upload Table with Inline Preview */}
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
         <div className="flex-1 mt-4 overflow-y-auto min-h-0">
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-8"></TableHead>
                 <TableHead className="w-12">Sr. No</TableHead>
-                <TableHead>Must Have Check List for ESIC Patient</TableHead>
+                <TableHead>Document Name</TableHead>
                 <TableHead className="w-48">Remark Reason</TableHead>
                 <TableHead className="w-32">Upload</TableHead>
                 <TableHead className="w-24">Remark</TableHead>
@@ -912,284 +1317,45 @@ export const DocumentUploadDialog: React.FC<DocumentUploadDialogProps> = ({
                 <TableHead className="w-24">Download</TableHead>
               </TableRow>
             </TableHeader>
+            <SortableContext items={documents.map(d => d.id)} strategy={verticalListSortingStrategy}>
             <TableBody>
-              {documents.map((doc) => (
-                <TableRow key={doc.id} className="group">
-                  <TableCell className="font-medium">{doc.id}</TableCell>
-                  <TableCell>
-                    <div className="space-y-2">
-                      <p className="text-sm font-medium">{doc.name}</p>
-                      {doc.fileName && (
-                        <div className="flex items-center gap-2">
-                          <p className="text-xs text-muted-foreground">
-                            📎 {doc.fileName}
-                          </p>
-                          <Badge variant="outline" className="text-xs">
-                            {doc.fileType?.split('/')[1]?.toUpperCase() || 'FILE'}
-                          </Badge>
-                        </div>
-                      )}
-                      {doc.uploadedAt && (
-                        <p className="text-xs text-green-600">
-                          ✓ Uploaded on {new Date(doc.uploadedAt).toLocaleDateString()}
-                        </p>
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <Input
-                      type="text"
-                      placeholder="Enter reason..."
-                      value={doc.remarkReason || ''}
-                      onChange={(e) => handleRemarkReasonChange(doc.id, e.target.value)}
-                      className="h-8 text-sm"
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      {doc.remarkOnly ? (
-                        <span className="text-sm text-muted-foreground px-3 py-2">
-                          Remark only
-                        </span>
-                      ) : !doc.isUploaded ? (
-                        <>
-                          <Input
-                            type="file"
-                            accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
-                            onChange={(e) => handleFileUpload(doc.id, e)}
-                            disabled={uploadingId === doc.id}
-                            className="hidden"
-                            id={`file-${doc.id}`}
-                          />
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => document.getElementById(`file-${doc.id}`)?.click()}
-                            disabled={uploadingId === doc.id}
-                            className="h-8"
-                          >
-                            <Upload className="h-3 w-3 mr-1" />
-                            {uploadingId === doc.id ? 'Uploading...' : 'Upload'}
-                          </Button>
-                        </>
-                      ) : (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleRemoveFile(doc.id)}
-                          className="h-8 text-red-600 hover:text-red-700"
-                        >
-                          <X className="h-3 w-3 mr-1" />
-                          Remove
-                        </Button>
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center justify-center">
-                      {doc.remarkOnly ? (
-                        // For remark-only items, show dropdown
-                        <Select
-                          value={doc.remarkStatus || 'Select'}
-                          onValueChange={(value: 'Yes' | 'No' | 'Select') => {
-                            console.log('Dropdown changed:', { documentId: doc.id, value, visitId });
-                            if (value !== 'Select') {
-                              console.log('Calling handleRemarkStatusChange for:', { documentId: doc.id, value });
-                              handleRemarkStatusChange(doc.id, value as 'Yes' | 'No');
-                            }
-                          }}
-                        >
-                          <SelectTrigger className="w-20 h-8">
-                            <SelectValue placeholder="Select" />
-                          </SelectTrigger>
-                          <SelectContent
-                            className="bg-white border shadow-lg z-50"
-                            onPointerDownOutside={(e) => e.preventDefault()}
-                            onInteractOutside={(e) => e.preventDefault()}
-                          >
-                            <SelectItem value="Yes">Yes</SelectItem>
-                            <SelectItem value="No">No</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      ) : doc.isUploaded ? (
-                        <Badge className="bg-green-100 text-green-800 hover:bg-green-100">
-                          <Check className="h-3 w-3 mr-1" />
-                          Yes
-                        </Badge>
-                      ) : (
-                        <Badge variant="secondary" className="bg-red-100 text-red-800">
-                          <X className="h-3 w-3 mr-1" />
-                          No
-                        </Badge>
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    {/* Inline Preview Column */}
-                    <div className="flex items-center justify-center">
-                      {doc.isUploaded ? (
-                        <div className="relative group">
-                          {doc.filePreview && doc.fileType?.includes('image') ? (
-                            <div className="relative">
-                              {/* Small preview thumbnail for images */}
-                              <img
-                                src={doc.filePreview}
-                                alt={doc.fileName}
-                                className="w-12 h-12 rounded border object-cover cursor-pointer hover:scale-105 transition-transform"
-                                onClick={() => {
-                                  // Open full size image in new window
-                                  const newWindow = window.open();
-                                  if (newWindow) {
-                                    newWindow.document.write(`
-                                      <html>
-                                        <head><title>${doc.fileName}</title></head>
-                                        <body style="margin:0; display:flex; justify-content:center; align-items:center; min-height:100vh; background:#f0f0f0;">
-                                          <img src="${doc.filePreview}" style="max-width:100%; max-height:100%; object-fit:contain;" alt="${doc.fileName}" />
-                                        </body>
-                                      </html>
-                                    `);
-                                  }
-                                }}
-                              />
-                              {/* Hover overlay */}
-                              <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-30 rounded flex items-center justify-center transition-all duration-200">
-                                <Eye className="h-4 w-4 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
-                              </div>
-                            </div>
-                          ) : (
-                            <div 
-                              className="w-12 h-12 rounded border flex items-center justify-center bg-gray-100 cursor-pointer hover:bg-gray-200 transition-colors"
-                              onClick={() => {
-                                if (doc.fileUrl) {
-                                  // Open document in new tab for preview
-                                  if (doc.fileType?.includes('pdf')) {
-                                    // For PDF, open in new tab with PDF viewer
-                                    const newWindow = window.open();
-                                    if (newWindow) {
-                                      newWindow.document.write(`
-                                        <html>
-                                          <head>
-                                            <title>Preview: ${doc.fileName}</title>
-                                            <style>
-                                              body { margin: 0; padding: 20px; background: #f5f5f5; font-family: Arial, sans-serif; }
-                                              .header { background: white; padding: 15px; margin-bottom: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-                                              .pdf-container { background: white; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); overflow: hidden; }
-                                              iframe { width: 100%; height: 80vh; border: none; }
-                                              .download-btn { background: #3b82f6; color: white; padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer; margin-left: 10px; }
-                                              .download-btn:hover { background: #2563eb; }
-                                            </style>
-                                          </head>
-                                          <body>
-                                            <div class="header">
-                                              <h2>📄 ${doc.fileName}</h2>
-                                              <p>Document Preview - Visit ID: ${visitId}</p>
-                                              <button class="download-btn" onclick="window.open('${doc.fileUrl}', '_blank')">Download Original</button>
-                                            </div>
-                                            <div class="pdf-container">
-                                              <iframe src="${doc.fileUrl}" type="application/pdf"></iframe>
-                                            </div>
-                                            <script>
-                                              // Fallback if PDF doesn't load in iframe
-                                              setTimeout(() => {
-                                                const iframe = document.querySelector('iframe');
-                                                iframe.onerror = () => {
-                                                  iframe.outerHTML = '<div style="padding: 40px; text-align: center;"><p>PDF preview not available in this browser.</p><a href="${doc.fileUrl}" target="_blank" style="color: #3b82f6; text-decoration: none; font-weight: bold;">Click here to download and view the PDF</a></div>';
-                                                };
-                                              }, 1000);
-                                            </script>
-                                          </body>
-                                        </html>
-                                      `);
-                                    }
-                                  } else {
-                                    // For other file types, open directly
-                                    window.open(doc.fileUrl, '_blank');
-                                  }
-                                }
-                              }}
-                            >
-                              {doc.fileType?.includes('pdf') ? (
-                                <FileText className="h-6 w-6 text-red-500" />
-                              ) : doc.fileType?.includes('image') ? (
-                                <Image className="h-6 w-6 text-green-500" />
-                              ) : (
-                                <FileText className="h-6 w-6 text-blue-500" />
-                              )}
-                            </div>
-                          )}
-
-                          {/* Tooltip */}
-                          <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-10">
-                            {doc.fileType?.includes('pdf') ? 'Click to preview PDF' : 'Click to view full size'}
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="w-12 h-12 rounded border-2 border-dashed border-gray-300 flex items-center justify-center bg-gray-50">
-                          <Upload className="h-4 w-4 text-gray-400" />
-                        </div>
-                      )}
-                    </div>
-                  </TableCell>
-
-                  <TableCell>
-                    {/* Download Button Column */}
-                    <div className="flex items-center justify-center">
-                      {doc.remarkOnly ? (
-                        <span className="text-sm text-muted-foreground">-</span>
-                      ) : doc.isUploaded && doc.fileUrl ? (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-8 flex items-center gap-1"
-                          title={`Download ${doc.fileName}`}
-                          onClick={async () => {
-                            try {
-                              // Create a download link for the file
-                              const response = await fetch(doc.fileUrl!);
-                              const blob = await response.blob();
-                              const url = window.URL.createObjectURL(blob);
-                              const link = document.createElement('a');
-                              link.href = url;
-                              link.download = doc.fileName || 'document';
-                              document.body.appendChild(link);
-                              link.click();
-                              document.body.removeChild(link);
-                              window.URL.revokeObjectURL(url);
-                            } catch (error) {
-                              console.error('Download failed:', error);
-                              setAlertMessage({
-                                type: 'error',
-                                message: 'Download failed. Please try again.'
-                              });
-                            }
-                          }}
-                        >
-                          <Download className="h-4 w-4" />
-                          Download
-                        </Button>
-                      ) : (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-8 opacity-50 cursor-not-allowed"
-                          disabled
-                        >
-                          <Download className="h-4 w-4" />
-                          Download
-                        </Button>
-                      )}
-                    </div>
-                  </TableCell>
-                </TableRow>
+              {documents.map((doc, index) => (
+                <SortableDocumentRow
+                  key={doc.id}
+                  doc={doc}
+                  index={index}
+                  uploadingId={uploadingId}
+                  visitId={visitId}
+                  onNameChange={handleNameChange}
+                  onNameEditToggle={handleNameEditToggle}
+                  onFileUpload={handleFileUpload}
+                  onRemoveFile={handleRemoveFile}
+                  onRemarkReasonChange={handleRemarkReasonChange}
+                  onRemarkStatusChange={handleRemarkStatusChange}
+                  onPreviewClick={handlePreviewClick}
+                  onDownloadClick={handleDownloadClick}
+                />
               ))}
             </TableBody>
+            </SortableContext>
           </Table>
         </div>
-
+        </DndContext>
         {/* Footer with buttons - always visible */}
         <div className="flex-shrink-0 flex justify-between items-center mt-4 pt-4 border-t bg-white">
-          <div className="text-sm text-muted-foreground">
-            Upload progress: {uploadedCount} of {totalCount} documents completed
+          <div className="flex items-center gap-4">
+            <div className="text-sm text-muted-foreground">
+              Upload progress: {uploadedCount} of {totalCount} documents completed
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleAddDocument}
+              className="flex items-center gap-1 text-blue-600 border-blue-300 hover:bg-blue-50"
+            >
+              <Plus className="h-4 w-4" />
+              Add Document
+            </Button>
           </div>
           <div className="flex gap-3">
             <Button

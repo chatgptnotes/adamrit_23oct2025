@@ -38,6 +38,8 @@ const Pharmacy = lazy(() => import("../pages/Pharmacy"));
 const Shifting = lazy(() => import("../pages/Shifting"));
 const Lab = lazy(() => import("../pages/Lab"));
 const Radiology = lazy(() => import("../pages/Radiology"));
+const RadiologyMaster = lazy(() => import("../pages/RadiologyMaster"));
+const LabMaster = lazy(() => import("../pages/LabMaster"));
 const FinalBill = lazy(() => import("../pages/FinalBill"));
 const EditFinalBill = lazy(() => import("../pages/EditFinalBill"));
 
@@ -57,6 +59,8 @@ const HopeAnaesthetists = lazy(() => import("../pages/HopeAnaesthetists"));
 const AyushmanSurgeons = lazy(() => import("../pages/AyushmanSurgeons"));
 const AyushmanConsultants = lazy(() => import("../pages/AyushmanConsultants"));
 const AyushmanAnaesthetists = lazy(() => import("../pages/AyushmanAnaesthetists"));
+const HopeRMOs = lazy(() => import("../pages/HopeRMOs"));
+const AyushmanRMOs = lazy(() => import("../pages/AyushmanRMOs"));
 const MandatoryService = lazy(() => import("../pages/MandatoryService"));
 const MandatoryServiceCreate = lazy(() => import("../pages/MandatoryServiceCreate"));
 const ClinicalServices = lazy(() => import("../pages/ClinicalServices"));
@@ -66,6 +70,7 @@ const ExternalRequisitionCreate = lazy(() => import("../pages/ExternalRequisitio
 const GatePassPrintPage = lazy(() => import("../pages/GatePassPrint"));
 const DischargeSummaryPrint = lazy(() => import("../pages/DischargeSummaryPrint"));
 const DischargeSummaryEdit = lazy(() => import("../pages/DischargeSummaryEdit"));
+const OpdSummaryLanding = lazy(() => import("../pages/OpdSummaryLanding"));
 const IpdDischargeSummary = lazy(() => import("../pages/IpdDischargeSummary"));
 const DeathCertificate = lazy(() => import("../pages/DeathCertificate"));
 const PhysiotherapyBill = lazy(() => import("../pages/PhysiotherapyBill"));
@@ -112,6 +117,8 @@ const MasterData = lazy(() => import('@/pages/MasterData'));
 const LocationMaster = lazy(() => import("../pages/LocationMaster"));
 const CorporateAreas = lazy(() => import("../pages/CorporateAreas"));
 const CorporateAreaDetail = lazy(() => import("../pages/CorporateAreaDetail"));
+const BillApprovals = lazy(() => import("../pages/BillApprovals"));
+const DailyPaymentAllocation = lazy(() => import("../pages/DailyPaymentAllocation"));
 
 // Loading component
 const PageLoader = () => (
@@ -151,6 +158,7 @@ export const AppRoutes = () => {
         <Route path="/gate-pass/:visitId" element={<Suspense fallback={<PageLoader />}><GatePassPrintPage /></Suspense>} />
         <Route path="/discharge-summary-print/:visitId" element={<Suspense fallback={<PageLoader />}><DischargeSummaryPrint /></Suspense>} />
         <Route path="/discharge-summary-edit/:visitId" element={<Suspense fallback={<PageLoader />}><DischargeSummaryEdit /></Suspense>} />
+        <Route path="/opd-summary" element={<Suspense fallback={<PageLoader />}><OpdSummaryLanding /></Suspense>} />
         <Route path="/physiotherapy-bill/:visitId" element={<Suspense fallback={<PageLoader />}><PhysiotherapyBill /></Suspense>} />
         <Route path="/admission-notes/:visitId" element={<Suspense fallback={<PageLoader />}><AdmissionNotes /></Suspense>} />
         <Route path="/opd-admission-notes/:visitId" element={<Suspense fallback={<PageLoader />}><OpdAdmissionNotes /></Suspense>} />
@@ -164,6 +172,8 @@ export const AppRoutes = () => {
         <Route path="/cghs-surgery-master" element={<Suspense fallback={<PageLoader />}><CghsSurgeryMaster /></Suspense>} />
         <Route path="/lab" element={<Suspense fallback={<PageLoader />}><Lab /></Suspense>} />
         <Route path="/radiology" element={<Suspense fallback={<PageLoader />}><Radiology /></Suspense>} />
+        <Route path="/radiology-master" element={<Suspense fallback={<PageLoader />}><RadiologyMaster /></Suspense>} />
+        <Route path="/lab-master" element={<Suspense fallback={<PageLoader />}><LabMaster /></Suspense>} />
         <Route path="/treatment-sheet" element={<Suspense fallback={<PageLoader />}><TreatmentSheet /></Suspense>} />
         <Route path="/esic-surgeons" element={<Suspense fallback={<PageLoader />}><EsicSurgeons /></Suspense>} />
         <Route path="/referees" element={<Suspense fallback={<PageLoader />}><Referees /></Suspense>} />
@@ -175,6 +185,8 @@ export const AppRoutes = () => {
         <Route path="/ayushman-surgeons" element={<Suspense fallback={<PageLoader />}><AyushmanSurgeons /></Suspense>} />
         <Route path="/ayushman-consultants" element={<Suspense fallback={<PageLoader />}><AyushmanConsultants /></Suspense>} />
         <Route path="/ayushman-anaesthetists" element={<Suspense fallback={<PageLoader />}><AyushmanAnaesthetists /></Suspense>} />
+        <Route path="/hope-rmos" element={<Suspense fallback={<PageLoader />}><HopeRMOs /></Suspense>} />
+        <Route path="/ayushman-rmos" element={<Suspense fallback={<PageLoader />}><AyushmanRMOs /></Suspense>} />
         <Route path="/accounting" element={<Suspense fallback={<PageLoader />}><Accounting /></Suspense>} />
         <Route path="/cash-book" element={<Suspense fallback={<PageLoader />}><CashBook /></Suspense>} />
         <Route path="/patient-ledger" element={<Suspense fallback={<PageLoader />}><PatientLedger /></Suspense>} />
@@ -227,6 +239,8 @@ export const AppRoutes = () => {
         <Route path="/corporate-master/:corporateId" element={<Suspense fallback={<PageLoader />}><CorporateAreas /></Suspense>} />
         <Route path="/corporate-master/:corporateId/area/:areaId" element={<Suspense fallback={<PageLoader />}><CorporateAreaDetail /></Suspense>} />
         <Route path="/location-master" element={<Suspense fallback={<PageLoader />}><LocationMaster /></Suspense>} />
+        <Route path="/bill-approvals" element={<Suspense fallback={<PageLoader />}><BillApprovals /></Suspense>} />
+        <Route path="/daily-payment-allocation" element={<Suspense fallback={<PageLoader />}><DailyPaymentAllocation /></Suspense>} />
         {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
         <Route path="/master-data" element={<Suspense fallback={<PageLoader />}><MasterData /></Suspense>} />
         <Route path="*" element={<NotFound />} />

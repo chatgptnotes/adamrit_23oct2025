@@ -4,6 +4,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { Plus, X, Loader2 } from 'lucide-react';
+import { sendPaymentAlert } from '@/lib/payment-alert-service';
+import { useCompanies } from '@/hooks/useCompanies';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -74,7 +76,11 @@ const VoucherEntry: React.FC = () => {
     { account_id: '', debit_amount: 0, credit_amount: 0, narration: '' },
     { account_id: '', debit_amount: 0, credit_amount: 0, narration: '' },
   ]);
+  const [selectedCompanyId, setSelectedCompanyId] = useState('');
   const [saving, setSaving] = useState(false);
+
+  // ------ Fetch companies ------
+  const { data: companies = [] } = useCompanies();
 
   // ------ Fetch active voucher types ------
   const { data: voucherTypes = [] } = useQuery({
@@ -159,6 +165,7 @@ const VoucherEntry: React.FC = () => {
 
   // ------ Clear / reset the entire form ------
   const handleClear = () => {
+    setSelectedCompanyId('');
     setSelectedVoucherType('');
     setVoucherDate(format(new Date(), 'yyyy-MM-dd'));
     setReferenceNumber('');
@@ -173,6 +180,12 @@ const VoucherEntry: React.FC = () => {
 
   // ------ Save voucher (draft or posted) ------
   const saveVoucher = async (status: 'draft' | 'posted') => {
+    // Validate company selection
+    if (!selectedCompanyId) {
+      toast.error('Select a company.');
+      return;
+    }
+
     // Validate voucher type selection
     if (!selectedVoucherType) {
       toast.error('Select a voucher type.');
@@ -219,6 +232,7 @@ const VoucherEntry: React.FC = () => {
           narration: narration || '',
           total_amount: debitSum,
           patient_id: patientId || null,
+          company_id: selectedCompanyId || null,
           status,
           created_by: 'system',
         })
@@ -254,6 +268,18 @@ const VoucherEntry: React.FC = () => {
 
       toast.success(`Voucher ${generatedNumber} saved as ${status}.`);
 
+      // WhatsApp alert for receipts > Rs. 10,000
+      const voucherTypeName = (voucherType?.voucher_type_name || '').toLowerCase();
+      if ((voucherTypeName.includes('receipt') || voucherTypeName.includes('receive')) && debitSum >= 10000) {
+        sendPaymentAlert({
+          alert_type: 'receipt',
+          amount: debitSum,
+          patient_name: narration || 'Voucher Entry',
+          hospital_name: 'Hope',
+          additional_info: `Voucher: ${generatedNumber}, Type: ${voucherType?.voucher_type_name || 'N/A'}`,
+        });
+      }
+
       // Invalidate relevant queries and reset the form
       queryClient.invalidateQueries({ queryKey: ['vouchers'] });
       queryClient.invalidateQueries({ queryKey: ['voucher_types'] });
@@ -274,6 +300,23 @@ const VoucherEntry: React.FC = () => {
       <CardContent className="space-y-6">
         {/* ----- Form Header Fields ----- */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* Company */}
+          <div className="space-y-1.5">
+            <Label>Company</Label>
+            <Select value={selectedCompanyId} onValueChange={setSelectedCompanyId}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select company" />
+              </SelectTrigger>
+              <SelectContent>
+                {companies.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    {c.company_name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
           {/* Voucher Type */}
           <div className="space-y-1.5">
             <Label>Voucher Type</Label>

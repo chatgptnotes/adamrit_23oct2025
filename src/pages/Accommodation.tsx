@@ -341,6 +341,15 @@ const Accommodation = () => {
             })
           }
           title="Edit Accommodation"
+          defaultValues={editingAccommodation ? {
+            room_type: editingAccommodation.room_type || '',
+            private_rate: editingAccommodation.private_rate?.toString() || '',
+            nabh_rate: editingAccommodation.nabh_rate?.toString() || '',
+            nabh_bhopal: editingAccommodation.nabh_bhopal?.toString() || '',
+            non_nabh_rate: editingAccommodation.non_nabh_rate?.toString() || '',
+            non_nabh_bhopal: editingAccommodation.non_nabh_bhopal?.toString() || '',
+            tpa_rate: editingAccommodation.tpa_rate?.toString() || '',
+          } : {}}
           fields={[
             {
               key: 'room_type',
@@ -348,49 +357,42 @@ const Accommodation = () => {
               type: 'text',
               required: true,
               placeholder: 'e.g., Private, Semi-private, Ward',
-              defaultValue: editingAccommodation?.room_type
             },
             {
               key: 'private_rate',
               label: 'Private Rate',
               type: 'number',
               placeholder: 'Enter private rate',
-              defaultValue: editingAccommodation?.private_rate?.toString()
             },
             {
               key: 'nabh_rate',
               label: 'NABH Rate',
               type: 'number',
               placeholder: 'Enter NABH rate',
-              defaultValue: editingAccommodation?.nabh_rate?.toString()
             },
             {
               key: 'nabh_bhopal',
               label: 'NABH Bhopal',
               type: 'number',
               placeholder: 'Enter NABH Bhopal rate',
-              defaultValue: editingAccommodation?.nabh_bhopal?.toString()
             },
             {
               key: 'non_nabh_rate',
               label: 'Non-NABH Rate',
               type: 'number',
               placeholder: 'Enter non-NABH rate',
-              defaultValue: editingAccommodation?.non_nabh_rate?.toString()
             },
             {
               key: 'non_nabh_bhopal',
               label: 'NonNABH Bhopal',
               type: 'number',
               placeholder: 'Enter NonNABH Bhopal rate',
-              defaultValue: editingAccommodation?.non_nabh_bhopal?.toString()
             },
             {
               key: 'tpa_rate',
               label: 'TPA Rate',
               type: 'number',
               placeholder: 'Enter TPA rate',
-              defaultValue: editingAccommodation?.tpa_rate?.toString()
             }
           ]}
         />

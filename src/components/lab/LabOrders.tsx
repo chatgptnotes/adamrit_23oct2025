@@ -30,6 +30,9 @@ interface LabTest {
   category: string;
   sample_type: string;
   price: number;
+  nabhRate: number;
+  nonNabhRate: number;
+  privateRate: number;
   turnaround_time: number;
   preparation_instructions?: string;
 }
@@ -100,6 +103,31 @@ interface PatientWithVisit {
   corporate?: string;
   insurancePersonNo?: string;
 }
+
+// Helper function to get the correct lab test rate based on patient's corporate type
+// CGHS/ECHS patients get NABH rates, ESIC gets Non-NABH rates, others get NABH, private patients get private rate
+const getLabRateForCorporate = (test: LabTest, corporate?: string): number => {
+  const corp = (corporate || '').toLowerCase().trim();
+  const hasCorporate = corp.length > 0 && corp !== 'opd' && corp !== 'private';
+
+  if (!hasCorporate) {
+    // Private patient — use private rate
+    return test.privateRate || test.price || 0;
+  }
+
+  // CGHS/ECHS → NABH rates
+  if (corp.includes('cghs') || corp.includes('echs')) {
+    return test.nabhRate || test.privateRate || 0;
+  }
+
+  // ESIC → Non-NABH rates
+  if (corp.includes('esic')) {
+    return test.nonNabhRate || test.nabhRate || test.privateRate || 0;
+  }
+
+  // All other corporates → NABH rates
+  return test.nabhRate || test.privateRate || 0;
+};
 
 // Helper function to find correct normal range based on patient gender
 const findNormalRangeForGender = (
@@ -1961,16 +1989,14 @@ const LabOrders = () => {
     }
   });
 
-  // Fetch lab tests
+  // Fetch lab tests with all rate columns
   const { data: labTests = [], isLoading: testsLoading } = useQuery({
     queryKey: ['lab-tests'],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('lab')
-        .select('*')
+        .select('id, name, interface_code, category, description, private, "NABH_rates_in_rupee", "Non-NABH_rates_in_rupee", bhopal_nabh_rate, bhopal_non_nabh_rate')
         .order('name');
-
-      // 🏥 Lab tests are shared across hospitals
 
       if (error) {
         console.error('Error fetching lab tests:', error);
@@ -1982,9 +2008,12 @@ const LabOrders = () => {
         name: test.name,
         test_code: test.interface_code || '',
         category: test.category || 'General',
-        sample_type: 'Blood', // Default since this field doesn't exist in lab table
+        sample_type: 'Blood',
         price: test.private || 0,
-        turnaround_time: 24, // Default
+        nabhRate: test['NABH_rates_in_rupee'] || 0,
+        nonNabhRate: test['Non-NABH_rates_in_rupee'] || 0,
+        privateRate: test.private || 0,
+        turnaround_time: 24,
         preparation_instructions: test.description || ''
       })) || [];
     }
@@ -2759,7 +2788,7 @@ const LabOrders = () => {
   const getTotalAmount = () => {
     return labTests
       .filter(test => selectedTests.includes(test.id))
-      .reduce((sum, test) => sum + test.price, 0);
+      .reduce((sum, test) => sum + getLabRateForCorporate(test, selectedPatient?.corporate), 0);
   };
 
   const getStatusColor = (status: string) => {
@@ -5153,7 +5182,7 @@ const LabOrders = () => {
                         <TableCell className="font-medium">{test.name}</TableCell>
                         <TableCell>{test.test_code}</TableCell>
                         <TableCell>{test.sample_type}</TableCell>
-                        <TableCell>₹{test.price}</TableCell>
+                        <TableCell>₹{getLabRateForCorporate(test, selectedPatient?.corporate)}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>

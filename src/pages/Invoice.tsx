@@ -2,8 +2,9 @@ import React, { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { format } from 'date-fns';
 import { useNavigate, useParams } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 
 // Convert amount to words (Indian format)
 const convertAmountToWords = (amount: number): string => {
@@ -32,6 +33,7 @@ const Invoice = () => {
   const [chargeFilter, setChargeFilter] = useState('all'); // 'all', 'lab', 'radiology', 'surgery'
   const [hideLabRadiology, setHideLabRadiology] = useState(false);
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { visitId } = useParams<{ visitId: string }>();
   const { hospitalConfig } = useAuth();
   const hospitalName = hospitalConfig?.name === 'ayushman' ? 'Ayushman Hospital Nagpur' : 'Hope Hospital Nagpur';
@@ -810,6 +812,65 @@ const Invoice = () => {
     enabled: !!visitId
   });
 
+  // Fetch pharmacy charges (CREDIT sales for this visit)
+  const { data: pharmacyData } = useQuery({
+    queryKey: ['invoice-pharmacy', visitId, hospitalConfig?.name],
+    queryFn: async () => {
+      if (!visitId) return { totalAmount: 0 };
+
+      const patientId = visitData?.patients?.patients_id;
+      const hName = hospitalConfig?.name;
+
+      if (!patientId || !hName) return { totalAmount: 0 };
+
+      // 1. Get CREDIT sales for this patient for THIS VISIT
+      const { data: salesData, error: salesError } = await supabase
+        .from('pharmacy_sales')
+        .select('sale_id, total_amount')
+        .eq('patient_id', patientId)
+        .eq('visit_id', visitId)
+        .eq('hospital_name', hName)
+        .eq('payment_method', 'CREDIT');
+
+      if (salesError) {
+        console.error('Error fetching pharmacy sales:', salesError);
+        return { totalAmount: 0 };
+      }
+
+      const totalCreditSales = (salesData || []).reduce((sum, sale) => sum + (sale.total_amount || 0), 0);
+      const visitSaleIds = (salesData || []).map(sale => sale.sale_id);
+
+      // 2. Get returns for sales from THIS VISIT
+      let totalReturns = 0;
+      if (visitSaleIds.length > 0) {
+        const { data: returnsData } = await supabase
+          .from('medicine_returns')
+          .select('net_refund')
+          .in('original_sale_id', visitSaleIds)
+          .eq('hospital_name', hName);
+
+        totalReturns = (returnsData || []).reduce((sum, ret) => sum + (ret.net_refund || 0), 0);
+      }
+
+      // 3. Get credit payments for sales from THIS VISIT
+      let totalPaymentsReceived = 0;
+      if (visitSaleIds.length > 0) {
+        const { data: paymentsData } = await supabase
+          .from('pharmacy_credit_payments')
+          .select('amount')
+          .in('sale_id', visitSaleIds)
+          .eq('hospital_name', hName);
+
+        totalPaymentsReceived = (paymentsData || []).reduce((sum, payment) => sum + (payment.amount || 0), 0);
+      }
+
+      const pendingAmount = Math.max(0, totalCreditSales - totalReturns - totalPaymentsReceived);
+
+      return { totalAmount: pendingAmount };
+    },
+    enabled: !!visitId && !!visitData?.patients?.patients_id && !!hospitalConfig?.name
+  });
+
   // Show loading state
   if (isLoading) {
     return (
@@ -929,7 +990,7 @@ const Invoice = () => {
         const usesBhopaliNABHRate = hasCorporate && (corporate.includes('mp police') || corporate.includes('ordnance factory'));
         const usesNABHRate = hasCorporate && !usesNonNABHRate && !usesBhopaliNABHRate;
 
-        labOrdersData.forEach((visitLab) => {
+        labOrdersData.filter(l => !l.is_hidden).forEach((visitLab) => {
           const labDetail = visitLab.lab;
           const quantity = visitLab.quantity || 1;
 
@@ -1155,7 +1216,8 @@ const Invoice = () => {
       });
 
       // USE STORED COST from visit_labs table (same as Final Bill)
-      labOrdersData.forEach((visitLab, index) => {
+      // Skip hidden lab tests - they should not appear in the bill
+      labOrdersData.filter(l => !l.is_hidden).forEach((visitLab, index) => {
         const labDetail = visitLab.lab;
 
         // Use the stored cost from visit_labs table instead of recalculating
@@ -1350,24 +1412,30 @@ const Invoice = () => {
     console.log('surgeryOrdersData length:', surgeryOrdersData?.length);
 
     let totalSurgeryCharges = 0;
+    const surgeryNames: string[] = [];
     if (surgeryOrdersData && surgeryOrdersData.length > 0) {
       surgeryOrdersData.forEach((visitSurgery: any) => {
         const surgeryRate = visitSurgery.rate && visitSurgery.rate > 0
           ? Number(visitSurgery.rate)
           : parseFloat(String(visitSurgery.cghs_surgery?.NABH_NABL_Rate || '0').replace(/[^\d.]/g, '')) || 0;
         totalSurgeryCharges += surgeryRate;
+        const surgeryName = visitSurgery.cghs_surgery?.name || visitSurgery.surgery_name || '';
+        if (surgeryName) surgeryNames.push(surgeryName);
         console.log('Adding surgery to total:', {
-          name: visitSurgery.cghs_surgery?.name,
+          name: surgeryName,
           storedRate: visitSurgery.rate,
           surgeryRate: surgeryRate
         });
       });
 
       if (totalSurgeryCharges > 0) {
-        console.log('Adding Surgery Charges summary line:', totalSurgeryCharges);
+        const surgeryLabel = surgeryNames.length > 0
+          ? `Surgery Charges - ${surgeryNames.join(', ')}`
+          : 'Surgery Charges';
+        console.log('Adding Surgery Charges summary line:', totalSurgeryCharges, surgeryLabel);
         services.push({
           srNo: srNo++,
-          item: 'Surgery Charges',
+          item: surgeryLabel,
           rate: totalSurgeryCharges,
           qty: 1,
           amount: totalSurgeryCharges,
@@ -1607,6 +1675,43 @@ const Invoice = () => {
       console.log('No mandatory services found in junction table for this visit');
     }
 
+    // Add pharmacy charges if toggled on
+    if (showPharmacyCharges && pharmacyData?.totalAmount > 0) {
+      services.push({
+        srNo: srNo++,
+        item: 'Pharmacy Charges',
+        rate: pharmacyData.totalAmount,
+        qty: 1,
+        amount: pharmacyData.totalAmount,
+        type: 'pharmacy'
+      });
+    }
+
+    // For package patients with medicine: compulsorily add medicine line
+    const isPackagePatient = visitData?.package_amount && Number(visitData.package_amount) > 0
+      && visitData?.package_status === 'approved';
+    const packageIncludesMedicine = visitData?.package_includes_medicine === true;
+
+    if (isPackagePatient && packageIncludesMedicine && pharmacyData?.totalAmount > 0) {
+      // If pharmacy charges weren't already added via toggle, add them compulsorily for package patients
+      if (!showPharmacyCharges) {
+        services.push({
+          srNo: srNo++,
+          item: 'Medicine Charges (Included in Package - Amount paid by hospital to third party pharmacy)',
+          rate: pharmacyData.totalAmount,
+          qty: 1,
+          amount: pharmacyData.totalAmount,
+          type: 'pharmacy'
+        });
+      } else {
+        // Update the already-added pharmacy line with the note
+        const pharmacyLine = services.find(s => s.type === 'pharmacy');
+        if (pharmacyLine) {
+          pharmacyLine.item = 'Medicine Charges (Included in Package - Amount paid by hospital to third party pharmacy)';
+        }
+      }
+    }
+
     return services;
   };
 
@@ -1697,7 +1802,7 @@ const Invoice = () => {
           ? format(new Date(visitData.created_at), 'dd/MM/yyyy HH:mm:ss')
           : 'N/A',
     dischargeDate: visitData.discharge_date ? format(new Date(visitData.discharge_date), 'dd/MM/yyyy HH:mm:ss') : '',
-    invoiceNo: billData?.bill_no || visitData.visit_id || 'N/A',
+    invoiceNo: billData?.formatted_bill_no || billData?.bill_no || visitData.visit_id || 'N/A',
     registrationNo: patient?.patients_id || visitData.visit_id || 'N/A',
     category: visitData?.patients?.corporate || billData?.category || 'Private',
     primaryConsultant: visitData.referring_doctor
@@ -2001,7 +2106,7 @@ const Invoice = () => {
                     <td style="text-align: right;">Rs ${invoiceData.amountPaid.toLocaleString()}.00</td>
                   </tr>
                   <tr>
-                    <td class="label-cell">Discount</td>
+                    <td class="label-cell">Discount Given</td>
                     <td style="text-align: right;">Rs ${currentDiscount.toLocaleString()}.00</td>
                   </tr>
                   <tr>
@@ -2052,23 +2157,83 @@ const Invoice = () => {
     }, 500);
   };
 
+  // Request approval — flips bills.status to PENDING_APPROVAL so admin/superadmin
+  // can review it from the /bill-approvals tab. Print stays locked until APPROVED.
+  const handleRequestApproval = async () => {
+    if (!billData?.id) {
+      toast.error('Please save the bill first before requesting approval.');
+      return;
+    }
+
+    try {
+      const raw = localStorage.getItem('hmis_user');
+      const currentUser = raw ? JSON.parse(raw) : {};
+      const requestedBy = currentUser.email || currentUser.username || 'Unknown';
+
+      const { error } = await supabase
+        .from('bills')
+        .update({ status: 'PENDING_APPROVAL', created_by: requestedBy } as any)
+        .eq('id', billData.id);
+
+      if (error) throw error;
+
+      toast.success('Bill submitted for approval successfully!');
+      queryClient.invalidateQueries({ queryKey: ['invoice-bill', visitId] });
+      queryClient.invalidateQueries({ queryKey: ['pending-bill-count'] });
+    } catch (error) {
+      console.error('Error requesting approval:', error);
+      toast.error('Failed to submit bill for approval.');
+    }
+  };
+
+  const billStatus = (billData as any)?.status as string | undefined;
+  const isApproved = billStatus === 'APPROVED';
+  const isPendingApproval = billStatus === 'PENDING_APPROVAL';
+  const printDisabled = !!billData?.id && !isApproved;
+
   return (
     <div className="min-h-screen bg-white p-4">
       <div className="max-w-4xl mx-auto">
         {/* Print and Close Buttons */}
-        <div className="flex justify-between mb-4">
+        <div className="flex justify-between items-center mb-4 no-print">
             <button
               onClick={() => navigate(-1)}
               className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600 transition-colors"
             >
               Close
             </button>
-            <button
-              onClick={handlePrint}
-              className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
-            >
-              Print
-            </button>
+            <div className="flex items-center gap-3">
+              {billData?.id && !isPendingApproval && !isApproved && (
+                <button
+                  onClick={handleRequestApproval}
+                  className="px-4 py-2 bg-orange-500 text-white rounded hover:bg-orange-600 transition-colors"
+                >
+                  Request Approval
+                </button>
+              )}
+              {isPendingApproval && (
+                <span className="text-orange-600 font-medium px-2">
+                  Pending Approval
+                </span>
+              )}
+              {isApproved && (
+                <span className="text-green-600 font-medium px-2">
+                  Approved
+                </span>
+              )}
+              <button
+                onClick={handlePrint}
+                disabled={printDisabled}
+                title={printDisabled ? 'Print disabled - Awaiting approval' : 'Print'}
+                className={`px-4 py-2 text-white rounded transition-colors ${
+                  printDisabled
+                    ? 'bg-gray-400 cursor-not-allowed'
+                    : 'bg-blue-500 hover:bg-blue-600'
+                }`}
+              >
+                {printDisabled ? '🔒 Awaiting Approval' : 'Print'}
+              </button>
+            </div>
           </div>
 
           {/* Invoice Form */}
@@ -2119,9 +2284,13 @@ const Invoice = () => {
           <div className="flex justify-center gap-2 mb-4 flex-wrap items-center">
             <button
               onClick={() => setShowPharmacyCharges(!showPharmacyCharges)}
-              className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors text-sm"
+              className={`px-4 py-2 text-white rounded transition-colors text-sm ${
+                showPharmacyCharges
+                  ? 'bg-green-500 hover:bg-green-600'
+                  : 'bg-blue-500 hover:bg-blue-600'
+              }`}
             >
-              Show Pharmacy Charge
+              {showPharmacyCharges ? 'Hide Pharmacy Charge' : 'Show Pharmacy Charge'}
             </button>
             <button
               onClick={() => setHideLabRadiology(!hideLabRadiology)}
@@ -2191,7 +2360,7 @@ const Invoice = () => {
                       <td className="border border-gray-400 p-2 text-right">Rs {invoiceData.amountPaid.toLocaleString()}.00</td>
                     </tr>
                     <tr>
-                      <td className="border border-gray-400 p-2 bg-gray-100 font-medium">Discount</td>
+                      <td className="border border-gray-400 p-2 bg-gray-100 font-medium">Discount Given</td>
                       <td className="border border-gray-400 p-2 text-right">Rs {currentDiscount.toLocaleString()}.00</td>
                     </tr>
                     <tr>

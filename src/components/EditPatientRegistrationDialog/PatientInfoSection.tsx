@@ -52,7 +52,7 @@ export const PatientInfoSection: React.FC<PatientInfoSectionProps> = ({
               <SelectValue placeholder={corporateLoading ? "Loading..." : "Select Corporate"} />
             </SelectTrigger>
             <SelectContent>
-              {corporateOptions.map((option) => (
+              {corporateOptions.filter(option => option.value).map((option) => (
                 <SelectItem key={option.value} value={option.value}>
                   {option.label}
                 </SelectItem>

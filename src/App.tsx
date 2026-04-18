@@ -4,7 +4,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter } from "react-router-dom";
+import { BrowserRouter, useNavigate, useLocation } from "react-router-dom";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { AppRoutes } from "@/components/AppRoutes";
@@ -40,6 +40,8 @@ const getRoleDefaultRoute = (role: string): string => {
     case 'receptionist':
     case 'reception':
       return '/patient-dashboard';
+    case 'front_office':
+      return '/opd-summary';
     case 'marketing':
     case 'marketing_manager':
       return '/marketing';
@@ -53,10 +55,33 @@ const getRoleDefaultRoute = (role: string): string => {
       return '/patient-dashboard';
     case 'superadmin':
     case 'super_admin':
+      return '/bill-approvals';
     case 'admin':
     default:
       return '/dashboard';
   }
+};
+
+// Role-based redirect component — lives inside BrowserRouter so it can use useNavigate
+// This replaces window.location.href which caused infinite reload loops on mobile
+const RoleRedirect: React.FC<{ user: { role: string; email: string } }> = ({ user }) => {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const hasRedirected = useRef(false);
+
+  useEffect(() => {
+    if (hasRedirected.current) return;
+    const genericRoutes = ['/', '/dashboard', '/login'];
+    if (genericRoutes.includes(location.pathname)) {
+      const targetRoute = getRoleDefaultRoute(user.role);
+      if (location.pathname !== targetRoute) {
+        hasRedirected.current = true;
+        navigate(targetRoute, { replace: true });
+      }
+    }
+  }, [location.pathname, user.role, navigate]);
+
+  return null;
 };
 
 // Suppress React Router v7 warnings
@@ -127,32 +152,14 @@ const AppContent = () => {
     setShowLanding,
     showHospitalSelection,
     setShowHospitalSelection,
-    hospitalConfig
+    hospitalConfig,
+    authError
   } = useAuth();
   const { toast } = useToast();
   // Always call hooks at the top level; avoid wrapping hooks in try/catch
   const counts = useCounts();
   const [selectedHospitalType, setSelectedHospitalType] = React.useState<HospitalType | null>(null);
-  const wasAuthenticated = useRef(false);
-
-  // Role-based redirect after login
-  useEffect(() => {
-    if (isAuthenticated && user && !wasAuthenticated.current) {
-      wasAuthenticated.current = true;
-      const targetRoute = getRoleDefaultRoute(user.role);
-      const currentPath = window.location.pathname;
-      // Only redirect if on a generic landing route AND not already on the target
-      if (
-        (currentPath === '/' || currentPath === '/dashboard' || currentPath === '/login') &&
-        currentPath !== targetRoute
-      ) {
-        window.location.href = targetRoute;
-      }
-    }
-    if (!isAuthenticated) {
-      wasAuthenticated.current = false;
-    }
-  }, [isAuthenticated, user]);
+  // Role-based redirect is handled by RoleRedirect component inside BrowserRouter (no page reloads)
 
   // Show loading while auth state is being restored from localStorage
   if (isAuthLoading) {
@@ -244,7 +251,16 @@ const AppContent = () => {
 
   // Fallback: Show hospital selection if no hospital is selected
   if (!isAuthenticated) {
-    return <HospitalSelection onHospitalSelect={handleHospitalSelect} onBackToHome={handleBackToHome} />;
+    return (
+      <>
+        {authError && (
+          <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg shadow-lg max-w-md text-sm">
+            {authError}
+          </div>
+        )}
+        <HospitalSelection onHospitalSelect={handleHospitalSelect} onBackToHome={handleBackToHome} />
+      </>
+    );
   }
 
 
@@ -257,6 +273,7 @@ const AppContent = () => {
         }}
       >
         <SidebarProvider>
+          {user && <RoleRedirect user={user} />}
           <div className="min-h-screen flex w-full">
             <AppSidebar {...counts} />
             <main className="flex-1">

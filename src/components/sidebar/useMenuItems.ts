@@ -6,7 +6,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { usePermissions } from '@/hooks/usePermissions';
 import { isFeatureEnabled } from '@/types/hospital';
 
-export const useMenuItems = (props: AppSidebarProps): MenuItem[] => {
+export const useMenuItems = (props: AppSidebarProps): { mainItems: MenuItem[]; masterItems: MenuItem[] } => {
   const { hospitalType, user } = useAuth();
   const { canManageUsers } = usePermissions();
   const {
@@ -27,8 +27,8 @@ export const useMenuItems = (props: AppSidebarProps): MenuItem[] => {
     ayushmanAnaesthetistsCount = 0
   } = props;
 
-  return useMemo(() => 
-    menuItems
+  return useMemo(() => {
+    const filtered = menuItems
       .filter(item => {
         // Hide Users tab for non-admins
         if (item.title === "Users" && !canManageUsers) {
@@ -43,6 +43,20 @@ export const useMenuItems = (props: AppSidebarProps): MenuItem[] => {
           }
         }
 
+        // Hide Lab Master & Radiology Master for all users except specific admins
+        if (item.title === "Lab Master" || item.title === "Radiology Master" || item.title === "Surgery") {
+          const MASTER_ADMIN_EMAILS = [
+            'admin@hopehospital.com',
+            'admin@ayushmanhospital.com',
+            'admin@test.com',
+          ];
+          const userEmail = user?.email?.toLowerCase() || '';
+          const userRole = user?.role;
+          if (userRole !== 'superadmin' && !MASTER_ADMIN_EMAILS.includes(userEmail)) {
+            return false;
+          }
+        }
+
         if (!hospitalType) return true; // Show all items if no hospital type
 
         // Filter menu items based on hospital features
@@ -50,8 +64,10 @@ export const useMenuItems = (props: AppSidebarProps): MenuItem[] => {
           case "Pharmacy":
             return isFeatureEnabled(hospitalType, 'hasPharmacy');
           case "Lab":
+          case "Lab Master":
             return isFeatureEnabled(hospitalType, 'hasLab');
           case "Radiology":
+          case "Radiology Master":
             return isFeatureEnabled(hospitalType, 'hasRadiology');
           case "Accounting":
             return isFeatureEnabled(hospitalType, 'hasAccounting');
@@ -78,14 +94,15 @@ export const useMenuItems = (props: AppSidebarProps): MenuItem[] => {
         icon: item.icon,
         description: `View ${item.title.toLowerCase()} data`,
         route: item.url,
+        section: item.section || 'main' as const,
         count: item.title === "Patient Dashboard" ? patientsCount :
                item.title === "Diagnoses" ? diagnosesCount :
                item.title === "Patients" ? patientsCount :
                item.title === "Users" ? usersCount :
                item.title === "Complications" ? complicationsCount :
                item.title === "Surgery" ? cghsSurgeryCount :
-               item.title === "Lab" ? labCount :
-               item.title === "Radiology" ? radiologyCount :
+               item.title === "Lab" || item.title === "Lab Master" ? labCount :
+               item.title === "Radiology" || item.title === "Radiology Master" ? radiologyCount :
                item.title === "Medications" ? medicationCount :
                item.title === "Referees" ? refereesCount :
                item.title === "Hope Surgeons" ? hopeSurgeonsCount :
@@ -94,11 +111,16 @@ export const useMenuItems = (props: AppSidebarProps): MenuItem[] => {
                item.title === "Ayushman Surgeons" ? ayushmanSurgeonsCount :
                item.title === "Ayushman Consultants" ? ayushmanConsultantsCount :
                item.title === "Ayushman Anaesthetists" ? ayushmanAnaesthetistsCount : 0
-      })), [
-        hospitalType, user, canManageUsers, diagnosesCount, patientsCount, usersCount, complicationsCount,
-        cghsSurgeryCount, labCount, radiologyCount, medicationCount,
-        refereesCount, hopeSurgeonsCount, hopeConsultantsCount, hopeAnaesthetistsCount,
-        ayushmanSurgeonsCount, ayushmanConsultantsCount, ayushmanAnaesthetistsCount
-      ]
-    );
+      }));
+
+    return {
+      mainItems: filtered.filter(item => item.section !== 'masters'),
+      masterItems: filtered.filter(item => item.section === 'masters'),
+    };
+  }, [
+    hospitalType, user, canManageUsers, diagnosesCount, patientsCount, usersCount, complicationsCount,
+    cghsSurgeryCount, labCount, radiologyCount, medicationCount,
+    refereesCount, hopeSurgeonsCount, hopeConsultantsCount, hopeAnaesthetistsCount,
+    ayushmanSurgeonsCount, ayushmanConsultantsCount, ayushmanAnaesthetistsCount
+  ]);
 };

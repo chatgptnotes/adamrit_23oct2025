@@ -97,7 +97,7 @@ const DischargeInvoice = () => {
       ]);
 
       // Calculate totals
-      const labTotal = labData.data?.reduce((sum, item) => sum + (parseFloat(item.cost || '0') || 0), 0) || 0;
+      const labTotal = labData.data?.filter(item => !item.is_hidden).reduce((sum, item) => sum + (parseFloat(item.cost || '0') || 0), 0) || 0;
       const radiologyTotal = radiologyData.data?.reduce((sum, item) => sum + (parseFloat(item.cost || '0') || 0), 0) || 0;
       const medicationTotal = medicationData.data?.reduce((sum, item) => sum + (parseFloat(item.cost || '0') || 0), 0) || 0;
       const clinicalTotal = clinicalData.data?.reduce((sum, item) => sum + (parseFloat(item.amount || '0') || 0), 0) || 0;
@@ -164,7 +164,7 @@ const DischargeInvoice = () => {
       // Calculate category subtotals
       const categoryTotals: any[] = [];
 
-      const labTotal = labData.data?.reduce((sum, item) => sum + (parseFloat(item.cost || '0') || 0), 0) || 0;
+      const labTotal = labData.data?.filter(item => !item.is_hidden).reduce((sum, item) => sum + (parseFloat(item.cost || '0') || 0), 0) || 0;
       if (labTotal > 0) {
         categoryTotals.push({
           description: 'Laboratory Charges',
@@ -330,7 +330,7 @@ const DischargeInvoice = () => {
             </tr>
             <tr>
               <td className="font-semibold py-1">Invoice No.</td>
-              <td className="py-1">: {billData?.bill_no || 'N/A'}</td>
+              <td className="py-1">: {billData?.formatted_bill_no || billData?.bill_no || 'N/A'}</td>
             </tr>
             <tr>
               <td className="font-semibold py-1">Registration No.</td>
@@ -423,6 +423,14 @@ const DischargeInvoice = () => {
                     {amountPaid.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </td>
                 </tr>
+                {discount > 0 && (
+                  <tr>
+                    <td className="border border-black p-2 font-semibold">Discount Given</td>
+                    <td className="border border-black p-2 text-right">
+                      Rs. {discount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </td>
+                  </tr>
+                )}
                 <tr>
                   <td className="border border-black p-2 font-semibold">Balance</td>
                   <td className="border border-black p-2 text-right">

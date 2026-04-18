@@ -85,6 +85,7 @@ const AdvanceStatementReport = () => {
           reason_for_visit,
           package_days,
           package_amount,
+          ipd_admission_notes,
           patients!inner (
             id,
             name,
@@ -94,6 +95,10 @@ const AdvanceStatementReport = () => {
             insurance_person_no,
             hospital_name,
             corporate
+          ),
+          diagnoses!diagnosis_id (
+            id,
+            name
           ),
           visit_diagnoses (
             diagnoses (
@@ -235,26 +240,62 @@ const AdvanceStatementReport = () => {
         }
       }
 
-      // Fetch pharmacy_sales for pharmacy totals using patient text IDs
-      const patientTextIds = data?.map(v => v.patients?.patients_id).filter(Boolean) as string[] || [];
-      const uniquePatientTextIds = Array.from(new Set(patientTextIds));
+      // Build visit_id → patient_id mapping for pharmacy validation
+      const visitPatientMap: Record<string, string> = {};
+      data?.forEach(visit => {
+        if (visit.visit_id && visit.patients?.patients_id) {
+          visitPatientMap[visit.visit_id] = visit.patients.patients_id;
+        }
+      });
 
+      // Fetch pharmacy_sales for pharmacy totals and paid using visit_id
       let pharmacyTotalMapping: Record<string, number> = {};
+      let pharmacyPaidMapping: Record<string, number> = {};
 
-      if (uniquePatientTextIds.length > 0) {
+      if (uniqueVisitIds.length > 0) {
         const { data: pharmacyData, error: pharmacyError } = await supabase
           .from('pharmacy_sales')
-          .select('patient_id, total_amount')
-          .in('patient_id', uniquePatientTextIds);
+          .select('visit_id, patient_id, total_amount, payment_method, sale_id')
+          .in('visit_id', uniqueVisitIds)
+          .eq('hospital_name', hospitalConfig?.name || '');
 
         if (pharmacyError) {
           console.error('Error fetching pharmacy_sales data:', pharmacyError);
         } else if (pharmacyData) {
-          pharmacyData.forEach((sale: { patient_id: string; total_amount: number | null }) => {
-            if (sale.patient_id) {
-              pharmacyTotalMapping[sale.patient_id] = (pharmacyTotalMapping[sale.patient_id] || 0) + (sale.total_amount || 0);
+          const creditSaleIds: number[] = [];
+          const creditSaleVisitMap: Record<number, string> = {};
+
+          pharmacyData.forEach((sale: { visit_id: string; patient_id: string | null; total_amount: number | null; payment_method: string | null; sale_id: number }) => {
+            if (sale.visit_id) {
+              // Only count pharmacy sales that belong to the correct patient for this visit
+              const expectedPatientId = visitPatientMap[sale.visit_id];
+              if (expectedPatientId && sale.patient_id !== expectedPatientId) {
+                return; // Skip records from a different patient
+              }
+              pharmacyTotalMapping[sale.visit_id] = (pharmacyTotalMapping[sale.visit_id] || 0) + (sale.total_amount || 0);
+              if (sale.payment_method !== 'CREDIT') {
+                pharmacyPaidMapping[sale.visit_id] = (pharmacyPaidMapping[sale.visit_id] || 0) + (sale.total_amount || 0);
+              } else {
+                creditSaleIds.push(sale.sale_id);
+                creditSaleVisitMap[sale.sale_id] = sale.visit_id;
+              }
             }
           });
+
+          if (creditSaleIds.length > 0) {
+            const { data: creditPayments } = await supabase
+              .from('pharmacy_credit_payments')
+              .select('sale_id, amount')
+              .in('sale_id', creditSaleIds)
+              .eq('hospital_name', hospitalConfig?.name || '');
+
+            (creditPayments || []).forEach((payment: { sale_id: number; amount: number | null }) => {
+              const visitId = creditSaleVisitMap[payment.sale_id];
+              if (visitId) {
+                pharmacyPaidMapping[visitId] = (pharmacyPaidMapping[visitId] || 0) + (payment.amount || 0);
+              }
+            });
+          }
         }
       }
 
@@ -268,7 +309,8 @@ const AdvanceStatementReport = () => {
           ? financialMapping[visit.visit_id]
           : null,
         lab_total: labTotalMapping[visit.id] || 0,
-        pharmacy_total: visit.patients?.patients_id ? (pharmacyTotalMapping[visit.patients.patients_id] || 0) : 0
+        pharmacy_total: visit.visit_id ? (pharmacyTotalMapping[visit.visit_id] || 0) : 0,
+        pharmacy_paid: visit.visit_id ? (pharmacyPaidMapping[visit.visit_id] || 0) : 0
       })) || [];
 
       return visitsWithRoomInfo;
@@ -691,7 +733,7 @@ const AdvanceStatementReport = () => {
               <div class="stat-label">Currently Admitted</div>
             </div>
             <div class="stat-item">
-              <div class="stat-number">${advanceData.filter(item => item.visit_diagnoses && item.visit_diagnoses.length > 0).length}</div>
+              <div class="stat-number">${advanceData.filter(item => item.diagnoses || (item.visit_diagnoses && item.visit_diagnoses.length > 0)).length}</div>
               <div class="stat-label">Patients with Diagnosis</div>
             </div>
             <div class="stat-item">
@@ -717,7 +759,8 @@ const AdvanceStatementReport = () => {
                 <th style="width: 5%;">Pkg Amt</th>
                 <th style="width: 5%;">Lab Amt</th>
                 <th style="width: 5%;">Pharmacy</th>
-                <th style="width: 10%;">Surgery/Procedure</th>
+                <th style="width: 5%;">Pharma Paid</th>
+                <th style="width: 9%;">Surgery/Procedure</th>
                 <th style="width: 7%;">Total Bill</th>
                 <th style="width: 7%;">Advance</th>
                 <th style="width: 9%;">Last Payment</th>
@@ -737,10 +780,19 @@ const AdvanceStatementReport = () => {
                   </div>
                 `;
 
-                const diagnoses = item.visit_diagnoses?.map(vd => vd.diagnoses?.name).filter(Boolean) || [];
-                const diagnosisText = diagnoses.length > 0 ?
-                  diagnoses.map(diagnosis => `<div class="diagnosis-item">${diagnosis}</div>`).join('') :
-                  (item.reason_for_visit ? `<div class="diagnosis-item">${item.reason_for_visit}</div>` : 'No diagnosis recorded');
+                const directDiagnosis = item.diagnoses?.name;
+                const junctionDiagnoses = item.visit_diagnoses?.map(vd => vd.diagnoses?.name).filter(Boolean) || [];
+                const admissionNotesDiagnosis = (item.ipd_admission_notes as any)?.provisional_diagnosis;
+                const reasonForVisit = item.reason_for_visit;
+                const diagnoses = directDiagnosis ? [directDiagnosis, ...junctionDiagnoses] : junctionDiagnoses;
+                const allDiagnoses = [
+                  ...diagnoses,
+                  ...(admissionNotesDiagnosis ? [admissionNotesDiagnosis] : []),
+                  ...(diagnoses.length === 0 && !admissionNotesDiagnosis && reasonForVisit ? [reasonForVisit] : []),
+                ];
+                const diagnosisText = allDiagnoses.length > 0 ?
+                  allDiagnoses.map(diagnosis => `<div class="diagnosis-item">${diagnosis}</div>`).join('') :
+                  'No diagnosis recorded';
 
                 const surgeries = item.visit_surgeries?.map(vs => vs.cghs_surgery ? {
                   name: vs.cghs_surgery.name,
@@ -807,6 +859,7 @@ const AdvanceStatementReport = () => {
                     <td style="text-align: right;">₹${(parseFloat(item.package_amount || '0') || 0).toLocaleString('en-IN')}</td>
                     <td style="text-align: right;">₹${(item.lab_total || 0).toLocaleString('en-IN')}</td>
                     <td style="text-align: right;">₹${(item.pharmacy_total || 0).toLocaleString('en-IN')}</td>
+                    <td style="text-align: right;">₹${(item.pharmacy_paid || 0).toLocaleString('en-IN')}</td>
                     <td>${surgeryText}</td>
                     <td style="text-align: right; font-weight: bold;">₹${totalBill.toLocaleString('en-IN')}</td>
                     <td style="text-align: right; color: #16a34a;">₹${advanceTillDate.toLocaleString('en-IN')}</td>
@@ -841,7 +894,7 @@ const AdvanceStatementReport = () => {
 
   const handleExport = () => {
     // Create CSV content
-    const headers = ['Sr. No.', 'Patient Details', 'Corporate Type', 'Room/Bed', 'Admission Date', 'Diagnosis', 'Package Days', 'Package Amount', 'Lab Amount', 'Pharmacy', 'Referral Letter', 'Planned Surgery or Procedure and Cost'];
+    const headers = ['Sr. No.', 'Patient Details', 'Corporate Type', 'Room/Bed', 'Admission Date', 'Diagnosis', 'Package Days', 'Package Amount', 'Lab Amount', 'Pharmacy', 'Pharmacy Paid', 'Referral Letter', 'Planned Surgery or Procedure and Cost'];
     const csvContent = [
       headers.join(','),
       ...advanceData.map((item, index) => {
@@ -861,7 +914,8 @@ const AdvanceStatementReport = () => {
         // Corporate Type
         const corporate = patient?.corporate || 'N/A';
 
-        const diagnoses = item.visit_diagnoses?.map(vd => vd.diagnoses?.name).filter(Boolean).join(', ') || 'No diagnosis';
+        const admissionNotesDiagnosis = (item.ipd_admission_notes as any)?.provisional_diagnosis;
+        const diagnoses = item.diagnoses?.name || item.visit_diagnoses?.map(vd => vd.diagnoses?.name).filter(Boolean).join(', ') || admissionNotesDiagnosis || item.reason_for_visit || 'No diagnosis';
         const surgeries = item.visit_surgeries?.map(vs => {
           if (!vs.cghs_surgery) return null;
           let surgeryInfo = `${vs.cghs_surgery.name} (Code: ${vs.cghs_surgery.code})`;
@@ -889,6 +943,7 @@ const AdvanceStatementReport = () => {
         const packageAmount = item.package_amount || '0';
         const labAmount = item.lab_total || 0;
         const pharmacyAmount = item.pharmacy_total || 0;
+        const pharmacyPaidAmount = item.pharmacy_paid || 0;
 
         return [
           index + 1,
@@ -901,6 +956,7 @@ const AdvanceStatementReport = () => {
           packageAmount,
           labAmount,
           pharmacyAmount,
+          pharmacyPaidAmount,
           `"${referralLetter}"`,
           `"${surgeries}"`
         ].join(',');
@@ -1036,7 +1092,7 @@ const AdvanceStatementReport = () => {
             <h3 className="text-sm font-medium text-gray-500">With Diagnosis</h3>
             <p className="text-2xl font-bold text-green-600">
               {advanceData.filter(item =>
-                item.visit_diagnoses && item.visit_diagnoses.length > 0
+                item.diagnoses || (item.visit_diagnoses && item.visit_diagnoses.length > 0)
               ).length}
             </p>
           </div>
@@ -1081,19 +1137,20 @@ const AdvanceStatementReport = () => {
                   <TableHead className="min-w-[120px]">Package Amount</TableHead>
                   <TableHead className="min-w-[120px]">Lab Amount</TableHead>
                   <TableHead className="min-w-[120px]">Pharmacy</TableHead>
+                  <TableHead className="min-w-[120px]">Pharmacy Paid</TableHead>
                   <TableHead className="min-w-[300px]">Planned Surgery or Procedure and Cost</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {isLoading ? (
                   <TableRow>
-                    <TableCell colSpan={hospitalType === 'hope' ? 11 : 10} className="text-center py-8">
+                    <TableCell colSpan={hospitalType === 'hope' ? 12 : 11} className="text-center py-8">
                       Loading...
                     </TableCell>
                   </TableRow>
                 ) : advanceData.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={hospitalType === 'hope' ? 11 : 10} className="text-center py-8 text-gray-500">
+                    <TableCell colSpan={hospitalType === 'hope' ? 12 : 11} className="text-center py-8 text-gray-500">
                       No data found
                     </TableCell>
                   </TableRow>
@@ -1115,15 +1172,22 @@ const AdvanceStatementReport = () => {
                       </div>
                     );
 
-                    const diagnoses = item.visit_diagnoses?.map(vd => vd.diagnoses?.name).filter(Boolean) || [];
-                    const diagnosisDisplay = diagnoses.length > 0 ? (
+                    const directDiagnosis = item.diagnoses?.name;
+                    const junctionDiagnoses = item.visit_diagnoses?.map(vd => vd.diagnoses?.name).filter(Boolean) || [];
+                    const admissionNotesDiagnosis = (item.ipd_admission_notes as any)?.provisional_diagnosis;
+                    const reasonForVisit = item.reason_for_visit;
+                    const diagnoses = directDiagnosis ? [directDiagnosis, ...junctionDiagnoses] : junctionDiagnoses;
+                    const allDiagnoses = [
+                      ...diagnoses,
+                      ...(admissionNotesDiagnosis ? [admissionNotesDiagnosis] : []),
+                      ...(diagnoses.length === 0 && !admissionNotesDiagnosis && reasonForVisit ? [reasonForVisit] : []),
+                    ];
+                    const diagnosisDisplay = allDiagnoses.length > 0 ? (
                       <div className="space-y-1">
-                        {diagnoses.map((diagnosis, idx) => (
+                        {allDiagnoses.map((diagnosis, idx) => (
                           <div key={idx} className="text-sm bg-blue-50 px-2 py-1 rounded">{diagnosis}</div>
                         ))}
                       </div>
-                    ) : item.reason_for_visit ? (
-                      <div className="text-sm bg-blue-50 px-2 py-1 rounded">{item.reason_for_visit}</div>
                     ) : (
                       <span className="text-gray-500">No diagnosis recorded</span>
                     );
@@ -1244,6 +1308,15 @@ const AdvanceStatementReport = () => {
                           {item.pharmacy_total > 0 ? (
                             <span className="text-sm font-medium text-purple-700">
                               ₹{item.pharmacy_total.toLocaleString('en-IN')}
+                            </span>
+                          ) : (
+                            <span className="text-gray-500">₹0</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {item.pharmacy_paid > 0 ? (
+                            <span className="text-sm font-medium text-green-700">
+                              ₹{item.pharmacy_paid.toLocaleString('en-IN')}
                             </span>
                           ) : (
                             <span className="text-gray-500">₹0</span>

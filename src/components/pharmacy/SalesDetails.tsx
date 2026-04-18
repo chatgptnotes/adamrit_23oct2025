@@ -4,7 +4,7 @@ import TreatmentSheetPrintView from './TreatmentSheetPrintView';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import { FileText, Printer, Eye, Download, Search, Calendar, ChevronLeft, ChevronRight, Receipt, X, Pencil, Copy, Trash2, User, RotateCcw, Wallet, Pill, FileSpreadsheet } from 'lucide-react';
+import { FileText, Printer, Eye, EyeOff, Download, Search, Calendar, ChevronLeft, ChevronRight, Receipt, X, Pencil, Copy, Trash2, User, RotateCcw, Wallet, Pill, FileSpreadsheet } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import ExcelJS from 'exceljs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -117,16 +117,7 @@ export const SalesDetails: React.FC = () => {
   // Selected bills for printing prescriptions
   const [selectedBills, setSelectedBills] = useState<number[]>([]);
 
-  // Pagination state
-  const [currentPage, setCurrentPage] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
-  const pageSize = 25;
-  const totalPages = Math.ceil(totalCount / pageSize);
-
-  // Reset to page 1 when search filters change
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [billNo, patientName, date]);
 
   // Fetch patients as user types
   useEffect(() => {
@@ -162,13 +153,9 @@ export const SalesDetails: React.FC = () => {
   // Fetch all sales on component mount and group by patient
   useEffect(() => {
     const fetchAllSales = async () => {
-      // Calculate pagination range
-      const from = (currentPage - 1) * pageSize;
-      const to = from + pageSize - 1;
-
       let query = supabase
         .from('pharmacy_sales')
-        .select('*', { count: 'exact' })  // Get total count for pagination
+        .select('*', { count: 'exact' })
         .order('sale_date', { ascending: false });
 
       // Filter by hospital if configured
@@ -198,9 +185,6 @@ export const SalesDetails: React.FC = () => {
         endDate.setHours(23, 59, 59, 999);
         query = query.gte('sale_date', startDate.toISOString()).lte('sale_date', endDate.toISOString());
       }
-
-      // Apply pagination
-      query = query.range(from, to);
 
       const { data, error, count } = await query;
 
@@ -264,7 +248,7 @@ export const SalesDetails: React.FC = () => {
       }
     };
     fetchAllSales();
-  }, [hospitalConfig?.name, currentPage, billNo, patientName, date]);
+  }, [hospitalConfig?.name, billNo, patientName, date]);
 
   // Auto-open sidebar when returning from Edit Sale Bill with saleId in URL
   useEffect(() => {
@@ -374,12 +358,13 @@ export const SalesDetails: React.FC = () => {
       return;
     }
 
-    // Build query for medicine_returns
+    // Build query for medicine_returns (exclude hidden ones)
     let query = supabase
       .from('medicine_returns')
       .select('*')
       .eq('patient_id', patientData.id)
-      .eq('hospital_name', hospitalConfig.name);
+      .eq('hospital_name', hospitalConfig.name)
+      .neq('is_hidden', true);
 
     // Filter by specific sale IDs if provided (to show returns only for selected visit)
     if (saleIds && saleIds.length > 0) {
@@ -461,6 +446,45 @@ export const SalesDetails: React.FC = () => {
       currency: 'INR',
       minimumFractionDigits: 2
     }).format(amount);
+
+  const printReturnVoucher = (ret: any) => {
+    const hospitalFullName = hospitalConfig?.name === 'ayushman'
+      ? 'Ayushman Hospital Nagpur' : 'Hope Hospital Nagpur';
+    const dateStr = ret.return_date ? new Date(ret.return_date).toLocaleDateString('en-IN') : '-';
+    const html = `<!DOCTYPE html>
+<html><head><title>Return Voucher - ${ret.return_number || ''}</title>
+<style>
+  body { font-family: Arial, sans-serif; padding: 30px; max-width: 800px; margin: 0 auto; font-size: 13px; }
+  h2 { text-align: center; margin-bottom: 4px; }
+  .subtitle { text-align: center; color: #666; margin-bottom: 20px; }
+  .row { display: flex; justify-content: space-between; margin-bottom: 8px; }
+  .amount { font-size: 18px; font-weight: bold; margin: 20px 0; text-align: right; }
+  .totals td { padding: 4px 8px; }
+  .signatures { display: flex; justify-content: space-between; margin-top: 60px; }
+  .sig-box { text-align: center; border-top: 1px solid #333; padding-top: 5px; width: 180px; font-size: 11px; }
+  @media print { body { padding: 15px; } }
+</style></head><body>
+  <h2>${hospitalFullName}</h2>
+  <p class="subtitle">PHARMACY RETURN / REFUND VOUCHER</p>
+  <div class="row"><div><strong>Return No:</strong> ${ret.return_number || `RET-${ret.id?.slice(0, 6)}`}</div><div><strong>Date:</strong> ${dateStr}</div></div>
+  <div class="row"><div><strong>Patient:</strong> ${selectedPatient?.patient_name || selectedPatient?.name || 'N/A'}</div><div><strong>Reason:</strong> ${ret.return_reason || 'N/A'}</div></div>
+  <hr/>
+  <table class="totals" style="margin-left:auto">
+    <tr><td>Refund Amount:</td><td style="text-align:right">${formatCurrency(ret.refund_amount || 0)}</td></tr>
+    ${(ret.processing_fee || 0) > 0 ? `<tr><td>Processing Fee:</td><td style="text-align:right">- ${formatCurrency(ret.processing_fee)}</td></tr>` : ''}
+    <tr style="font-weight:bold;border-top:2px solid #333"><td>Net Refund:</td><td style="text-align:right">${formatCurrency(ret.net_refund || 0)}</td></tr>
+  </table>
+  <p class="amount">${formatCurrency(ret.net_refund || 0)}/-</p>
+  <div class="signatures">
+    <div class="sig-box">Patient Signature</div>
+    <div class="sig-box">Pharmacy Executive</div>
+    <div class="sig-box">Authorised Signatory</div>
+  </div>
+  <script>window.onload = function() { window.print(); }</script>
+</body></html>`;
+    const printWindow = window.open('', '_blank');
+    if (printWindow) { printWindow.document.write(html); printWindow.document.close(); }
+  };
 
   const printBill = (sale: any, items: any[]) => {
     const printWindow = window.open('', '', 'width=800,height=600');
@@ -950,35 +974,23 @@ export const SalesDetails: React.FC = () => {
     setViewBillModal(bill);
   };
 
-  // Delete Bill handler
+  // Mark Bill as Cancelled (soft-delete — bills can never be deleted for audit trail)
   const handleDeleteBill = async (bill: any) => {
-    if (!confirm('Are you sure you want to delete this bill? This action cannot be undone.')) return;
+    if (!confirm('Are you sure you want to cancel this bill? The bill will be marked as cancelled and hidden from active views. This preserves the audit trail.')) return;
 
-    // Delete sale items first
-    const { error: itemsError } = await supabase
-      .from('pharmacy_sale_items')
-      .delete()
-      .eq('sale_id', bill.sale_id);
-
-    if (itemsError) {
-      console.error('Error deleting sale items:', itemsError);
-      alert('Error deleting bill items');
-      return;
-    }
-
-    // Delete the sale
-    const { error: saleError } = await supabase
+    // Mark the sale as cancelled (soft-delete)
+    const { error: saleError } = await (supabase as any)
       .from('pharmacy_sales')
-      .delete()
+      .update({ status: 'cancelled', updated_at: new Date().toISOString() })
       .eq('sale_id', bill.sale_id);
 
     if (saleError) {
-      console.error('Error deleting sale:', saleError);
-      alert('Error deleting bill');
+      console.error('Error cancelling sale:', saleError);
+      alert('Error cancelling bill');
       return;
     }
 
-    // Update state - remove from selectedPatient.bills
+    // Update state - remove cancelled bill from view
     if (selectedPatient) {
       setSelectedPatient((prev: any) => ({
         ...prev,
@@ -999,7 +1011,7 @@ export const SalesDetails: React.FC = () => {
     // Update tableData
     setTableData(prev => prev.filter(s => s.sale_id !== bill.sale_id));
 
-    alert('Bill deleted successfully');
+    alert('Bill cancelled successfully. Audit trail preserved.');
   };
 
   const handleOpenTreatmentSheet = (visitId: string) => {
@@ -1092,8 +1104,8 @@ export const SalesDetails: React.FC = () => {
             <tr>
               <th>Date</th>
               <th class="right">Paid Amt</th>
-              <th class="right">Discount</th>
-              <th class="right">Balance</th>
+              <th class="right">Discount Given</th>
+              <th class="right">Credit Pending</th>
             </tr>
           </thead>
           <tbody>
@@ -1844,33 +1856,13 @@ export const SalesDetails: React.FC = () => {
             </table>
           </div>
 
-          {/* Pagination */}
+          {/* Record count */}
           {totalCount > 0 && (
-            <div className="flex items-center justify-between px-4 py-3 border-t bg-gray-50">
+            <div className="px-4 py-3 border-t bg-gray-50">
               <p className="text-sm text-gray-600">
-                Showing <span className="font-medium">{patientGroups.length}</span> of <span className="font-medium">{totalCount}</span> records
+                Showing <span className="font-medium">{patientGroups.length}</span> of{' '}
+                <span className="font-medium">{totalCount}</span> records
               </p>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={currentPage === 1}
-                  onClick={() => setCurrentPage(p => p - 1)}
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                  Previous
-                </Button>
-                <span className="text-sm text-gray-600 px-2">Page {currentPage} of {totalPages || 1}</span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={currentPage >= totalPages}
-                  onClick={() => setCurrentPage(p => p + 1)}
-                >
-                  Next
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
-              </div>
             </div>
           )}
         </Card>
@@ -1946,7 +1938,24 @@ export const SalesDetails: React.FC = () => {
                     <th className="px-2 py-2 text-right text-xs font-semibold">Disc</th>
                     <th className="px-2 py-2 text-right text-xs font-semibold">Net Amt</th>
                     <th className="px-2 py-2 text-center text-xs font-semibold">Action</th>
-                    <th className="px-1 py-2"></th>
+                    <th className="px-1 py-2 text-center">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 rounded border-gray-300 text-cyan-600 focus:ring-cyan-500"
+                        title="Select all"
+                        checked={
+                          selectedPatient?.bills?.length > 0 &&
+                          selectedPatient.bills.every((b: any) => selectedBills.includes(b.sale_id))
+                        }
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedBills(selectedPatient.bills.map((b: any) => b.sale_id));
+                          } else {
+                            setSelectedBills([]);
+                          }
+                        }}
+                      />
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1960,23 +1969,49 @@ export const SalesDetails: React.FC = () => {
                       <tr key={bill.sale_id || idx} className="bg-white border-b hover:bg-gray-50">
                         <td className="px-2 py-2 text-gray-800">SB-{bill.sale_id}</td>
                         <td className="px-2 py-2 text-gray-600">{bill.payment_method || 'Cash'}</td>
-                        <td className="px-2 py-2 text-gray-600">{bill.sale_date ? new Date(bill.sale_date).toLocaleDateString('en-IN') : '-'}</td>
+                        <td className="px-2 py-2 text-gray-600">
+                          {bill.payment_method === 'CREDIT' ? (
+                            <input
+                              type="date"
+                              defaultValue={bill.sale_date ? new Date(bill.sale_date).toISOString().split('T')[0] : ''}
+                              max={new Date().toISOString().split('T')[0]}
+                              onBlur={async (e) => {
+                                const newDate = e.target.value;
+                                if (!newDate || newDate === (bill.sale_date ? new Date(bill.sale_date).toISOString().split('T')[0] : '')) return;
+                                const { error } = await supabase
+                                  .from('pharmacy_sales')
+                                  .update({ sale_date: new Date(newDate + 'T12:00:00').toISOString() })
+                                  .eq('sale_id', bill.sale_id);
+                                if (error) {
+                                  alert('Failed to update date: ' + error.message);
+                                } else {
+                                  bill.sale_date = new Date(newDate + 'T12:00:00').toISOString();
+                                }
+                              }}
+                              className="w-28 px-1 py-0.5 text-xs border border-blue-300 bg-blue-50 rounded focus:ring-1 focus:ring-blue-500"
+                            />
+                          ) : (
+                            bill.sale_date ? new Date(bill.sale_date).toLocaleDateString('en-IN') : '-'
+                          )}
+                        </td>
                         <td className="px-2 py-2 text-right text-gray-800">{((bill.total_amount || 0) + (bill.discount || 0)).toFixed(2)}</td>
                         <td className="px-2 py-2 text-right text-gray-800">{paid.toFixed(2)}</td>
                         <td className="px-2 py-2 text-right text-gray-600">{(bill.discount || 0).toFixed(2)}</td>
                         <td className="px-2 py-2 text-right font-medium text-gray-800">{amount.toFixed(2)}</td>
                         <td className="px-2 py-2">
                           <div className="flex items-center justify-center gap-1">
-                            {/* 1. Edit */}
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => navigate(`/pharmacy/edit-sale/${bill.sale_id}`)}
-                              className="h-6 w-6 p-0 hover:bg-cyan-100 hover:text-cyan-600"
-                              title="Edit"
-                            >
-                              <Pencil className="h-3 w-3" />
-                            </Button>
+                            {/* 1. Edit - for non-completed sales OR CREDIT (corporate/panel/insurance) */}
+                            {(bill.payment_status !== 'COMPLETED' && bill.payment_status !== 'REFUNDED') || bill.payment_method === 'CREDIT' ? (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => navigate(`/pharmacy/edit-sale/${bill.sale_id}`)}
+                                className="h-6 w-6 p-0 hover:bg-cyan-100 hover:text-cyan-600"
+                                title="Edit"
+                              >
+                                <Pencil className="h-3 w-3" />
+                              </Button>
+                            ) : null}
                             {/* 2. View Sales - Modal */}
                             <Button
                               variant="ghost"
@@ -1997,13 +2032,13 @@ export const SalesDetails: React.FC = () => {
                             >
                               <Printer className="h-3 w-3" />
                             </Button>
-                            {/* 4. Delete */}
+                            {/* 4. Cancel Bill (soft-delete) */}
                             <Button
                               variant="ghost"
                               size="sm"
                               onClick={() => handleDeleteBill(bill)}
-                              className="h-6 w-6 p-0 hover:bg-red-100 hover:text-red-600"
-                              title="Delete"
+                              className="h-6 w-6 p-0 hover:bg-orange-100 hover:text-orange-600"
+                              title="Cancel bill"
                             >
                               <Trash2 className="h-3 w-3" />
                             </Button>
@@ -2094,17 +2129,28 @@ export const SalesDetails: React.FC = () => {
                               variant="ghost"
                               size="sm"
                               className="h-6 w-6 p-0 hover:bg-cyan-100 hover:text-cyan-600"
-                              title="View"
+                              title="Print Return Voucher"
+                              onClick={() => printReturnVoucher(ret)}
                             >
-                              <Eye className="h-3 w-3" />
+                              <Printer className="h-3 w-3" />
                             </Button>
                             <Button
                               variant="ghost"
                               size="sm"
-                              className="h-6 w-6 p-0 hover:bg-cyan-100 hover:text-cyan-600"
-                              title="Print"
+                              className="h-6 w-6 p-0 hover:bg-red-100 hover:text-red-600"
+                              title="Hide return"
+                              onClick={async () => {
+                                if (!confirm('Hide this return? It will be hidden from the bill but kept in the database for audit.')) return;
+                                const { error } = await (supabase as any).from('medicine_returns').update({ is_hidden: true }).eq('id', ret.id);
+                                if (error) {
+                                  toast.error('Failed to hide return');
+                                } else {
+                                  toast.success('Return hidden successfully');
+                                  setPatientReturns(prev => prev.filter(r => r.id !== ret.id));
+                                }
+                              }}
                             >
-                              <Printer className="h-3 w-3" />
+                              <EyeOff className="h-3 w-3" />
                             </Button>
                           </div>
                         </td>
@@ -2176,8 +2222,8 @@ export const SalesDetails: React.FC = () => {
                       <tr className="bg-cyan-600 text-white">
                         <th className="px-3 py-2 text-left text-xs font-semibold">Date</th>
                         <th className="px-3 py-2 text-right text-xs font-semibold">Paid Amt</th>
-                        <th className="px-3 py-2 text-right text-xs font-semibold">Discount</th>
-                        <th className="px-3 py-2 text-right text-xs font-semibold">Balance</th>
+                        <th className="px-3 py-2 text-right text-xs font-semibold">Discount Given</th>
+                        <th className="px-3 py-2 text-right text-xs font-semibold">Credit Pending</th>
                       </tr>
                     </thead>
                     <tbody>

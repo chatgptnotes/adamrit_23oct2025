@@ -167,10 +167,14 @@ interface RadiologyTest {
   bhopal_non_nabh?: number;
 }
 
-const RadiologyManagement: React.FC = () => {
+interface RadiologyManagementProps {
+  masterOnly?: boolean;
+}
+
+const RadiologyManagement: React.FC<RadiologyManagementProps> = ({ masterOnly = false }) => {
   const { hospitalConfig } = useAuth();
   const { canEditMasters } = usePermissions();
-  const [activeView, setActiveView] = useState<string>('orders');
+  const [activeView, setActiveView] = useState<string>(masterOnly ? 'addTest' : 'orders');
   const [radiologyTests, setRadiologyTests] = useState<RadiologyTest[]>([]);
   const [loading, setLoading] = useState(false);
   const [editingTest, setEditingTest] = useState<RadiologyTest | null>(null);
@@ -1060,6 +1064,7 @@ const RadiologyManagement: React.FC = () => {
           </div>
 
           {/* Navigation Tabs */}
+          {!masterOnly && (
           <div className="flex space-x-1 mb-6 bg-gray-100 p-1 rounded-lg w-fit">
             <Button
               variant="ghost"
@@ -1086,6 +1091,7 @@ const RadiologyManagement: React.FC = () => {
               X-Ray Tracking
             </Button>
           </div>
+          )}
 
           {/* Search Bar */}
           <div className="flex items-center gap-4 mb-6">
@@ -1107,38 +1113,48 @@ const RadiologyManagement: React.FC = () => {
           </div>
 
           {/* Table */}
-          <div className="bg-white rounded-lg shadow overflow-hidden">
-            <table className="w-full">
+          <div className="bg-white rounded-lg shadow overflow-x-auto">
+            <table className="w-full min-w-[900px]">
               <thead className="bg-gray-100">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Id</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Active</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Action</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Id</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">NABH</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Non-NABH</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Private</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">NABH Bhopal</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Non-NABH Bhopal</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Active</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Action</th>
                 </tr>
               </thead>
                             <tbody className="bg-white divide-y divide-gray-200">
                 {loading ? (
                   <tr>
-                    <td colSpan={4} className="px-6 py-4 text-center text-gray-500">
+                    <td colSpan={9} className="px-6 py-4 text-center text-gray-500">
                       Loading radiology tests...
                     </td>
                   </tr>
                 ) : radiologyTests.length === 0 ? (
                   <tr>
-                    <td colSpan={4} className="px-6 py-4 text-center text-gray-500">
+                    <td colSpan={9} className="px-6 py-4 text-center text-gray-500">
                       No radiology tests found. Add your first test!
                     </td>
                   </tr>
                 ) : (
                   currentTests.map((test, index) => (
                     <tr key={test.id} className={index % 2 === 0 ? "bg-gray-50" : "bg-white"}>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{startIndex + index + 1}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{test.name}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">{startIndex + index + 1}</td>
+                      <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">{test.name}</td>
+                      <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 text-right">{test.nabhNablRate || '—'}</td>
+                      <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 text-right">{test.nonNabhNablRate || '—'}</td>
+                      <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 text-right">{test.private || '—'}</td>
+                      <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 text-right">{test.bhopal_nabh || '—'}</td>
+                      <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 text-right">{test.bhopal_non_nabh || '—'}</td>
+                      <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
                         {test.is_active ? "Yes" : "No"}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
                         <div className="flex items-center gap-2">
                           <Button
                             size="sm"
@@ -1302,6 +1318,7 @@ const RadiologyManagement: React.FC = () => {
           </div>
 
           {/* Navigation Tabs */}
+          {!masterOnly && (
           <div className="flex space-x-1 mb-6 bg-gray-100 p-1 rounded-lg w-fit">
             <Button
               variant="ghost"
@@ -1328,6 +1345,7 @@ const RadiologyManagement: React.FC = () => {
               X-Ray Tracking
             </Button>
           </div>
+          )}
 
           <XRayTracking />
         </div>
@@ -1347,6 +1365,7 @@ const RadiologyManagement: React.FC = () => {
           </div>
 
           {/* Navigation Tabs */}
+          {!masterOnly && (
           <div className="flex space-x-1 mb-6 bg-gray-100 p-1 rounded-lg w-fit">
             <Button
               variant="ghost"
@@ -1373,6 +1392,7 @@ const RadiologyManagement: React.FC = () => {
               X-Ray Tracking
             </Button>
           </div>
+          )}
 
           {activeView === 'orders' && <RadiologyDashboard />}
         </div>

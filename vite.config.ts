@@ -20,7 +20,7 @@ export default defineConfig(({ mode }) => ({
     global: 'globalThis',
   },
   optimizeDeps: {
-    exclude: ['jspdf']
+    exclude: ['jspdf', '@ckeditor/ckeditor5-build-classic']
   },
   build: {
     target: 'es2015',
@@ -28,17 +28,11 @@ export default defineConfig(({ mode }) => ({
     minify: 'esbuild',
     chunkSizeWarningLimit: 1600,
     rollupOptions: {
-      output: {
-        manualChunks: {
-          'react-vendor': ['react', 'react-dom'],
-          'ui-vendor': ['@radix-ui/react-dialog', '@radix-ui/react-select', '@radix-ui/react-tabs'],
-          'chart-vendor': ['recharts'],
-          'pdf-vendor': ['jspdf', 'html2canvas'],
-          'supabase-vendor': ['@supabase/supabase-js'],
-        },
-      },
+      // NOTE: Manual chunk splitting removed entirely. Previous config caused
+      // runtime crashes: react-router "Cannot read createContext", recharts
+      // "Cannot access 'S' before initialization". Rollup's automatic code
+      // splitting handles module initialization order correctly.
       onwarn(warning, warn) {
-        // Suppress warnings for better build
         if (warning.code === 'UNRESOLVED_IMPORT' ||
             warning.code === 'MISSING_EXPORT') {
           return;

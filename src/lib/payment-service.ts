@@ -43,7 +43,7 @@ export async function recordOpdServicePayment(
       p_visit_id: params.visitId,
       p_payment_mode: params.paymentMode,
       p_amount: params.amount,
-      p_payment_date: params.paymentDate || new Date().toISOString().split('T')[0],
+      p_payment_date: params.paymentDate || new Date().toISOString(),
       p_narration: params.narration || null,
       p_created_by: params.createdBy || null
     });
@@ -90,7 +90,7 @@ export async function recordPharmacyPayment(
       p_sale_id: params.saleId,
       p_amount: params.amount,
       p_payment_mode: params.paymentMode,
-      p_payment_date: params.paymentDate || new Date().toISOString().split('T')[0],
+      p_payment_date: params.paymentDate || new Date().toISOString(),
       p_medicine_details: null,
       p_created_by: params.createdBy || null
     });

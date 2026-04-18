@@ -182,6 +182,10 @@ const CurrentlyAdmittedPatients = () => {
             hospital_name,
             corporate
           ),
+          diagnoses!diagnosis_id (
+            id,
+            name
+          ),
           visit_diagnoses(
             diagnoses(
               name
@@ -545,7 +549,7 @@ const CurrentlyAdmittedPatients = () => {
                         {visit.visit_hope_surgeons?.map(vs => vs.hope_surgeons?.name).join(', ') || '-'}
                       </TableCell>
                       <TableCell>
-                        {visit.visit_diagnoses?.map(vd => vd.diagnoses?.name).join(', ') || '-'}
+                        {visit.diagnoses?.name || visit.visit_diagnoses?.map(vd => vd.diagnoses?.name).join(', ') || '-'}
                       </TableCell>
                     </TableRow>
                   ))}

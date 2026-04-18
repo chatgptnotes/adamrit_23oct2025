@@ -10,12 +10,15 @@ import PaymentDetailsModal from '@/components/PaymentDetailsModal';
 import { PatientDetailsModal } from '@/components/PatientDetailsModal';
 import * as XLSX from 'xlsx';
 import { supabase } from '@/integrations/supabase/client';
+import { useCompanies } from '@/hooks/useCompanies';
 
 const LedgerStatement: React.FC = () => {
   // Get today's date in YYYY-MM-DD format
   const today = new Date().toISOString().split('T')[0];
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  const { data: companies = [] } = useCompanies();
+  const [selectedCompanyId, setSelectedCompanyId] = useState('');
 
   // URL-persisted state
   const mrnNo = searchParams.get('mrn') || '';
@@ -61,7 +64,7 @@ const LedgerStatement: React.FC = () => {
         const { data, error } = await supabase
           .from('chart_of_accounts')
           .select('id, account_name, account_code')
-          .in('account_code', ['1121', '1122', '1123'])
+          .in('account_code', ['1121', '1122', '1123', '1124'])
           .eq('is_active', true)
           .order('account_name');
 
@@ -380,6 +383,21 @@ const LedgerStatement: React.FC = () => {
       {/* Filter Bar */}
       <div className="bg-gray-500 px-4 py-3 border-b border-gray-400">
         <div className="flex items-center space-x-3">
+          {/* Company Filter */}
+          <div className="flex items-center">
+            <label className="text-white font-semibold text-sm mr-2">Company</label>
+            <select
+              value={selectedCompanyId}
+              onChange={(e) => setSelectedCompanyId(e.target.value)}
+              className="px-3 py-1.5 border border-gray-300 rounded text-sm outline-none focus:border-blue-500 w-52 bg-white"
+            >
+              <option value="">All Companies</option>
+              {companies.map((c) => (
+                <option key={c.id} value={c.id}>{c.company_name}</option>
+              ))}
+            </select>
+          </div>
+
           {/* MRN# Input */}
           <div className="flex items-center">
             <label className="text-white font-semibold text-sm mr-2">MRN#</label>

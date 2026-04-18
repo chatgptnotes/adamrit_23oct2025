@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -17,7 +17,49 @@ import { DeletePatientDialog } from '@/components/dashboard/DeletePatientDialog'
 import { Button } from '@/components/ui/button';
 import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
 
-const PatientDashboard = () => {
+// Route-level error boundary to catch and display errors without crashing the whole app
+class PatientDashboardErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { hasError: boolean; error?: Error }
+> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    console.error('PatientDashboard Error:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen bg-background p-6">
+          <div className="max-w-7xl mx-auto">
+            <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
+              <h2 className="text-xl font-bold text-red-600 mb-2">Patient Dashboard Error</h2>
+              <p className="text-gray-600 mb-2">Something went wrong loading this page.</p>
+              <p className="text-sm text-red-500 mb-4 font-mono">{this.state.error?.message}</p>
+              <button
+                onClick={() => { this.setState({ hasError: false }); window.location.reload(); }}
+                className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+              >
+                Refresh Page
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+const PatientDashboardInner = () => {
   const { hospitalConfig } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -54,43 +96,33 @@ const PatientDashboard = () => {
   const [patientToEdit, setPatientToEdit] = useState<any>(null);
   const [patientToDelete, setPatientToDelete] = useState<{ id: string; name: string; patients_id?: string } | null>(null);
 
-  const { data: patients = [], isLoading } = useQuery({
+  const { data: patients = [], isLoading, error: queryError } = useQuery({
     queryKey: ['dashboard-patients', hospitalConfig?.name || 'default'],
     queryFn: async () => {
-      console.log('🏥 PatientDashboard: Fetching patients for hospital:', hospitalConfig?.name);
-      console.log('🔍 PatientDashboard: Full hospitalConfig:', hospitalConfig);
-      
-      let query = supabase
-        .from('patients')
-        .select('*, patients_id, corporate')
-        .order('created_at', { ascending: false });
-      
-      // Only apply filter if hospitalConfig exists and has a name
-      if (hospitalConfig?.name) {
-        query = query.eq('hospital_name', hospitalConfig.name);
-        console.log('🏥 PatientDashboard: Applied hospital filter for:', hospitalConfig.name);
-      } else {
-        console.warn('⚠️ PatientDashboard: No hospital filter applied - showing all patients');
-      }
-      
-      const { data, error } = await query;
+      try {
+        let query = supabase
+          .from('patients')
+          .select('*, patients_id, corporate')
+          .order('created_at', { ascending: false });
 
-      if (error) {
-        console.error('❌ Error fetching patients:', error);
-        throw error;
-      }
+        if (hospitalConfig?.name) {
+          query = query.eq('hospital_name', hospitalConfig.name);
+        }
 
-      console.log(`✅ PatientDashboard: Found ${data?.length || 0} patients for ${hospitalConfig?.name}`);
-      if (data && data.length > 0) {
-        console.log('📋 PatientDashboard: Patient details:', data.map(p => ({
-          id: p.id,
-          name: p.name,
-          patients_id: p.patients_id,
-          hospital_name: p.hospital_name
-        })));
+        const { data, error } = await query;
+
+        if (error) {
+          console.error('Error fetching patients:', error);
+          return [];
+        }
+
+        return data || [];
+      } catch (err) {
+        console.error('PatientDashboard query failed:', err);
+        return [];
       }
-      return data || [];
-    }
+    },
+    retry: 1,
   });
 
   const handleViewPatient = (patient: { id: string; name: string; patients_id?: string }) => {
@@ -174,6 +206,22 @@ const PatientDashboard = () => {
       <div className="min-h-screen bg-background p-6">
         <div className="max-w-7xl mx-auto">
           <div className="text-center">Loading patients...</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (queryError) {
+    return (
+      <div className="min-h-screen bg-background p-6">
+        <div className="max-w-7xl mx-auto">
+          <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
+            <h2 className="text-lg font-bold text-red-600 mb-2">Error loading patients</h2>
+            <p className="text-sm text-red-500 mb-4">{(queryError as Error)?.message || 'Unknown error'}</p>
+            <button onClick={() => window.location.reload()} className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600">
+              Retry
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -302,5 +350,11 @@ const PatientDashboard = () => {
     </div>
   );
 };
+
+const PatientDashboard = () => (
+  <PatientDashboardErrorBoundary>
+    <PatientDashboardInner />
+  </PatientDashboardErrorBoundary>
+);
 
 export default PatientDashboard;

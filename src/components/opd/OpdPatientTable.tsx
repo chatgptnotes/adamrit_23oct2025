@@ -1281,35 +1281,24 @@ Verified by: [To be verified by doctor]`;
   };
 
   const handleDeleteClick = async (patient: Patient) => {
-    if (patient.visit_id && window.confirm(`Are you sure you want to delete the visit for ${patient.patients?.name}? This cannot be undone.`)) {
+    if (patient.visit_id && window.confirm(`Are you sure you want to mark the visit for ${patient.patients?.name} as inactive? The record will be preserved for audit purposes.`)) {
       try {
-        // Delete related bills for this visit first
-        const { error: billsError } = await supabase
-          .from('bills')
-          .delete()
-          .eq('visit_id', patient.id);
-
-        if (billsError) {
-          console.error('Error deleting visit bills:', billsError);
-        }
-
-        // Delete the visit from the database
         const { error } = await supabase
           .from('visits')
-          .delete()
+          .update({ status: 'inactive', updated_at: new Date().toISOString() })
           .eq('id', patient.id);
 
         if (error) {
-          console.error('Error deleting visit:', error);
+          console.error('Error deactivating visit:', error);
           toast({
             title: "Error",
-            description: "Failed to delete visit: " + error.message,
+            description: "Failed to deactivate visit: " + error.message,
             variant: "destructive"
           });
           return;
         }
 
-        // Remove from local state after successful DB delete
+        // Hide from local state
         setHiddenPatients(prev => {
           const newSet = new Set(prev);
           newSet.add(patient.visit_id!);
@@ -1318,13 +1307,13 @@ Verified by: [To be verified by doctor]`;
 
         toast({
           title: "Success",
-          description: `Visit for ${patient.patients?.name} deleted successfully`,
+          description: `Visit for ${patient.patients?.name} marked as inactive`,
         });
       } catch (err) {
-        console.error('Error deleting visit:', err);
+        console.error('Error deactivating visit:', err);
         toast({
           title: "Error",
-          description: "Failed to delete visit",
+          description: "Failed to deactivate visit",
           variant: "destructive"
         });
       }
@@ -1714,9 +1703,9 @@ Verified by: [To be verified by doctor]`;
                       size="sm"
                       className="h-8 w-8 p-0"
                       onClick={() => handleDeleteClick(patient)}
-                      title="Delete Visit"
+                      title="Mark Visit Inactive"
                     >
-                      <Trash2 className="h-4 w-4 text-red-600" />
+                      <Trash2 className="h-4 w-4 text-orange-600" />
                     </Button>
                   )}
                 </div>

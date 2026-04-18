@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface DiscountTabProps {
   visitId?: string;
@@ -11,12 +12,17 @@ interface DiscountData {
   id?: string;
   discount_amount: number;
   discount_reason: string;
+  approval_status?: string;
+  approved_by?: string;
+  approved_at?: string;
+  rejection_reason?: string;
 }
 
 export const DiscountTab: React.FC<DiscountTabProps> = ({
   visitId,
   onDiscountUpdate
 }) => {
+  const { isAdmin, hospitalConfig } = useAuth() as any;
   const [discountData, setDiscountData] = useState<DiscountData>({
     discount_amount: 0,
     discount_reason: ''
@@ -75,12 +81,17 @@ export const DiscountTab: React.FC<DiscountTabProps> = ({
           setDiscountData({
             id: discountData.id,
             discount_amount: discountData.discount_amount || 0,
-            discount_reason: discountData.discount_reason || ''
+            discount_reason: discountData.discount_reason || '',
+            approval_status: (discountData as any).approval_status || 'pending_approval',
+            approved_by: (discountData as any).approved_by,
+            approved_at: (discountData as any).approved_at,
+            rejection_reason: (discountData as any).rejection_reason
           });
 
-          // Notify parent component about loaded discount
+          // Only notify parent with discount amount if approved
+          const status = (discountData as any).approval_status;
           if (onDiscountUpdate) {
-            onDiscountUpdate(discountData.discount_amount || 0);
+            onDiscountUpdate(status === 'approved' ? (discountData.discount_amount || 0) : 0);
           }
         } else {
           console.log('📝 [DISCOUNT LOAD] No existing discount found');
@@ -122,13 +133,19 @@ export const DiscountTab: React.FC<DiscountTabProps> = ({
         return;
       }
 
-      // Prepare data for upsert
-      const upsertData = {
+      // Get current user
+      const currentUser = localStorage.getItem('userEmail') || localStorage.getItem('userName') || 'Unknown User';
+
+      // Prepare data for upsert — discount goes to admin for approval
+      const upsertData: any = {
         visit_id: visitData.id,
         discount_amount: discountData.discount_amount,
         discount_reason: discountData.discount_reason,
-        applied_by: 'Current User', // TODO: Get from auth context
-        updated_at: new Date().toISOString()
+        applied_by: currentUser,
+        updated_at: new Date().toISOString(),
+        approval_status: isAdmin ? 'approved' : 'pending_approval',
+        hospital_name: hospitalConfig?.name || 'unknown',
+        ...(isAdmin ? { approved_by: currentUser, approved_at: new Date().toISOString() } : { approved_by: null, approved_at: null, rejection_reason: null })
       };
 
       // Upsert discount data
@@ -147,20 +164,33 @@ export const DiscountTab: React.FC<DiscountTabProps> = ({
       // Update local state with saved data
       setDiscountData(prev => ({
         ...prev,
-        id: savedData.id
+        id: savedData.id,
+        approval_status: isAdmin ? 'approved' : 'pending_approval'
       }));
 
-      // Notify parent component about discount update
-      console.log('🔥 [DISCOUNT SAVE] About to call onDiscountUpdate with amount:', discountData.discount_amount);
+      // Notify parent — only apply discount amount if approved (admin saves directly)
       if (onDiscountUpdate) {
-        console.log('🔥 [DISCOUNT SAVE] Calling onDiscountUpdate callback...');
-        onDiscountUpdate(discountData.discount_amount);
-        console.log('🔥 [DISCOUNT SAVE] onDiscountUpdate callback completed');
-      } else {
-        console.error('❌ [DISCOUNT SAVE] onDiscountUpdate callback not available!');
+        onDiscountUpdate(isAdmin ? discountData.discount_amount : 0);
       }
 
-      toast.success('Discount saved successfully!');
+      if (isAdmin) {
+        toast.success('Discount approved and saved!');
+      } else {
+        toast.success('Discount submitted for admin approval!');
+      }
+
+      // WhatsApp alert for discounts > Rs. 33,000
+      if (discountData.discount_amount >= 33000) {
+        import('@/lib/payment-alert-service').then(({ sendPaymentAlert }) => {
+          sendPaymentAlert({
+            alert_type: 'discount',
+            amount: discountData.discount_amount,
+            patient_name: `Visit: ${visitId}`,
+            visit_id: visitId,
+            additional_info: `Reason: ${discountData.discount_reason || 'Not specified'}`,
+          });
+        });
+      }
     } catch (error) {
       console.error('Exception saving discount:', error);
       toast.error('Failed to save discount');
@@ -242,7 +272,7 @@ export const DiscountTab: React.FC<DiscountTabProps> = ({
           <div className="flex justify-end pt-4">
             <button
               onClick={handleSaveDiscount}
-              disabled={isSaving}
+              disabled={isSaving || (discountData.approval_status === 'pending_approval' && !isAdmin)}
               className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
             >
               {isSaving ? (
@@ -250,15 +280,17 @@ export const DiscountTab: React.FC<DiscountTabProps> = ({
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
                   Saving...
                 </span>
+              ) : isAdmin ? (
+                'Approve & Save Discount'
               ) : (
-                'Save Discount'
+                'Submit for Approval'
               )}
             </button>
           </div>
         </div>
 
         {/* Discount Status */}
-        {discountData.id && (
+        {discountData.id && discountData.approval_status === 'approved' && (
           <div className="mt-6 p-4 bg-green-50 border border-green-200 rounded-lg">
             <div className="flex items-center">
               <div className="flex-shrink-0">
@@ -268,7 +300,41 @@ export const DiscountTab: React.FC<DiscountTabProps> = ({
               </div>
               <div className="ml-3">
                 <p className="text-sm font-medium text-green-800">
-                  Discount of ₹{discountData.discount_amount.toLocaleString()} has been applied to this bill.
+                  Discount of ₹{discountData.discount_amount.toLocaleString()} approved{discountData.approved_by ? ` by ${discountData.approved_by}` : ''}.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {discountData.id && discountData.approval_status === 'pending_approval' && (
+          <div className="mt-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+            <div className="flex items-center">
+              <div className="flex-shrink-0">
+                <svg className="h-5 w-5 text-yellow-500" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                </svg>
+              </div>
+              <div className="ml-3">
+                <p className="text-sm font-medium text-yellow-800">
+                  Discount of ₹{discountData.discount_amount.toLocaleString()} is pending admin approval.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {discountData.id && discountData.approval_status === 'rejected' && (
+          <div className="mt-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+            <div className="flex items-center">
+              <div className="flex-shrink-0">
+                <svg className="h-5 w-5 text-red-400" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                </svg>
+              </div>
+              <div className="ml-3">
+                <p className="text-sm font-medium text-red-800">
+                  Discount rejected{discountData.rejection_reason ? `: ${discountData.rejection_reason}` : ''}.
                 </p>
               </div>
             </div>

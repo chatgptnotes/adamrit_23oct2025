@@ -1737,8 +1737,11 @@ const LabPanelManager: React.FC = () => {
                     <TableHead>Name</TableHead>
                     <TableHead>Test Code</TableHead>
                     <TableHead>Sub Specialty</TableHead>
-                    <TableHead>Service Group</TableHead>
-                    <TableHead>Parameter Type</TableHead>
+                    <TableHead className="text-right">NABH</TableHead>
+                    <TableHead className="text-right">Non-NABH</TableHead>
+                    <TableHead className="text-right">Private</TableHead>
+                    <TableHead className="text-right">NABH Bhopal</TableHead>
+                    <TableHead className="text-right">Non-NABH Bhopal</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Action</TableHead>
                   </TableRow>
@@ -1749,12 +1752,11 @@ const LabPanelManager: React.FC = () => {
                     <TableCell className="font-medium">{panel.testName}</TableCell>
                     <TableCell>{panel.testCode}</TableCell>
                     <TableCell>{panel.subSpecialty}</TableCell>
-                    <TableCell>{panel.serviceGroup}</TableCell>
-                    <TableCell>
-                      <Badge variant={panel.parameterType === 'Multiple' ? 'default' : 'secondary'}>
-                        {panel.parameterType}
-                      </Badge>
-                    </TableCell>
+                    <TableCell className="text-right">{panel.nabhRates || '—'}</TableCell>
+                    <TableCell className="text-right">{panel.nonNabhRates || '—'}</TableCell>
+                    <TableCell className="text-right">{panel.private || '—'}</TableCell>
+                    <TableCell className="text-right">{panel.bhopalNabhRates || '—'}</TableCell>
+                    <TableCell className="text-right">{panel.bhopalNonNabhRates || '—'}</TableCell>
                     <TableCell>
                       <Badge variant={panel.isActive ? 'default' : 'destructive'}>
                         {panel.isActive ? 'Active' : 'Inactive'}

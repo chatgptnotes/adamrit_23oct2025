@@ -1,22 +1,31 @@
 import { createContext, useContext, useState, useEffect, useMemo, useCallback, ReactNode } from 'react';
+import { createClient } from '@supabase/supabase-js';
 import { HospitalType, getHospitalConfig } from '@/types/hospital';
 import { supabase } from '@/integrations/supabase/client';
 import { hashPassword, comparePassword, validateEmail, sanitizeInput, signupRateLimiter } from '@/utils/auth';
 import { logActivity } from '@/lib/activity-logger';
 
+// Separate anon client for User table lookups — not affected by OAuth session RLS
+const supabaseAnon = createClient(
+  'https://xvkxccqaopbnkvwgyfjv.supabase.co',
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh2a3hjY3Fhb3Bibmt2d2d5Zmp2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDc4MjMwMTIsImV4cCI6MjA2MzM5OTAxMn0.z9UkKHDm4RPMs_2IIzEPEYzd3-sbQSF6XpxaQg3vZhU',
+  { auth: { persistSession: false, autoRefreshToken: false } }
+);
+
 interface User {
   id?: string;
   email: string;
   username: string;
-  role: 'superadmin' | 'super_admin' | 'admin' | 'doctor' | 'nurse' | 'user' | 'marketing_manager' | 'receptionist' | 'lab_technician' | 'pharmacy' | 'pharmacist' | 'radiology' | 'radiology_tech' | 'ot_tech' | 'cath_lab_tech' | 'billing' | 'housekeeping' | 'security' | 'driver' | 'physiotherapist' | 'lab' | 'reception' | 'maintenance' | 'hr' | 'quality' | 'consultant';
+  role: 'superadmin' | 'super_admin' | 'admin' | 'doctor' | 'nurse' | 'user' | 'marketing_manager' | 'receptionist' | 'lab_technician' | 'pharmacy' | 'pharmacist' | 'radiology' | 'radiology_tech' | 'ot_tech' | 'cath_lab_tech' | 'billing' | 'housekeeping' | 'security' | 'driver' | 'physiotherapist' | 'lab' | 'reception' | 'maintenance' | 'hr' | 'quality' | 'consultant' | 'front_office';
   hospitalType: HospitalType;
 }
 
 interface AuthContextType {
   user: User | null;
   login: (credentials: { email: string; password: string }) => Promise<boolean>;
+  loginWithGoogle: () => Promise<void>;
   signup: (userData: { email: string; password: string; role: string; hospitalType: HospitalType }) => Promise<{ success: boolean; error?: string }>;
-  logout: () => void;
+  logout: () => Promise<void>;
   isAuthenticated: boolean;
   isAuthLoading: boolean;
   isSuperAdmin: boolean;
@@ -27,6 +36,8 @@ interface AuthContextType {
   setShowLanding: (show: boolean) => void;
   showHospitalSelection: boolean;
   setShowHospitalSelection: (show: boolean) => void;
+  authError: string | null;
+  switchHospital: (hospitalType: HospitalType) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -48,83 +59,217 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [isAuthLoading, setIsAuthLoading] = useState<boolean>(true);
   const [showLanding, setShowLanding] = useState<boolean>(true);
   const [showHospitalSelection, setShowHospitalSelection] = useState<boolean>(false);
+  const [authError, setAuthError] = useState<string | null>(null);
 
-  // Check for saved session on load
-  useEffect(() => {
-    const savedUser = localStorage.getItem('hmis_user');
-    const hasVisitedBefore = localStorage.getItem('hmis_visited');
-    
-    if (savedUser) {
-      const parsedUser = JSON.parse(savedUser);
-      // Add hospitalType if missing (for backward compatibility)
-      if (!parsedUser.hospitalType) {
-        // For backward compatibility, determine hospital type from username
-        if (parsedUser.username === 'ayushman') {
-          parsedUser.hospitalType = 'ayushman';
-          parsedUser.hospitalName = 'ayushman';
-        } else {
-          parsedUser.hospitalType = 'hope'; // default fallback
-          parsedUser.hospitalName = 'hope';
-        }
-      }
-      if (!parsedUser.role) {
-        parsedUser.role = parsedUser.username === 'admin' ? 'admin' : 'user';
-      }
-      setUser(parsedUser);
+  // Handle Google OAuth session - look up email in User table using RPC to bypass RLS
+  const handleGoogleSession = async (email: string) => {
+    const googleEmail = email.toLowerCase();
+    console.log('[OAuth] Processing Google session for:', googleEmail);
+
+    // Use SECURITY DEFINER RPC function to bypass RLS
+    const { data: rows, error } = await supabaseAnon
+      .rpc('lookup_user_by_email', { lookup_email: googleEmail });
+
+    const data = rows?.[0] || null;
+
+    if (error || !data) {
+      console.error('[OAuth] Google user not found in User table:', googleEmail, error);
+      setAuthError(`No account found for ${googleEmail}. Please contact admin to create your account first.`);
+      // Sign out the Supabase OAuth session since user doesn't exist in our app
+      supabase.auth.signOut().catch(() => {});
+      setIsAuthLoading(false);
+      return;
     }
-    
-    // Show landing page only for first-time visitors
-    if (hasVisitedBefore) {
-      setShowLanding(false);
-    }
+
+    console.log('[OAuth] User found:', data.email, 'role:', data.role);
+
+    const appUser: User = {
+      id: data.id,
+      email: data.email,
+      username: data.email.split('@')[0],
+      role: data.role,
+      hospitalType: data.hospital_type || 'hope'
+    };
+
+    setUser(appUser);
+    localStorage.setItem('hmis_user', JSON.stringify(appUser));
+    localStorage.setItem('hmis_visited', 'true');
+    setShowLanding(false);
+    setShowHospitalSelection(false);
+    setAuthError(null);
     setIsAuthLoading(false);
+
+    // Clean up the URL after processing OAuth callback (hash tokens or PKCE code)
+    if (window.location.hash.includes('access_token') || new URLSearchParams(window.location.search).has('code')) {
+      window.history.replaceState(null, '', window.location.pathname);
+    }
+
+    (supabase as any).from('User').update({ last_login_at: new Date().toISOString() }).eq('id', data.id).then(() => {});
+    logActivity('user_login', { email: appUser.email, role: appUser.role, hospital: appUser.hospitalType, method: 'google' });
+  };
+
+  // Single unified initialization effect
+  useEffect(() => {
+    // Step 1: Restore saved session from localStorage
+    const savedUser = localStorage.getItem('hmis_user');
+    if (savedUser) {
+      try {
+        const parsed = JSON.parse(savedUser);
+        // Backward compatibility: add hospitalType if missing
+        if (!parsed.hospitalType) {
+          if (parsed.username === 'ayushman') {
+            parsed.hospitalType = 'ayushman';
+            parsed.hospitalName = 'ayushman';
+          } else {
+            parsed.hospitalType = 'hope';
+            parsed.hospitalName = 'hope';
+          }
+        }
+        if (!parsed.role) {
+          parsed.role = parsed.username === 'admin' ? 'admin' : 'user';
+        }
+        setUser(parsed);
+      } catch {
+        localStorage.removeItem('hmis_user');
+      }
+    }
+
+    // Step 2: Handle landing page visibility
+    const hasVisited = localStorage.getItem('hmis_visited');
+    if (hasVisited) setShowLanding(false);
+
+    // Step 3: If we already have a saved user, stop loading immediately
+    if (savedUser) {
+      setIsAuthLoading(false);
+      return;
+    }
+
+    // Detect if this is an OAuth callback (URL has ?code= or #access_token=)
+    const isOAuthCallback = new URLSearchParams(window.location.search).has('code') ||
+      window.location.hash.includes('access_token');
+
+    // Step 4: No saved user and NOT an OAuth callback — stop loading quickly
+    if (!isOAuthCallback) {
+      // Check for existing Supabase session (e.g., user refreshed the page while still logged in via Google)
+      supabase.auth.getSession().then(async ({ data: { session } }) => {
+        if (session?.user?.email) {
+          console.log('[OAuth] Existing session found for:', session.user.email);
+          await handleGoogleSession(session.user.email);
+        } else {
+          setIsAuthLoading(false);
+        }
+      });
+      return;
+    }
+
+    // Step 5: OAuth callback — wait for PKCE code exchange to complete
+    console.log('[OAuth] Detected OAuth callback, waiting for session exchange...');
+    let resolved = false;
+
+    const processOAuthSession = async (email: string) => {
+      if (resolved) return;
+      resolved = true;
+      await handleGoogleSession(email);
+    };
+
+    const finishLoading = () => {
+      if (!resolved) {
+        resolved = true;
+        console.error('[OAuth] Session exchange timed out — no session obtained');
+        setAuthError('Google sign-in timed out. Please try again.');
+        // Clean up URL
+        window.history.replaceState(null, '', window.location.pathname);
+        setIsAuthLoading(false);
+      }
+    };
+
+    // Register auth state change listener — this fires when PKCE exchange completes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('[OAuth] Auth event:', event, session?.user?.email);
+      if (session?.user?.email && !resolved) {
+        await processOAuthSession(session.user.email);
+      }
+    });
+
+    // Also check if session is already available (exchange might have completed during init)
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (session?.user?.email && !resolved) {
+        await processOAuthSession(session.user.email);
+      }
+    });
+
+    // Safety timeout — give PKCE exchange up to 8 seconds
+    const safetyTimeout = setTimeout(finishLoading, 8000);
+
+    return () => {
+      subscription.unsubscribe();
+      clearTimeout(safetyTimeout);
+    };
   }, []);
 
   // Database authentication
   const login = async (credentials: { email: string; password: string }): Promise<boolean> => {
     try {
-      console.log('🔐 Login attempt for:', credentials.email);
+      // Staff pin login: blank email + @XXXX password
+      const isStaffPin = !credentials.email.trim() && credentials.password.startsWith('@') && credentials.password.length === 5;
 
-      const { data, error } = await supabase
-        .from('User')
-        .select('*')
-        .ilike('email', credentials.email.trim())
-        .single();
+      let data: any = null;
+      let error: any = null;
+
+      if (isStaffPin) {
+        const pin = credentials.password.substring(1); // Remove @ prefix
+        console.log('Staff pin login attempt');
+        const result = await supabase
+          .from('User')
+          .select('*')
+          .eq('staff_pin', pin)
+          .eq('hospital_type', 'ayushman')
+          .single();
+        data = result.data;
+        error = result.error;
+      } else {
+        console.log('Login attempt for:', credentials.email);
+        const result = await supabase
+          .from('User')
+          .select('*')
+          .ilike('email', credentials.email.trim())
+          .single();
+        data = result.data;
+        error = result.error;
+      }
 
       if (error || !data) {
         console.error('Login error:', error);
         return false;
       }
 
-      console.log('✅ User found, checking password...');
-      console.log('📋 Password type:', data.password.startsWith('$2') ? 'hashed' : 'plain');
+      // Staff pin login: pin already verified by the query, skip password check
+      if (!isStaffPin) {
+        console.log('User found, checking password...');
 
-      // Check if password is hashed (new users) or plain text (existing users)
-      let isPasswordValid = false;
+        // Check if password is hashed (new users) or plain text (existing users)
+        let isPasswordValid = false;
 
-      if (data.password.startsWith('$2')) {
-        // Hashed password - use bcrypt compare with setTimeout to prevent UI blocking
-        isPasswordValid = await new Promise<boolean>((resolve) => {
-          setTimeout(async () => {
-            const result = await comparePassword(credentials.password, data.password);
-            resolve(result);
-          }, 10);
-        });
-      } else {
-        // Plain text password - direct comparison (for backward compatibility)
-        isPasswordValid = data.password === credentials.password;
+        if (data.password.startsWith('$2')) {
+          // Hashed password - use bcrypt compare with setTimeout to prevent UI blocking
+          isPasswordValid = await new Promise<boolean>((resolve) => {
+            setTimeout(async () => {
+              const result = await comparePassword(credentials.password, data.password);
+              resolve(result);
+            }, 10);
+          });
+        } else {
+          // Plain text password - direct comparison (for backward compatibility)
+          isPasswordValid = data.password === credentials.password;
+        }
+
+        if (!isPasswordValid) {
+          console.error('Invalid password');
+          return false;
+        }
       }
 
-      console.log('🔑 Password validation result:', isPasswordValid);
-
-      if (!isPasswordValid) {
-        console.error('❌ Invalid password');
-        return false;
-      }
-
-      console.log('✅ Password valid, creating user session...');
-
-      const user: User = {
+      const appUser: User = {
         id: data.id,
         email: data.email,
         username: data.email.split('@')[0], // Use email prefix as username
@@ -132,14 +277,14 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         hospitalType: data.hospital_type || 'hope'
       };
 
-      setUser(user);
-      localStorage.setItem('hmis_user', JSON.stringify(user));
+      setUser(appUser);
+      localStorage.setItem('hmis_user', JSON.stringify(appUser));
 
       // Update last_login_at
       (supabase as any).from('User').update({ last_login_at: new Date().toISOString() }).eq('id', data.id).then(() => {});
 
       // Log activity
-      logActivity('user_login', { email: user.email, role: user.role, hospital: user.hospitalType });
+      logActivity('user_login', { email: appUser.email, role: appUser.role, hospital: appUser.hospitalType });
 
       return true;
     } catch (error) {
@@ -147,6 +292,19 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       return false;
     }
   };
+
+  // Google OAuth login
+  const loginWithGoogle = useCallback(async () => {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: window.location.origin
+      }
+    });
+    if (error) {
+      console.error('Google login error:', error);
+    }
+  }, []);
 
   // Signup functionality
   const signup = async (userData: { email: string; password: string; role: string; hospitalType: HospitalType }): Promise<{ success: boolean; error?: string }> => {
@@ -209,17 +367,33 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     }
   };
 
-  const logout = () => {
+  const logout = useCallback(async () => {
     setUser(null);
     localStorage.removeItem('hmis_user');
     setShowHospitalSelection(false);
-  };
+    // Also sign out of Supabase Auth (for Google OAuth sessions)
+    // Must be awaited — otherwise the session may still be active on next page load,
+    // causing the user to be silently re-authenticated via getSession() in the init effect.
+    try {
+      await supabase.auth.signOut();
+    } catch {
+      // Ignore signOut errors — local state is already cleared
+    }
+  }, []);
+
+  const switchHospital = useCallback((newHospitalType: HospitalType) => {
+    if (!user) return;
+    const updatedUser = { ...user, hospitalType: newHospitalType };
+    setUser(updatedUser);
+    localStorage.setItem('hmis_user', JSON.stringify(updatedUser));
+  }, [user]);
 
   const hospitalConfig = useMemo(() => getHospitalConfig(user?.hospitalType), [user?.hospitalType]);
 
   const value: AuthContextType = useMemo(() => ({
     user,
     login,
+    loginWithGoogle,
     signup,
     logout,
     isAuthenticated: !!user,
@@ -231,9 +405,11 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     showLanding,
     setShowLanding,
     showHospitalSelection,
-    setShowHospitalSelection
+    setShowHospitalSelection,
+    authError,
+    switchHospital
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [user, isAuthLoading, hospitalConfig, showLanding, showHospitalSelection]);
+  }), [user, isAuthLoading, hospitalConfig, showLanding, showHospitalSelection, authError]);
 
   return (
     <AuthContext.Provider value={value}>

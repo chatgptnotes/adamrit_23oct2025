@@ -214,6 +214,15 @@ export const useFinalBillData = (visitId: string) => {
       if (existingBillId) {
         // UPDATE existing bill - only edit, no new row
         console.log('📝 Updating existing bill:', existingBillId);
+
+        // Preserve approval status — don't reset to DRAFT if already submitted for approval
+        const { data: currentBill } = await supabase
+          .from('bills')
+          .select('status')
+          .eq('id', existingBillId)
+          .single();
+        const preserveStatus = currentBill?.status === 'PENDING_APPROVAL' || currentBill?.status === 'APPROVED';
+
         const result = await supabase
           .from('bills')
           .update({
@@ -225,7 +234,7 @@ export const useFinalBillData = (visitId: string) => {
             visit_id: billData.visit_id || visitId,
             bill_patient_data: billData.bill_patient_data || {},
             bill_items_json: billData.bill_items_json || null,
-            status: 'DRAFT'
+            ...(preserveStatus ? {} : { status: 'DRAFT' })
           } as any)
           .eq('id', existingBillId)
           .select()
@@ -319,6 +328,20 @@ export const useFinalBillData = (visitId: string) => {
 
       console.log('✅ Bill saved successfully with ID:', bill.id);
       console.log('✅ Saved total_amount:', bill.total_amount);
+
+      // WhatsApp alert for invoices > Rs. 1,00,000
+      if (bill.total_amount >= 100000) {
+        import('@/lib/payment-alert-service').then(({ sendPaymentAlert }) => {
+          sendPaymentAlert({
+            alert_type: 'invoice',
+            amount: bill.total_amount,
+            patient_name: bill.bill_patient_data?.name || 'Patient',
+            patient_id: bill.patient_id,
+            visit_id: bill.visit_id || visitId,
+            additional_info: `Bill No: ${bill.bill_no || 'N/A'}, Category: ${bill.category || 'N/A'}`,
+          });
+        });
+      }
 
       return bill;
     },

@@ -146,6 +146,7 @@ const BillSubmissionPage: React.FC = () => {
   // Export to Excel function
   const handleExportExcel = () => {
     const exportData = filteredSubmissions.map((s: any) => ({
+      'Bill No.': s.bill_no || '-',
       'Visit ID': s.visit_id,
       'Patient Name': s.patient_name,
       'Corporate': s.patient_corporate || '-',
@@ -287,16 +288,44 @@ const BillSubmissionPage: React.FC = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const handlePatientSelect = (visit: any) => {
-    setSelectedPatient({
-      visitId: visit.visit_id || '',
-      patientName: visit.patients?.name || '',
-      corporate: visit.patients?.corporate || '',
-    });
-    setEditData(null);
-    setIsFormOpen(true);
+  const handlePatientSelect = async (visit: any) => {
     setShowDropdown(false);
     setSearchTerm('');
+
+    // Check if a bill_preparation record already exists for this visit
+    const { data: existing } = await supabase
+      .from('bill_preparation' as any)
+      .select('*')
+      .eq('visit_id', visit.visit_id)
+      .maybeSingle();
+
+    if (existing) {
+      // Load existing record as edit data so we don't overwrite saved dates
+      setSelectedPatient(null);
+      setEditData({
+        id: existing.id,
+        visitId: existing.visit_id || '',
+        patientName: visit.patients?.name || '',
+        corporate: existing.corporate || visit.patients?.corporate || '',
+        billAmount: Number(existing.bill_amount) || 0,
+        submittedBy: existing.executive_who_submitted || '',
+        submissionDate: existing.date_of_submission ? String(existing.date_of_submission).split('T')[0] : '',
+        expectedPaymentDate: existing.expected_payment_date ? String(existing.expected_payment_date).split('T')[0] : '',
+        receivedAmount: Number(existing.received_amount) || 0,
+        deductionAmount: Number(existing.deduction_amount) || 0,
+        tdsAmount: Number(existing.tds_amount) || 0,
+        receivedDate: existing.received_date ? String(existing.received_date).split('T')[0] : '',
+      });
+    } else {
+      // No existing record — open fresh form
+      setEditData(null);
+      setSelectedPatient({
+        visitId: visit.visit_id || '',
+        patientName: visit.patients?.name || '',
+        corporate: visit.patients?.corporate || '',
+      });
+    }
+    setIsFormOpen(true);
   };
 
   // Handle patient lookup selection
@@ -642,6 +671,7 @@ const BillSubmissionPage: React.FC = () => {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead>Bill No.</TableHead>
                   <TableHead>Visit ID</TableHead>
                   <TableHead>Patient Name</TableHead>
                   <TableHead>Corporate</TableHead>
@@ -661,13 +691,13 @@ const BillSubmissionPage: React.FC = () => {
               <TableBody>
                 {isLoading ? (
                   <TableRow>
-                    <TableCell colSpan={14} className="text-center py-8">
+                    <TableCell colSpan={15} className="text-center py-8">
                       <Loader2 className="h-6 w-6 animate-spin mx-auto" />
                     </TableCell>
                   </TableRow>
                 ) : filteredSubmissions.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={14} className="text-center py-8 text-gray-500">
+                    <TableCell colSpan={15} className="text-center py-8 text-gray-500">
                       {submissions.length === 0
                         ? 'No bill submissions yet. Search for a patient above to create one.'
                         : 'No records match the selected filters.'}
@@ -676,6 +706,7 @@ const BillSubmissionPage: React.FC = () => {
                 ) : (
                   paginatedSubmissions.map((submission: any) => (
                     <TableRow key={submission.id}>
+                      <TableCell className="font-medium text-blue-600">{submission.bill_no || '-'}</TableCell>
                       <TableCell className="font-medium">{submission.visit_id}</TableCell>
                       <TableCell>{submission.patient_name}</TableCell>
                       <TableCell>{submission.patient_corporate || '-'}</TableCell>

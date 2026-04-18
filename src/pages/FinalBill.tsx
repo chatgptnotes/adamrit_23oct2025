@@ -533,13 +533,22 @@ const DocumentModal: React.FC<DocumentModalProps> = ({
   );
 };
 
+// Helper: check if patient is Maharashtra Yojana (MJPJY / Ayushman Bharat MH)
+const isMaharashtraYojana = (corp: string) => {
+  const c = (corp || '').toLowerCase().trim();
+  return c.includes('yojana') || c.includes('mjpjy') || c.includes('ayushman') ||
+    c.includes('mahatma jyotiba') || c.includes('pmjay') || c.includes('ab-pmjay') ||
+    c.includes('ab pmjay') || c.includes('maharashtra yojana');
+};
+
 const FinalBill = () => {
   const { visitId } = useParams<{ visitId: string }>();
   const navigate = useNavigate();
   const { billData, isLoading: isBillLoading, saveBill, isSaving } = useFinalBillData(visitId || '');
   const { generateAccommodationsFromShiftings, isGenerating } = useShiftingAccommodation();
   const queryClient = useQueryClient();
-  const { hospitalConfig, user } = useAuth();
+  const { hospitalConfig, user, isAdmin } = useAuth();
+  const [showHiddenLabTests, setShowHiddenLabTests] = useState(false);
   const [surgeons, setSurgeons] = useState<{ id: string; name: string }[]>([]);
   const [anaesthetists, setAnaesthetists] = useState<{ id: string; name: string }[]>([]);
   const [implantsList, setImplantsList] = useState<{ id: string; name: string }[]>([]);
@@ -825,13 +834,45 @@ const FinalBill = () => {
       if (visitId) {
         const { data, error: visitError } = await supabase
           .from('visits')
-          .select('id, patient_type, insurance_type')
+          .select('id, patient_type, insurance_type, corporate')
           .eq('visit_id', visitId)
           .single();
 
         if (!visitError && data) {
           visitDataResult = data;
         }
+      }
+
+      // Determine patient type to select appropriate rate
+      const patientType = (visitDataResult?.patient_type || patientInfo?.patient_type || '').toLowerCase().trim();
+      // Check visit-level billing override first, then fall back to patient corporate
+      const visitCorporateOverride = (visitDataResult?.corporate || '').toLowerCase().trim();
+      const patientCorporateVal = (patientInfo?.corporate || '').toLowerCase().trim();
+      const corporate = visitCorporateOverride || patientCorporateVal;
+
+      // For Maharashtra Yojana patients, fetch from yojana_mh_procedures tariff
+      const isYojana = isMaharashtraYojana(corporate);
+      if (isYojana) {
+        const { data: yojanaData, error: yojanaError } = await supabase
+          .from('yojana_mh_procedures')
+          .select('id, procedure_code, procedure_name, package_name, specialty, tier3_rate, level_of_care, los, medical_or_surgical');
+
+        if (yojanaData && Array.isArray(yojanaData)) {
+          console.log('🏥 Maharashtra Yojana procedures loaded:', yojanaData.length, 'procedures');
+          const transformedYojana = yojanaData.map(proc => ({
+            id: proc.id,
+            name: proc.procedure_name || proc.package_name || '',
+            code: proc.procedure_code || '',
+            category: proc.specialty || '',
+            description: `${proc.package_name || ''} | LOS: ${proc.los || 'N/A'} | ${proc.level_of_care || ''}`,
+            private: proc.tier3_rate || 0,
+            NABH_NABL_Rate: (proc.tier3_rate || 0).toString(),
+            rateSource: 'yojana_mh_tier3',
+            is_yojana: true
+          }));
+          setCghsSurgeries(transformedYojana as any);
+        }
+        return; // Skip CGHS surgery fetch for yojana patients
       }
 
       const { data, error } = await supabase
@@ -841,21 +882,20 @@ const FinalBill = () => {
       if (data && Array.isArray(data)) {
         console.log('CGHS Surgeries loaded:', data.length, 'surgeries');
 
-        // Determine patient type to select appropriate rate
-        const patientType = (visitDataResult?.patient_type || patientInfo?.patient_type || '').toLowerCase().trim();
-        const corporate = (patientInfo?.corporate || '').toLowerCase().trim();
-
         // Corporate field takes priority - check if patient has a corporate panel first
         const hasCorporate = corporate.length > 0 && corporate !== 'private';
 
         // Patient is private ONLY if they don't have a corporate panel
         const isPrivatePatient = !hasCorporate && (patientType === 'private' || corporate === 'private');
 
-        // Check if corporate qualifies for Non-NABH rates (CGHS/ECHS/ESIC)
+        // Check if corporate qualifies for Non-NABH rates (ESIC only)
         const usesNonNABHRate = hasCorporate &&
+          corporate.includes('esic');
+
+        // Check if corporate qualifies for CGHS/NABH rates
+        const usesCGHSNABHRate = hasCorporate &&
           (corporate.includes('cghs') ||
-          corporate.includes('echs') ||
-          corporate.includes('esic'));
+          corporate.includes('echs'));
 
         // Check if corporate qualifies for Bhopal NABH rates
         const usesBhopaliNABHRate = hasCorporate &&
@@ -864,7 +904,7 @@ const FinalBill = () => {
           corporate.includes('ordnance factory itarsi'));
 
         // Check if patient has other corporate
-        const usesNABHRate = hasCorporate && !usesNonNABHRate && !usesBhopaliNABHRate;
+        const usesNABHRate = usesCGHSNABHRate || (hasCorporate && !usesNonNABHRate && !usesBhopaliNABHRate);
 
         console.log('🔍 Patient Type for Surgery Dropdown:', {
           patientType,
@@ -933,7 +973,7 @@ const FinalBill = () => {
         if (visitId) {
           const { data: visitData, error: visitError } = await supabase
             .from('visits')
-            .select('id, patient_type, insurance_type')
+            .select('id, patient_type, insurance_type, corporate')
             .eq('visit_id', visitId)
             .single();
 
@@ -961,7 +1001,10 @@ const FinalBill = () => {
 
           // Determine patient type to select appropriate rate
           const patientType = (visitDataResult?.patient_type || patientInfo?.patient_type || '').toLowerCase().trim();
-          const corporate = (patientInfo?.corporate || '').toLowerCase().trim();
+          // Check visit-level billing override first, then fall back to patient corporate
+          const visitCorporateOverride = (visitDataResult?.corporate || '').toLowerCase().trim();
+          const patientCorporateVal = (patientInfo?.corporate || '').toLowerCase().trim();
+          const corporate = visitCorporateOverride || patientCorporateVal;
 
           // Corporate field takes priority - check if patient has a corporate panel first
           const hasCorporate = corporate.length > 0 && corporate !== 'private';
@@ -971,9 +1014,11 @@ const FinalBill = () => {
 
           // Check if corporate qualifies for Non-NABH rates (CGHS/ECHS/ESIC)
           const usesNonNABHRate = hasCorporate &&
+            corporate.includes('esic');
+
+          const usesCGHSNABHRate = hasCorporate &&
             (corporate.includes('cghs') ||
-            corporate.includes('echs') ||
-            corporate.includes('esic'));
+            corporate.includes('echs'));
 
           // Check if corporate qualifies for Bhopal NABH rates
           const usesBhopaliNABHRate = hasCorporate &&
@@ -982,7 +1027,7 @@ const FinalBill = () => {
             corporate.includes('ordnance factory itarsi'));
 
           // Check if patient has other corporate
-          const usesNABHRate = hasCorporate && !usesNonNABHRate && !usesBhopaliNABHRate;
+          const usesNABHRate = usesCGHSNABHRate || (hasCorporate && !usesNonNABHRate && !usesBhopaliNABHRate);
 
           console.log('🔍 Patient Type for Lab Dropdown:', {
             patientType,
@@ -1100,7 +1145,7 @@ const FinalBill = () => {
         if (visitId) {
           const { data, error: visitError } = await supabase
             .from('visits')
-            .select('id, patient_type, insurance_type')
+            .select('id, patient_type, insurance_type, corporate')
             .eq('visit_id', visitId)
             .single();
 
@@ -1127,7 +1172,10 @@ const FinalBill = () => {
 
           // Determine patient type to select appropriate rate
           const patientType = (visitDataResult?.patient_type || patientInfo?.patient_type || '').toLowerCase().trim();
-          const corporate = (patientInfo?.corporate || '').toLowerCase().trim();
+          // Check visit-level billing override first, then fall back to patient corporate
+          const visitCorporateOverride = (visitDataResult?.corporate || '').toLowerCase().trim();
+          const patientCorporateVal = (patientInfo?.corporate || '').toLowerCase().trim();
+          const corporate = visitCorporateOverride || patientCorporateVal;
 
           // Corporate field takes priority - check if patient has a corporate panel first
           const hasCorporate = corporate.length > 0 && corporate !== 'private';
@@ -1137,9 +1185,11 @@ const FinalBill = () => {
 
           // Check if corporate qualifies for Non-NABH rates (CGHS/ECHS/ESIC)
           const usesNonNABHRate = hasCorporate &&
+            corporate.includes('esic');
+
+          const usesCGHSNABHRate = hasCorporate &&
             (corporate.includes('cghs') ||
-            corporate.includes('echs') ||
-            corporate.includes('esic'));
+            corporate.includes('echs'));
 
           // Check if corporate qualifies for Bhopal NABH rates
           const usesBhopaliNABHRate = hasCorporate &&
@@ -1148,7 +1198,7 @@ const FinalBill = () => {
             corporate.includes('ordnance factory itarsi'));
 
           // Check if patient has other corporate
-          const usesNABHRate = hasCorporate && !usesNonNABHRate && !usesBhopaliNABHRate;
+          const usesNABHRate = usesCGHSNABHRate || (hasCorporate && !usesNonNABHRate && !usesBhopaliNABHRate);
 
           console.log('🔍 Patient Type for Radiology Dropdown:', {
             patientType,
@@ -1448,7 +1498,7 @@ const FinalBill = () => {
   // Corporate short name mapping for bill number prefix
   const getCorporateBillPrefix = (corporateName: string | null | undefined): string => {
     if (!corporateName || corporateName.trim() === '' || corporateName.toLowerCase() === 'private') {
-      return 'PVT';
+      return 'PRIVATE';
     }
     const shortNameMap: Record<string, string> = {
       'Mahatma Jyotirao Phule jan Arogya Yojana (MJPJAY)': 'MJPJAY',
@@ -1514,11 +1564,13 @@ const FinalBill = () => {
             patient_id: visitData.patients.id,
             visit_id: visitId,
             bill_no: billNo,
+            formatted_bill_no: billNo,
             claim_id: validateClaimId(visitData.claim_id || visitId || 'TEMP-CLAIM'),
             date: new Date().toISOString(),
             category: 'GENERAL',
             total_amount: 0,
-            status: 'DRAFT'
+            status: 'DRAFT',
+            hospital_name: hospitalConfig?.name || 'unknown'
           } as any)
           .select()
           .single();
@@ -1661,6 +1713,8 @@ const FinalBill = () => {
   // Track if draft was loaded from localStorage (using ref for synchronous updates)
   const draftLoadedRef = useRef(false);
   const billDataLoadedRef = useRef(false);
+  const isAutoAddingRef = useRef(false);
+  const autoAddTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Draft: load from localStorage on mount/visit change
   useEffect(() => {
@@ -1721,6 +1775,7 @@ const FinalBill = () => {
   const [serviceSearchTerm, setServiceSearchTerm] = useState("");
   const [accommodationSearchTerm, setAccommodationSearchTerm] = useState("");
   const [activeServiceTab, setActiveServiceTab] = useState("Laboratory services");
+  const [implantCategoryFilter, setImplantCategoryFilter] = useState<string>('ALL');
   const [diagnosisSearchTerm, setDiagnosisSearchTerm] = useState("");
   const [selectedDiagnoses, setSelectedDiagnoses] = useState<any[]>([]);
   const [savedDiagnoses, setSavedDiagnoses] = useState<{ id: string; name: string; is_primary: boolean }[]>([]);
@@ -2106,14 +2161,15 @@ const FinalBill = () => {
   const [finalDischargeSummary, setFinalDischargeSummary] = useState('');
   const [isGeneratingDischargeSummary, setIsGeneratingDischargeSummary] = useState(false);
   const [patientInfo, setPatientInfo] = useState<any>(null);
+  const [visitCorporateOverride, setVisitCorporateOverride] = useState<string>('');
 
-  // Refetch services when patient info changes (especially corporate panel)
+  // Refetch services when patient info or visit corporate override changes
   useEffect(() => {
-    if (patientInfo?.corporate) {
-      console.log('🔄 Patient info loaded, triggering services refetch. Corporate:', patientInfo.corporate);
+    if (patientInfo?.corporate || visitCorporateOverride) {
+      console.log('🔄 Patient info loaded, triggering services refetch. Corporate:', patientInfo?.corporate, 'Override:', visitCorporateOverride);
       setServicesRefetchTrigger(prev => prev + 1);
     }
-  }, [patientInfo?.corporate]);
+  }, [patientInfo?.corporate, visitCorporateOverride]);
 
   // Fetch available implant services from database
   useEffect(() => {
@@ -2127,7 +2183,7 @@ const FinalBill = () => {
         if (visitId) {
           const { data, error: visitError } = await supabase
             .from('visits')
-            .select('id, patient_type, insurance_type')
+            .select('id, patient_type, insurance_type, corporate')
             .eq('visit_id', visitId)
             .single();
 
@@ -2140,9 +2196,9 @@ const FinalBill = () => {
           }
         }
 
-        const { data, error } = await supabase
+        const { data, error } = await (supabase as any)
           .from('implants')
-          .select('id, name, nabh_nabl_rate, non_nabh_nabl_rate, private_rate, bhopal_nabh_rate, bhopal_non_nabh_rate')
+          .select('*')
           .order('name');
 
         if (error) {
@@ -2154,7 +2210,10 @@ const FinalBill = () => {
 
           // Determine patient type to select appropriate rate
           const patientType = (visitDataResult?.patient_type || patientInfo?.patient_type || '').toLowerCase().trim();
-          const corporate = (patientInfo?.corporate || '').toLowerCase().trim();
+          // Check visit-level billing override first, then fall back to patient corporate
+          const visitCorporateOverride = (visitDataResult?.corporate || '').toLowerCase().trim();
+          const patientCorporateVal = (patientInfo?.corporate || '').toLowerCase().trim();
+          const corporate = visitCorporateOverride || patientCorporateVal;
 
           // Corporate field takes priority - check if patient has a corporate panel first
           const hasCorporate = corporate.length > 0 && corporate !== 'private';
@@ -2164,9 +2223,11 @@ const FinalBill = () => {
 
           // Check if corporate qualifies for Non-NABH rates (CGHS/ECHS/ESIC)
           const usesNonNABHRate = hasCorporate &&
+            corporate.includes('esic');
+
+          const usesCGHSNABHRate = hasCorporate &&
             (corporate.includes('cghs') ||
-            corporate.includes('echs') ||
-            corporate.includes('esic'));
+            corporate.includes('echs'));
 
           // Check if corporate qualifies for Bhopal NABH rates
           const usesBhopaliNABHRate = hasCorporate &&
@@ -2175,7 +2236,7 @@ const FinalBill = () => {
             corporate.includes('ordnance factory itarsi'));
 
           // Check if patient has other corporate
-          const usesNABHRate = hasCorporate && !usesNonNABHRate && !usesBhopaliNABHRate;
+          const usesNABHRate = usesCGHSNABHRate || (hasCorporate && !usesNonNABHRate && !usesBhopaliNABHRate);
 
           console.log('🔍 Patient Type for Implant Dropdown:', {
             patientType,
@@ -2226,7 +2287,12 @@ const FinalBill = () => {
               name: implant.name,
               amount: cost,
               code: '',
-              rateSource: rateSource
+              rateSource: rateSource,
+              category: implant.category || 'General',
+              subcategory: implant.subcategory || '',
+              manufacturer: implant.manufacturer || '',
+              model_number: implant.model_number || '',
+              description: implant.description || '',
             };
           });
 
@@ -2579,6 +2645,10 @@ const FinalBill = () => {
   const [savedImplantData, setSavedImplantData] = useState<any[]>([]);
   const [savedAnesthetistData, setSavedAnesthetistData] = useState<any[]>([]);
   const [savedPathologyCharges, setSavedPathologyCharges] = useState<any[]>([]);
+  const [prescriptionsForPatient, setPrescriptionsForPatient] = useState<any[]>([]);
+  const [prescriptionsLoaded, setPrescriptionsLoaded] = useState(false);
+  const [addMedicineToRxId, setAddMedicineToRxId] = useState<string | null>(null);
+  const [newMedicine, setNewMedicine] = useState({ name: '', generic_name: '', brand_name: '', route: 'IV', frequency: 'BD', duration: '', qty: 3, instructions: '' });
 
   // State initialization flags to prevent duplicate fetches
   const [clinicalServicesInitialized, setClinicalServicesInitialized] = useState(false);
@@ -2873,6 +2943,18 @@ const FinalBill = () => {
         }
       }
 
+      // If changing quantity directly, recalculate amount
+      if (field === 'quantity') {
+        const qty = Math.max(1, parseInt(value) || 1);
+        updateData.quantity = qty;
+        const currentService = savedClinicalServicesData.find(s => s.junction_id === junctionId);
+        if (currentService) {
+          const rate = currentService.rate_used || currentService.selectedRate || 0;
+          const numericRate = typeof rate === 'string' ? parseFloat(rate) : rate;
+          updateData.amount = numericRate * qty;
+        }
+      }
+
       const { error } = await supabase
         .from('visit_clinical_services')
         .update(updateData)
@@ -3065,23 +3147,41 @@ const FinalBill = () => {
               if (item.lab_id) {
                 const { data: labDetails } = await supabase
                   .from('lab')
-                  .select('name, private, "CGHS_code", description')
+                  .select('name, private, "CGHS_code", description, "NABH_rates_in_rupee", "Non-NABH_rates_in_rupee", bhopal_nabh_rate, bhopal_non_nabh_rate')
                   .eq('id', item.lab_id)
                   .single();
+
+                // Determine correct rate based on corporate status
+                const corporate = (patientInfo?.corporate || '').toLowerCase().trim();
+                const hasCorp = corporate.length > 0 && corporate !== 'private';
+                let masterRate = labDetails?.private || 0;
+                if (hasCorp) {
+                  if (corporate.includes('cghs') || corporate.includes('echs')) {
+                    masterRate = labDetails?.['NABH_rates_in_rupee'] || labDetails?.private || 0;
+                  } else if (corporate.includes('esic')) {
+                    masterRate = labDetails?.['Non-NABH_rates_in_rupee'] || labDetails?.private || 0;
+                  } else if (corporate.includes('mp police') || corporate.includes('ordnance factory')) {
+                    masterRate = labDetails?.bhopal_nabh_rate || labDetails?.private || 0;
+                  } else if (corporate.includes('icici')) {
+                    masterRate = labDetails?.private || 0;
+                  } else {
+                    masterRate = labDetails?.['NABH_rates_in_rupee'] || labDetails?.private || 0;
+                  }
+                }
 
                 return {
                   ...item,
                   lab_name: labDetails?.name || 'Unknown Lab',
-                  cost: item.cost || ((labDetails?.private && labDetails.private > 0) ? labDetails.private : 0), // Preserve saved cost
-                  quantity: item.quantity || 1, // Preserve quantity from database
+                  cost: masterRate > 0 ? masterRate : (item.cost || 0), // Always use current master rate
+                  quantity: item.quantity || 1,
                   description: labDetails?.description || ''
                 };
               }
               return {
                 ...item,
                 lab_name: 'Unknown Lab',
-                cost: item.cost || 0, // Preserve saved cost
-                quantity: item.quantity || 1, // Preserve quantity from database
+                cost: item.cost || 0,
+                quantity: item.quantity || 1,
                 description: ''
               };
             })
@@ -3102,21 +3202,37 @@ const FinalBill = () => {
               if (item.radiology_id) {
                 const { data: radiologyDetails } = await supabase
                   .from('radiology')
-                  .select('name, description')
+                  .select('name, description, private, NABH_NABL_Rate, Non_NABH_NABL_Rate, bhopal_nabh')
                   .eq('id', item.radiology_id)
                   .single();
+
+                // Determine correct rate based on corporate status
+                const corporate = (patientInfo?.corporate || '').toLowerCase().trim();
+                const hasCorp = corporate.length > 0 && corporate !== 'private';
+                let masterRate = radiologyDetails?.private || 0;
+                if (hasCorp) {
+                  if (corporate.includes('cghs') || corporate.includes('echs')) {
+                    masterRate = radiologyDetails?.NABH_NABL_Rate || radiologyDetails?.private || 0;
+                  } else if (corporate.includes('esic')) {
+                    masterRate = radiologyDetails?.Non_NABH_NABL_Rate || radiologyDetails?.private || 0;
+                  } else if (corporate.includes('mp police') || corporate.includes('ordnance factory')) {
+                    masterRate = radiologyDetails?.bhopal_nabh || radiologyDetails?.private || 0;
+                  } else {
+                    masterRate = radiologyDetails?.NABH_NABL_Rate || radiologyDetails?.private || 0;
+                  }
+                }
 
                 return {
                   ...item,
                   radiology_name: radiologyDetails?.name || 'Unknown Radiology',
-                  cost: item.cost || 0,
+                  cost: masterRate > 0 ? masterRate : (item.cost || 0),
                   description: radiologyDetails?.description || ''
                 };
               }
               return {
                 ...item,
                 radiology_name: 'Unknown Radiology',
-                cost: 0,
+                cost: item.cost || 0,
                 description: ''
               };
             })
@@ -3215,31 +3331,37 @@ const FinalBill = () => {
     }
   }, [visitId]);
 
+  // Re-fetch lab and radiology data when patientInfo becomes available
+  // This fixes the race condition where lab rates are loaded before corporate info is known
+  useEffect(() => {
+    if (visitId && patientInfo?.corporate) {
+      console.log('🔄 [PATIENT INFO LOADED] Re-fetching lab data with correct corporate rates:', patientInfo.corporate);
+      fetchSavedLabData().catch(err => console.error('❌ Lab re-fetch failed:', err));
+      fetchSavedRadiologyData().catch(err => console.error('❌ Radiology re-fetch failed:', err));
+    }
+  }, [patientInfo?.corporate]);
+
   // Periodic state verification to ensure data consistency
   useEffect(() => {
     if (!visitId) return;
 
-    // Initial verification after data is loaded
+    // One-time verification after data is loaded (no polling to avoid 406 floods)
     const initialVerificationTimer = setTimeout(() => {
       if (clinicalServicesInitialized && mandatoryServicesInitialized) {
         verifyServicesStateConsistency();
       }
     }, 1000);
 
-    // Periodic verification every 30 seconds
-    const periodicVerificationInterval = setInterval(() => {
-      verifyServicesStateConsistency();
-    }, 30000);
-
     return () => {
       clearTimeout(initialVerificationTimer);
-      clearInterval(periodicVerificationInterval);
     };
   }, [visitId, clinicalServicesInitialized, mandatoryServicesInitialized]); // Removed circular dependencies
 
   // Auto-add daily clinical services (Doctor Charges & Nursing Charges)
   const autoAddDailyServices = async () => {
     if (!visitData?.id || !visitData?.admission_date || !visitId) return;
+    if (isAutoAddingRef.current) return; // prevent concurrent runs
+    isAutoAddingRef.current = true;
 
     try {
       const admissionDate = new Date(visitData.admission_date);
@@ -3293,11 +3415,10 @@ const FinalBill = () => {
       );
 
       if (dailyServices.length === 0) {
-        console.log('⚠️ [AUTO-DAILY] No Doctor Charges or Nursing services found');
-        return;
+        console.log('⚠️ [AUTO-DAILY] No Doctor Charges or Nursing services found — skipping daily loop only');
       }
 
-      console.log('🔄 [AUTO-DAILY] Auto-adding daily services:', dailyServices.map(s => s.service_name), 'Days:', days);
+      if (dailyServices.length > 0) console.log('🔄 [AUTO-DAILY] Auto-adding daily services:', dailyServices.map(s => s.service_name), 'Days:', days);
 
       for (const service of dailyServices) {
         // Select correct rate based on patient type
@@ -3368,6 +3489,124 @@ const FinalBill = () => {
         }
       }
 
+      // Auto-add one-time charges (Emergency Charges, Consultation Charges, MLC Charges)
+      const oneTimeServices = allActiveServices.filter(s =>
+        s.service_name?.toLowerCase().includes('emergency charge') ||
+        s.service_name?.toLowerCase().includes('consultation charge') ||
+        s.service_name?.toLowerCase().includes('mlc processing')
+      );
+
+      if (oneTimeServices.length > 0) {
+        console.log('🔄 [AUTO-ONETIME] Auto-adding one-time charges:', oneTimeServices.map(s => s.service_name));
+
+        for (const service of oneTimeServices) {
+          let rate = 0;
+          if (usesPrivateRate) {
+            rate = service.private_rate || service.tpa_rate || 0;
+          } else if (rateType === 'tpa') {
+            rate = service.tpa_rate || service.private_rate || 0;
+          } else if (rateType === 'cghs') {
+            rate = service.nabh_rate || service.private_rate || 0;
+          } else if (rateType === 'non_cghs') {
+            rate = service.non_nabh_rate || service.private_rate || 0;
+          } else {
+            rate = service.private_rate || service.tpa_rate || 0;
+          }
+
+          const numericRate = typeof rate === 'string' ? parseFloat(rate) : rate;
+          if (!numericRate || numericRate <= 0) continue;
+
+          // Only insert if not already present — user may have manually adjusted
+          const { data: existingRows } = await supabase
+            .from('visit_clinical_services')
+            .select('id')
+            .eq('visit_id', visitData.id)
+            .eq('clinical_service_id', service.id)
+            .limit(1);
+
+          const alreadyExists = existingRows && existingRows.length > 0;
+          if (alreadyExists) continue;
+
+          const { error } = await supabase
+            .from('visit_clinical_services')
+            .insert({
+              visit_id: visitData.id,
+              clinical_service_id: service.id,
+              quantity: 1,
+              rate_used: numericRate,
+              rate_type: rateType,
+              amount: numericRate,
+              start_date: visitData.admission_date,
+              end_date: visitData.discharge_date || new Date().toISOString().split('T')[0],
+            });
+
+          if (error) {
+            console.error(`❌ [AUTO-ONETIME] Failed to insert ${service.service_name}:`, error);
+          } else {
+            console.log(`✅ [AUTO-ONETIME] Inserted ${service.service_name}: ₹${numericRate}`);
+          }
+        }
+      }
+
+      // Auto-add MLC from mandatory_services table
+      const { data: allMandatoryActive } = await supabase
+        .from('mandatory_services')
+        .select('*')
+        .eq('status', 'Active');
+
+      const mlcServices = (allMandatoryActive || []).filter(s =>
+        s.service_name?.toLowerCase().includes('medico legal') ||
+        (s.service_name?.toLowerCase().includes('mlc') &&
+         !s.service_name?.toLowerCase().includes('processing charges'))
+      );
+
+      if (mlcServices && mlcServices.length > 0) {
+        for (const mlcService of mlcServices) {
+          let mlcRate = 0;
+          if (usesPrivateRate) {
+            mlcRate = mlcService.private_rate || mlcService.tpa_rate || 0;
+          } else if (rateType === 'tpa') {
+            mlcRate = mlcService.tpa_rate || mlcService.private_rate || 0;
+          } else if (rateType === 'cghs') {
+            mlcRate = mlcService.cghs_rate || mlcService.private_rate || 0;
+          } else if (rateType === 'non_cghs') {
+            mlcRate = mlcService.non_cghs_rate || mlcService.private_rate || 0;
+          } else {
+            mlcRate = mlcService.private_rate || mlcService.tpa_rate || 0;
+          }
+
+          const numericMlcRate = typeof mlcRate === 'string' ? parseFloat(mlcRate) : mlcRate;
+          if (!numericMlcRate || numericMlcRate <= 0) continue;
+
+          const { data: existingMlc } = await supabase
+            .from('visit_mandatory_services')
+            .select('id')
+            .eq('visit_id', visitData.id)
+            .eq('mandatory_service_id', mlcService.id)
+            .limit(1);
+
+          if (existingMlc && existingMlc.length > 0) continue;
+
+          const { error: mlcError } = await supabase
+            .from('visit_mandatory_services')
+            .insert({
+              visit_id: visitData.id,
+              mandatory_service_id: mlcService.id,
+              quantity: 1,
+              rate_used: numericMlcRate,
+              rate_type: rateType,
+              amount: numericMlcRate,
+              selected_at: new Date().toISOString(),
+            });
+
+          if (mlcError) {
+            console.error(`❌ [AUTO-MLC] Failed to insert ${mlcService.service_name}:`, mlcError);
+          } else {
+            console.log(`✅ [AUTO-MLC] Inserted ${mlcService.service_name}: ₹${numericMlcRate}`);
+          }
+        }
+      }
+
       // Refresh saved clinical services data and financial summary
       await fetchSavedClinicalServicesData();
       if (autoPopulateFinancialData) {
@@ -3375,15 +3614,30 @@ const FinalBill = () => {
       }
     } catch (error) {
       console.error('❌ [AUTO-DAILY] Error auto-adding daily services:', error);
+    } finally {
+      isAutoAddingRef.current = false;
     }
   };
 
-  // Auto-add of daily services disabled - user manages clinical services manually
-  // useEffect(() => {
-  //   if (visitData?.id && visitData?.admission_date && patientInfo) {
-  //     autoAddDailyServices();
-  //   }
-  // }, [visitData?.id, visitData?.admission_date, visitData?.discharge_date, patientInfo]);
+  // Reset lock when visit changes so a new bill always runs auto-add fresh
+  useEffect(() => {
+    isAutoAddingRef.current = false;
+    if (autoAddTimerRef.current) clearTimeout(autoAddTimerRef.current);
+  }, [visitId]);
+
+  // Trigger auto-add of daily services when visit data loads or discharge date changes
+  // Debounced to prevent duplicate inserts from rapid re-renders
+  useEffect(() => {
+    if (visitData?.id && visitData?.admission_date && patientInfo) {
+      if (autoAddTimerRef.current) clearTimeout(autoAddTimerRef.current);
+      autoAddTimerRef.current = setTimeout(() => {
+        autoAddDailyServices();
+      }, 800);
+    }
+    return () => {
+      if (autoAddTimerRef.current) clearTimeout(autoAddTimerRef.current);
+    };
+  }, [visitData?.id, visitData?.admission_date, visitData?.discharge_date, patientInfo]);
 
   // Function to refresh saved data
   const refreshSavedData = async () => {
@@ -3891,6 +4145,9 @@ const FinalBill = () => {
       if (surgeryError) {
         console.error('Error fetching surgery data:', surgeryError);
       }
+
+      // Store visit-level billing override (corporate column on visits table)
+      setVisitCorporateOverride((visitData.corporate || '').toLowerCase().trim());
 
       // Combine patient info with surgery details
       const combinedInfo = {
@@ -5112,13 +5369,10 @@ Generated on: ${new Date().toLocaleDateString('en-IN')}`);
       return;
     }
 
-    // Check if OpenAI API key is available
-    const openaiApiKey = import.meta.env.VITE_OPENAI_API_KEY;
-    console.log('OpenAI API Key status:', openaiApiKey ? 'Found' : 'Not found');
-    console.log('API Key preview:', openaiApiKey ? `${openaiApiKey.substring(0, 7)}...` : 'None');
-
-    if (!openaiApiKey) {
-      toast.error('OpenAI API key not configured. Please add VITE_OPENAI_API_KEY to your environment variables.');
+    // Check if Gemini API key is available
+    const geminiApiKey = import.meta.env.VITE_GEMINI_API_KEY;
+    if (!geminiApiKey) {
+      toast.error('Gemini API key not configured. Please add VITE_GEMINI_API_KEY to your environment variables.');
       return;
     }
 
@@ -5220,58 +5474,56 @@ Make it detailed and professional as if written by an experienced surgeon.`;
 
       console.log('Generating combined AI notes for all surgeries...');
 
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiApiKey}`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${import.meta.env.VITE_OPENAI_API_KEY}`
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          model: 'gpt-3.5-turbo',
-          messages: [
-            {
-              role: 'system',
-              content: 'You are an experienced surgeon writing detailed operative notes. Generate comprehensive, professional surgical documentation with specific details about implants, quantities, and surgical techniques. When multiple surgeries are performed, include details for all procedures in a single combined note.'
-            },
-            {
-              role: 'user',
-              content: surgeryPrompt
-            }
-          ],
-          max_tokens: 2000,
-          temperature: 0.7
+          contents: [{
+            parts: [{
+              text: 'You are an experienced surgeon writing detailed operative notes. Generate comprehensive, professional surgical documentation with specific details about implants, quantities, and surgical techniques. When multiple surgeries are performed, include details for all procedures in a single combined note.\n\n' + surgeryPrompt
+            }]
+          }],
+          generationConfig: {
+            temperature: 0.7,
+            maxOutputTokens: 2000
+          }
         })
       });
 
       if (!response.ok) {
-        const errorText = await response.text();
-        console.error('OpenAI API Response Error:', response.status, errorText);
-        throw new Error(`OpenAI API error: ${response.status} - ${errorText}`);
+        const errorData = await response.json();
+        console.error('Gemini API Response Error:', response.status, errorData);
+        throw new Error(`Gemini API error: ${errorData.error?.message || response.statusText}`);
       }
 
       const data = await response.json();
-      console.log('OpenAI API Response:', data);
+      console.log('Gemini API Response:', data);
 
-      if (!data.choices || !data.choices[0] || !data.choices[0].message) {
-        throw new Error('Invalid response format from OpenAI API');
+      const generatedText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!generatedText) {
+        throw new Error('No response from Gemini API');
       }
 
       // Set the single shared description
-      setSharedDescription(data.choices[0].message.content);
+      setSharedDescription(generatedText);
       toast.success('AI surgery notes generated successfully!');
 
     } catch (error) {
       console.error('Error generating surgery notes:', error);
 
       // More detailed error handling
-      if (error.message?.includes('401')) {
-        toast.error('OpenAI API key is invalid or expired. Please check your API key.');
-      } else if (error.message?.includes('429')) {
-        toast.error('OpenAI API rate limit exceeded. Please try again later.');
-      } else if (error.message?.includes('Network')) {
+      const errMsg = error instanceof Error ? error.message : String(error);
+      console.error('Surgery notes generation error details:', errMsg);
+      if (errMsg.includes('401') || errMsg.includes('API_KEY')) {
+        toast.error('Gemini API key is invalid or expired. Please check your API key.');
+      } else if (errMsg.includes('429')) {
+        toast.error('API rate limit exceeded. Please try again later.');
+      } else if (errMsg.includes('Network') || errMsg.includes('fetch')) {
         toast.error('Network error. Please check your internet connection.');
       } else {
-        toast.error('Failed to generate surgery notes. Please try again.');
+        toast.error(`Failed to generate surgery notes: ${errMsg.substring(0, 100)}`);
       }
 
       // Fallback combined surgery notes
@@ -5761,7 +6013,7 @@ INSTRUCTIONS:
             description: '', // No description for date-based entries
             code: '',
             rate: parseFloat(charge.rate?.toString() || '0') || 0,
-            qty: parseInt(charge.days?.toString() || '1') || 1,
+            qty: parseInt(charge.qty?.toString() || '1') || 1,
             amount: parseFloat(charge.amount?.toString() || '0') || 0,
             type: 'standard' as const,
             dates: {
@@ -6087,11 +6339,15 @@ INSTRUCTIONS:
               const updatedSubItem = { ...subItem, [field]: processedValue };
 
               // Auto-calculate days and amount when dates change
+              // Skip auto-multiplication for Pathology and Medicine charges — their qty is independent of date range
               if (field === 'dates') {
-                const calculatedDays = calculateDaysBetweenDates(processedValue);
-                updatedSubItem.qty = calculatedDays;
-                const rate = (updatedSubItem as StandardSubItem).rate || 0;
-                (updatedSubItem as StandardSubItem).amount = rate * calculatedDays;
+                const isPathologyOrMedicine = item.description === 'Pathology Charges' || item.description === 'Medicine Charges';
+                if (!isPathologyOrMedicine) {
+                  const calculatedDays = calculateDaysBetweenDates(processedValue);
+                  updatedSubItem.qty = calculatedDays;
+                  const rate = (updatedSubItem as StandardSubItem).rate || 0;
+                  (updatedSubItem as StandardSubItem).amount = rate * calculatedDays;
+                }
               }
 
               // Auto-calculate amount when rate or qty changes
@@ -6234,11 +6490,13 @@ INSTRUCTIONS:
               const corporate = (patientInfo?.corporate || '').toLowerCase().trim();
               const hasCorporate = corporate.length > 0;
 
-              // Check if corporate qualifies for Non-NABH rates (CGHS/ECHS/ESIC)
-              const usesNonNABHRate =
+              // Check if corporate qualifies for Non-NABH rates (ESIC only)
+              const usesNonNABHRate = corporate.includes('esic');
+
+              // Check if corporate qualifies for CGHS/NABH rates
+              const usesCGHSNABHRate =
                 corporate.includes('cghs') ||
-                corporate.includes('echs') ||
-                corporate.includes('esic');
+                corporate.includes('echs');
 
               // Check if corporate qualifies for Bhopal NABH rates
               const usesBhopaliNABHRate =
@@ -6247,7 +6505,7 @@ INSTRUCTIONS:
                 corporate.includes('ordnance factory itarsi');
 
               // Check if patient has other corporate
-              const usesNABHRate = hasCorporate && !usesNonNABHRate && !usesBhopaliNABHRate;
+              const usesNABHRate = usesCGHSNABHRate || (hasCorporate && !usesNonNABHRate && !usesBhopaliNABHRate);
 
               // STRICT CORPORATE RATE SELECTION - NO FALLBACK
               let correctRate = 0;
@@ -6397,9 +6655,11 @@ INSTRUCTIONS:
 
               // Check if corporate qualifies for Non-NABH rates (CGHS/ECHS/ESIC)
               const usesNonNABHRate = hasCorporate &&
+                corporate.includes('esic');
+
+              const usesCGHSNABHRate = hasCorporate &&
                 (corporate.includes('cghs') ||
-                corporate.includes('echs') ||
-                corporate.includes('esic'));
+                corporate.includes('echs'));
 
               // Check if corporate qualifies for Bhopal NABH rates
               const usesBhopaliNABHRate = hasCorporate &&
@@ -6412,7 +6672,7 @@ INSTRUCTIONS:
                 (corporate.includes('icici lombard') || corporate.includes('icici'));
 
               // Check if patient has other corporate (not CGHS/ECHS/ESIC, not MP Police/Ordnance Factory, not ICICI)
-              const usesNABHRate = hasCorporate && !usesNonNABHRate && !usesBhopaliNABHRate && !usesPrivateRate;
+              const usesNABHRate = usesCGHSNABHRate || (hasCorporate && !usesNonNABHRate && !usesBhopaliNABHRate && !usesPrivateRate);
 
               // Select appropriate rate based on corporate (priority: Private > Non-NABH > Bhopal NABH > NABH > Fallback)
               let correctRate = 100; // Default fallback
@@ -6495,7 +6755,7 @@ INSTRUCTIONS:
     }
   };
 
-  // Function to delete saved lab test
+  // Function to delete saved lab test (admin only)
   const handleDeleteLabTest = async (labId: string) => {
     if (!confirm('Are you sure you want to delete this lab test?')) {
       return;
@@ -6519,6 +6779,54 @@ INSTRUCTIONS:
     } catch (error) {
       console.error('Error deleting lab test:', error);
       toast.error('Failed to delete lab test');
+    }
+  };
+
+  // Function to hide a wrongly entered lab test (available to all users)
+  const handleHideLabTest = async (labId: string) => {
+    if (!confirm('Hide this test? It will be removed from the bill but kept in the database for audit.')) {
+      return;
+    }
+
+    try {
+      const { error } = await (supabase as any)
+        .from('visit_labs')
+        .update({ is_hidden: true })
+        .eq('id', labId);
+
+      if (error) {
+        console.error('Error hiding lab test:', error);
+        toast.error('Failed to hide lab test');
+        return;
+      }
+
+      await fetchSavedLabData();
+      toast.success('Lab test hidden successfully');
+    } catch (error) {
+      console.error('Error hiding lab test:', error);
+      toast.error('Failed to hide lab test');
+    }
+  };
+
+  // Function to unhide a lab test (admin only)
+  const handleUnhideLabTest = async (labId: string) => {
+    try {
+      const { error } = await (supabase as any)
+        .from('visit_labs')
+        .update({ is_hidden: false })
+        .eq('id', labId);
+
+      if (error) {
+        console.error('Error unhiding lab test:', error);
+        toast.error('Failed to unhide lab test');
+        return;
+      }
+
+      await fetchSavedLabData();
+      toast.success('Lab test restored');
+    } catch (error) {
+      console.error('Error unhiding lab test:', error);
+      toast.error('Failed to unhide lab test');
     }
   };
 
@@ -7464,7 +7772,7 @@ INSTRUCTIONS:
       // Step 1: Get visit UUID from visit_id
       const { data: visitData, error: visitError } = await supabase
         .from('visits')
-        .select('id, visit_id, mandatory_service_id, mandatory_service:mandatory_services!visits_mandatory_service_id_fkey(id, service_name, tpa_rate, private_rate, nabh_rate, non_nabh_rate)')
+        .select('id, visit_id, mandatory_service_id')
         .eq('visit_id', visitId)
         .single();
 
@@ -8942,6 +9250,137 @@ INSTRUCTIONS:
     }
   };
 
+  // Function to fetch prescriptions for the patient
+  const fetchPatientPrescriptions = async () => {
+    if (!patientInfo?.id && !patientInfo?.name) return;
+    try {
+      let rxData: any[] = [];
+
+      // Step 1: Try by patient_id (UUID from patients table)
+      if (patientInfo?.id) {
+        console.log('📋 [RX FETCH] Step 1: Querying by patient_id:', patientInfo.id);
+        const { data, error } = await (supabase as any)
+          .from('prescriptions')
+          .select('*')
+          .eq('patient_id', patientInfo.id)
+          .order('created_at', { ascending: false });
+        if (!error && data && data.length > 0) {
+          rxData = data;
+          console.log('✅ [RX FETCH] Found', data.length, 'prescriptions by patient_id');
+        }
+      }
+
+      // Step 2: Try by patient name in notes field (CameraUpload stores patient name in notes)
+      if (rxData.length === 0 && patientInfo?.name) {
+        console.log('📋 [RX FETCH] Step 2: Searching by patient name in all recent prescriptions');
+        const { data: allRx, error: allError } = await (supabase as any)
+          .from('prescriptions')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(200);
+
+        if (!allError && allRx && allRx.length > 0) {
+          // Build patient name lookup for all prescription patient_ids
+          const patientIds = [...new Set(allRx.map((rx: any) => rx.patient_id).filter(Boolean))];
+          const nameMap: Record<string, string> = {};
+
+          if (patientIds.length > 0) {
+            const { data: patients } = await (supabase as any)
+              .from('patients')
+              .select('id, name')
+              .in('id', patientIds);
+
+            for (const p of (patients || [])) {
+              nameMap[p.id] = (p.name || '').toLowerCase().trim();
+            }
+          }
+
+          const searchName = (patientInfo.name || '').toLowerCase().trim();
+
+          // Match by patient name (exact) OR by patient name in notes
+          rxData = allRx.filter((rx: any) => {
+            // Match by patient_id → name lookup
+            if (rx.patient_id && nameMap[rx.patient_id] === searchName) return true;
+            // Match by patient name appearing in notes field
+            if (rx.notes && rx.notes.toLowerCase().includes(searchName)) return true;
+            return false;
+          });
+
+          if (rxData.length > 0) {
+            console.log('✅ [RX FETCH] Found', rxData.length, 'prescriptions by name match');
+          }
+        }
+      }
+
+      // Step 3: If still nothing, try querying all prescriptions created today for this visit
+      if (rxData.length === 0 && visitId) {
+        console.log('📋 [RX FETCH] Step 3: Checking all prescriptions from today');
+        const today = new Date().toISOString().split('T')[0];
+        const { data: todayRx } = await (supabase as any)
+          .from('prescriptions')
+          .select('*')
+          .eq('prescription_date', today)
+          .order('created_at', { ascending: false });
+
+        if (todayRx && todayRx.length > 0 && patientInfo?.name) {
+          const searchName = (patientInfo.name || '').toLowerCase().trim();
+          // Check patient_ids
+          const pIds = todayRx.map((rx: any) => rx.patient_id).filter(Boolean);
+          if (pIds.length > 0) {
+            const { data: pts } = await (supabase as any)
+              .from('patients')
+              .select('id, name')
+              .in('id', pIds);
+            const pMap: Record<string, string> = {};
+            for (const p of (pts || [])) pMap[p.id] = (p.name || '').toLowerCase().trim();
+            rxData = todayRx.filter((rx: any) => pMap[rx.patient_id] === searchName);
+          }
+          if (rxData.length > 0) {
+            console.log('✅ [RX FETCH] Found', rxData.length, 'prescriptions from today by name');
+          }
+        }
+      }
+
+      console.log('📋 [RX FETCH] Final result:', rxData.length, 'prescriptions found');
+
+      if (rxData.length === 0) {
+        setPrescriptionsForPatient([]);
+        setPrescriptionsLoaded(true);
+        return;
+      }
+
+      // Step 2: Fetch prescription items separately (avoids FK join issues)
+      const rxIds = rxData.map((rx: any) => rx.id);
+      const { data: itemsData, error: itemsError } = await (supabase as any)
+        .from('prescription_items')
+        .select('*')
+        .in('prescription_id', rxIds);
+
+      if (itemsError) {
+        console.error('❌ [PRESCRIPTIONS FETCH] Items error:', itemsError);
+        // Still show prescriptions without items
+      }
+
+      // Group items by prescription_id
+      const itemsByRx: Record<string, any[]> = {};
+      for (const item of (itemsData || [])) {
+        if (!itemsByRx[item.prescription_id]) itemsByRx[item.prescription_id] = [];
+        itemsByRx[item.prescription_id].push(item);
+      }
+
+      // Combine
+      const combined = rxData.map((rx: any) => ({
+        ...rx,
+        prescription_items: itemsByRx[rx.id] || [],
+      }));
+
+      setPrescriptionsForPatient(combined);
+      setPrescriptionsLoaded(true);
+    } catch (err) {
+      console.error('❌ [PRESCRIPTIONS FETCH] Unexpected error:', err);
+    }
+  };
+
   // Function to fetch saved anesthetist data
   const fetchSavedAnesthetistData = async () => {
     if (!visitId) {
@@ -9210,7 +9649,9 @@ INSTRUCTIONS:
         visit_id: visitData.id,
         start_date: today,
         end_date: today,
-        rate: 0
+        rate: 0,
+        qty: 1,
+        amount: 0
       };
 
       console.log('💾 [PATHOLOGY ADD] Inserting with defaults:', pathologyData);
@@ -9244,9 +9685,21 @@ INSTRUCTIONS:
   // Function to update pathology field
   const updatePathologyField = async (pathologyId: string, field: string, value: string | number) => {
     try {
+      const updateData: Record<string, any> = { [field]: value };
+
+      // When rate or qty changes, recalculate amount (no longer auto-generated by DB)
+      if (field === 'rate' || field === 'qty') {
+        const currentCharge = savedPathologyCharges.find(c => c.id === pathologyId);
+        if (currentCharge) {
+          const rate = field === 'rate' ? parseFloat(value.toString()) || 0 : parseFloat(currentCharge.rate?.toString() || '0');
+          const qty = field === 'qty' ? parseInt(value.toString()) || 1 : parseInt(currentCharge.qty?.toString() || '1');
+          updateData.amount = rate * qty;
+        }
+      }
+
       const { error } = await supabase
         .from('visit_pathology_charges')
-        .update({ [field]: value })
+        .update(updateData)
         .eq('id', pathologyId);
 
       if (error) {
@@ -9255,7 +9708,7 @@ INSTRUCTIONS:
         return;
       }
 
-      // Refresh pathology data to get auto-calculated days and amount
+      // Refresh pathology data
       await fetchSavedPathologyCharges();
 
       toast.success('Pathology data updated successfully');
@@ -9568,7 +10021,13 @@ INSTRUCTIONS:
       return total + finalAmount;
     }, 0);
 
-    return baseAmount + surgeryTreatmentTotal;
+    // Add anaesthetist charges from saved data
+    const anesthetistChargesTotal = savedAnesthetistData.reduce((total, a) => total + (parseFloat(a.rate) || 0), 0);
+
+    // Add OT charges from saved anesthetist data (if ot_charges field exists)
+    const otChargesTotal = savedAnesthetistData.reduce((total, a) => total + (parseFloat(a.ot_charges) || 0), 0);
+
+    return baseAmount + surgeryTreatmentTotal + anesthetistChargesTotal + otChargesTotal;
   };
 
   // Surgery Treatment functions
@@ -10020,11 +10479,14 @@ INSTRUCTIONS:
       // Patient is private ONLY if they don't have a corporate panel
       const isPrivatePatient = !hasCorporate && (patientType === 'private' || corporate === 'private');
 
-      // Check if corporate qualifies for Non-NABH rates (CGHS/ECHS/ESIC)
+      // Check if corporate qualifies for Non-NABH rates (ESIC only)
       const usesNonNABHRate = hasCorporate &&
+        corporate.includes('esic');
+
+      // Check if corporate qualifies for CGHS/NABH rates
+      const usesCGHSNABHRate = hasCorporate &&
         (corporate.includes('cghs') ||
-        corporate.includes('echs') ||
-        corporate.includes('esic'));
+        corporate.includes('echs'));
 
       // Check if corporate qualifies for Bhopal NABH rates
       const usesBhopaliNABHRate = hasCorporate &&
@@ -10033,7 +10495,7 @@ INSTRUCTIONS:
         corporate.includes('ordnance factory itarsi'));
 
       // Check if patient has other corporate
-      const usesNABHRate = hasCorporate && !usesNonNABHRate && !usesBhopaliNABHRate;
+      const usesNABHRate = usesCGHSNABHRate || (hasCorporate && !usesNonNABHRate && !usesBhopaliNABHRate);
 
       console.log('🔍 Saved Radiology - Patient Type Detection:', {
         patientType,
@@ -10257,9 +10719,11 @@ INSTRUCTIONS:
 
           // Check if corporate qualifies for Non-NABH rates (CGHS/ECHS/ESIC)
           const usesNonNABHRate = hasCorporate &&
+            corporate.includes('esic');
+
+          const usesCGHSNABHRate = hasCorporate &&
             (corporate.includes('cghs') ||
-            corporate.includes('echs') ||
-            corporate.includes('esic'));
+            corporate.includes('echs'));
 
           // Check if corporate qualifies for Bhopal NABH rates
           const usesBhopaliNABHRate = hasCorporate &&
@@ -10272,7 +10736,7 @@ INSTRUCTIONS:
             (corporate.includes('icici lombard') || corporate.includes('icici'));
 
           // Check if patient has other corporate (not CGHS/ECHS/ESIC, not MP Police/Ordnance Factory, not ICICI)
-          const usesNABHRate = hasCorporate && !usesNonNABHRate && !usesBhopaliNABHRate && !usesPrivateRate;
+          const usesNABHRate = usesCGHSNABHRate || (hasCorporate && !usesNonNABHRate && !usesBhopaliNABHRate && !usesPrivateRate);
 
           // Select appropriate rate based on patient type (priority: Private > Non-NABH > Bhopal NABH > NABH > Fallback)
           let cost = 100; // Default fallback
@@ -10384,11 +10848,14 @@ INSTRUCTIONS:
         // Patient is private ONLY if they don't have a corporate panel
         const isPrivatePatient = !hasCorporate && (patientType === 'private' || corporate === 'private');
 
-        // Check if corporate qualifies for Non-NABH rates (CGHS/ECHS/ESIC)
+        // Check if corporate qualifies for Non-NABH rates (ESIC only)
         const usesNonNABHRate = hasCorporate &&
+          corporate.includes('esic');
+
+        // Check if corporate qualifies for CGHS/NABH rates
+        const usesCGHSNABHRate = hasCorporate &&
           (corporate.includes('cghs') ||
-          corporate.includes('echs') ||
-          corporate.includes('esic'));
+          corporate.includes('echs'));
 
         // Check if corporate uses Private rates (ICICI Lombard, etc.)
         const usesPrivateRate = hasCorporate &&
@@ -10402,7 +10869,7 @@ INSTRUCTIONS:
           corporate.includes('ordnance factory itarsi'));
 
         // Check if patient has other corporate (not CGHS/ECHS/ESIC, not MP Police/Ordnance Factory, not ICICI)
-        const usesNABHRate = hasCorporate && !usesNonNABHRate && !usesBhopaliNABHRate && !usesPrivateRate;
+        const usesNABHRate = usesCGHSNABHRate || (hasCorporate && !usesNonNABHRate && !usesBhopaliNABHRate && !usesPrivateRate);
 
         // Rate selection based on patient type (priority: Private > Non-NABH > Bhopal NABH > NABH > Fallback)
         let finalCost = 0;
@@ -10526,9 +10993,9 @@ INSTRUCTIONS:
       }
 
       try {
-        const { data, error } = await supabase
+        const { data, error } = await (supabase as any)
           .from('implants')
-          .select('id, name, nabh_nabl_rate, non_nabh_nabl_rate, private_rate, bhopal_nabh_rate, bhopal_non_nabh_rate')
+          .select('*')
           .ilike('name', `%${serviceSearchTerm}%`)
           .order('name')
           .limit(20);
@@ -10554,9 +11021,11 @@ INSTRUCTIONS:
 
           // Check if corporate qualifies for Non-NABH rates (CGHS/ECHS/ESIC)
           const usesNonNABHRate = hasCorporate &&
+            corporate.includes('esic');
+
+          const usesCGHSNABHRate = hasCorporate &&
             (corporate.includes('cghs') ||
-            corporate.includes('echs') ||
-            corporate.includes('esic'));
+            corporate.includes('echs'));
 
           // Check if corporate qualifies for Bhopal NABH rates
           const usesBhopaliNABHRate = hasCorporate &&
@@ -10569,7 +11038,7 @@ INSTRUCTIONS:
             (corporate.includes('icici lombard') || corporate.includes('icici'));
 
           // Check if patient has other corporate (not CGHS/ECHS/ESIC, not MP Police/Ordnance Factory, not ICICI)
-          const usesNABHRate = hasCorporate && !usesNonNABHRate && !usesBhopaliNABHRate && !usesPrivateRate;
+          const usesNABHRate = usesCGHSNABHRate || (hasCorporate && !usesNonNABHRate && !usesBhopaliNABHRate && !usesPrivateRate);
 
           // Select appropriate rate based on patient type
           let cost = 0;
@@ -10693,12 +11162,15 @@ INSTRUCTIONS:
 
   // Filtered implant services
   const filteredImplantServices = (() => {
-    const result = serviceSearchTerm.length >= 2
+    const base = serviceSearchTerm.length >= 2
       ? searchedImplantServices
       : availableImplantServices.filter(service =>
           service.name?.toLowerCase().includes(serviceSearchTerm.toLowerCase())
         );
-    return result;
+    if (!implantCategoryFilter || implantCategoryFilter === 'ALL') return base;
+    return (base || []).filter((service: any) =>
+      (service.category || 'General') === implantCategoryFilter
+    );
   })();
 
   // Debug logging for implant services
@@ -11352,6 +11824,10 @@ INSTRUCTIONS:
         let selectedRate = 0;
         let rateType = 'private'; // Default
 
+        // Determine if patient is IPD (for IPD-specific rates)
+        const patientType = (visitData?.patient_type || visitData?.patients?.patient_type || '').toLowerCase().trim();
+        const isIpd = patientType === 'ipd';
+
         // Get corporate for ICICI Lombard check
         const corporate = (patientInfo?.corporate || '').toLowerCase().trim();
         const hasCorporate = corporate.length > 0 && corporate !== 'private';
@@ -11365,23 +11841,23 @@ INSTRUCTIONS:
 
         // ICICI Lombard always uses private rate
         if (usesPrivateRate) {
-          selectedRate = item.private_rate || item.rate || item.amount || 0;
+          selectedRate = (isIpd && item.private_rate_ipd) || item.private_rate || item.rate || item.amount || 0;
           rateType = 'private';
         } else if (categoryLower.includes('corporate') || categoryLower.includes('company')) {
-          selectedRate = item.private_rate || item.rate || item.amount || 0;
+          selectedRate = (isIpd && item.private_rate_ipd) || item.private_rate || item.rate || item.amount || 0;
           rateType = 'corporate';
         } else if (categoryLower.includes('tpa') || categoryLower.includes('insurance')) {
-          selectedRate = item.tpa_rate || item.private_rate || item.rate || item.amount || 0;
+          selectedRate = (isIpd && item.tpa_rate_ipd) || item.tpa_rate || item.private_rate || item.rate || item.amount || 0;
           rateType = 'tpa';
         } else if (categoryLower.includes('cghs')) {
-          selectedRate = item.cghs_rate || item.private_rate || item.rate || item.amount || 0;
+          selectedRate = (isIpd && item.nabh_rate_ipd) || item.cghs_rate || item.private_rate || item.rate || item.amount || 0;
           rateType = 'cghs';
         } else if (categoryLower.includes('non_cghs') || categoryLower.includes('non-cghs')) {
-          selectedRate = item.non_cghs_rate || item.private_rate || item.rate || item.amount || 0;
+          selectedRate = (isIpd && item.non_nabh_rate_ipd) || item.non_cghs_rate || item.private_rate || item.rate || item.amount || 0;
           rateType = 'non_cghs';
         } else {
           // Default to private rate
-          selectedRate = item.private_rate || item.rate || item.amount || 0;
+          selectedRate = (isIpd && item.private_rate_ipd) || item.private_rate || item.rate || item.amount || 0;
           rateType = 'private';
         }
 
@@ -11480,17 +11956,52 @@ INSTRUCTIONS:
     enabled: diagnosisSearchTerm.length >= 2
   });
 
-  // CGHS Surgery search query
+  // CGHS Surgery search query (also searches Maharashtra Yojana tariff for yojana patients)
   const { data: availableSurgeries = [] } = useQuery({
     queryKey: ['cghs_surgery', surgerySearchTerm, patientInfo?.corporate],
     queryFn: async () => {
-      console.log('🔍 Fetching CGHS surgeries in FinalBill:', {
+      console.log('🔍 Fetching surgeries in FinalBill:', {
         surgerySearchTerm,
         patientCorporate: patientInfo?.corporate || 'NOT SET'
       });
 
       if (!surgerySearchTerm || surgerySearchTerm.length < 2) return [];
 
+      const corporate = (patientInfo?.corporate || '').toLowerCase().trim();
+      const isYojana = isMaharashtraYojana(corporate);
+
+      // For Maharashtra Yojana patients, search from yojana_mh_procedures tariff
+      if (isYojana) {
+        const { data: yojanaData, error: yojanaError } = await supabase
+          .from('yojana_mh_procedures')
+          .select('id, procedure_code, procedure_name, package_name, specialty, specialty_code, tier3_rate, level_of_care, los, medical_or_surgical')
+          .or(`procedure_name.ilike.%${surgerySearchTerm}%,package_name.ilike.%${surgerySearchTerm}%,procedure_code.ilike.%${surgerySearchTerm}%,specialty.ilike.%${surgerySearchTerm}%`)
+          .order('procedure_name')
+          .limit(15);
+
+        if (yojanaError) {
+          console.error('Error fetching Yojana procedures:', yojanaError);
+          return [];
+        }
+
+        // Map yojana procedures to the same shape as cghs_surgery for compatibility
+        return (yojanaData || []).map(proc => ({
+          id: proc.id,
+          name: proc.procedure_name || proc.package_name || '',
+          code: proc.procedure_code || '',
+          category: proc.specialty || '',
+          description: `${proc.package_name || ''} | LOS: ${proc.los || 'N/A'} | ${proc.level_of_care || ''} | ${proc.medical_or_surgical || ''}`,
+          private: proc.tier3_rate || 0,
+          NABH_NABL_Rate: proc.tier3_rate || 0,
+          Non_NABH_NABL_Rate: 0,
+          bhopal_nabh_rate: 0,
+          selectedRate: proc.tier3_rate || 0,
+          rateSource: 'yojana_mh_tier3',
+          is_yojana: true
+        }));
+      }
+
+      // Standard CGHS surgery search for non-yojana patients
       const { data, error } = await supabase
         .from('cghs_surgery')
         .select('id, name, code, category, private, Non_NABH_NABL_Rate, bhopal_nabh_rate, NABH_NABL_Rate, description')
@@ -11503,20 +12014,20 @@ INSTRUCTIONS:
         return [];
       }
 
-      // Apply corporate-based rate selection
-      const corporate = (patientInfo?.corporate || '').toLowerCase().trim();
-
       // Corporate field takes priority - check if patient has a corporate panel first
       const hasCorporate = corporate.length > 0 && corporate !== 'private';
 
       // Patient is private ONLY if they don't have a corporate panel
       const isPrivate = !hasCorporate;
 
-      // Check if corporate qualifies for Non-NABH rates (CGHS/ECHS/ESIC)
+      // Check if corporate qualifies for Non-NABH rates (ESIC only)
       const usesNonNABHRate = hasCorporate &&
+        corporate.includes('esic');
+
+      // Check if corporate qualifies for CGHS/NABH rates
+      const usesCGHSNABHRate = hasCorporate &&
         (corporate.includes('cghs') ||
-        corporate.includes('echs') ||
-        corporate.includes('esic'));
+        corporate.includes('echs'));
 
       // Check if corporate qualifies for Bhopal NABH rates
       const usesBhopaliRate = hasCorporate &&
@@ -11525,7 +12036,7 @@ INSTRUCTIONS:
         corporate.includes('ordnance factory itarsi'));
 
       // Check if patient has other corporate
-      const usesNABHRate = hasCorporate && !usesNonNABHRate && !usesBhopaliRate;
+      const usesNABHRate = usesCGHSNABHRate || (hasCorporate && !usesNonNABHRate && !usesBhopaliRate);
 
       const surgeriesWithSelectedRate = data?.map(surgery => {
         // Select appropriate rate based on corporate (priority: Private > Non-NABH > Bhopal NABH > NABH NABL > Fallback)
@@ -11533,7 +12044,6 @@ INSTRUCTIONS:
         let rateSource = 'fallback';
 
         if (isPrivate) {
-          // Private patients → use private rate (even if 0), only fallback to NABH if NULL
           if (surgery.private !== null && surgery.private !== undefined) {
             selectedRate = surgery.private;
             rateSource = 'private';
@@ -11545,44 +12055,24 @@ INSTRUCTIONS:
             rateSource = 'no_rate';
           }
         } else if (usesNonNABHRate && surgery.Non_NABH_NABL_Rate && surgery.Non_NABH_NABL_Rate > 0) {
-          // CGHS/ECHS/ESIC → use Non_NABH_NABL_Rate
           selectedRate = surgery.Non_NABH_NABL_Rate;
           rateSource = 'non_nabh_nabl';
         } else if (usesBhopaliRate && surgery.bhopal_nabh_rate && surgery.bhopal_nabh_rate > 0) {
-          // MP Police/Ordnance Factory → use bhopal_nabh_rate
           selectedRate = surgery.bhopal_nabh_rate;
           rateSource = 'bhopal_nabh';
         } else if (usesNABHRate && surgery.NABH_NABL_Rate && surgery.NABH_NABL_Rate > 0) {
-          // All other corporate patients → use NABH_NABL_Rate
           selectedRate = surgery.NABH_NABL_Rate;
           rateSource = 'nabh_nabl';
         } else {
-          // Fallback
           selectedRate = surgery.NABH_NABL_Rate || surgery.private || 0;
           rateSource = 'fallback';
         }
 
-        console.log('🔍 Surgery rate mapping in FinalBill:', {
-          surgeryName: surgery.name,
-          patientCorporate: patientInfo?.corporate || 'NOT SET',
-          corporateLower: corporate || 'EMPTY',
-          isPrivate: isPrivate,
-          usesNonNABHRate: usesNonNABHRate,
-          usesBhopaliRate: usesBhopaliRate,
-          usesNABHRate: usesNABHRate,
-          privateRate: surgery.private,
-          nonNabhRate: surgery.Non_NABH_NABL_Rate,
-          bhopaliNABHRate: surgery.bhopal_nabh_rate,
-          nabhNablRate: surgery.NABH_NABL_Rate,
-          selectedRate: selectedRate,
-          rateSource: rateSource
-        });
-
         return {
           ...surgery,
-          NABH_NABL_Rate: selectedRate, // Override with selected rate
-          selectedRate, // Add selectedRate field
-          rateSource // Add rate source for debugging
+          NABH_NABL_Rate: selectedRate,
+          selectedRate,
+          rateSource
         };
       }) || [];
 
@@ -12050,11 +12540,14 @@ INSTRUCTIONS:
       // Patient is private ONLY if they don't have a corporate panel
       const isPrivatePatient = !hasCorporate && (patientType === 'private' || corporate === 'private');
 
-      // Check if corporate qualifies for Non-NABH rates (CGHS/ECHS/ESIC)
+      // Check if corporate qualifies for Non-NABH rates (ESIC only)
       const usesNonNABHRate = hasCorporate &&
+        corporate.includes('esic');
+
+      // Check if corporate qualifies for CGHS/NABH rates
+      const usesCGHSNABHRate = hasCorporate &&
         (corporate.includes('cghs') ||
-        corporate.includes('echs') ||
-        corporate.includes('esic'));
+        corporate.includes('echs'));
 
       // Check if corporate qualifies for Bhopal NABH rates
       const usesBhopaliNABHRate = hasCorporate &&
@@ -12063,7 +12556,7 @@ INSTRUCTIONS:
         corporate.includes('ordnance factory itarsi'));
 
       // Check if patient has other corporate (uses NABH rate)
-      const usesNABHRate = hasCorporate && !usesNonNABHRate && !usesBhopaliNABHRate;
+      const usesNABHRate = usesCGHSNABHRate || (hasCorporate && !usesNonNABHRate && !usesBhopaliNABHRate);
 
       console.log('🔍 fetchSavedSurgeriesFromVisit - Patient Type Detection:', {
         patientType,
@@ -12307,11 +12800,14 @@ INSTRUCTIONS:
       // Patient is private ONLY if they don't have a corporate panel
       const isPrivatePatient = !hasCorporate && (patientType === 'private' || corporate === 'private');
 
-      // Check if corporate qualifies for Non-NABH rates (CGHS/ECHS/ESIC)
+      // Check if corporate qualifies for Non-NABH rates (ESIC only)
       const usesNonNABHRate = hasCorporate &&
+        corporate.includes('esic');
+
+      // Check if corporate qualifies for CGHS/NABH rates
+      const usesCGHSNABHRate = hasCorporate &&
         (corporate.includes('cghs') ||
-        corporate.includes('echs') ||
-        corporate.includes('esic'));
+        corporate.includes('echs'));
 
       // Check if corporate qualifies for Bhopal NABH rates
       const usesBhopaliNABHRate = hasCorporate &&
@@ -12324,7 +12820,7 @@ INSTRUCTIONS:
         (corporate.includes('icici lombard') || corporate.includes('icici'));
 
       // Check if patient has other corporate (not CGHS/ECHS/ESIC, not MP Police/Ordnance Factory, not ICICI)
-      const usesNABHRate = hasCorporate && !usesNonNABHRate && !usesBhopaliNABHRate && !usesPrivateRate;
+      const usesNABHRate = usesCGHSNABHRate || (hasCorporate && !usesNonNABHRate && !usesBhopaliNABHRate && !usesPrivateRate);
 
       console.log('🔍 Patient Type Check in fetchSavedLabs:', {
         patientType,
@@ -13430,10 +13926,12 @@ Format the response as JSON:
         return;
       }
 
-      // First, check which surgeries already exist for this visit
+      // First, check which surgeries already exist for this visit.
+      // We fetch both surgery_id (CGHS) and yojana_procedure_id so duplicate detection
+      // works correctly for both patient types.
       const { data: existingSurgeries, error: checkError } = await supabase
         .from('visit_surgeries' as any)
-        .select('surgery_id')
+        .select('*')
         .eq('visit_id', visitData.id);
 
       if (checkError) {
@@ -13442,7 +13940,15 @@ Format the response as JSON:
         return;
       }
 
-      const existingSurgeryIds = new Set(existingSurgeries?.map(s => s.surgery_id) || []);
+      // Build a set of IDs already saved — covers both CGHS UUIDs and Yojana UUIDs.
+      const existingSurgeryIds = new Set<string>(
+        (existingSurgeries || []).flatMap(s => {
+          const ids: string[] = [];
+          if (s.surgery_id) ids.push(s.surgery_id);
+          if (s.yojana_procedure_id) ids.push(s.yojana_procedure_id);
+          return ids;
+        })
+      );
 
       // Filter out surgeries that already exist
       const newSurgeries = selectedSurgeries.filter(surgery => !existingSurgeryIds.has(surgery.id));
@@ -13458,17 +13964,28 @@ Format the response as JSON:
         return;
       }
 
-      // Prepare data for insertion (only new surgeries)
-      const surgeriesToSave = newSurgeries.map((surgery) => ({
-        visit_id: visitData.id,
-        surgery_id: surgery.id,
-        is_primary: false, // Don't automatically set as primary - let user choose
-        status: 'planned',
-        sanction_status: surgery.sanction_status || 'Not Sanctioned',
-        notes: null,
-        rate: parseFloat(surgery.NABH_NABL_Rate?.toString().replace(/[^\d.]/g, '') || '0'),
-        rate_type: surgery.rateSource || 'private'
-      }));
+      // Prepare data for insertion (only new surgeries).
+      // For Maharashtra Yojana patients (is_yojana: true), the surgery.id is a UUID
+      // from yojana_mh_procedures — it must NOT go into surgery_id (which has a FK to
+      // cghs_surgery).  Instead we store it in yojana_procedure_id and leave surgery_id
+      // as null (the migration 20260407160000 makes surgery_id nullable).
+      const surgeriesToSave = newSurgeries.map((surgery) => {
+        const isYojanaSurgery = !!(surgery as any).is_yojana;
+        const parsedRate = parseFloat(
+          surgery.NABH_NABL_Rate?.toString().replace(/[^\d.]/g, '') || '0'
+        );
+        return {
+          visit_id: visitData.id,
+          surgery_id: isYojanaSurgery ? null : surgery.id,
+          yojana_procedure_id: isYojanaSurgery ? surgery.id : null,
+          is_primary: false,
+          status: 'planned',
+          sanction_status: surgery.sanction_status || 'Not Sanctioned',
+          notes: null,
+          rate: parsedRate,
+          rate_type: surgery.rateSource || 'private',
+        };
+      });
 
       console.log('New surgeries to save:', surgeriesToSave);
 
@@ -13756,11 +14273,14 @@ Format the response as JSON:
       // Patient is private ONLY if they don't have a corporate panel
       const isPrivatePatient = !hasCorporate && (patientType === 'private' || corporate === 'private');
 
-      // Check if corporate qualifies for Non-NABH rates (CGHS/ECHS/ESIC)
+      // Check if corporate qualifies for Non-NABH rates (ESIC only)
       const usesNonNABHRate = hasCorporate &&
+        corporate.includes('esic');
+
+      // Check if corporate qualifies for CGHS/NABH rates
+      const usesCGHSNABHRate = hasCorporate &&
         (corporate.includes('cghs') ||
-        corporate.includes('echs') ||
-        corporate.includes('esic'));
+        corporate.includes('echs'));
 
       // Check if corporate qualifies for Bhopal NABH rates
       const usesBhopaliNABHRate = hasCorporate &&
@@ -13773,7 +14293,7 @@ Format the response as JSON:
         (corporate.includes('icici lombard') || corporate.includes('icici'));
 
       // Check if patient has other corporate (not CGHS/ECHS/ESIC, not MP Police/Ordnance Factory, not ICICI)
-      const usesNABHRate = hasCorporate && !usesNonNABHRate && !usesBhopaliNABHRate && !usesPrivateRate;
+      const usesNABHRate = usesCGHSNABHRate || (hasCorporate && !usesNonNABHRate && !usesBhopaliNABHRate && !usesPrivateRate);
 
       console.log('🔍 Patient Type Check in saveLabsToVisit:', {
         patientType,
@@ -14094,6 +14614,12 @@ Format the response as JSON:
   }, [invoiceItems, savedSurgeries, surgeryRows, isSavingBill]);
 
   const handlePrint = () => {
+    // Block printing after bill is submitted or amount received
+    if (isBillSubmitted || isAmountReceived) {
+      toast.error('Print is locked after bill submission. Contact superadmin to unlock.');
+      return;
+    }
+
     try {
       console.log('🖨️ Print button clicked for Final Bill');
 
@@ -15642,6 +16168,34 @@ Dr. Murali B K
       toast.error("Failed to save bill. Please try again.", { id: 'save-bill' });
     } finally {
       setIsSavingBill(false);
+    }
+  };
+
+  // Handle Request Approval - sets bill status to PENDING_APPROVAL
+  const handleRequestApproval = async () => {
+    if (!billData?.id) {
+      toast.error('Please save the bill first before requesting approval.');
+      return;
+    }
+
+    try {
+      const raw = localStorage.getItem('hmis_user');
+      const currentUser = raw ? JSON.parse(raw) : {};
+      const requestedBy = currentUser.email || currentUser.username || 'Unknown';
+
+      const { error } = await supabase
+        .from('bills')
+        .update({ status: 'PENDING_APPROVAL', created_by: requestedBy } as any)
+        .eq('id', billData.id);
+
+      if (error) throw error;
+
+      toast.success('Bill submitted for approval successfully!');
+      queryClient.invalidateQueries({ queryKey: ['final-bill', visitId] });
+      queryClient.invalidateQueries({ queryKey: ['pending-bill-count'] });
+    } catch (error) {
+      console.error('Error requesting approval:', error);
+      toast.error('Failed to submit bill for approval.');
     }
   };
 
@@ -17933,6 +18487,30 @@ Dr. Murali B K
 
                       {activeServiceTab === "Implant" && (
                         <>
+                          {/* Category filter pills */}
+                          {!isLoadingImplantServices && availableImplantServices.length > 0 && (
+                            <div className="px-2 pt-2 pb-1 flex flex-wrap gap-1 border-b border-gray-100">
+                              {['ALL', 'Orthopedic', 'Cardiac', 'Spinal', 'Neurosurgery', 'Ophthalmic', 'Dental', 'ENT', 'Urology', 'Vascular', 'General'].map((cat) => {
+                                const catCount = cat === 'ALL'
+                                  ? availableImplantServices.length
+                                  : availableImplantServices.filter((s: any) => (s.category || 'General') === cat).length;
+                                if (catCount === 0 && cat !== 'ALL') return null;
+                                return (
+                                  <button
+                                    key={cat}
+                                    onClick={() => setImplantCategoryFilter(cat)}
+                                    className={`px-2 py-0.5 rounded-full text-xs font-medium border transition-colors ${
+                                      implantCategoryFilter === cat
+                                        ? 'bg-blue-600 text-white border-blue-600'
+                                        : 'bg-white text-gray-600 border-gray-300 hover:border-blue-400 hover:text-blue-600'
+                                    }`}
+                                  >
+                                    {cat} {catCount > 0 && <span className="opacity-70">({catCount})</span>}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          )}
                           {(isLoadingImplantServices || isSearchingImplants) ? (
                             <div className="p-2 text-gray-500 text-sm">
                               {serviceSearchTerm.length >= 2 ? 'Searching implant services...' : 'Loading implant services...'}
@@ -17940,7 +18518,7 @@ Dr. Murali B K
                           ) : (
                             <>
                               {filteredImplantServices && filteredImplantServices.length > 0 ? (
-                                filteredImplantServices.map((service) => (
+                                filteredImplantServices.map((service: any) => (
                                   <div
                                     key={service.id}
                                     className={`p-2 border-b border-gray-100 last:border-b-0 ${(!service.amount || service.amount === 0) ? 'bg-gray-50 cursor-not-allowed opacity-60' : 'hover:bg-gray-100 cursor-pointer'}`}
@@ -17951,13 +18529,24 @@ Dr. Murali B K
                                     }}
                                   >
                                     <div className="flex justify-between items-center">
-                                      <div className="flex-1">
+                                      <div className="flex-1 min-w-0">
                                         <div className={`font-medium text-sm ${(!service.amount || service.amount === 0) ? 'text-gray-400' : ''}`}>{service.name}</div>
+                                        <div className="flex flex-wrap gap-1 mt-0.5">
+                                          {service.category && service.category !== 'General' && (
+                                            <span className="text-xs text-blue-600">{service.category}</span>
+                                          )}
+                                          {service.subcategory && (
+                                            <span className="text-xs text-gray-500">· {service.subcategory}</span>
+                                          )}
+                                          {service.manufacturer && (
+                                            <span className="text-xs text-gray-500">· {service.manufacturer}</span>
+                                          )}
+                                        </div>
                                         {(!service.amount || service.amount === 0) && (
                                           <div className="text-xs text-red-500 mt-1">Rate not available</div>
                                         )}
                                       </div>
-                                      <div className={`text-sm font-medium ${(!service.amount || service.amount === 0) ? 'text-red-500' : 'text-green-600'}`}>
+                                      <div className={`text-sm font-medium ml-2 shrink-0 ${(!service.amount || service.amount === 0) ? 'text-red-500' : 'text-green-600'}`}>
                                         {service.rateSource === 'private' && 'Private: '}
                                         {service.rateSource === 'non_nabh' && 'Non-NABH: '}
                                         {service.rateSource === 'bhopal_nabh' && 'Bhopal NABH: '}
@@ -19022,6 +19611,18 @@ Dr. Murali B K
                           Medications ({savedMedicationData.length}) {console.log('🔍 savedMedicationData:', savedMedicationData)}
                         </button>
                         <button
+                          className={`px-4 py-2 text-sm font-medium ${savedDataTab === 'prescriptions'
+                            ? 'border-b-2 border-purple-500 text-purple-600 bg-purple-50'
+                            : 'text-purple-400 hover:text-purple-700 bg-purple-50/50'
+                            }`}
+                          onClick={() => {
+                            setSavedDataTab('prescriptions');
+                            fetchPatientPrescriptions();
+                          }}
+                        >
+                          Prescriptions ({prescriptionsForPatient.length})
+                        </button>
+                        <button
                           className={`px-4 py-2 text-sm font-medium ${savedDataTab === 'clinical_services'
                             ? 'border-b-2 border-blue-500 text-blue-600 bg-blue-50'
                             : 'text-gray-500 hover:text-gray-700'
@@ -19129,8 +19730,17 @@ Dr. Murali B K
                         {savedDataTab === 'labs' && (
                           <div>
                             <div className="flex justify-between items-center mb-3">
-                              <h5 className="font-medium text-gray-900">
-                                Saved Lab Tests ({savedLabData.length})
+                              <h5 className="font-medium text-gray-900 flex items-center gap-2">
+                                Saved Lab Tests ({savedLabData.filter(l => !l.is_hidden).length})
+                                {savedLabData.some(l => l.is_hidden) && (
+                                  <button
+                                    onClick={() => setShowHiddenLabTests(!showHiddenLabTests)}
+                                    className={`text-xs px-2 py-0.5 rounded ${showHiddenLabTests ? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-500'}`}
+                                    title="Toggle hidden tests"
+                                  >
+                                    {showHiddenLabTests ? `Hide ${savedLabData.filter(l => l.is_hidden).length} hidden` : `Show ${savedLabData.filter(l => l.is_hidden).length} hidden`}
+                                  </button>
+                                )}
                               </h5>
                               <div className="flex items-center gap-4">
                                 {selectedLabTests.length > 0 && (
@@ -19160,8 +19770,7 @@ Dr. Murali B K
                                   </>
                                 )}
                                 <div className="text-lg font-bold text-green-600">
-                                  Total: ₹{savedLabData.reduce((total, lab) => {
-                                    // Each lab entry represents an individual test with its own cost
+                                  Total: ₹{savedLabData.filter(l => !l.is_hidden).reduce((total, lab) => {
                                     const individualCost = parseFloat(lab.cost) || 0;
                                     return total + individualCost;
                                   }, 0)}
@@ -19183,20 +19792,25 @@ Dr. Murali B K
                                       </th>
                                       <th className="border border-gray-300 px-4 py-2 text-left text-sm font-medium text-gray-900">Date/Time</th>
                                       <th className="border border-gray-300 px-4 py-2 text-left text-sm font-medium text-gray-900">Test Name</th>
+                                      <th className="border border-gray-300 px-2 py-2 text-center text-sm font-medium text-gray-900 w-16">Qty</th>
                                       <th className="border border-gray-300 px-4 py-2 text-center text-sm font-medium text-gray-900">Amount</th>
                                       <th className="border border-gray-300 px-4 py-2 text-left text-sm font-medium text-gray-900">Action</th>
                                     </tr>
                                   </thead>
                                   <tbody>
-                                    {savedLabData.map((lab, index) => (
-                                      <tr key={lab.id || `lab-${lab.lab_id}-${lab.ordered_date}-${index}`} className="hover:bg-gray-50">
+                                    {savedLabData
+                                      .filter(lab => showHiddenLabTests ? true : !lab.is_hidden)
+                                      .map((lab, index) => (
+                                      <tr key={lab.id || `lab-${lab.lab_id}-${lab.ordered_date}-${index}`} className={`hover:bg-gray-50 ${lab.is_hidden ? 'opacity-50 bg-red-50' : ''}`}>
                                         <td className="border border-gray-300 px-2 py-2 text-center">
-                                          <input
-                                            type="checkbox"
-                                            checked={selectedLabTests.includes(lab.id)}
-                                            onChange={(e) => handleLabTestSelection(lab.id, e.target.checked)}
-                                            className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                                          />
+                                          {!lab.is_hidden && (
+                                            <input
+                                              type="checkbox"
+                                              checked={selectedLabTests.includes(lab.id)}
+                                              onChange={(e) => handleLabTestSelection(lab.id, e.target.checked)}
+                                              className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                                            />
+                                          )}
                                         </td>
                                         <td className="border border-gray-300 px-4 py-2 text-sm text-gray-600">
                                           <input
@@ -19204,25 +19818,66 @@ Dr. Murali B K
                                             value={lab.ordered_date ? (() => { const d = new Date(lab.ordered_date); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}T${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`; })() : ''}
                                             onChange={(e) => updateLabField(lab.id, 'ordered_date', e.target.value ? new Date(e.target.value).toISOString() : '')}
                                             className="w-full px-2 py-1 text-xs border border-gray-200 rounded focus:outline-none focus:border-blue-500"
+                                            disabled={lab.is_hidden}
                                           />
                                         </td>
                                         <td className="border border-gray-300 px-4 py-2 text-sm text-gray-900 font-medium">
                                           {lab.lab_name}
+                                          {lab.is_hidden && <span className="ml-2 text-xs text-red-500 font-normal">(hidden)</span>}
+                                        </td>
+                                        <td className="border border-gray-300 px-2 py-2 text-center">
+                                          <input
+                                            type="number"
+                                            min="1"
+                                            value={lab.quantity || 1}
+                                            onChange={async (e) => {
+                                              const newQty = parseInt(e.target.value) || 1;
+                                              const unitRate = lab.unit_rate || (parseFloat(lab.cost) / (lab.quantity || 1));
+                                              const newCost = unitRate * newQty;
+                                              await supabase.from('visit_labs').update({ quantity: newQty, cost: newCost }).eq('id', lab.id);
+                                              setSavedLabData(prev => prev.map(l => l.id === lab.id ? { ...l, quantity: newQty, cost: newCost } : l));
+                                              toast.success(`Quantity updated to ${newQty}`);
+                                            }}
+                                            className="w-14 px-1 py-1 text-xs text-center border border-gray-200 rounded focus:outline-none focus:border-blue-500"
+                                            disabled={lab.is_hidden}
+                                          />
                                         </td>
                                         <td className="border border-gray-300 px-4 py-2 text-center text-sm font-medium text-green-600">
-                                          ₹{lab.cost || 0}
+                                          {lab.is_hidden ? <span className="line-through text-gray-400">₹{lab.cost || 0}</span> : `₹${lab.cost || 0}`}
                                         </td>
                                         <td className="border border-gray-300 px-4 py-2 text-sm text-center">
-                                          {user?.email !== 'user@ayushmanhospital.com' &&
-                                           user?.email !== 'user@hopehospital.com' && (
-                                            <button
-                                              onClick={() => handleDeleteLabTest(lab.id)}
-                                              className="text-red-600 hover:text-red-800 p-2 rounded-full hover:bg-red-50 transition-colors"
-                                              title="Delete lab test"
-                                            >
-                                              🗑️
-                                            </button>
-                                          )}
+                                          <div className="flex items-center justify-center gap-1">
+                                            {lab.is_hidden ? (
+                                              isAdmin && (
+                                                <button
+                                                  onClick={() => handleUnhideLabTest(lab.id)}
+                                                  className="text-green-600 hover:text-green-800 p-1 rounded-full hover:bg-green-50 transition-colors text-xs"
+                                                  title="Restore this test"
+                                                >
+                                                  ↩️
+                                                </button>
+                                              )
+                                            ) : (
+                                              <>
+                                                <button
+                                                  onClick={() => handleHideLabTest(lab.id)}
+                                                  className="text-orange-600 hover:text-orange-800 p-1 rounded-full hover:bg-orange-50 transition-colors"
+                                                  title="Hide wrongly entered test"
+                                                >
+                                                  👁️‍🗨️
+                                                </button>
+                                                {isAdmin && (
+                                                  <button
+                                                    onClick={() => handleDeleteLabTest(lab.id)}
+                                                    className="text-red-600 hover:text-red-800 p-1 rounded-full hover:bg-red-50 transition-colors"
+                                                    title="Delete lab test (admin only)"
+                                                  >
+                                                    🗑️
+                                                  </button>
+                                                )}
+                                              </>
+                                            )}
+                                          </div>
                                         </td>
                                       </tr>
                                     ))}
@@ -19446,11 +20101,15 @@ Dr. Murali B K
                               </h5>
                               <div className="text-lg font-bold text-blue-600">
                                 Total: ₹{savedClinicalServicesData.reduce((total, service) => {
-                                  if (!service.start_date || !service.end_date) return total;
                                   const rate = parseFloat(service.selectedRate || service.rate_used || service.amount) || 0;
-                                  const start = new Date(service.start_date);
-                                  const end = new Date(service.end_date);
-                                  const qty = Math.max(1, Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+                                  let qty = 1;
+                                  if (service.quantity && service.quantity > 0) {
+                                    qty = service.quantity;
+                                  } else if (service.start_date && service.end_date) {
+                                    const start = new Date(service.start_date);
+                                    const end = new Date(service.end_date);
+                                    qty = Math.max(1, Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+                                  }
                                   return total + (rate * qty);
                                 }, 0).toLocaleString('en-IN')}
                               </div>
@@ -19481,16 +20140,29 @@ Dr. Murali B K
                                         <td className="border border-gray-300 px-2 py-2 text-sm text-center font-medium">
                                           <input
                                             type="number"
-                                            min="0"
-                                            className="w-16 text-center border border-gray-300 rounded px-1 py-1 text-sm"
-                                            value={service.quantity || 0}
+                                            min="1"
+                                            value={(() => {
+                                              if (service.quantity && service.quantity > 0) return service.quantity;
+                                              if (!service.start_date || !service.end_date) return 1;
+                                              const start = new Date(service.start_date);
+                                              const end = new Date(service.end_date);
+                                              return Math.max(1, Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+                                            })()}
                                             onChange={(e) => updateClinicalServiceField(service.junction_id, 'quantity', e.target.value)}
+                                            className="w-20 text-center border border-blue-300 bg-blue-50 text-sm font-bold rounded px-1 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                                           />
                                         </td>
                                         <td className="border border-gray-300 px-4 py-2 text-sm font-medium text-green-600">
                                           ₹{(() => {
                                             const rate = parseFloat(service.selectedRate || service.rate_used || service.amount) || 0;
-                                            const qty = service.quantity || 0;
+                                            let qty = 1;
+                                            if (service.quantity && service.quantity > 0) {
+                                              qty = service.quantity;
+                                            } else if (service.start_date && service.end_date) {
+                                              const start = new Date(service.start_date);
+                                              const end = new Date(service.end_date);
+                                              qty = Math.max(1, Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+                                            }
                                             return (rate * qty).toLocaleString('en-IN');
                                           })()}
                                         </td>
@@ -19909,7 +20581,10 @@ Dr. Murali B K
                                 Saved Anesthetists ({savedAnesthetistData.length})
                               </h5>
                               <span className="text-orange-600 font-bold">
-                                Total: ₹{savedAnesthetistData.reduce((sum, item) => sum + (parseFloat(item.rate) || 0), 0).toLocaleString()}
+                                Anaesthetist: ₹{savedAnesthetistData.reduce((sum, item) => sum + (parseFloat(item.rate) || 0), 0).toLocaleString()}
+                                {savedAnesthetistData.reduce((sum, item) => sum + (parseFloat(item.ot_charges) || 0), 0) > 0 && (
+                                  <span className="ml-2 text-green-600">| OT: ₹{savedAnesthetistData.reduce((sum, item) => sum + (parseFloat(item.ot_charges) || 0), 0).toLocaleString()}</span>
+                                )}
                               </span>
                             </div>
                             {savedAnesthetistData.length === 0 ? (
@@ -19925,6 +20600,7 @@ Dr. Murali B K
                                       <th className="text-left p-2 border border-gray-300 font-semibold">Anesthetist Name</th>
                                       <th className="text-center p-2 border border-gray-300 font-semibold">Type</th>
                                       <th className="text-right p-2 border border-gray-300 font-semibold">Rate</th>
+                                      <th className="text-right p-2 border border-gray-300 font-semibold">OT Charges</th>
                                       <th className="text-center p-2 border border-gray-300 font-semibold">Action</th>
                                     </tr>
                                   </thead>
@@ -19938,6 +20614,27 @@ Dr. Murali B K
                                         <td className="p-2 border border-gray-300 text-center">{anesthetist.anesthetist_type || '-'}</td>
                                         <td className="p-2 border border-gray-300 text-right text-orange-600 font-medium">
                                           ₹{(parseFloat(anesthetist.rate) || 0).toLocaleString()}
+                                        </td>
+                                        <td className="p-2 border border-gray-300 text-right">
+                                          <input
+                                            type="number"
+                                            defaultValue={anesthetist.ot_charges || 0}
+                                            className="w-24 text-right border border-gray-300 rounded px-1 py-1 text-sm"
+                                            placeholder="OT ₹"
+                                            onBlur={async (e) => {
+                                              const otVal = parseFloat(e.target.value) || 0;
+                                              const { error } = await supabase
+                                                .from('visit_anesthetists')
+                                                .update({ ot_charges: otVal })
+                                                .eq('id', anesthetist.id);
+                                              if (error) {
+                                                toast.error('Failed to save OT charges');
+                                              } else {
+                                                toast.success('OT charges saved');
+                                                fetchSavedAnesthetistData();
+                                              }
+                                            }}
+                                          />
                                         </td>
                                         <td className="p-2 border border-gray-300 text-center">
                                           <button
@@ -19964,6 +20661,295 @@ Dr. Murali B K
                                     ))}
                                   </tbody>
                                 </table>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        {savedDataTab === 'prescriptions' && (
+                          <div>
+                            <div className="flex justify-between items-center mb-3">
+                              <h5 className="font-medium text-gray-900">Prescriptions ({prescriptionsForPatient.length})</h5>
+                              <button
+                                onClick={() => {
+                                  setPrescriptionsLoaded(false);
+                                  fetchPatientPrescriptions();
+                                }}
+                                className="text-xs px-2 py-1 bg-blue-50 text-blue-600 rounded hover:bg-blue-100"
+                              >
+                                Refresh
+                              </button>
+                            </div>
+                            {prescriptionsForPatient.length === 0 ? (
+                              <div className="text-center py-4">
+                                <p className="text-sm text-gray-500">No prescriptions found for this patient.</p>
+                                <p className="text-xs text-blue-500 mt-2">Upload a treatment sheet via the camera icon to create prescriptions.</p>
+                              </div>
+                            ) : (
+                              <div className="space-y-3">
+                                {prescriptionsForPatient.map((prescription: any) => (
+                                  <div key={prescription.id} className="border border-gray-200 rounded-lg overflow-hidden">
+                                    {/* Prescription Header */}
+                                    <div className="flex items-center justify-between p-3 bg-gray-50">
+                                      <div>
+                                        <span className="font-medium text-gray-900 text-sm">#{prescription.prescription_number}</span>
+                                        <span className="ml-3 text-xs text-gray-500">
+                                          {prescription.prescription_date ? new Date(prescription.prescription_date).toLocaleDateString() : new Date(prescription.created_at).toLocaleDateString()}
+                                        </span>
+                                        {prescription.doctor_name && prescription.doctor_name !== 'As per records' && (
+                                          <span className="ml-3 text-xs text-gray-600">Dr. {prescription.doctor_name}</span>
+                                        )}
+                                      </div>
+                                      <div className="flex items-center gap-2">
+                                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                                          prescription.status === 'PENDING' ? 'bg-yellow-100 text-yellow-700' :
+                                          prescription.status === 'APPROVED' ? 'bg-green-100 text-green-700' :
+                                          prescription.status === 'DISPENSED' ? 'bg-blue-100 text-blue-700' :
+                                          prescription.status === 'PARTIALLY_DISPENSED' ? 'bg-orange-100 text-orange-700' :
+                                          prescription.status === 'CANCELLED' ? 'bg-red-100 text-red-700' :
+                                          'bg-gray-100 text-gray-600'
+                                        }`}>
+                                          {prescription.status}
+                                        </span>
+                                        {prescription.status === 'PENDING' && (
+                                          <>
+                                            <button
+                                              onClick={async () => {
+                                                const { error } = await (supabase as any)
+                                                  .from('prescriptions')
+                                                  .update({ status: 'APPROVED' })
+                                                  .eq('id', prescription.id);
+                                                if (error) {
+                                                  toast.error('Failed to approve prescription');
+                                                } else {
+                                                  toast.success('Prescription approved');
+                                                  fetchPatientPrescriptions();
+                                                }
+                                              }}
+                                              className="text-xs px-2 py-1 bg-green-600 text-white rounded hover:bg-green-700"
+                                            >
+                                              Approve
+                                            </button>
+                                            <button
+                                              onClick={async () => {
+                                                const { error } = await (supabase as any)
+                                                  .from('prescriptions')
+                                                  .update({ status: 'CANCELLED' })
+                                                  .eq('id', prescription.id);
+                                                if (error) {
+                                                  toast.error('Failed to reject prescription');
+                                                } else {
+                                                  toast.success('Prescription rejected');
+                                                  fetchPatientPrescriptions();
+                                                }
+                                              }}
+                                              className="text-xs px-2 py-1 bg-red-600 text-white rounded hover:bg-red-700"
+                                            >
+                                              Reject
+                                            </button>
+                                          </>
+                                        )}
+                                        {prescription.status === 'APPROVED' && (
+                                          <span className="text-xs text-green-600 italic">Sent to Pharmacy</span>
+                                        )}
+                                        {/* Delete button for any status */}
+                                        <button
+                                          onClick={async () => {
+                                            if (!confirm('Delete this prescription?')) return;
+                                            // Delete items first, then prescription
+                                            await (supabase as any).from('prescription_items').delete().eq('prescription_id', prescription.id);
+                                            const { error } = await (supabase as any).from('prescriptions').delete().eq('id', prescription.id);
+                                            if (error) {
+                                              toast.error('Failed to delete prescription');
+                                            } else {
+                                              toast.success('Prescription deleted');
+                                              fetchPatientPrescriptions();
+                                            }
+                                          }}
+                                          className="text-xs px-1.5 py-1 text-red-400 hover:text-red-600 hover:bg-red-50 rounded"
+                                          title="Delete prescription"
+                                        >
+                                          ✕
+                                        </button>
+                                      </div>
+                                    </div>
+
+                                    {/* Medicines Table */}
+                                    <div className="border-t border-gray-100">
+                                      <table className="w-full text-xs">
+                                        <thead className="bg-gray-50">
+                                          <tr>
+                                            <th className="px-3 py-1.5 text-left text-gray-600 font-medium w-8">#</th>
+                                            <th className="px-3 py-1.5 text-left text-gray-600 font-medium">Medicine</th>
+                                            <th className="px-3 py-1.5 text-left text-gray-600 font-medium">Route</th>
+                                            <th className="px-3 py-1.5 text-left text-gray-600 font-medium">Frequency</th>
+                                            <th className="px-3 py-1.5 text-left text-gray-600 font-medium">Instructions</th>
+                                            <th className="px-3 py-1.5 text-center text-gray-600 font-medium w-16">Qty</th>
+                                            <th className="px-3 py-1.5 text-center text-gray-600 font-medium w-8"></th>
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          {(prescription.prescription_items || []).map((item: any, idx: number) => (
+                                            <tr key={item.id} className="border-t border-gray-50 hover:bg-blue-50/30">
+                                              <td className="px-3 py-1.5 text-gray-400">{idx + 1}</td>
+                                              <td className="px-3 py-1.5 text-gray-800">
+                                                <div className="font-bold text-xs">
+                                                  {(item.generic_name || item.medicine_name || `Medicine #${item.medicine_id || '?'}`).toUpperCase()}
+                                                </div>
+                                                {item.brand_name && (
+                                                  <div className="text-[10px] text-gray-500">({item.brand_name})</div>
+                                                )}
+                                                {item.special_instructions && (
+                                                  <span className="text-[10px] text-blue-500 italic">{item.special_instructions}</span>
+                                                )}
+                                              </td>
+                                              <td className="px-3 py-1.5 text-gray-600">{item.dosage_timing || '-'}</td>
+                                              <td className="px-3 py-1.5 text-gray-600">{item.dosage_frequency || '-'}</td>
+                                              <td className="px-3 py-1.5 text-gray-500">{item.duration_days ? `${item.duration_days} days` : '-'}</td>
+                                              <td className="px-3 py-1.5 text-center font-medium">{item.quantity_prescribed || 0}</td>
+                                              <td className="px-3 py-1.5 text-center">
+                                                <button
+                                                  onClick={async () => {
+                                                    if (!confirm('Remove this medicine?')) return;
+                                                    const { error } = await (supabase as any).from('prescription_items').delete().eq('id', item.id);
+                                                    if (error) { toast.error('Failed to remove'); } else { fetchPatientPrescriptions(); }
+                                                  }}
+                                                  className="text-red-300 hover:text-red-600 text-[10px]"
+                                                  title="Remove medicine"
+                                                >✕</button>
+                                              </td>
+                                            </tr>
+                                          ))}
+
+                                          {/* Add Medicine inline form */}
+                                          {addMedicineToRxId === prescription.id && (
+                                            <tr className="border-t-2 border-blue-200 bg-blue-50/50">
+                                              <td className="px-3 py-1.5 text-blue-400">+</td>
+                                              <td className="px-2 py-1">
+                                                <input
+                                                  type="text"
+                                                  placeholder="Molecule name (e.g. AMOXICILLIN)..."
+                                                  value={newMedicine.generic_name}
+                                                  onChange={(e) => setNewMedicine(prev => ({ ...prev, generic_name: e.target.value, name: e.target.value }))}
+                                                  className="w-full h-6 text-xs border border-blue-300 rounded px-1.5 bg-white font-bold"
+                                                  autoFocus
+                                                />
+                                                <input
+                                                  type="text"
+                                                  placeholder="Brand name (e.g. Augmentin)..."
+                                                  value={newMedicine.brand_name}
+                                                  onChange={(e) => setNewMedicine(prev => ({ ...prev, brand_name: e.target.value }))}
+                                                  className="w-full h-5 text-[10px] border border-blue-200 rounded px-1.5 bg-white mt-0.5 text-gray-500"
+                                                />
+                                              </td>
+                                              <td className="px-2 py-1">
+                                                <select
+                                                  value={newMedicine.route}
+                                                  onChange={(e) => setNewMedicine(prev => ({ ...prev, route: e.target.value }))}
+                                                  className="h-6 text-xs border border-blue-300 rounded px-1 bg-white w-full"
+                                                >
+                                                  <option value="IV">IV</option>
+                                                  <option value="IM">IM</option>
+                                                  <option value="Oral">Oral</option>
+                                                  <option value="SC">SC</option>
+                                                  <option value="Topical">Topical</option>
+                                                  <option value="Inhale">Inhale</option>
+                                                  <option value="SL">SL</option>
+                                                  <option value="PR">PR</option>
+                                                </select>
+                                              </td>
+                                              <td className="px-2 py-1">
+                                                <select
+                                                  value={newMedicine.frequency}
+                                                  onChange={(e) => setNewMedicine(prev => ({ ...prev, frequency: e.target.value }))}
+                                                  className="h-6 text-xs border border-blue-300 rounded px-1 bg-white w-full"
+                                                >
+                                                  <option value="OD">OD</option>
+                                                  <option value="BD">BD</option>
+                                                  <option value="TDS">TDS</option>
+                                                  <option value="QID">QID</option>
+                                                  <option value="HS">HS</option>
+                                                  <option value="SOS">SOS</option>
+                                                  <option value="STAT">STAT</option>
+                                                </select>
+                                              </td>
+                                              <td className="px-2 py-1">
+                                                <input
+                                                  type="text"
+                                                  placeholder="e.g. 5 days"
+                                                  value={newMedicine.instructions}
+                                                  onChange={(e) => setNewMedicine(prev => ({ ...prev, instructions: e.target.value }))}
+                                                  className="w-full h-6 text-xs border border-blue-300 rounded px-1.5 bg-white"
+                                                />
+                                              </td>
+                                              <td className="px-2 py-1">
+                                                <input
+                                                  type="number"
+                                                  min={1}
+                                                  value={newMedicine.qty}
+                                                  onChange={(e) => setNewMedicine(prev => ({ ...prev, qty: Math.max(1, parseInt(e.target.value) || 1) }))}
+                                                  className="w-14 h-6 text-xs border border-blue-300 rounded px-1.5 bg-white text-center"
+                                                />
+                                              </td>
+                                              <td className="px-2 py-1 flex gap-1">
+                                                <button
+                                                  onClick={async () => {
+                                                    if (!newMedicine.name.trim()) { toast.error('Enter medicine name'); return; }
+                                                    const { error } = await (supabase as any)
+                                                      .from('prescription_items')
+                                                      .insert({
+                                                        prescription_id: prescription.id,
+                                                        medicine_id: null,
+                                                        medicine_name: newMedicine.name.trim(),
+                                                        generic_name: newMedicine.generic_name.trim().toUpperCase() || newMedicine.name.trim().toUpperCase(),
+                                                        brand_name: newMedicine.brand_name.trim(),
+                                                        quantity_prescribed: newMedicine.qty,
+                                                        dosage_frequency: newMedicine.frequency,
+                                                        dosage_timing: newMedicine.route,
+                                                        duration_days: parseInt(newMedicine.duration) || 0,
+                                                        special_instructions: newMedicine.instructions || null,
+                                                      });
+                                                    if (error) {
+                                                      toast.error('Failed to add medicine: ' + error.message);
+                                                    } else {
+                                                      toast.success(`Added ${newMedicine.name}`);
+                                                      setNewMedicine({ name: '', generic_name: '', brand_name: '', route: 'IV', frequency: 'BD', duration: '', qty: 3, instructions: '' });
+                                                      fetchPatientPrescriptions();
+                                                    }
+                                                  }}
+                                                  className="text-green-600 hover:text-green-800 text-sm font-bold"
+                                                  title="Save"
+                                                >✓</button>
+                                                <button
+                                                  onClick={() => {
+                                                    setAddMedicineToRxId(null);
+                                                    setNewMedicine({ name: '', generic_name: '', brand_name: '', route: 'IV', frequency: 'BD', duration: '', qty: 3, instructions: '' });
+                                                  }}
+                                                  className="text-gray-400 hover:text-gray-600 text-sm"
+                                                  title="Cancel"
+                                                >✕</button>
+                                              </td>
+                                            </tr>
+                                          )}
+                                        </tbody>
+                                      </table>
+
+                                      {/* Add Medicine button */}
+                                      {addMedicineToRxId !== prescription.id && (
+                                        <div className="px-3 py-1.5 border-t border-gray-100">
+                                          <button
+                                            onClick={() => {
+                                              setAddMedicineToRxId(prescription.id);
+                                              setNewMedicine({ name: '', route: 'IV', frequency: 'BD', duration: '', qty: 3, instructions: '' });
+                                            }}
+                                            className="text-xs text-blue-600 hover:text-blue-800 hover:bg-blue-50 px-2 py-1 rounded"
+                                          >
+                                            + Add Medicine
+                                          </button>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                ))}
                               </div>
                             )}
                           </div>
@@ -20023,12 +21009,10 @@ Dr. Murali B K
                                     <input
                                       type="date"
                                       value={editableVisitDates.admission_date}
-                                      onChange={(e) => {
-                                        const newValue = e.target.value;
-                                        setEditableVisitDates(prev => ({ ...prev, admission_date: newValue }));
-                                        saveVisitDates('admission_date', newValue);
-                                      }}
-                                      className="w-full bg-transparent border-none outline-none text-xs"
+                                      readOnly
+                                      disabled
+                                      className="w-full bg-transparent border-none outline-none text-xs text-gray-700 cursor-not-allowed"
+                                      title="Date of admission cannot be changed"
                                     />
                                   </td>
                                   <td className="border border-black p-1 font-semibold bg-gray-100">DATE OF DISCHARGE</td>
@@ -21562,6 +22546,13 @@ Dr. Murali B K
                 </div>
                 <div className="border-2 border-black p-2 mb-2">
                   <h2 className="text-xl font-bold tracking-wider print:text-xl">{patientInfo?.corporate ? patientInfo.corporate.toUpperCase() : 'PRIVATE'}</h2>
+                  {visitCorporateOverride && visitCorporateOverride !== (patientInfo?.corporate || '').toLowerCase().trim() && (
+                    <div className="screen-only mt-1">
+                      <Badge className="bg-orange-100 text-orange-800 border border-orange-300 text-xs font-semibold">
+                        Billing Override: {visitCorporateOverride.toUpperCase()}
+                      </Badge>
+                    </div>
+                  )}
                 </div>
                 {!hiddenFields.includes('claimId') && (
                 <div className="border-2 border-black p-2 relative">
@@ -22325,34 +23316,11 @@ Dr. Murali B K
                           const secondDiscountAmount = amountAfterFirstDiscount * ((row.secondAdjustmentPercent || 0) / 100);
                           const totalDiscountAmount = firstDiscountAmount + secondDiscountAmount;
                           const finalAmount = amountAfterFirstDiscount - secondDiscountAmount;
-                          
-                          // Debug console log with detailed breakdown
-                          console.log(`🧮 Surgery Row ${index + 1} Calculation:`, {
-                            description: row.name,
-                            baseAmount,
-                            adjustment: row.adjustment,
-                            adjustmentPercent: row.adjustmentPercent,
-                            firstDiscountAmount,
-                            amountAfterFirstDiscount,
-                            secondAdjustment: row.secondAdjustment,
-                            secondAdjustmentPercent: row.secondAdjustmentPercent,
-                            secondDiscountAmount,
-                            totalDiscountAmount,
-                            finalAmount,
-                            // Additional debugging for 75% issue
-                            calculationBreakdown: {
-                              step1_baseAmount: baseAmount,
-                              step2_firstDiscount: `${row.adjustmentPercent}% of ${baseAmount} = ${firstDiscountAmount}`,
-                              step3_afterFirstDiscount: `${baseAmount} - ${firstDiscountAmount} = ${amountAfterFirstDiscount}`,
-                              step4_secondDiscount: `${row.secondAdjustmentPercent || 0}% of ${amountAfterFirstDiscount} = ${secondDiscountAmount}`,
-                              step5_finalAmount: `${amountAfterFirstDiscount} - ${secondDiscountAmount} = ${finalAmount}`
-                            }
-                          });
 
                           return (
                             <tr key={row.id}>
                               <td className="border border-gray-400 p-3 text-center font-bold">
-                                {String.fromCharCode(97 + index)})
+                                {String.fromCharCode(97 + index)}) {/* Surgery letter */}
                               </td>
                               <td className="border border-gray-400 p-3">
                                 <div className="screen-only">
@@ -22494,6 +23462,46 @@ Dr. Murali B K
                             </tr>
                           );
                         })}
+
+                        {/* Auto-generated Anaesthetist Charges row (from saved anesthetist data) */}
+                        {savedAnesthetistData.length > 0 && (() => {
+                          const anesthetistTotal = savedAnesthetistData.reduce((sum, a) => sum + (parseFloat(a.rate) || 0), 0);
+                          const anesthetistNames = savedAnesthetistData.map(a => a.anesthetist_name).filter(Boolean).join(', ');
+                          return anesthetistTotal > 0 ? (
+                            <tr className="bg-blue-50">
+                              <td className="border border-gray-400 p-3 text-center font-bold">
+                                {String.fromCharCode(97 + surgeryRows.length)})
+                              </td>
+                              <td className="border border-gray-400 p-3" colSpan={2}>
+                                <div className="font-semibold">Anaesthetist Charges</div>
+                                {anesthetistNames && <div className="text-xs text-gray-600">{anesthetistNames}</div>}
+                              </td>
+                              <td className="border border-gray-400 p-3 text-center text-xs text-gray-500">Auto</td>
+                              <td className="border border-gray-400 p-3 text-right font-semibold">₹{anesthetistTotal.toLocaleString('en-IN')}</td>
+                              <td className="border border-gray-400 p-3 text-right font-semibold">₹{anesthetistTotal.toLocaleString('en-IN')}</td>
+                              <td className="border border-gray-400 p-2 no-print"></td>
+                            </tr>
+                          ) : null;
+                        })()}
+
+                        {/* Auto-generated OT Charges row (from saved anesthetist data — OT charges tracked with anesthetists) */}
+                        {savedAnesthetistData.length > 0 && (() => {
+                          const otCharges = savedAnesthetistData.reduce((sum, a) => sum + (parseFloat(a.ot_charges) || 0), 0);
+                          return otCharges > 0 ? (
+                            <tr className="bg-green-50">
+                              <td className="border border-gray-400 p-3 text-center font-bold">
+                                {String.fromCharCode(97 + surgeryRows.length + 1)})
+                              </td>
+                              <td className="border border-gray-400 p-3" colSpan={2}>
+                                <div className="font-semibold">OT Charges</div>
+                              </td>
+                              <td className="border border-gray-400 p-3 text-center text-xs text-gray-500">Auto</td>
+                              <td className="border border-gray-400 p-3 text-right font-semibold">₹{otCharges.toLocaleString('en-IN')}</td>
+                              <td className="border border-gray-400 p-3 text-right font-semibold">₹{otCharges.toLocaleString('en-IN')}</td>
+                              <td className="border border-gray-400 p-2 no-print"></td>
+                            </tr>
+                          ) : null;
+                        })()}
                       </>
                     )}
 
@@ -22577,9 +23585,35 @@ Dr. Murali B K
                     <>💾 Save Bill</>
                   )}
                 </Button>
-                <Button onClick={handlePrint} variant="outline" size="lg" className="px-6 py-2">
-                  🖨️ Print / Save PDF
+                <Button
+                  onClick={handlePrint}
+                  variant="outline"
+                  size="lg"
+                  className="px-6 py-2"
+                  disabled={isBillSubmitted || isAmountReceived || (billData?.id && (billData as any)?.status !== 'APPROVED')}
+                  title={isBillSubmitted ? 'Print disabled - Bill already submitted' : isAmountReceived ? 'Print disabled - Amount already received' : (billData?.id && (billData as any)?.status !== 'APPROVED') ? 'Print disabled - Awaiting approval' : 'Print / Save PDF'}
+                >
+                  {isBillSubmitted || isAmountReceived ? '🔒 Print Locked' : (billData?.id && (billData as any)?.status !== 'APPROVED') ? '🔒 Awaiting Approval' : '🖨️ Print / Save PDF'}
                 </Button>
+                {billData?.id && (billData as any)?.status !== 'PENDING_APPROVAL' && (billData as any)?.status !== 'APPROVED' && (
+                  <Button
+                    onClick={handleRequestApproval}
+                    className="bg-orange-500 hover:bg-orange-600 text-white px-6 py-2"
+                    size="lg"
+                  >
+                    Request Approval
+                  </Button>
+                )}
+                {(billData as any)?.status === 'PENDING_APPROVAL' && (
+                  <span className="flex items-center text-orange-600 font-medium px-4">
+                    Pending Approval
+                  </span>
+                )}
+                {(billData as any)?.status === 'APPROVED' && (
+                  <span className="flex items-center text-green-600 font-medium px-4">
+                    Approved
+                  </span>
+                )}
               </div>
 
               {/* Bill Preparation Section */}

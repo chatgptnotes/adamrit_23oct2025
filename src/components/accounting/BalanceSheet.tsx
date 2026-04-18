@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { format } from 'date-fns';
+import { useCompanies } from '@/hooks/useCompanies';
 
 // Type definitions
 interface Account {
@@ -126,6 +127,8 @@ const exportCSV = (
  * collapsible groups and a balance check indicator.
  */
 const BalanceSheet: React.FC = () => {
+  const { data: companies = [] } = useCompanies();
+  const [selectedCompanyId, setSelectedCompanyId] = useState('');
   const [asOfDate, setAsOfDate] = useState<string>(format(new Date(), 'yyyy-MM-dd'));
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
 
@@ -157,14 +160,18 @@ const BalanceSheet: React.FC = () => {
     error: entErr,
     refetch: refetchEntries,
   } = useQuery({
-    queryKey: ['balance_sheet_entries', asOfDate],
+    queryKey: ['balance_sheet_entries', asOfDate, selectedCompanyId],
     queryFn: async () => {
       // First get all posted vouchers up to the as-of date
-      const { data: vouchers, error: vErr } = await supabase
+      let query = supabase
         .from('vouchers')
         .select('id, voucher_number, voucher_date, status')
         .eq('status', 'posted')
         .lte('voucher_date', asOfDate);
+      if (selectedCompanyId) {
+        query = query.eq('company_id', selectedCompanyId);
+      }
+      const { data: vouchers, error: vErr } = await query;
       if (vErr) throw vErr;
       if (!vouchers || vouchers.length === 0) return [];
 
@@ -380,7 +387,20 @@ const BalanceSheet: React.FC = () => {
             As on {format(new Date(asOfDate), 'dd MMM yyyy')}
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex items-center gap-2">
+            <Label className="text-sm whitespace-nowrap">Company</Label>
+            <select
+              value={selectedCompanyId}
+              onChange={(e) => setSelectedCompanyId(e.target.value)}
+              className="flex h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+            >
+              <option value="">All Companies</option>
+              {companies.map((c) => (
+                <option key={c.id} value={c.id}>{c.company_name}</option>
+              ))}
+            </select>
+          </div>
           <div className="flex items-center gap-2">
             <Label htmlFor="asOfDate" className="text-sm whitespace-nowrap">
               As on

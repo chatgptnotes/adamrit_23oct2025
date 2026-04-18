@@ -27,24 +27,37 @@ import { useToast } from '@/hooks/use-toast';
 interface DoctorVisitsListProps {
   onAddNew: () => void;
   selectedMonth?: string;
+  filterOutcomes?: string[];
+  currentMarketingUserId?: string;
+  isAdmin?: boolean;
 }
 
-const DoctorVisitsList: React.FC<DoctorVisitsListProps> = ({ onAddNew, selectedMonth }) => {
+const DoctorVisitsList: React.FC<DoctorVisitsListProps> = ({ onAddNew, selectedMonth, filterOutcomes, currentMarketingUserId, isAdmin: isAdminProp }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedUser, setSelectedUser] = useState<string>('all');
   const [isExecutiveSheetOpen, setIsExecutiveSheetOpen] = useState(false);
   const [isCorporateSheetOpen, setIsCorporateSheetOpen] = useState(false);
   const { toast } = useToast();
-  const { isAdmin } = useAuth();
+  const authContext = useAuth();
+  const isAdmin = isAdminProp ?? authContext.isAdmin;
+
+  // For non-admins, always filter to their own data; for admins, use dropdown selection
+  const effectiveUserFilter = !isAdmin && currentMarketingUserId
+    ? currentMarketingUserId
+    : selectedUser !== 'all' ? selectedUser : undefined;
 
   const { data: visits = [], isLoading } = useDoctorVisits(
-    selectedUser !== 'all' ? selectedUser : undefined,
+    effectiveUserFilter,
     selectedMonth
   );
   const { data: marketingUsers = [] } = useMarketingUsers();
   const deleteVisit = useDeleteDoctorVisit();
 
-  const filteredVisits = visits.filter(visit =>
+  const outcomeFiltered = filterOutcomes
+    ? visits.filter(visit => filterOutcomes.includes(visit.disposition || ''))
+    : visits;
+
+  const filteredVisits = outcomeFiltered.filter(visit =>
     visit.doctor_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     visit.hospital_clinic_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     visit.specialty?.toLowerCase().includes(searchTerm.toLowerCase())
@@ -119,19 +132,21 @@ const DoctorVisitsList: React.FC<DoctorVisitsListProps> = ({ onAddNew, selectedM
               className="pl-10"
             />
           </div>
-          <Select value={selectedUser} onValueChange={setSelectedUser}>
-            <SelectTrigger className="w-[200px]">
-              <SelectValue placeholder="Filter by staff" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Staff</SelectItem>
-              {marketingUsers.map((user) => (
-                <SelectItem key={user.id} value={user.id}>
-                  {user.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          {isAdmin && (
+            <Select value={selectedUser} onValueChange={setSelectedUser}>
+              <SelectTrigger className="w-[200px]">
+                <SelectValue placeholder="Filter by staff" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Staff</SelectItem>
+                {marketingUsers.map((user) => (
+                  <SelectItem key={user.id} value={user.id}>
+                    {user.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
         </div>
 
         {/* Table */}

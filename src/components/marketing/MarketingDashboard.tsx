@@ -21,21 +21,25 @@ import {
   RefreshCw,
 } from 'lucide-react';
 
-import { useMarketingDashboard } from '@/hooks/useMarketingData';
+import { useMarketingDashboard, useCurrentMarketingUser } from '@/hooks/useMarketingData';
+import { useAuth } from '@/contexts/AuthContext';
 import PerformanceOverview from './PerformanceOverview';
 import DoctorVisitsList from './DoctorVisitsList';
 import MarketingCampsList from './MarketingCampsList';
 import MarketingUsersList from './MarketingUsersList';
+import DoctorList from './DoctorList';
 import AddDoctorVisitDialog from './AddDoctorVisitDialog';
 import AddMarketingCampDialog from './AddMarketingCampDialog';
 import AddMarketingUserDialog from './AddMarketingUserDialog';
+import AddMarketingDoctorDialog from './AddMarketingDoctorDialog';
 
 const MarketingDashboard: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
-  const selectedTab = searchParams.get('tab') || 'overview';
+  const selectedTab = searchParams.get('tab') || 'visits';
   const [isAddVisitOpen, setIsAddVisitOpen] = useState(false);
   const [isAddCampOpen, setIsAddCampOpen] = useState(false);
   const [isAddUserOpen, setIsAddUserOpen] = useState(false);
+  const [isAddDoctorOpen, setIsAddDoctorOpen] = useState(false);
 
   // Month filter state
   const currentDate = new Date();
@@ -56,7 +60,15 @@ const MarketingDashboard: React.FC = () => {
     return options; // January to December
   }, []);
 
-  const { data: dashboardData, isLoading, refetch } = useMarketingDashboard(selectedMonth);
+  const { isAdmin } = useAuth();
+  const { marketingUserId } = useCurrentMarketingUser();
+
+  // Only admin/superadmin see all data; everyone else (including marketing_manager) sees only their own
+  // If a non-admin has no matching marketing_users record, use a dummy UUID so queries return empty (not everything)
+  const NO_MATCH_ID = '00000000-0000-0000-0000-000000000000';
+  const effectiveUserId = isAdmin ? undefined : (marketingUserId || NO_MATCH_ID);
+
+  const { data: dashboardData, isLoading, refetch } = useMarketingDashboard(selectedMonth, effectiveUserId);
 
   const setSelectedTab = (tab: string) => {
     setSearchParams({ tab });
@@ -181,20 +193,22 @@ const MarketingDashboard: React.FC = () => {
           <Tent className="h-4 w-4 mr-1" />
           <span className="text-xs">+ Camp</span>
         </Button>
+        {isAdmin && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="col-span-1 h-full"
+            onClick={() => setIsAddUserOpen(true)}
+          >
+            <UserPlus className="h-4 w-4 mr-1" />
+            <span className="text-xs">+ Staff</span>
+          </Button>
+        )}
         <Button
           variant="outline"
           size="sm"
           className="col-span-1 h-full"
-          onClick={() => setIsAddUserOpen(true)}
-        >
-          <UserPlus className="h-4 w-4 mr-1" />
-          <span className="text-xs">+ Staff</span>
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          className="col-span-1 h-full"
-          onClick={() => setSelectedTab('overview')}
+          onClick={() => setSelectedTab('visits')}
         >
           <TrendingUp className="h-4 w-4 mr-1" />
           <span className="text-xs">Stats</span>
@@ -203,42 +217,51 @@ const MarketingDashboard: React.FC = () => {
 
       {/* Tabs */}
       <Tabs value={selectedTab} onValueChange={setSelectedTab} className="space-y-3">
-        <TabsList className="grid w-full grid-cols-4 bg-blue-50 rounded-md">
-          <TabsTrigger value="overview">Performance Overview</TabsTrigger>
-          <TabsTrigger value="visits">Referal</TabsTrigger>
+        <TabsList className={`grid w-full ${isAdmin ? 'grid-cols-4' : 'grid-cols-3'} bg-blue-50 rounded-md`}>
+          <TabsTrigger value="visits">Visit</TabsTrigger>
           <TabsTrigger value="camps">Marketing Camps</TabsTrigger>
-          <TabsTrigger value="users">Marketing Staff</TabsTrigger>
+          <TabsTrigger value="doctors">Doctor</TabsTrigger>
+          {isAdmin && <TabsTrigger value="users">Marketing Staff</TabsTrigger>}
         </TabsList>
 
-        <TabsContent value="overview">
-          <PerformanceOverview data={dashboardData} isLoading={isLoading} selectedMonth={selectedMonth} />
-        </TabsContent>
-
         <TabsContent value="visits">
-          <DoctorVisitsList onAddNew={() => setIsAddVisitOpen(true)} selectedMonth={selectedMonth} />
+          <DoctorVisitsList onAddNew={() => setIsAddVisitOpen(true)} selectedMonth={selectedMonth} currentMarketingUserId={effectiveUserId} isAdmin={isAdmin} />
         </TabsContent>
 
         <TabsContent value="camps">
-          <MarketingCampsList onAddNew={() => setIsAddCampOpen(true)} selectedMonth={selectedMonth} />
+          <MarketingCampsList onAddNew={() => setIsAddCampOpen(true)} selectedMonth={selectedMonth} currentMarketingUserId={effectiveUserId} isAdmin={isAdmin} />
         </TabsContent>
 
-        <TabsContent value="users">
-          <MarketingUsersList onAddNew={() => setIsAddUserOpen(true)} />
+        <TabsContent value="doctors">
+          <DoctorList onAddNew={() => setIsAddDoctorOpen(true)} currentMarketingUserId={effectiveUserId} isAdmin={isAdmin} />
         </TabsContent>
+
+        {isAdmin && (
+          <TabsContent value="users">
+            <MarketingUsersList onAddNew={() => setIsAddUserOpen(true)} />
+          </TabsContent>
+        )}
       </Tabs>
 
       {/* Dialogs */}
       <AddDoctorVisitDialog
         isOpen={isAddVisitOpen}
         onClose={() => setIsAddVisitOpen(false)}
+        currentMarketingUserId={marketingUserId}
       />
       <AddMarketingCampDialog
         isOpen={isAddCampOpen}
         onClose={() => setIsAddCampOpen(false)}
+        currentMarketingUserId={marketingUserId}
       />
       <AddMarketingUserDialog
         isOpen={isAddUserOpen}
         onClose={() => setIsAddUserOpen(false)}
+      />
+      <AddMarketingDoctorDialog
+        isOpen={isAddDoctorOpen}
+        onClose={() => setIsAddDoctorOpen(false)}
+        currentMarketingUserId={marketingUserId}
       />
     </div>
   );

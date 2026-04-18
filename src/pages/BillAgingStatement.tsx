@@ -248,6 +248,7 @@ const BillAgingStatement: React.FC = () => {
   const handleExportExcel = () => {
     const exportData = data.map((record, index) => ({
       'Sr. No.': index + 1,
+      'Bill No.': record.bill_no || '-',
       'Visit ID': record.visit_id,
       'Claim ID': record.claim_id || '-',
       'Patient Name': record.patient_name,
@@ -268,6 +269,7 @@ const BillAgingStatement: React.FC = () => {
     // Add summary row
     exportData.push({
       'Sr. No.': '' as any,
+      'Bill No.': '',
       'Visit ID': 'TOTAL',
       'Claim ID': '',
       'Patient Name': `${summary.total_bills} Bills`,
@@ -568,6 +570,14 @@ const BillAgingStatement: React.FC = () => {
                     <TableHead className="w-12 text-center">Sr.</TableHead>
                     <TableHead
                       className="cursor-pointer hover:bg-muted"
+                      onClick={() => handleSort('bill_no')}
+                    >
+                      <div className="flex items-center gap-1">
+                        Bill No. {renderSortIcon('bill_no')}
+                      </div>
+                    </TableHead>
+                    <TableHead
+                      className="cursor-pointer hover:bg-muted"
                       onClick={() => handleSort('visit_id')}
                     >
                       <div className="flex items-center gap-1">
@@ -707,6 +717,7 @@ const BillAgingStatement: React.FC = () => {
                                   <TableCell className="text-center text-muted-foreground">
                                     {serialNo}
                                   </TableCell>
+                                  <TableCell className="font-medium text-blue-700">{record.bill_no || '-'}</TableCell>
                                   <TableCell className="font-medium">{record.visit_id}</TableCell>
                                   <TableCell className="font-medium">{record.claim_id || '-'}</TableCell>
                                   <TableCell>{record.patient_name}</TableCell>
@@ -823,6 +834,7 @@ const BillAgingStatement: React.FC = () => {
           <TableHeader>
             <TableRow className="bg-muted/50">
               <TableHead className="w-12 text-center">Sr.</TableHead>
+              <TableHead>Bill No.</TableHead>
               <TableHead>Visit ID</TableHead>
               <TableHead>Claim ID</TableHead>
               <TableHead>Patient Name</TableHead>
@@ -845,7 +857,7 @@ const BillAgingStatement: React.FC = () => {
                   <React.Fragment key={bucket}>
                     {/* Bucket Heading Row */}
                     <TableRow className={getPrintHeadingRowClass(bucket)}>
-                      <TableCell colSpan={10} className="py-2 font-bold">
+                      <TableCell colSpan={11} className="py-2 font-bold">
                         {bucket} Days ({bucketRecords.length} {bucketRecords.length === 1 ? 'patient' : 'patients'})
                       </TableCell>
                     </TableRow>
@@ -855,6 +867,7 @@ const BillAgingStatement: React.FC = () => {
                       return (
                         <TableRow key={record.id}>
                           <TableCell className="text-center">{serialNo}</TableCell>
+                          <TableCell className="font-medium text-blue-700">{record.bill_no || '-'}</TableCell>
                           <TableCell className="font-medium">{record.visit_id}</TableCell>
                           <TableCell className="font-medium">{record.claim_id || '-'}</TableCell>
                           <TableCell>{record.patient_name}</TableCell>

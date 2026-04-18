@@ -1519,6 +1519,10 @@ const TodaysIpdDashboard = () => {
           relationship_managers (
             id,
             name
+          ),
+          diagnoses!diagnosis_id (
+            id,
+            name
           )
         `)
         .eq('patient_type', 'IPD')
@@ -2494,122 +2498,27 @@ const TodaysIpdDashboard = () => {
   };
 
   const handleDeleteVisit = async (visitId: string) => {
-    if (window.confirm('Are you sure you want to delete this visit? This action cannot be undone.')) {
+    if (window.confirm('Are you sure you want to mark this visit as inactive? The record will be preserved for audit purposes.')) {
       try {
-        console.log('Deleting visit and related data for visit ID:', visitId);
+        console.log('Deactivating visit for visit ID:', visitId);
 
-        // First get the UUID for this visit_id
-        const { data: visitData, error: visitFetchError } = await supabase
+        const { error } = await supabase
           .from('visits')
-          .select('id, patient_id')
-          .eq('visit_id', visitId)
-          .single();
+          .update({ status: 'inactive', updated_at: new Date().toISOString() })
+          .eq('visit_id', visitId);
 
-        if (visitFetchError || !visitData) {
-          console.error('Error fetching visit data:', visitFetchError);
-          alert('Failed to find visit. Please try again.');
+        if (error) {
+          console.error('Error deactivating visit:', error);
+          alert('Failed to deactivate visit. Please try again.');
           return;
         }
 
-        const visitUUID = visitData.id;
-        console.log('Found visit UUID:', visitUUID);
-
-        // Tables with NO ACTION constraint - must delete manually FIRST
-        const noActionTables = [
-          'visit_complications',
-          'visit_surgeons',
-          'visit_consultants',
-          'doctor_plan'
-        ];
-
-        // Tables with CASCADE constraint - will auto-delete when visit is deleted
-        // Note: ai_clinical_recommendations also has CASCADE but uses UUID visit_id
-
-        // Tables that might use text visit_id (need to check if they exist)
-        const textVisitIdTables = [
-          'patient_documents',
-          'pharmacy_sales'
-        ];
-
-        // STEP 1: Delete from NO ACTION tables first (to avoid constraint violations)
-        console.log('🗑️ Step 1: Deleting from NO ACTION constraint tables...');
-
-        for (const tableName of noActionTables) {
-          try {
-            const { error } = await supabase
-              .from(tableName)
-              .delete()
-              .eq('visit_id', visitUUID);
-
-            if (error) {
-              console.error(`❌ Error deleting from ${tableName}:`, error);
-              // Continue with other tables even if one fails
-            } else {
-              console.log(`✅ Deleted data from ${tableName}`);
-            }
-          } catch (tableError) {
-            console.error(`❌ Exception deleting from ${tableName}:`, tableError);
-            // Continue with other tables
-          }
-        }
-
-        // STEP 2: Delete from text-based tables (if they exist)
-        console.log('🗑️ Step 2: Deleting from text-based tables...');
-
-        for (const tableName of textVisitIdTables) {
-          try {
-            const { error } = await supabase
-              .from(tableName)
-              .delete()
-              .eq('visit_id', visitId);
-
-            if (error) {
-              console.error(`❌ Error deleting from ${tableName}:`, error);
-              // Continue with other tables even if one fails
-            } else {
-              console.log(`✅ Deleted data from ${tableName}`);
-            }
-          } catch (tableError) {
-            console.error(`❌ Exception deleting from ${tableName}:`, tableError);
-            // Continue with other tables
-          }
-        }
-
-        // Note: CASCADE tables will be automatically deleted when main visit is deleted
-
-        // Delete from bills table (uses patient_id, not visit_id)
-        const { error: billsError } = await supabase
-          .from('bills')
-          .delete()
-          .eq('patient_id', visitData.patient_id);
-
-        if (billsError) {
-          console.error('Error deleting bills for visit:', billsError);
-        } else {
-          console.log('✅ Deleted bills data for visit');
-        }
-
-        // Finally, delete the visit record itself using UUID
-        console.log('Deleting visit record...');
-        const { error: visitError } = await supabase
-          .from('visits')
-          .delete()
-          .eq('id', visitUUID);
-
-        if (visitError) {
-          console.error('Error deleting visit:', visitError);
-          alert('Failed to delete visit. Please try again.');
-          return;
-        }
-
-        console.log('✅ Successfully deleted visit and all related data');
-
-        // Refresh the visits list
+        console.log('Visit marked as inactive:', visitId);
         refetch();
-        alert('Visit and all related data deleted successfully.');
+        alert('Visit marked as inactive successfully.');
       } catch (error) {
-        console.error('Error deleting visit:', error);
-        alert('Failed to delete visit. Please try again.');
+        console.error('Error deactivating visit:', error);
+        alert('Failed to deactivate visit. Please try again.');
       }
     }
   };
@@ -2992,7 +2901,7 @@ const TodaysIpdDashboard = () => {
                     {visit.appointment_with}
                   </TableCell>
                   <TableCell>
-                    General
+                    {visit.diagnoses?.name || 'General'}
                   </TableCell>
                   <TableCell>
                     {(() => {
@@ -3399,11 +3308,11 @@ const TodaysIpdDashboard = () => {
                          <Button
                            variant="ghost"
                            size="sm"
-                           className="h-8 w-8 p-0 hover:bg-red-50"
+                           className="h-8 w-8 p-0 hover:bg-orange-50"
                            onClick={() => handleDeleteVisit(visit.visit_id)}
-                           title="Delete Visit"
+                           title="Mark Visit Inactive"
                          >
-                           <Trash2 className="h-4 w-4 text-red-600" />
+                           <Trash2 className="h-4 w-4 text-orange-600" />
                          </Button>
                        )}
                      </div>
@@ -3679,7 +3588,7 @@ const TodaysIpdDashboard = () => {
                       </span>
                     </div>
                     <div>
-                      <span className="font-medium text-gray-600">Diagnosis:</span> {selectedPatientForView.diagnosis || 'General'}
+                      <span className="font-medium text-gray-600">Diagnosis:</span> {selectedPatientForView.diagnoses?.name || 'General'}
                     </div>
                     <div>
                       <span className="font-medium text-gray-600">Relation with Employee:</span> {selectedPatientForView.relation_with_employee || 'N/A'}

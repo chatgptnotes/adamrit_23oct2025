@@ -1,9 +1,11 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 import {
   MarketingUser,
   DoctorVisit,
   MarketingCamp,
+  MarketingDoctor,
   MarketingDashboardData,
   MarketingPerformance
 } from '@/types/marketing';
@@ -38,6 +40,56 @@ const getMonthRange = (monthStr?: string) => {
 
 // Get current month date range (legacy helper)
 const getCurrentMonthRange = () => getMonthRange();
+
+// Hook to resolve the current logged-in user's marketing_users ID
+export const useCurrentMarketingUser = () => {
+  const { user } = useAuth();
+  const email = user?.email;
+  const username = user?.username; // e.g. "suraj" (email prefix)
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['current-marketing-user', email],
+    queryFn: async () => {
+      if (!email) return null;
+
+      // Try 1: match by email
+      const { data: byEmail } = await supabase
+        .from('marketing_users')
+        .select('id')
+        .ilike('email', email)
+        .eq('is_active', true)
+        .maybeSingle();
+      if (byEmail) return byEmail.id as string;
+
+      // Try 2: match by name (username = email prefix)
+      if (username) {
+        const { data: byName } = await supabase
+          .from('marketing_users')
+          .select('id')
+          .ilike('name', username)
+          .eq('is_active', true)
+          .maybeSingle();
+        if (byName) return byName.id as string;
+      }
+
+      // Try 3: Auto-create for marketing role users who have no record
+      const role = user?.role || '';
+      if (role === 'marketing_manager' || role === 'marketing_staff') {
+        const { data: newUser, error } = await supabase
+          .from('marketing_users')
+          .insert({ name: username || email.split('@')[0], email })
+          .select('id')
+          .single();
+        if (newUser && !error) return newUser.id as string;
+      }
+
+      return null;
+    },
+    enabled: !!email,
+  });
+
+  return { marketingUserId: data ?? null, isLoading };
+};
 
 // Hook for Marketing Users
 export const useMarketingUsers = () => {
@@ -179,11 +231,11 @@ export const useAllMarketingCamps = () => {
 };
 
 // Hook for Dashboard Summary Data
-export const useMarketingDashboard = (monthStr?: string) => {
+export const useMarketingDashboard = (monthStr?: string, marketingUserId?: string) => {
   const { start, end, monthLabel } = getMonthRange(monthStr);
 
   return useQuery({
-    queryKey: ['marketing-dashboard', start, end],
+    queryKey: ['marketing-dashboard', start, end, marketingUserId],
     queryFn: async (): Promise<MarketingDashboardData> => {
       // Fetch all active marketing users
       const { data: users, error: usersError } = await supabase
@@ -195,25 +247,35 @@ export const useMarketingDashboard = (monthStr?: string) => {
       if (usersError) throw usersError;
 
       // Fetch current month visits
-      const { data: visits, error: visitsError } = await supabase
+      let visitsQuery = supabase
         .from('marketing_visits')
         .select('"marketingUser_id"')
         .gte('visit_date', start)
         .lte('visit_date', end);
 
+      if (marketingUserId) {
+        visitsQuery = visitsQuery.eq('marketingUser_id', marketingUserId);
+      }
+
+      const { data: visits, error: visitsError } = await visitsQuery;
       if (visitsError) throw visitsError;
 
       // Fetch current month completed camps
-      const { data: camps, error: campsError } = await supabase
+      let campsQuery = supabase
         .from('marketing_camps')
         .select('marketing_user_id, status')
         .gte('camp_date', start)
         .lte('camp_date', end);
 
+      if (marketingUserId) {
+        campsQuery = campsQuery.eq('marketing_user_id', marketingUserId);
+      }
+
+      const { data: camps, error: campsError } = await campsQuery;
       if (campsError) throw campsError;
 
       // Calculate performance for each user
-      const performance: MarketingPerformance[] = (users || []).map(user => {
+      const allPerformance: MarketingPerformance[] = (users || []).map(user => {
         const userVisits = visits?.filter((v: any) => v.marketingUser_id === user.id).length || 0;
         const userCamps = camps?.filter(c => c.marketing_user_id === user.id && c.status === 'Completed').length || 0;
 
@@ -225,6 +287,11 @@ export const useMarketingDashboard = (monthStr?: string) => {
           campsPercentage: Math.min((userCamps / TARGETS.camps) * 100, 100)
         };
       });
+
+      // Filter performance to only the matched user for non-admins
+      const performance = marketingUserId
+        ? allPerformance.filter(p => p.marketingUser.id === marketingUserId)
+        : allPerformance;
 
       return {
         performance,
@@ -419,6 +486,98 @@ export const useDeleteMarketingCamp = () => {
       queryClient.invalidateQueries({ queryKey: ['marketing-camps'] });
       queryClient.invalidateQueries({ queryKey: ['all-marketing-camps'] });
       queryClient.invalidateQueries({ queryKey: ['marketing-dashboard'] });
+    }
+  });
+};
+
+// ============ Marketing Doctors ============
+
+// Hook for Marketing Doctors
+export const useMarketingDoctors = (createdBy?: string) => {
+  return useQuery({
+    queryKey: ['marketing-doctors', createdBy],
+    queryFn: async () => {
+      let query = supabase
+        .from('marketing_doctors')
+        .select(`
+          *,
+          marketing_users (
+            id,
+            name
+          )
+        `)
+        .eq('is_active', true)
+        .order('doctor_name');
+
+      if (createdBy) {
+        query = query.eq('created_by', createdBy);
+      }
+
+      const { data, error } = await query;
+      if (error) throw error;
+      return data as MarketingDoctor[];
+    }
+  });
+};
+
+// Mutation for creating marketing doctor
+export const useCreateMarketingDoctor = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (doctor: Partial<MarketingDoctor>) => {
+      const { data, error } = await supabase
+        .from('marketing_doctors')
+        .insert(doctor)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['marketing-doctors'] });
+    }
+  });
+};
+
+// Mutation for updating marketing doctor
+export const useUpdateMarketingDoctor = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ id, ...doctor }: Partial<MarketingDoctor> & { id: string }) => {
+      const { data, error } = await supabase
+        .from('marketing_doctors')
+        .update(doctor)
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['marketing-doctors'] });
+    }
+  });
+};
+
+// Mutation for deleting marketing doctor
+export const useDeleteMarketingDoctor = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase
+        .from('marketing_doctors')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['marketing-doctors'] });
     }
   });
 };

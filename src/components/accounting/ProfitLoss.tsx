@@ -17,6 +17,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { format, startOfMonth } from 'date-fns';
+import { useCompanies } from '@/hooks/useCompanies';
 
 // Type definitions
 interface Account {
@@ -137,6 +138,8 @@ const exportCSV = (
  */
 const ProfitLoss: React.FC = () => {
   const now = new Date();
+  const { data: companies = [] } = useCompanies();
+  const [selectedCompanyId, setSelectedCompanyId] = useState('');
   const [fromDate, setFromDate] = useState<string>(getFYStart(now));
   const [toDate, setToDate] = useState<string>(getFYEnd(now));
 
@@ -168,14 +171,18 @@ const ProfitLoss: React.FC = () => {
     error: entErr,
     refetch: refetchEntries,
   } = useQuery({
-    queryKey: ['profit_loss_entries', fromDate, toDate],
+    queryKey: ['profit_loss_entries', fromDate, toDate, selectedCompanyId],
     queryFn: async () => {
-      const { data: vouchers, error: vErr } = await supabase
+      let query = supabase
         .from('vouchers')
         .select('id, voucher_number, voucher_date, status')
         .eq('status', 'posted')
         .gte('voucher_date', fromDate)
         .lte('voucher_date', toDate);
+      if (selectedCompanyId) {
+        query = query.eq('company_id', selectedCompanyId);
+      }
+      const { data: vouchers, error: vErr } = await query;
       if (vErr) throw vErr;
       if (!vouchers || vouchers.length === 0) return [];
 
@@ -314,6 +321,19 @@ const ProfitLoss: React.FC = () => {
           </p>
         </div>
         <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex items-center gap-2">
+            <Label className="text-sm whitespace-nowrap">Company</Label>
+            <select
+              value={selectedCompanyId}
+              onChange={(e) => setSelectedCompanyId(e.target.value)}
+              className="flex h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+            >
+              <option value="">All Companies</option>
+              {companies.map((c) => (
+                <option key={c.id} value={c.id}>{c.company_name}</option>
+              ))}
+            </select>
+          </div>
           <div className="flex items-center gap-2">
             <Label htmlFor="plFromDate" className="text-sm whitespace-nowrap">
               From

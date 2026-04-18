@@ -97,19 +97,24 @@ async function handleTestConnection(body: any) {
   </STATICVARIABLES></DESC></BODY>
 </ENVELOPE>`
 
-  try {
-    const responseText = await fetchFromTally(serverUrl, xmlBody, 15000)
-    const companies: string[] = []
-    const companyMatches = responseText.match(/<NAME[^>]*>([^<]+)<\/NAME>/gi) || []
-    for (const match of companyMatches) {
-      const name = match.replace(/<\/?NAME[^>]*>/gi, '').trim()
-      if (name && !companies.includes(name)) companies.push(name)
+  // Try with 60s timeout, retry once on timeout
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const responseText = await fetchFromTally(serverUrl, xmlBody, 60000)
+      const companies: string[] = []
+      const companyMatches = responseText.match(/<NAME[^>]*>([^<]+)<\/NAME>/gi) || []
+      for (const match of companyMatches) {
+        const name = match.replace(/<\/?NAME[^>]*>/gi, '').trim()
+        if (name && !companies.includes(name)) companies.push(name)
+      }
+      const versionMatch = responseText.match(/<VERSION[^>]*>([^<]+)<\/VERSION>/i)
+      return { connected: true, companies, version: versionMatch ? versionMatch[1] : 'Connected' }
+    } catch (err: any) {
+      if (attempt === 0 && err.message.includes('timed out')) continue
+      return { connected: false, companies: [], version: '', error: err.message }
     }
-    const versionMatch = responseText.match(/<VERSION[^>]*>([^<]+)<\/VERSION>/i)
-    return { connected: true, companies, version: versionMatch ? versionMatch[1] : 'Connected' }
-  } catch (err: any) {
-    return { connected: false, companies: [], version: '', error: err.message }
   }
+  return { connected: false, companies: [], version: '', error: 'Connection timed out after retries' }
 }
 
 // ─── Endpoint: proxy (raw XML) ───
@@ -262,101 +267,187 @@ async function handleSync(body: any) {
   try {
     switch (action) {
       case 'ledgers': {
-        const xml = buildExportXml('List of Ledgers', companyName)
-        const response = await fetchFromTally(serverUrl, xml)
-        let elements = getAll(response, 'LEDGER')
-        // ALWAYS log raw response for debugging (will be removed once parsing is fixed)
-        errors.push(`LEDGER_RAW_RESPONSE (${response.length} chars, ${elements.length} LEDGER elements): ${response.substring(0, 2000)}`)
-        if (elements.length > 0) {
-          errors.push(`FIRST_LEDGER: ${elements[0].substring(0, 500)}`)
-        }
+        // TallyPrime Collection-based export
+        const xml = `<ENVELOPE>
+  <HEADER><VERSION>1</VERSION><TALLYREQUEST>Export</TALLYREQUEST><TYPE>Collection</TYPE><ID>Ledger Collection</ID></HEADER>
+  <BODY><DESC>
+    <STATICVARIABLES><SVCURRENTCOMPANY>${companyName}</SVCURRENTCOMPANY></STATICVARIABLES>
+    <TDL><TDLMESSAGE>
+      <COLLECTION NAME="Ledger Collection" ISMODIFY="No">
+        <TYPE>Ledger</TYPE>
+        <FETCH>NAME,PARENT,OPENINGBALANCE,CLOSINGBALANCE,ADDRESS,LEDGERPHONE,EMAIL,PARTYGSTIN,INCOMETAXNUMBER,GUID</FETCH>
+      </COLLECTION>
+    </TDLMESSAGE></TDL>
+  </DESC></BODY>
+</ENVELOPE>`
+        const response = await fetchFromTally(serverUrl, xml, 120000)
+        const elements = getAll(response, 'LEDGER')
+        // Batch upsert for speed (50 at a time instead of 1-by-1)
+        const BATCH_SIZE = 50
+        const now = new Date().toISOString()
+        const allRows: any[] = []
         for (const el of elements) {
-          try {
-            const name = getVal(el, 'NAME') || getAttr(el, 'NAME')
-            if (!name) continue
-            await supabase.from('tally_ledgers').upsert({
-              company_id: companyId,
-              name, tally_guid: getVal(el, 'GUID') || getAttr(el, 'GUID') || null,
-              parent_group: getVal(el, 'PARENT'),
-              opening_balance: parseFloat(getVal(el, 'OPENINGBALANCE') || '0'),
-              closing_balance: parseFloat(getVal(el, 'CLOSINGBALANCE') || '0'),
-              address: getVal(el, 'ADDRESS') || null,
-              phone: getVal(el, 'LEDGERPHONE') || getVal(el, 'PHONE') || null,
-              email: getVal(el, 'EMAIL') || getVal(el, 'LEDGEREMAIL') || null,
-              gst_number: getVal(el, 'PARTYGSTIN') || null,
-              pan_number: getVal(el, 'INCOMETAXNUMBER') || null,
-              last_synced_at: new Date().toISOString(),
-            }, { onConflict: 'company_id,name', ignoreDuplicates: false })
-            recordsSynced++
-          } catch (e: any) { recordsFailed++; errors.push(e.message) }
+          const name = getVal(el, 'NAME') || getAttr(el, 'NAME')
+          if (!name) continue
+          allRows.push({
+            company_id: companyId,
+            name, tally_guid: getVal(el, 'GUID') || getAttr(el, 'GUID') || null,
+            parent_group: getVal(el, 'PARENT'),
+            opening_balance: parseFloat(getVal(el, 'OPENINGBALANCE') || '0'),
+            closing_balance: parseFloat(getVal(el, 'CLOSINGBALANCE') || '0'),
+            address: getVal(el, 'ADDRESS') || null,
+            phone: getVal(el, 'LEDGERPHONE') || getVal(el, 'PHONE') || null,
+            email: getVal(el, 'EMAIL') || getVal(el, 'LEDGEREMAIL') || null,
+            gst_number: getVal(el, 'PARTYGSTIN') || null,
+            pan_number: getVal(el, 'INCOMETAXNUMBER') || null,
+            last_synced_at: now,
+          })
+        }
+        for (let i = 0; i < allRows.length; i += BATCH_SIZE) {
+          const batch = allRows.slice(i, i + BATCH_SIZE)
+          const { error: upsertError } = await supabase.from('tally_ledgers').upsert(batch, { onConflict: 'company_id,name', ignoreDuplicates: false })
+          if (upsertError) {
+            recordsFailed += batch.length
+            errors.push(`Ledger batch ${i}-${i + batch.length}: ${upsertError.message}`)
+          } else {
+            recordsSynced += batch.length
+          }
         }
         break
       }
       case 'groups': {
-        const xml = buildExportXml('List of Groups', companyName)
-        const response = await fetchFromTally(serverUrl, xml)
+        const xml = `<ENVELOPE>
+  <HEADER><VERSION>1</VERSION><TALLYREQUEST>Export</TALLYREQUEST><TYPE>Collection</TYPE><ID>Group Collection</ID></HEADER>
+  <BODY><DESC>
+    <STATICVARIABLES><SVCURRENTCOMPANY>${companyName}</SVCURRENTCOMPANY></STATICVARIABLES>
+    <TDL><TDLMESSAGE>
+      <COLLECTION NAME="Group Collection" ISMODIFY="No">
+        <TYPE>Group</TYPE>
+        <FETCH>NAME,PARENT,NATUREOFGROUP,ISDEEMEDPOSITIVE,GUID</FETCH>
+      </COLLECTION>
+    </TDLMESSAGE></TDL>
+  </DESC></BODY>
+</ENVELOPE>`
+        const response = await fetchFromTally(serverUrl, xml, 120000)
         const elements = getAll(response, 'GROUP')
+        const nowG = new Date().toISOString()
+        const groupRows: any[] = []
         for (const el of elements) {
-          try {
-            const name = getVal(el, 'NAME') || getAttr(el, 'NAME')
-            if (!name) continue
-            await supabase.from('tally_groups').upsert({
-              company_id: companyId,
-              name, parent_group: getVal(el, 'PARENT') || null,
-              nature_of_group: getVal(el, 'NATUREOFGROUP') || null,
-              is_revenue: (getVal(el, 'NATUREOFGROUP') || '').toLowerCase().includes('revenue'),
-              is_deemed_positive: getVal(el, 'ISDEEMEDPOSITIVE') === 'Yes',
-              last_synced_at: new Date().toISOString(),
-            }, { onConflict: 'company_id,name' })
-            recordsSynced++
-          } catch (e: any) { recordsFailed++; errors.push(e.message) }
+          const name = getVal(el, 'NAME') || getAttr(el, 'NAME')
+          if (!name) continue
+          groupRows.push({
+            company_id: companyId,
+            name, parent_group: getVal(el, 'PARENT') || null,
+            nature_of_group: getVal(el, 'NATUREOFGROUP') || null,
+            is_revenue: (getVal(el, 'NATUREOFGROUP') || '').toLowerCase().includes('revenue'),
+            is_deemed_positive: getVal(el, 'ISDEEMEDPOSITIVE') === 'Yes',
+            last_synced_at: nowG,
+          })
+        }
+        for (let i = 0; i < groupRows.length; i += 50) {
+          const batch = groupRows.slice(i, i + 50)
+          const { error: upsertError } = await supabase.from('tally_groups').upsert(batch, { onConflict: 'company_id,name' })
+          if (upsertError) {
+            recordsFailed += batch.length
+            errors.push(`Groups batch ${i}: ${upsertError.message}`)
+          } else {
+            recordsSynced += batch.length
+          }
         }
         break
       }
       case 'stock': {
-        const xml = buildExportXml('List of Stock Items', companyName)
-        const response = await fetchFromTally(serverUrl, xml)
-        let elements = getAll(response, 'STOCKITEM')
+        const xml = `<ENVELOPE>
+  <HEADER><VERSION>1</VERSION><TALLYREQUEST>Export</TALLYREQUEST><TYPE>Collection</TYPE><ID>StockItem Collection</ID></HEADER>
+  <BODY><DESC>
+    <STATICVARIABLES><SVCURRENTCOMPANY>${companyName}</SVCURRENTCOMPANY></STATICVARIABLES>
+    <TDL><TDLMESSAGE>
+      <COLLECTION NAME="StockItem Collection" ISMODIFY="No">
+        <TYPE>StockItem</TYPE>
+        <FETCH>NAME,PARENT,BASEUNITS,OPENINGBALANCE,CLOSINGBALANCE,OPENINGVALUE,CLOSINGVALUE,CLOSINGRATE,GSTRATE,HSNCODE,GUID</FETCH>
+      </COLLECTION>
+    </TDLMESSAGE></TDL>
+  </DESC></BODY>
+</ENVELOPE>`
+        const response = await fetchFromTally(serverUrl, xml, 120000)
+        const elements = getAll(response, 'STOCKITEM')
         if (elements.length === 0 && response.length > 0) {
           errors.push(`No STOCKITEM elements found in Tally response (${response.length} chars). Response preview: ${response.substring(0, 500)}`)
         }
+        const nowS = new Date().toISOString()
+        const stockRows: any[] = []
         for (const el of elements) {
-          try {
-            const name = getVal(el, 'NAME') || getAttr(el, 'NAME')
-            if (!name) continue
-            await supabase.from('tally_stock_items').upsert({
-              company_id: companyId,
-              name, tally_guid: getVal(el, 'GUID') || getAttr(el, 'GUID') || null,
-              stock_group: getVal(el, 'PARENT') || getVal(el, 'STOCKGROUP') || null,
-              unit: getVal(el, 'BASEUNITS') || getVal(el, 'UNIT') || null,
-              opening_balance: parseFloat(getVal(el, 'OPENINGBALANCE') || '0'),
-              closing_balance: parseFloat(getVal(el, 'CLOSINGBALANCE') || '0'),
-              opening_value: parseFloat(getVal(el, 'OPENINGVALUE') || '0'),
-              closing_value: parseFloat(getVal(el, 'CLOSINGVALUE') || '0'),
-              rate: parseFloat(getVal(el, 'CLOSINGRATE') || getVal(el, 'RATE') || '0'),
-              gst_rate: parseFloat(getVal(el, 'GSTRATE') || '0'),
-              hsn_code: getVal(el, 'HSNCODE') || getVal(el, 'HSNSACCODE') || null,
-              last_synced_at: new Date().toISOString(),
-            }, { onConflict: 'company_id,name', ignoreDuplicates: false })
-            recordsSynced++
-          } catch (e: any) { recordsFailed++; errors.push(e.message) }
+          const name = getVal(el, 'NAME') || getAttr(el, 'NAME')
+          if (!name) continue
+          stockRows.push({
+            company_id: companyId,
+            name, tally_guid: getVal(el, 'GUID') || getAttr(el, 'GUID') || null,
+            stock_group: getVal(el, 'PARENT') || getVal(el, 'STOCKGROUP') || null,
+            unit: getVal(el, 'BASEUNITS') || getVal(el, 'UNIT') || null,
+            opening_balance: parseFloat(getVal(el, 'OPENINGBALANCE') || '0'),
+            closing_balance: parseFloat(getVal(el, 'CLOSINGBALANCE') || '0'),
+            opening_value: parseFloat(getVal(el, 'OPENINGVALUE') || '0'),
+            closing_value: parseFloat(getVal(el, 'CLOSINGVALUE') || '0'),
+            rate: parseFloat(getVal(el, 'CLOSINGRATE') || getVal(el, 'RATE') || '0'),
+            gst_rate: parseFloat(getVal(el, 'GSTRATE') || '0'),
+            hsn_code: getVal(el, 'HSNCODE') || getVal(el, 'HSNSACCODE') || null,
+            last_synced_at: nowS,
+          })
+        }
+        for (let i = 0; i < stockRows.length; i += 50) {
+          const batch = stockRows.slice(i, i + 50)
+          const { error: upsertError } = await supabase.from('tally_stock_items').upsert(batch, { onConflict: 'company_id,name', ignoreDuplicates: false })
+          if (upsertError) {
+            recordsFailed += batch.length
+            errors.push(`Stock batch ${i}: ${upsertError.message}`)
+          } else {
+            recordsSynced += batch.length
+          }
         }
         break
       }
       case 'vouchers': {
-        const from = dateRange?.from || '2024-04-01'
+        // Default to financial year start (April 1)
+        const now = new Date()
+        const fyYear = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1
+        const defaultFrom = `${fyYear}-04-01`
+        const from = dateRange?.from || defaultFrom
         const to = dateRange?.to || new Date().toISOString().split('T')[0]
-        const xml = buildExportXml('Day Book', companyName,
+        // Use Day Book export (reliable with date range) as primary
+        const dayBookXml = buildExportXml('Day Book', companyName,
           `<SVFROMDATE>${from.replace(/-/g, '')}</SVFROMDATE><SVTODATE>${to.replace(/-/g, '')}</SVTODATE>`)
-        const response = await fetchFromTally(serverUrl, xml)
+        let response: string
+        try {
+          response = await fetchFromTally(serverUrl, dayBookXml, 120000)
+        } catch {
+          // Fallback to Collection export without CHILDOF filter
+          const collectionXml = `<ENVELOPE>
+  <HEADER><VERSION>1</VERSION><TALLYREQUEST>Export</TALLYREQUEST><TYPE>Collection</TYPE><ID>Voucher Collection</ID></HEADER>
+  <BODY><DESC>
+    <STATICVARIABLES>
+      <SVCURRENTCOMPANY>${companyName}</SVCURRENTCOMPANY>
+    </STATICVARIABLES>
+    <TDL><TDLMESSAGE>
+      <COLLECTION NAME="Voucher Collection" ISMODIFY="No">
+        <TYPE>Voucher</TYPE>
+        <FETCH>DATE,VOUCHERTYPENAME,VOUCHERNUMBER,PARTYLEDGERNAME,AMOUNT,NARRATION,ISCANCELLED,GUID</FETCH>
+        <FETCH>ALLLEDGERENTRIES.LIST</FETCH>
+      </COLLECTION>
+    </TDLMESSAGE></TDL>
+  </DESC></BODY>
+</ENVELOPE>`
+          response = await fetchFromTally(serverUrl, collectionXml, 120000)
+        }
         const elements = getAll(response, 'VOUCHER')
-        // ALWAYS log raw response for debugging
-        errors.push(`VOUCHER_RAW_RESPONSE (${response.length} chars, ${elements.length} VOUCHER elements): ${response.substring(0, 2000)}`)
+        // Batch upsert vouchers for speed
+        const VBATCH = 50
+        const voucherRows: any[] = []
+        const nowV = new Date().toISOString()
+        let vIdx = 0
         for (const el of elements) {
           try {
             const rawDate = getVal(el, 'DATE')
             const date = rawDate ? `${rawDate.slice(0, 4)}-${rawDate.slice(4, 6)}-${rawDate.slice(6, 8)}` : to
-            // Try multiple tag names for ledger entries (TallyPrime versions vary)
             let entryElements = getAll(el, 'ALLLEDGERENTRIES.LIST')
             if (entryElements.length === 0) entryElements = getAll(el, 'LEDGERENTRIES.LIST')
             if (entryElements.length === 0) entryElements = getAll(el, 'ALLLEDGERENTRIES')
@@ -365,34 +456,37 @@ async function handleSync(body: any) {
               const amt = parseFloat(getVal(entryEl, 'AMOUNT') || '0')
               return { ledger: getVal(entryEl, 'LEDGERNAME'), amount: Math.abs(amt), is_debit: amt < 0 }
             })
-            // Calculate total: use debit side, credit side, or voucher-level AMOUNT as fallback
             const debitTotal = ledgerEntries.filter(e => e.is_debit).reduce((s, e) => s + e.amount, 0)
             const creditTotal = ledgerEntries.filter(e => !e.is_debit).reduce((s, e) => s + e.amount, 0)
             const voucherLevelAmt = Math.abs(parseFloat(getVal(el, 'AMOUNT') || '0'))
             const totalAmount = debitTotal || creditTotal || voucherLevelAmt
-            // Debug: log first voucher's full details
-            if (recordsSynced === 0 && recordsFailed === 0) {
-              errors.push(`FIRST_VOUCHER_XML: ${el.substring(0, 800)}`)
-              errors.push(`ENTRY_TAGS_TRIED: ALLLEDGERENTRIES.LIST=${getAll(el, 'ALLLEDGERENTRIES.LIST').length}, LEDGERENTRIES.LIST=${getAll(el, 'LEDGERENTRIES.LIST').length}, ALLLEDGERENTRIES=${getAll(el, 'ALLLEDGERENTRIES').length}, LEDGERENTRIES=${getAll(el, 'LEDGERENTRIES').length}`)
-              errors.push(`ENTRIES_FOUND: ${entryElements.length}, debitTotal=${debitTotal}, creditTotal=${creditTotal}, voucherAmt=${voucherLevelAmt}, finalAmount=${totalAmount}`)
-              if (entryElements.length > 0) {
-                errors.push(`FIRST_ENTRY_XML: ${entryElements[0]}`)
-              }
-            }
-            const guid = getVal(el, 'GUID') || getAttr(el, 'REMOTEID') || null
-            await supabase.from('tally_vouchers').upsert({
+            const vchNum = getVal(el, 'VOUCHERNUMBER')
+            const vchType = getVal(el, 'VOUCHERTYPENAME') || getAttr(el, 'VCHTYPE')
+            // Use GUID if available, otherwise generate a deterministic key from voucher details
+            const guid = getVal(el, 'GUID') || getAttr(el, 'REMOTEID') || `${vchType}-${vchNum}-${date}-${vIdx}`
+            vIdx++
+            voucherRows.push({
               company_id: companyId,
               tally_guid: guid,
-              voucher_number: getVal(el, 'VOUCHERNUMBER'),
-              voucher_type: getVal(el, 'VOUCHERTYPENAME') || getAttr(el, 'VCHTYPE'),
+              voucher_number: vchNum,
+              voucher_type: vchType,
               date, party_ledger: getVal(el, 'PARTYLEDGERNAME'),
               amount: totalAmount, narration: getVal(el, 'NARRATION') || null,
               is_cancelled: getVal(el, 'ISCANCELLED') === 'Yes',
               sync_direction: 'from_tally', sync_status: 'synced',
-              ledger_entries: ledgerEntries, synced_at: new Date().toISOString(),
-            }, { onConflict: 'company_id,tally_guid', ignoreDuplicates: false })
-            recordsSynced++
+              ledger_entries: ledgerEntries, synced_at: nowV,
+            })
           } catch (e: any) { recordsFailed++; errors.push(e.message) }
+        }
+        for (let i = 0; i < voucherRows.length; i += VBATCH) {
+          const batch = voucherRows.slice(i, i + VBATCH)
+          const { error: upsertError } = await supabase.from('tally_vouchers').upsert(batch, { onConflict: 'company_id,tally_guid', ignoreDuplicates: false })
+          if (upsertError) {
+            recordsFailed += batch.length
+            errors.push(`Voucher batch ${i}: ${upsertError.message}`)
+          } else {
+            recordsSynced += batch.length
+          }
         }
         break
       }
@@ -411,7 +505,7 @@ async function handleSync(body: any) {
         for (const report of reportIds) {
           try {
             const xml = buildExportXml(report.id, companyName, report.extra)
-            const response = await fetchFromTally(serverUrl, xml)
+            const response = await fetchFromTally(serverUrl, xml, 120000)
             await supabase.from('tally_reports').insert({
               company_id: companyId,
               report_type: report.type, report_date: today, period_from: fyStart, period_to: today,
@@ -432,7 +526,7 @@ async function handleSync(body: any) {
         try {
           const xml = buildExportXml(gstReportId, companyName,
             `<SVFROMDATE>${gstFrom.replace(/-/g, '')}</SVFROMDATE><SVTODATE>${gstTo.replace(/-/g, '')}</SVTODATE>`)
-          const response = await fetchFromTally(serverUrl, xml)
+          const response = await fetchFromTally(serverUrl, xml, 120000)
           await supabase.from('tally_gst_data').insert({
             company_id: companyId,
             report_type: gstType, period_from: gstFrom, period_to: gstTo,
@@ -444,9 +538,11 @@ async function handleSync(body: any) {
       }
       case 'full': {
         for (const subAction of ['groups', 'ledgers', 'stock', 'vouchers', 'reports']) {
-          const subResult = await handleSync({ action: subAction, serverUrl, companyName, companyId, dateRange })
-          recordsSynced += (subResult as any).recordsSynced || 0
-          recordsFailed += (subResult as any).recordsFailed || 0
+          const subResult = await handleSync({ action: subAction, serverUrl, companyName, companyId, dateRange }) as any
+          recordsSynced += subResult.recordsSynced || 0
+          recordsFailed += subResult.recordsFailed || 0
+          if (subResult.errors?.length) errors.push(...subResult.errors)
+          if (subResult.error) errors.push(`${subAction}: ${subResult.error}`)
         }
         break
       }

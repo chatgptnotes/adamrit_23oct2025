@@ -377,7 +377,8 @@ const DetailedInvoice = () => {
       return;
     }
 
-    const total = items.reduce((sum, item) => sum + (item.rate || 0), 0);
+    // Calculate total as sum of (rate * qty) for each item
+    const total = items.reduce((sum, item) => sum + ((parseFloat(item.cghsRate) || item.rate || 0) * (item.qty || 1)), 0);
 
     const printContent = `
       <!DOCTYPE html>
@@ -450,20 +451,22 @@ const DetailedInvoice = () => {
                 <th class="text-center" style="width: 120px;">DATE & TIME</th>
                 <th class="text-center" style="width: 100px;">CGHS NABH RATE</th>
                 <th class="text-center" style="width: 80px;">QTY</th>
-                <th class="text-right" style="width: 100px;">RATE</th>
+                <th class="text-right" style="width: 100px;">AMOUNT</th>
               </tr>
             </thead>
             <tbody>
-              ${items.map((item, index) => `
+              ${items.map((item, index) => {
+                const lineAmount = (parseFloat(item.cghsRate) || item.rate || 0) * (item.qty || 1);
+                return `
                 <tr>
                   <td class="text-center">${index + 1}</td>
                   <td contenteditable="true">${item.item}</td>
                   <td class="text-center" contenteditable="true">${item.dateTime}</td>
                   <td class="text-center" contenteditable="true">${item.cghsRate || ''}</td>
                   <td class="text-center" contenteditable="true">${item.qty}</td>
-                  <td class="text-right" contenteditable="true">${item.rate}</td>
+                  <td class="text-right" contenteditable="true">${lineAmount}</td>
                 </tr>
-              `).join('')}
+              `}).join('')}
               <tr class="total-row">
                 <td colspan="5" class="text-right">TOTAL:</td>
                 <td class="text-right" id="grand-total">${total}</td>
@@ -641,7 +644,8 @@ const DetailedInvoice = () => {
       return;
     }
 
-    const total = items.reduce((sum, item) => sum + (item.rate || 0), 0);
+    // Calculate total as sum of (rate * qty) for each item
+    const total = items.reduce((sum, item) => sum + ((parseFloat(item.cghsRate) || item.rate || 0) * (item.qty || 1)), 0);
 
     const printContent = `
       <!DOCTYPE html>
@@ -714,20 +718,22 @@ const DetailedInvoice = () => {
                 <th class="text-center" style="width: 120px;">DATE & TIME</th>
                 <th class="text-center" style="width: 100px;">CGHS NABH RATE</th>
                 <th class="text-center" style="width: 80px;">QTY</th>
-                <th class="text-right" style="width: 100px;">RATE</th>
+                <th class="text-right" style="width: 100px;">AMOUNT</th>
               </tr>
             </thead>
             <tbody>
-              ${items.map((item, index) => `
+              ${items.map((item, index) => {
+                const lineAmount = (parseFloat(item.cghsRate) || item.rate || 0) * (item.qty || 1);
+                return `
                 <tr>
                   <td class="text-center">${index + 1}</td>
                   <td contenteditable="true">${item.item}</td>
                   <td class="text-center" contenteditable="true">${item.dateTime}</td>
                   <td class="text-center" contenteditable="true">${item.cghsRate || ''}</td>
                   <td class="text-center" contenteditable="true">${item.qty}</td>
-                  <td class="text-right" contenteditable="true">${item.rate}</td>
+                  <td class="text-right" contenteditable="true">${lineAmount}</td>
                 </tr>
-              `).join('')}
+              `}).join('')}
               <tr class="total-row">
                 <td colspan="5" class="text-right">TOTAL:</td>
                 <td class="text-right" id="grand-total">${total}</td>
@@ -892,7 +898,7 @@ const DetailedInvoice = () => {
     };
 
     const items = serviceData[section] || [];
-    const total = items.reduce((sum, item) => sum + (item.rate || 0), 0);
+    const total = items.reduce((sum, item) => sum + ((parseFloat(item.cghsRate) || item.rate || 0) * (item.qty || 1)), 0);
     const itemCount = items.length;
 
     const printContent = `
@@ -1548,7 +1554,7 @@ const DetailedInvoice = () => {
       console.log('🔩 Implant orders:', visitData.implantOrders);
 
       // Calculate total amount from all services
-      const labTotal = visitData.labOrders.reduce((sum, order) => sum + ((order.lab?.private && order.lab.private > 0) ? order.lab.private : 100), 0);
+      const labTotal = visitData.labOrders.filter(order => !order.is_hidden).reduce((sum, order) => sum + (parseFloat(order.cost) || parseFloat(order.unit_rate) || parseFloat(order.lab?.NABH_rates_in_rupee) || 0), 0);
       const radioTotal = visitData.radiologyOrders.reduce((sum, order) => {
         const cost = parseFloat(order.cost) || parseFloat(order.unit_rate) || 0;
         console.log('🔍 Radiology order cost:', { name: order.radiology?.name, cost, raw_cost: order.cost, unit_rate: order.unit_rate });
@@ -1651,12 +1657,12 @@ const DetailedInvoice = () => {
       qty: service.quantity || 1,
       rate: parseFloat(service.amount) || parseFloat(service.rate_used) || 0
     })) || [],
-    laboratory: visitData?.labOrders?.map((lab, index) => ({
+    laboratory: visitData?.labOrders?.filter(lab => !lab.is_hidden).map((lab, index) => ({
       item: lab.lab?.name || 'Lab Test',
       dateTime: lab.ordered_date ? format(new Date(lab.ordered_date), 'dd/MM/yyyy HH:mm:ss') : '',
-      qty: 1,
-      cghsRate: lab.lab?.NABH_rates_in_rupee || lab.lab?.CGHS_code || '',
-      rate: lab.cost || lab.unit_rate || 100
+      qty: lab.quantity || 1,
+      cghsRate: lab.lab?.NABH_rates_in_rupee || '',
+      rate: parseFloat(lab.cost) || parseFloat(lab.unit_rate) || parseFloat(lab.lab?.NABH_rates_in_rupee) || 0
     })) || [],
     radiology: visitData?.radiologyOrders?.map((radio, index) => ({
       item: radio.radiology?.name || 'Radiology Test',
@@ -1720,16 +1726,18 @@ const DetailedInvoice = () => {
     balance: patientData?.totalAmount || 0
   };
 
-  // Calculate total from displayed serviceData values
+  // Calculate total from displayed serviceData values (rate * qty for each item)
+  const calcLineTotal = (items: { rate?: number; qty?: number; cghsRate?: string | number }[]) =>
+    items.reduce((sum, item) => sum + ((parseFloat(String(item.cghsRate)) || item.rate || 0) * (item.qty || 1)), 0);
   const calculatedTotal =
-    serviceData.roomTariff.reduce((sum, item) => sum + (item.rate || 0), 0) +
-    serviceData.services.reduce((sum, item) => sum + (item.rate || 0), 0) +
-    serviceData.laboratory.reduce((sum, item) => sum + (item.rate || 0), 0) +
-    serviceData.radiology.reduce((sum, item) => sum + (item.rate || 0), 0) +
-    serviceData.surgery.reduce((sum, item) => sum + (item.rate || 0), 0) +
-    serviceData.implants.reduce((sum, item) => sum + (item.rate || 0), 0) +
-    serviceData.mandatory.reduce((sum, item) => sum + (item.rate || 0), 0) +
-    serviceData.pharmacy.reduce((sum, item) => sum + (item.rate || 0), 0);
+    calcLineTotal(serviceData.roomTariff) +
+    calcLineTotal(serviceData.services) +
+    calcLineTotal(serviceData.laboratory) +
+    calcLineTotal(serviceData.radiology) +
+    calcLineTotal(serviceData.surgery) +
+    calcLineTotal(serviceData.implants) +
+    calcLineTotal(serviceData.mandatory) +
+    calcLineTotal(serviceData.pharmacy);
 
   // Convert to words
   const totalInWords = convertNumberToWords(calculatedTotal);

@@ -59,7 +59,18 @@
       "Bash(do grep:*)",
       "Bash(echo \"Found in: $file\")",
       "Bash(done)",
-      "Bash(sed 's/:[^:]*$//')"
+      "Bash(sed 's/:[^:]*$//')",
+      "Bash(npx vite:*)",
+      "Bash(find /Users/apple/Desktop/Hope_projects/adamrit -name *diagnosis* -type f)",
+      "Bash(find /Users/apple/Desktop/Hope_projects/adamrit/supabase/migrations -name *visits* -type f)",
+      "Bash(ls -1t /Users/apple/Desktop/Hope_projects/adamrit/supabase/migrations/*final*)",
+      "Bash(find /Users/apple/Desktop/Hope_projects/adamrit/supabase/migrations -name \"*.sql\" -exec grep -l \"pharmacy_sales\" {})",
+      "Bash(xargs ls:*)",
+      "Bash(ls -1t /Users/apple/Desktop/Hope_projects/adamrit/supabase/migrations/*pharmacy*)",
+      "Bash(ls -1 /Users/apple/Desktop/Hope_projects/adamrit/supabase/migrations/202603*)",
+      "Bash(ls -ltr /Users/apple/Desktop/Hope_projects/adamrit/supabase/migrations/*.sql)",
+      "Bash(ls -lh /Users/apple/Desktop/Hope_projects/adamrit/supabase/migrations/202503*.sql)",
+      "WebSearch"
     ],
     "deny": [],
     "ask": []

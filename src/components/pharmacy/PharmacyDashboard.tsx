@@ -37,6 +37,7 @@ import AddPurchaseOrder from './AddPurchaseOrder';
 import EditPurchaseOrder from './EditPurchaseOrder';
 import CreditPayments from './CreditPayments';
 import LowStockMedicines from './LowStockMedicines';
+import PrescriptionQueue from './PrescriptionQueue';
 
 const PharmacyDashboard: React.FC = () => {
   const [searchParams] = useSearchParams();
@@ -125,6 +126,7 @@ const PharmacyDashboard: React.FC = () => {
           <TabsTrigger value="supplier">Supplier</TabsTrigger>
           <TabsTrigger value="purchase-order">Purchase Order</TabsTrigger>
           <TabsTrigger value="low-stock">Low Stock</TabsTrigger>
+          <TabsTrigger value="prescriptions">Prescriptions</TabsTrigger>
           </div>
         </TabsList>
 
@@ -489,6 +491,10 @@ const PharmacyDashboard: React.FC = () => {
               />
             )}
           </div>
+        </TabsContent>
+
+        <TabsContent value="prescriptions">
+          <PrescriptionQueue />
         </TabsContent>
       </Tabs>
     </div>

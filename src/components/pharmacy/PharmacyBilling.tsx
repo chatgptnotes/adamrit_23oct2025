@@ -104,7 +104,7 @@ interface Sale {
 }
 
 const PharmacyBilling: React.FC = () => {
-  const { hospitalConfig } = useAuth();
+  const { hospitalConfig, isAdmin } = useAuth();
   const [cart, setCart] = useState<CartItem[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [saleType, setSaleType] = useState<'antibiotic' | 'other'>('other');
@@ -116,6 +116,7 @@ const PharmacyBilling: React.FC = () => {
   const [orderDiscount, setOrderDiscount] = useState(0); // Order-level discount amount
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
   const [completedSale, setCompletedSale] = useState<Sale | null>(null);
+  const [saleDate, setSaleDate] = useState(new Date().toISOString().split('T')[0]); // YYYY-MM-DD
   
   const [patientSearchResults, setPatientSearchResults] = useState<any[]>([]);
   const [isSearchingPatient, setIsSearchingPatient] = useState(false);
@@ -625,7 +626,7 @@ const PharmacyBilling: React.FC = () => {
       patient_id: patientInfo.id || undefined,
       patient_name: patientInfo.name || undefined,
       prescription_id: prescriptionId || undefined,
-      sale_date: new Date().toISOString(),
+      sale_date: patientInfo.corporate ? new Date(saleDate + 'T12:00:00').toISOString() : new Date().toISOString(),
       sale_type: saleType,
       subtotal: totals.subtotal,
       discount_amount: totals.totalDiscount,
@@ -662,6 +663,7 @@ const PharmacyBilling: React.FC = () => {
       prescription_number: prescriptionId || undefined,
       hospital_name: hospitalConfig?.name || undefined, // Add hospital name
       bill_number: billNumber, // Save bill number to database
+      sale_date: patientInfo.corporate ? new Date(saleDate + 'T12:00:00').toISOString() : undefined,
       subtotal: totals.subtotal,
       discount: totals.totalDiscount,
       discount_percentage: discountPercentage,
@@ -669,7 +671,7 @@ const PharmacyBilling: React.FC = () => {
       tax_percentage: 0,
       total_amount: totals.totalAmount,
       payment_method: paymentMethod,
-      payment_status: 'COMPLETED',
+      payment_status: (totals.totalDiscount > 0 && !isAdmin) ? 'PENDING_DISCOUNT_APPROVAL' : 'COMPLETED',
       items: cart.map(item => {
         console.log('🔍 Cart item being mapped:', {
           medicine_id: item.medicine_id,
@@ -814,7 +816,11 @@ const PharmacyBilling: React.FC = () => {
     setIsProcessingPayment(false);
     clearCart();
 
-    alert(`✅ Sale completed successfully! Sale ID: ${response.sale_id}`);
+    if (totals.totalDiscount > 0 && !isAdmin) {
+      alert(`⏳ Bill submitted for admin discount approval. Sale ID: ${response.sale_id}`);
+    } else {
+      alert(`✅ Sale completed successfully! Sale ID: ${response.sale_id}`);
+    }
   };
 
   const filteredMedicines = searchResults.filter(medicine =>
@@ -1021,7 +1027,7 @@ const PharmacyBilling: React.FC = () => {
             const subtotal = completedSale.subtotal || (completedSale.total_amount + discount);
             if (discount > 0) {
               return `<div>Subtotal: Rs ${subtotal.toFixed(2)}</div>
-              <div>Discount: Rs ${discount.toFixed(2)}</div>
+              <div>Discount Given: Rs ${discount.toFixed(2)}</div>
               <div class="net-total">Net Amount: Rs ${completedSale.total_amount.toFixed(2)}</div>`;
             }
             return `<div>Total: Rs ${completedSale.total_amount.toFixed(2)}</div>`;
@@ -1189,6 +1195,20 @@ const PharmacyBilling: React.FC = () => {
                     readOnly
                     className="bg-gray-50"
                   />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Bill Date</label>
+                  <Input
+                    type="date"
+                    value={saleDate}
+                    onChange={(e) => setSaleDate(e.target.value)}
+                    max={new Date().toISOString().split('T')[0]}
+                    disabled={!patientInfo.corporate}
+                    className={patientInfo.corporate ? 'border-blue-400 bg-blue-50' : 'bg-gray-50'}
+                  />
+                  {!patientInfo.corporate && (
+                    <p className="text-xs text-gray-400 mt-1">Backdating available for corporate/panel/yojana patients only</p>
+                  )}
                 </div>
               </div>
               <div className="grid grid-cols-3 gap-4">
@@ -1665,6 +1685,11 @@ const PharmacyBilling: React.FC = () => {
                   />
                 </div>
               </div>
+              {orderDiscount > 0 && !isAdmin && (
+                <div className="bg-amber-50 border border-amber-200 rounded-md px-3 py-2 text-xs text-amber-800">
+                  <strong>Admin approval required.</strong> This bill will be saved as pending until an admin approves the discount.
+                </div>
+              )}
               {totals.totalDiscount > 0 && (
                 <div className="flex justify-between text-sm text-gray-500">
                   <span>Total Discount:</span>
@@ -1722,6 +1747,11 @@ const PharmacyBilling: React.FC = () => {
                   <>
                     <Clock className="h-4 w-4 mr-2 animate-spin" />
                     Processing...
+                  </>
+                ) : totals.totalDiscount > 0 && !isAdmin ? (
+                  <>
+                    <Clock className="h-4 w-4 mr-2" />
+                    Submit for Approval - ₹{totals.totalAmount}
                   </>
                 ) : (
                   <>

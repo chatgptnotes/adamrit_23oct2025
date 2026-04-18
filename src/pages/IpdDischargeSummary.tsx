@@ -186,6 +186,9 @@ const IpdDischargeSummary = () => {
     corporateType: ''
   });
 
+  // Track whether a saved discharge summary was loaded (to lock dates after save)
+  const [isSummarySaved, setIsSummarySaved] = useState(false);
+
   // Diagnosis States
   const [diagnosis, setDiagnosis] = useState('');
 
@@ -360,6 +363,10 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
               gender,
               address,
               phone
+            ),
+            diagnoses!diagnosis_id (
+              id,
+              name
             )
           `)
           .eq('visit_id', visitId)
@@ -961,6 +968,7 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
         }
 
         console.log('📋 Found existing discharge summary:', summaryData.id);
+        setIsSummarySaved(true);
 
         // Extract data from JSONB columns
         const medicationsData = summaryData.discharge_medications || [];
@@ -1044,6 +1052,7 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
 
       // Load existing discharge summary data if available
       if (summary) {
+        setIsSummarySaved(true);
         if (summary.diagnosis) setDiagnosis(summary.diagnosis);
         if (summary.investigations) setInvestigations(summary.investigations);
         if (summary.stay_notes) setStayNotes(summary.stay_notes);
@@ -1232,8 +1241,16 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
     }
   }, [visitSurgeryData, otNotesData, patientData, isOtNotesLoading]);
 
-  // Update diagnosis when data is loaded from visit_diagnoses table
+  // Update diagnosis when data is loaded from visit_diagnoses table or direct diagnosis_id
   useEffect(() => {
+    // Fallback: use direct diagnosis_id from visits table
+    if ((!visitDiagnosisData || visitDiagnosisData.length === 0) && patientData?.diagnoses?.name) {
+      if (!diagnosis || diagnosis.trim() === '' || diagnosis === 'Enter diagnosis details...') {
+        setDiagnosis(patientData.diagnoses.name);
+        console.log('✅ Diagnosis field updated from direct diagnosis_id:', patientData.diagnoses.name);
+      }
+      return;
+    }
     if (visitDiagnosisData && visitDiagnosisData.length > 0) {
       try {
         console.log('🔄 Processing diagnosis data:', visitDiagnosisData);
@@ -1295,7 +1312,7 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
         console.log('❌ Error formatting diagnosis data:', error);
       }
     }
-  }, [visitDiagnosisData, diagnosis]);
+  }, [visitDiagnosisData, diagnosis, patientData]);
 
   // Populate form fields when existing discharge summary is loaded
   useEffect(() => {
@@ -1803,6 +1820,7 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
       });
 
       console.log('🎉 IPD discharge summary saved to database successfully!');
+      setIsSummarySaved(true);
 
       toast({
         title: "Success",
@@ -3471,7 +3489,10 @@ DD/MM/YYYY:-Test Category: Test1:Value1 unit, Test2:Value2 unit`);
                 <Input
                   type="date"
                   value={patientInfo.doa}
-                  onChange={(e) => setPatientInfo({...patientInfo, doa: e.target.value})}
+                  readOnly
+                  disabled
+                  className="bg-gray-100 cursor-not-allowed"
+                  title="Date of admission cannot be changed"
                 />
               </div>
             </div>
@@ -3635,7 +3656,10 @@ DD/MM/YYYY:-Test Category: Test1:Value1 unit, Test2:Value2 unit`);
               <Input
                 type="date"
                 value={patientInfo.doa}
-                onChange={(e) => setPatientInfo({...patientInfo, doa: e.target.value})}
+                readOnly
+                disabled
+                className="bg-gray-100 cursor-not-allowed"
+                title="Date of admission cannot be changed"
               />
             </div>
             <div className="space-y-2">
@@ -3648,11 +3672,15 @@ DD/MM/YYYY:-Test Category: Test1:Value1 unit, Test2:Value2 unit`);
               />
             </div>
             <div className="space-y-2">
-              <Label>Date Of Discharge:</Label>
+              <Label>Date Of Discharge:{isSummarySaved && <span className="text-xs text-gray-500 ml-1">(locked)</span>}</Label>
               <Input
                 type="date"
                 value={patientInfo.dateOfDischarge}
-                onChange={(e) => setPatientInfo({...patientInfo, dateOfDischarge: e.target.value})}
+                onChange={(e) => !isSummarySaved && setPatientInfo({...patientInfo, dateOfDischarge: e.target.value})}
+                readOnly={isSummarySaved}
+                disabled={isSummarySaved}
+                className={isSummarySaved ? "bg-gray-100 cursor-not-allowed" : ""}
+                title={isSummarySaved ? "Discharge date cannot be changed after summary is saved" : ""}
               />
             </div>
             <div className="space-y-2">
@@ -4203,18 +4231,15 @@ DD/MM/YYYY:-Test Category: Test1:Value1 unit, Test2:Value2 unit`);
                       `Surgery ${i + 1}: ${s.procedurePerformed || 'Not specified'} (Surgeon: ${s.surgeon || 'Not specified'}, Anesthesia: ${s.anesthesia || 'Not specified'})`
                     ).join('\n');
 
-                    const prompt = `You are a medical specialist. Write a comprehensive, detailed surgical summary for each procedure listed below:
+                    const prompt = `You are a senior medical documentation specialist. Write a concise, professional surgical summary for the procedure(s) listed below:
 ${allProcedures}
 
-For EACH surgery, write a separate detailed paragraph (3-5 sentences) including:
-1. Full procedure name and indication/reason for surgery
-2. Surgical approach and technique used
-3. Key intraoperative findings
-4. Any implants/hardware used (if applicable)
-5. Estimated blood loss and patient's hemodynamic stability
-6. Immediate post-operative condition and recovery status
-
-Write in professional medical terminology. Do NOT use placeholders like "[insert reason]" - if information is not provided, write general medical facts about the procedure. Write each surgery as "Surgery 1:", "Surgery 2:", etc.`;
+Rules:
+- Total summary must NOT exceed 200 words.
+- Write in formal clinical terminology.
+- Cover: procedure performed, surgical approach, key intraoperative findings, hemodynamic stability, and immediate post-op condition.
+- If multiple surgeries, combine into one cohesive paragraph — do NOT list them separately.
+- Do NOT use bullet points, headings, or placeholders. Plain paragraph only.`;
 
                     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${import.meta.env.VITE_GEMINI_API_KEY}`, {
                       method: 'POST',
@@ -4228,8 +4253,8 @@ Write in professional medical terminology. Do NOT use placeholders like "[insert
                           }]
                         }],
                         generationConfig: {
-                          temperature: 0.7,
-                          maxOutputTokens: 1000
+                          temperature: 0.4,
+                          maxOutputTokens: 300
                         }
                       })
                     });

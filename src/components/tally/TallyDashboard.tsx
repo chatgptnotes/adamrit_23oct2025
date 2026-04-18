@@ -238,6 +238,12 @@ export default function TallyDashboard({ serverUrl: propServerUrl, companyName: 
     setAutoSyncQueue(syncTypes)
     setAutoSyncCompleted(0)
 
+    // Sync from financial year start (April 1)
+    const now = new Date()
+    const fyYear = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1
+    const fyStart = `${fyYear}-04-01`
+    const today = new Date().toISOString().split('T')[0]
+
     for (let i = 0; i < syncTypes.length; i++) {
       setAutoSyncCurrent(syncTypes[i])
       setAutoSyncCompleted(i)
@@ -245,7 +251,10 @@ export default function TallyDashboard({ serverUrl: propServerUrl, companyName: 
         await fetch('/api/tally-proxy', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ endpoint: 'sync', action: syncTypes[i], serverUrl, companyName, companyId: configId }),
+          body: JSON.stringify({
+            endpoint: 'sync', action: syncTypes[i], serverUrl, companyName, companyId: configId,
+            dateRange: { from: fyStart, to: today },
+          }),
         })
       } catch {}
     }
@@ -256,7 +265,7 @@ export default function TallyDashboard({ serverUrl: propServerUrl, companyName: 
     setLastSyncAt(new Date())
     await loadStats()
     await loadSyncLogs()
-  }, [serverUrl, companyName])
+  }, [serverUrl, companyName, configId])
 
   useEffect(() => {
     if (autoSyncTimerRef.current) {
@@ -297,33 +306,86 @@ export default function TallyDashboard({ serverUrl: propServerUrl, companyName: 
     return `${m}:${String(s).padStart(2, '0')}`
   }
 
-  async function runSync(action) {
-    setSyncing(action)
-    setSyncProgress(10)
+  async function runSingleSync(syncAction: string, dateRange: { from: string; to: string }) {
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 5 * 60 * 1000) // 5 min per type
     try {
-      const progressTimer = setInterval(() => {
-        setSyncProgress(prev => Math.min(prev + 10, 90))
-      }, 1000)
-
       const res = await fetch('/api/tally-proxy', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ endpoint: 'sync', action, serverUrl, companyName, companyId: configId }),
+        body: JSON.stringify({
+          endpoint: 'sync', action: syncAction, serverUrl, companyName, companyId: configId,
+          dateRange,
+        }),
+        signal: controller.signal,
       })
-      clearInterval(progressTimer)
-      setSyncProgress(100)
+      clearTimeout(timeout)
+      return await res.json()
+    } catch (err: any) {
+      clearTimeout(timeout)
+      return { success: false, error: err.name === 'AbortError' ? `${syncAction} timed out` : err.message, recordsSynced: 0, recordsFailed: 0 }
+    }
+  }
 
-      const result = await res.json()
-      if (result.success) {
-        toast.success(`Sync complete: ${result.recordsSynced} records synced${result.recordsFailed ? `, ${result.recordsFailed} failed` : ''}`)
+  async function runSync(action) {
+    setSyncing(action)
+    setSyncProgress(5)
+
+    // Sync from financial year start (April 1)
+    const now = new Date()
+    const fyYear = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1
+    const fyStart = `${fyYear}-04-01`
+    const today = new Date().toISOString().split('T')[0]
+    const dateRange = { from: fyStart, to: today }
+
+    try {
+      if (action === 'full') {
+        // Run each sync type as separate API call to avoid Vercel timeout
+        const syncTypes = ['groups', 'ledgers', 'stock', 'vouchers', 'reports']
+        let totalSynced = 0
+        let totalFailed = 0
+        const allErrors: string[] = []
+
+        for (let i = 0; i < syncTypes.length; i++) {
+          setSyncProgress(Math.round(((i) / syncTypes.length) * 90) + 5)
+          toast.info(`Syncing ${syncTypes[i]}...`)
+          const result = await runSingleSync(syncTypes[i], dateRange)
+          totalSynced += result.recordsSynced || 0
+          totalFailed += result.recordsFailed || 0
+          if (result.errors?.length) allErrors.push(...result.errors)
+          if (result.error) allErrors.push(result.error)
+        }
+
+        setSyncProgress(100)
+        if (totalFailed > 0 && allErrors.length) {
+          toast.error(`Sync: ${totalSynced} synced, ${totalFailed} failed — ${allErrors[0]}`)
+        } else {
+          toast.success(`Sync complete: ${totalSynced} records synced${totalFailed ? `, ${totalFailed} failed` : ''}`)
+        }
       } else {
-        toast.error(result.error || 'Sync failed')
+        const progressTimer = setInterval(() => {
+          setSyncProgress(prev => Math.min(prev + 3, 90))
+        }, 2000)
+
+        const result = await runSingleSync(action, dateRange)
+        clearInterval(progressTimer)
+        setSyncProgress(100)
+
+        if (result.success) {
+          if (result.recordsFailed > 0 && result.errors?.length) {
+            toast.error(`Sync: ${result.recordsSynced} synced, ${result.recordsFailed} failed — ${result.errors[0]}`)
+          } else {
+            toast.success(`Sync complete: ${result.recordsSynced} records synced${result.recordsFailed ? `, ${result.recordsFailed} failed` : ''}`)
+          }
+        } else {
+          toast.error(result.error || 'Sync failed')
+        }
       }
 
       await loadStats()
       await loadSyncLogs()
-    } catch (err) {
-      toast.error('Sync request failed')
+    } catch (err: any) {
+      toast.error('Sync request failed - check if Tally server is reachable')
     }
     setSyncing(null)
     setSyncProgress(0)
