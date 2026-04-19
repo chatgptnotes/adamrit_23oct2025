@@ -127,6 +127,8 @@ const B2BPortal = lazy(() => import("../pages/B2BPortal"));
 const MarketingIncentives = lazy(() => import("../pages/MarketingIncentives"));
 const DoctorView = lazy(() => import("../pages/DoctorView"));
 const PatientPortal = lazy(() => import("../pages/PatientPortal"));
+const SelfCheckIn = lazy(() => import("../pages/SelfCheckIn"));
+const ReportDelivery = lazy(() => import("../pages/ReportDelivery"));
 
 // Loading component
 const PageLoader = () => (
@@ -257,6 +259,8 @@ export const AppRoutes = () => {
         <Route path="/marketing-incentives" element={<Suspense fallback={<PageLoader />}><MarketingIncentives /></Suspense>} />
         <Route path="/doctor-view" element={<Suspense fallback={<PageLoader />}><DoctorView /></Suspense>} />
         <Route path="/patient-portal" element={<PatientPortal />} />
+        <Route path="/kiosk" element={<SelfCheckIn />} />
+        <Route path="/report-delivery" element={<Suspense fallback={<PageLoader />}><ReportDelivery /></Suspense>} />
         {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
         <Route path="/master-data" element={<Suspense fallback={<PageLoader />}><MasterData /></Suspense>} />
         <Route path="*" element={<NotFound />} />

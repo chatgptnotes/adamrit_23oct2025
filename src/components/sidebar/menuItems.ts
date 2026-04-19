@@ -1,4 +1,4 @@
-import { BarChart3, Calendar, PhoneCall, Users, UserPlus, Database, Activity, FileText, TestTube, Camera, Pill, MapPin, Stethoscope, UserCog, ScrollText, Calculator, Syringe, Shield, Building2, ClipboardList, ShieldCheck, Receipt, HeartHandshake, ExternalLink, UserCheck, Bed, DoorOpen, LayoutDashboard, BookOpen, Clock, TrendingUp, Scissors, Heart, Cross, ClipboardCheck, ArrowLeftRight, Wallet, Navigation, Award, Smartphone } from 'lucide-react';
+import { BarChart3, Calendar, PhoneCall, Users, UserPlus, Database, Activity, FileText, TestTube, Camera, Pill, MapPin, Stethoscope, UserCog, ScrollText, Calculator, Syringe, Shield, Building2, ClipboardList, ShieldCheck, Receipt, HeartHandshake, ExternalLink, UserCheck, Bed, DoorOpen, LayoutDashboard, BookOpen, Clock, TrendingUp, Scissors, Heart, Cross, ClipboardCheck, ArrowLeftRight, Wallet, Navigation, Award, Smartphone, MonitorSmartphone, MessageCircle } from 'lucide-react';
 
 export type MenuSection = 'main' | 'masters';
 
@@ -225,6 +225,16 @@ export const menuItems: MenuItemDef[] = [
     title: "Patient Portal",
     url: "/patient-portal",
     icon: Smartphone,
+  },
+  {
+    title: "Self Check-In Kiosk",
+    url: "/kiosk",
+    icon: MonitorSmartphone,
+  },
+  {
+    title: "Report Delivery",
+    url: "/report-delivery",
+    icon: MessageCircle,
   },
 
   // ── Masters section ──
