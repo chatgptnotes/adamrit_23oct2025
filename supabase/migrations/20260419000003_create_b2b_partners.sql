@@ -39,6 +39,12 @@ create index if not exists idx_hc_b2b_partner on home_collection_requests(b2b_pa
 alter table b2b_partners enable row level security;
 create policy "b2b_all" on b2b_partners for all using (true) with check (true);
 
-create trigger update_b2b_updated_at
+create or replace function b2b_set_updated_at()
+returns trigger language plpgsql as $$
+begin new.updated_at := now(); return new; end;
+$$;
+
+do $$ begin create trigger update_b2b_updated_at
   before update on b2b_partners
-  for each row execute procedure moddatetime(updated_at);
+  for each row execute function b2b_set_updated_at();
+exception when duplicate_object then null; end $$;

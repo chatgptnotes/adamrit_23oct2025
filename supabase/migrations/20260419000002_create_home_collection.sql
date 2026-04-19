@@ -57,16 +57,24 @@ begin
 end;
 $$;
 
-create trigger set_hc_number
+create or replace function hc_set_updated_at()
+returns trigger language plpgsql as $$
+begin new.updated_at := now(); return new; end;
+$$;
+
+do $$ begin create trigger set_hc_number
   before insert on home_collection_requests
   for each row execute function generate_hc_number();
+exception when duplicate_object then null; end $$;
 
-create trigger update_hc_updated_at
+do $$ begin create trigger update_hc_updated_at
   before update on home_collection_requests
-  for each row execute procedure moddatetime(updated_at);
+  for each row execute function hc_set_updated_at();
+exception when duplicate_object then null; end $$;
 
-create index idx_hc_status_date on home_collection_requests(status, preferred_date);
-create index idx_hc_phlebotomist on home_collection_requests(phlebotomist_id, preferred_date);
+create index if not exists idx_hc_status_date on home_collection_requests(status, preferred_date);
+create index if not exists idx_hc_phlebotomist on home_collection_requests(phlebotomist_id, preferred_date);
 
 alter table home_collection_requests enable row level security;
-create policy "hc_all" on home_collection_requests for all using (true) with check (true);
+do $$ begin create policy "hc_all" on home_collection_requests for all using (true) with check (true);
+exception when duplicate_object then null; end $$;
