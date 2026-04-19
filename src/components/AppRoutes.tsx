@@ -119,6 +119,9 @@ const CorporateAreas = lazy(() => import("../pages/CorporateAreas"));
 const CorporateAreaDetail = lazy(() => import("../pages/CorporateAreaDetail"));
 const BillApprovals = lazy(() => import("../pages/BillApprovals"));
 const DailyPaymentAllocation = lazy(() => import("../pages/DailyPaymentAllocation"));
+const QueueManagement = lazy(() => import("../pages/QueueManagement"));
+const QueueDisplay = lazy(() => import("../pages/QueueDisplay"));
+const HomeCollection = lazy(() => import("../pages/HomeCollection"));
 
 // Loading component
 const PageLoader = () => (
@@ -241,6 +244,9 @@ export const AppRoutes = () => {
         <Route path="/location-master" element={<Suspense fallback={<PageLoader />}><LocationMaster /></Suspense>} />
         <Route path="/bill-approvals" element={<Suspense fallback={<PageLoader />}><BillApprovals /></Suspense>} />
         <Route path="/daily-payment-allocation" element={<Suspense fallback={<PageLoader />}><DailyPaymentAllocation /></Suspense>} />
+        <Route path="/queue-management" element={<Suspense fallback={<PageLoader />}><QueueManagement /></Suspense>} />
+        <Route path="/queue-display" element={<QueueDisplay />} />
+        <Route path="/home-collection" element={<Suspense fallback={<PageLoader />}><HomeCollection /></Suspense>} />
         {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
         <Route path="/master-data" element={<Suspense fallback={<PageLoader />}><MasterData /></Suspense>} />
         <Route path="*" element={<NotFound />} />
