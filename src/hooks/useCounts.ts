@@ -26,6 +26,7 @@ export const useCounts = () => {
     },
     retry: 1,
     refetchOnWindowFocus: false,
+    staleTime: 5 * 60 * 1000,
   });
 
   const { data: patientsCount = 0 } = useQuery({
@@ -55,6 +56,7 @@ export const useCounts = () => {
     },
     retry: 1,
     refetchOnWindowFocus: false,
+    staleTime: 5 * 60 * 1000,
   });
 
   const { data: usersCount = 0 } = useQuery({
@@ -78,6 +80,7 @@ export const useCounts = () => {
     },
     retry: 1,
     refetchOnWindowFocus: false,
+    staleTime: 5 * 60 * 1000,
   });
 
   const { data: complicationsCount = 0 } = useQuery({
@@ -101,6 +104,7 @@ export const useCounts = () => {
     },
     retry: 1,
     refetchOnWindowFocus: false,
+    staleTime: 5 * 60 * 1000,
   });
 
   const { data: cghsSurgeryCount = 0 } = useQuery({
@@ -124,6 +128,7 @@ export const useCounts = () => {
     },
     retry: 1,
     refetchOnWindowFocus: false,
+    staleTime: 5 * 60 * 1000,
   });
 
   const { data: labCount = 0 } = useQuery({
@@ -147,6 +152,7 @@ export const useCounts = () => {
     },
     retry: 1,
     refetchOnWindowFocus: false,
+    staleTime: 5 * 60 * 1000,
   });
 
   const { data: radiologyCount = 0 } = useQuery({
@@ -170,6 +176,7 @@ export const useCounts = () => {
     },
     retry: 1,
     refetchOnWindowFocus: false,
+    staleTime: 5 * 60 * 1000,
   });
 
   const { data: medicationsCount = 0 } = useQuery({
@@ -193,6 +200,7 @@ export const useCounts = () => {
     },
     retry: 1,
     refetchOnWindowFocus: false,
+    staleTime: 5 * 60 * 1000,
   });
 
   const { data: esicSurgeonsCount = 0 } = useQuery({
@@ -216,6 +224,7 @@ export const useCounts = () => {
     },
     retry: 1,
     refetchOnWindowFocus: false,
+    staleTime: 5 * 60 * 1000,
   });
 
   const { data: refereesCount = 0 } = useQuery({
@@ -239,6 +248,7 @@ export const useCounts = () => {
     },
     retry: 1,
     refetchOnWindowFocus: false,
+    staleTime: 5 * 60 * 1000,
   });
 
   const { data: hopeSurgeonsCount = 0 } = useQuery({
@@ -262,6 +272,7 @@ export const useCounts = () => {
     },
     retry: 1,
     refetchOnWindowFocus: false,
+    staleTime: 5 * 60 * 1000,
   });
 
   const { data: hopeConsultantsCount = 0 } = useQuery({
@@ -285,6 +296,7 @@ export const useCounts = () => {
     },
     retry: 1,
     refetchOnWindowFocus: false,
+    staleTime: 5 * 60 * 1000,
   });
 
   const { data: hopeAnaesthetistsCount = 0 } = useQuery({
@@ -308,6 +320,7 @@ export const useCounts = () => {
     },
     retry: 1,
     refetchOnWindowFocus: false,
+    staleTime: 5 * 60 * 1000,
   });
 
   const { data: ayushmanSurgeonsCount = 0 } = useQuery({
@@ -331,6 +344,7 @@ export const useCounts = () => {
     },
     retry: 1,
     refetchOnWindowFocus: false,
+    staleTime: 5 * 60 * 1000,
   });
 
   const { data: ayushmanConsultantsCount = 0 } = useQuery({
@@ -354,6 +368,7 @@ export const useCounts = () => {
     },
     retry: 1,
     refetchOnWindowFocus: false,
+    staleTime: 5 * 60 * 1000,
   });
 
   const { data: ayushmanAnaesthetistsCount = 0 } = useQuery({
@@ -377,6 +392,7 @@ export const useCounts = () => {
     },
     retry: 1,
     refetchOnWindowFocus: false,
+    staleTime: 5 * 60 * 1000,
   });
 
   return {

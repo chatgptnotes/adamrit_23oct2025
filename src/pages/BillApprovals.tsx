@@ -93,7 +93,7 @@ const BillApprovals = () => {
       return enrichBillsWithPatients(bills || []);
     },
     enabled: isAdmin,
-    refetchInterval: 15000,
+    refetchInterval: 120000,
   });
 
   // Fetch approved bills (APPROVED + FINALIZED)
@@ -110,7 +110,7 @@ const BillApprovals = () => {
       return enrichBillsWithPatients(bills || []);
     },
     enabled: isAdmin,
-    refetchInterval: 30000,
+    refetchInterval: 120000,
   });
 
   // Fetch pending discount approvals
@@ -145,7 +145,7 @@ const BillApprovals = () => {
       return enriched;
     },
     enabled: isAdmin,
-    refetchInterval: 15000,
+    refetchInterval: 120000,
   });
 
   // Fetch pending package approvals
@@ -165,7 +165,7 @@ const BillApprovals = () => {
       }));
     },
     enabled: isAdmin,
-    refetchInterval: 15000,
+    refetchInterval: 120000,
   });
 
   const handleApprovePackage = async (visitUUID: string, visitId: string, packageAmount: string) => {

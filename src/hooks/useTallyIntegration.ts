@@ -76,7 +76,7 @@ export function useTallySyncStatus() {
       if (error) throw error;
       return data as TallySyncStatus[];
     },
-    refetchInterval: 5000 // Refresh every 5 seconds
+    refetchInterval: 60000 // Refresh every 60 seconds (reduced from 5s to prevent DB overload)
   });
 }
 

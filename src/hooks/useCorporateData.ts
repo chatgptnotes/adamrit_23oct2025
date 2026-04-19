@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { SearchableSelectOption } from '@/components/ui/searchable-select';
 
@@ -23,6 +23,7 @@ export const useCorporateData = (): UseCorporateDataReturn => {
   const [corporateIdMap, setCorporateIdMap] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fetchCorporateData = async () => {
     try {
@@ -103,8 +104,9 @@ export const useCorporateData = (): UseCorporateDataReturn => {
         },
         (payload) => {
           console.log('🔄 Corporate table changed:', payload);
-          // Refetch data when corporate table changes
-          fetchCorporateData();
+          // Debounced refetch — prevents cascade on bulk inserts
+          if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+          debounceTimerRef.current = setTimeout(() => fetchCorporateData(), 2000);
         }
       )
       .subscribe();
