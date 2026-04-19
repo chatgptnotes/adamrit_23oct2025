@@ -1,4 +1,4 @@
-import { BarChart3, Calendar, PhoneCall, Users, UserPlus, Database, Activity, FileText, TestTube, Camera, Pill, MapPin, Stethoscope, UserCog, ScrollText, Calculator, Syringe, Shield, Building2, ClipboardList, ShieldCheck, Receipt, HeartHandshake, ExternalLink, UserCheck, Bed, DoorOpen, LayoutDashboard, BookOpen, Clock, TrendingUp, Scissors, Heart, Cross, ClipboardCheck, ArrowLeftRight, Wallet, Navigation, Award } from 'lucide-react';
+import { BarChart3, Calendar, PhoneCall, Users, UserPlus, Database, Activity, FileText, TestTube, Camera, Pill, MapPin, Stethoscope, UserCog, ScrollText, Calculator, Syringe, Shield, Building2, ClipboardList, ShieldCheck, Receipt, HeartHandshake, ExternalLink, UserCheck, Bed, DoorOpen, LayoutDashboard, BookOpen, Clock, TrendingUp, Scissors, Heart, Cross, ClipboardCheck, ArrowLeftRight, Wallet, Navigation, Award, Smartphone } from 'lucide-react';
 
 export type MenuSection = 'main' | 'masters';
 
@@ -215,6 +215,16 @@ export const menuItems: MenuItemDef[] = [
     title: "Marketing Incentives",
     url: "/marketing-incentives",
     icon: Award,
+  },
+  {
+    title: "Doctor View",
+    url: "/doctor-view",
+    icon: Stethoscope,
+  },
+  {
+    title: "Patient Portal",
+    url: "/patient-portal",
+    icon: Smartphone,
   },
 
   // ── Masters section ──
