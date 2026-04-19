@@ -1,4 +1,4 @@
-import { BarChart3, Calendar, PhoneCall, Users, UserPlus, Database, Activity, FileText, TestTube, Camera, Pill, MapPin, Stethoscope, UserCog, ScrollText, Calculator, Syringe, Shield, Building2, ClipboardList, ShieldCheck, Receipt, HeartHandshake, ExternalLink, UserCheck, Bed, DoorOpen, LayoutDashboard, BookOpen, Clock, TrendingUp, Scissors, Heart, Cross, ClipboardCheck, ArrowLeftRight, Wallet } from 'lucide-react';
+import { BarChart3, Calendar, PhoneCall, Users, UserPlus, Database, Activity, FileText, TestTube, Camera, Pill, MapPin, Stethoscope, UserCog, ScrollText, Calculator, Syringe, Shield, Building2, ClipboardList, ShieldCheck, Receipt, HeartHandshake, ExternalLink, UserCheck, Bed, DoorOpen, LayoutDashboard, BookOpen, Clock, TrendingUp, Scissors, Heart, Cross, ClipboardCheck, ArrowLeftRight, Wallet, Navigation, Award } from 'lucide-react';
 
 export type MenuSection = 'main' | 'masters';
 
@@ -190,6 +190,31 @@ export const menuItems: MenuItemDef[] = [
     title: "Patient Journey Logs",
     url: "/patient-journey-logs",
     icon: ScrollText,
+  },
+  {
+    title: "Queue Management",
+    url: "/queue-management",
+    icon: Clock,
+  },
+  {
+    title: "Home Collection",
+    url: "/home-collection",
+    icon: MapPin,
+  },
+  {
+    title: "Phlebotomist",
+    url: "/phlebotomist",
+    icon: Navigation,
+  },
+  {
+    title: "B2B Partners",
+    url: "/b2b-portal",
+    icon: Building2,
+  },
+  {
+    title: "Marketing Incentives",
+    url: "/marketing-incentives",
+    icon: Award,
   },
 
   // ── Masters section ──
