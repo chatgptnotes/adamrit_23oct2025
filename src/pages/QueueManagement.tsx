@@ -102,7 +102,7 @@ export default function QueueManagement() {
             {format(new Date(), 'EEEE, dd MMMM yyyy')} · {tokens.length} tokens today
           </p>
         </div>
-        <Button variant="outline" onClick={() => window.open('/queue-display?dept=' + dept, '_blank')}>
+        <Button variant="outline" onClick={() => window.open('/queue-tv', '_blank')}>
           <Tv className="w-4 h-4 mr-2" />
           TV Display
         </Button>

@@ -121,6 +121,7 @@ const BillApprovals = lazy(() => import("../pages/BillApprovals"));
 const DailyPaymentAllocation = lazy(() => import("../pages/DailyPaymentAllocation"));
 const QueueManagement = lazy(() => import("../pages/QueueManagement"));
 const QueueDisplay = lazy(() => import("../pages/QueueDisplay"));
+const QueueTV = lazy(() => import("../pages/QueueTV"));
 const HomeCollection = lazy(() => import("../pages/HomeCollection"));
 const PhlebotomistDashboard = lazy(() => import("../pages/PhlebotomistDashboard"));
 const B2BPortal = lazy(() => import("../pages/B2BPortal"));
@@ -255,6 +256,7 @@ export const AppRoutes = () => {
         <Route path="/daily-payment-allocation" element={<Suspense fallback={<PageLoader />}><DailyPaymentAllocation /></Suspense>} />
         <Route path="/queue-management" element={<Suspense fallback={<PageLoader />}><QueueManagement /></Suspense>} />
         <Route path="/queue-display" element={<QueueDisplay />} />
+        <Route path="/queue-tv" element={<QueueTV />} />
         <Route path="/home-collection" element={<Suspense fallback={<PageLoader />}><HomeCollection /></Suspense>} />
         <Route path="/phlebotomist" element={<Suspense fallback={<PageLoader />}><PhlebotomistDashboard /></Suspense>} />
         <Route path="/b2b-portal" element={<Suspense fallback={<PageLoader />}><B2BPortal /></Suspense>} />

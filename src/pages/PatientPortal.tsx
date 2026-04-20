@@ -5,10 +5,14 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Search, TestTube, Camera, Clock, Phone, User, FileText, CheckCircle } from 'lucide-react';
+import { Search, TestTube, Clock, Phone, User, FileText, CheckCircle, TrendingUp, X, ChevronDown, ChevronUp } from 'lucide-react';
 import { format } from 'date-fns';
+import {
+  LineChart, Line, XAxis, YAxis, Tooltip, ReferenceLine,
+  ResponsiveContainer, CartesianGrid,
+} from 'recharts';
 
-// DATA SOURCE: patients (mobile lookup) → visits → lab_results + radiology_orders + queue_tokens
+// DATA SOURCE: patients (mobile lookup) → visits → lab_results + queue_tokens
 
 interface Patient {
   id: string;
@@ -39,19 +43,86 @@ interface QueueToken {
 }
 
 const STATUS_BADGE: Record<string, { label: string; color: string }> = {
-  waiting:          { label: 'Waiting',     color: 'bg-yellow-100 text-yellow-800' },
-  called:           { label: 'Your Turn!',  color: 'bg-green-500 text-white animate-pulse' },
-  serving:          { label: 'Being Served', color: 'bg-green-100 text-green-800' },
-  done:             { label: 'Done',        color: 'bg-gray-100 text-gray-500' },
-  skipped:          { label: 'Skipped',     color: 'bg-red-100 text-red-700' },
+  waiting: { label: 'Waiting',      color: 'bg-yellow-100 text-yellow-800' },
+  called:  { label: 'Your Turn!',   color: 'bg-green-500 text-white animate-pulse' },
+  serving: { label: 'Being Served', color: 'bg-green-100 text-green-800' },
+  done:    { label: 'Done',         color: 'bg-gray-100 text-gray-500' },
+  skipped: { label: 'Skipped',      color: 'bg-red-100 text-red-700' },
 };
+
+// Parse "low - high" from reference_range string
+function parseRange(ref: string | null): { low: number; high: number } | null {
+  if (!ref) return null;
+  const m = ref.match(/([\d.]+)\s*[-–]\s*([\d.]+)/);
+  if (!m) return null;
+  return { low: parseFloat(m[1]), high: parseFloat(m[2]) };
+}
+
+function TrendChart({ results, unit, refRange }: {
+  results: LabResult[];
+  unit: string | null;
+  refRange: string | null;
+}) {
+  const data = results
+    .filter(r => r.result_value && !isNaN(parseFloat(r.result_value)))
+    .map(r => ({
+      date: format(new Date(r.created_at), 'dd MMM yy'),
+      value: parseFloat(r.result_value!),
+      abnormal: r.is_abnormal,
+    }))
+    .reverse();
+
+  if (data.length < 2) return (
+    <p className="text-xs text-muted-foreground py-4 text-center">Need at least 2 data points for trend</p>
+  );
+
+  const range = parseRange(refRange);
+  const yMin = range ? Math.min(range.low * 0.85, Math.min(...data.map(d => d.value)) * 0.9) : undefined;
+  const yMax = range ? Math.max(range.high * 1.15, Math.max(...data.map(d => d.value)) * 1.1) : undefined;
+
+  return (
+    <div className="h-36 mt-2">
+      <ResponsiveContainer width="100%" height="100%">
+        <LineChart data={data} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+          <XAxis dataKey="date" tick={{ fontSize: 10 }} />
+          <YAxis domain={[yMin ?? 'auto', yMax ?? 'auto']} tick={{ fontSize: 10 }} />
+          <Tooltip
+            formatter={(v: number) => [`${v} ${unit || ''}`, 'Result']}
+            labelStyle={{ fontSize: 11 }}
+            contentStyle={{ fontSize: 11 }}
+          />
+          {range && (
+            <>
+              <ReferenceLine y={range.low} stroke="#22c55e" strokeDasharray="4 2" label={{ value: 'Min', fontSize: 9, fill: '#22c55e' }} />
+              <ReferenceLine y={range.high} stroke="#22c55e" strokeDasharray="4 2" label={{ value: 'Max', fontSize: 9, fill: '#22c55e' }} />
+            </>
+          )}
+          <Line
+            type="monotone"
+            dataKey="value"
+            stroke="#3b82f6"
+            strokeWidth={2}
+            dot={(props: any) => {
+              const { cx, cy, payload } = props;
+              return <circle key={cx} cx={cx} cy={cy} r={4}
+                fill={payload.abnormal ? '#ef4444' : '#3b82f6'}
+                stroke="white" strokeWidth={1.5} />;
+            }}
+          />
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
 
 export default function PatientPortal() {
   const [mobileInput, setMobileInput] = useState('');
   const [searchMobile, setSearchMobile] = useState('');
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
+  const [activeTab, setActiveTab] = useState<'reports' | 'trends'>('reports');
+  const [expandedTest, setExpandedTest] = useState<string | null>(null);
 
-  // Lookup patients by mobile
   const { data: patients = [], isLoading: lookupLoading } = useQuery({
     queryKey: ['portal-lookup', searchMobile],
     queryFn: async () => {
@@ -67,7 +138,7 @@ export default function PatientPortal() {
     staleTime: 30000,
   });
 
-  // Lab results for selected patient (last 30 days)
+  // DATA SOURCE: lab_results for patient — fetch up to 200 for trend charts
   const { data: labResults = [], isLoading: labLoading } = useQuery({
     queryKey: ['portal-lab', selectedPatient?.id],
     queryFn: async () => {
@@ -78,14 +149,13 @@ export default function PatientPortal() {
         .eq('patient_id', selectedPatient.id)
         .not('result_value', 'is', null)
         .order('created_at', { ascending: false })
-        .limit(60);
+        .limit(200);
       return (data || []) as LabResult[];
     },
     enabled: !!selectedPatient,
     staleTime: 60000,
   });
 
-  // Queue status for this patient today
   const { data: queueTokens = [] } = useQuery({
     queryKey: ['portal-queue', selectedPatient?.id],
     queryFn: async () => {
@@ -106,13 +176,28 @@ export default function PatientPortal() {
     staleTime: 5000,
   });
 
-  // Group lab results by date
-  const byDate = labResults.reduce<Record<string, LabResult[]>>((acc, r) => {
+  // Group by date for reports tab
+  const byDate = labResults.slice(0, 60).reduce<Record<string, LabResult[]>>((acc, r) => {
     const key = format(new Date(r.created_at), 'dd MMM yyyy');
     if (!acc[key]) acc[key] = [];
     acc[key].push(r);
     return acc;
   }, {});
+
+  // Group by test_name for trends tab
+  const byTest = labResults.reduce<Record<string, LabResult[]>>((acc, r) => {
+    if (!acc[r.test_name]) acc[r.test_name] = [];
+    acc[r.test_name].push(r);
+    return acc;
+  }, {});
+
+  // Only show tests with numeric values & >1 data point for trend
+  const trendableTests = Object.entries(byTest)
+    .filter(([, results]) => {
+      const numeric = results.filter(r => r.result_value && !isNaN(parseFloat(r.result_value)));
+      return numeric.length >= 2;
+    })
+    .sort((a, b) => b[1].length - a[1].length);
 
   const handleSearch = () => setSearchMobile(mobileInput.trim());
 
@@ -125,7 +210,7 @@ export default function PatientPortal() {
             <User className="w-7 h-7 text-white" />
           </div>
           <h1 className="text-2xl font-bold">Patient Self-Service</h1>
-          <p className="text-sm text-muted-foreground mt-1">View your reports and queue status</p>
+          <p className="text-sm text-muted-foreground mt-1">View reports, trends & queue status</p>
         </div>
 
         {/* Search */}
@@ -149,7 +234,6 @@ export default function PatientPortal() {
               </Button>
             </div>
 
-            {/* Patient selector */}
             {lookupLoading && <p className="text-sm text-muted-foreground mt-2">Searching…</p>}
             {patients.length > 0 && !selectedPatient && (
               <div className="mt-3 space-y-2">
@@ -174,7 +258,6 @@ export default function PatientPortal() {
           </CardContent>
         </Card>
 
-        {/* Selected patient view */}
         {selectedPatient && (
           <>
             {/* Patient header */}
@@ -192,7 +275,7 @@ export default function PatientPortal() {
                   className="text-blue-800 border-white/30 hover:bg-blue-700 hover:text-white"
                   onClick={() => { setSelectedPatient(null); setSearchMobile(''); setMobileInput(''); }}
                 >
-                  Change
+                  <X className="w-3.5 h-3.5 mr-1" /> Change
                 </Button>
               </CardContent>
             </Card>
@@ -215,7 +298,7 @@ export default function PatientPortal() {
                             {t.department[0]}{t.token_number}
                           </div>
                           <div className="text-sm text-muted-foreground">
-                            {t.department} {t.counter_name ? `· ${t.counter_name}` : ''}
+                            {t.department}{t.counter_name ? ` · ${t.counter_name}` : ''}
                           </div>
                         </div>
                         <Badge className={`text-sm px-3 py-1 ${badge.color}`}>{badge.label}</Badge>
@@ -226,57 +309,155 @@ export default function PatientPortal() {
               </Card>
             )}
 
-            {/* Lab Reports */}
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <TestTube className="w-4 h-4 text-green-600" /> Your Lab Reports
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {labLoading ? (
-                  <p className="text-sm text-muted-foreground">Loading reports…</p>
-                ) : Object.keys(byDate).length === 0 ? (
-                  <div className="text-center py-6 text-muted-foreground">
-                    <FileText className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                    <p className="text-sm">No lab results found</p>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {Object.entries(byDate).map(([date, results]) => (
-                      <div key={date}>
-                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">{date}</p>
-                        <div className="space-y-1">
-                          {results.map(r => (
-                            <div
-                              key={r.id}
-                              className={`flex items-center justify-between px-3 py-2 rounded-lg text-sm ${r.is_abnormal ? 'bg-red-50 border border-red-200' : 'bg-gray-50'}`}
-                            >
-                              <div className="flex-1 min-w-0">
-                                <span className={`font-medium ${r.is_abnormal ? 'text-red-700' : ''}`}>{r.test_name}</span>
-                                {r.reference_range && (
-                                  <span className="text-xs text-muted-foreground ml-1 hidden sm:inline">({r.reference_range})</span>
-                                )}
-                              </div>
-                              <div className="flex items-center gap-1 shrink-0 ml-3">
-                                <span className={`font-bold ${r.is_abnormal ? 'text-red-700' : 'text-green-700'}`}>
-                                  {r.result_value}
-                                </span>
-                                {r.unit && <span className="text-xs text-muted-foreground">{r.unit}</span>}
-                                {r.is_abnormal && <span className="text-red-500 text-xs">⚠</span>}
-                                {r.result_status === 'final' && !r.is_abnormal && (
-                                  <CheckCircle className="w-3 h-3 text-green-500" />
-                                )}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+            {/* Tab switcher */}
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                variant={activeTab === 'reports' ? 'default' : 'outline'}
+                onClick={() => setActiveTab('reports')}
+                className="flex-1"
+              >
+                <TestTube className="w-3.5 h-3.5 mr-1.5" /> Reports
+              </Button>
+              <Button
+                size="sm"
+                variant={activeTab === 'trends' ? 'default' : 'outline'}
+                onClick={() => setActiveTab('trends')}
+                className="flex-1"
+              >
+                <TrendingUp className="w-3.5 h-3.5 mr-1.5" /> Trends
+                {trendableTests.length > 0 && (
+                  <Badge variant="secondary" className="ml-1.5 h-4 px-1 text-xs">{trendableTests.length}</Badge>
                 )}
-              </CardContent>
-            </Card>
+              </Button>
+            </div>
+
+            {/* Reports Tab */}
+            {activeTab === 'reports' && (
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <FileText className="w-4 h-4 text-green-600" /> Lab Reports
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {labLoading ? (
+                    <p className="text-sm text-muted-foreground">Loading reports…</p>
+                  ) : Object.keys(byDate).length === 0 ? (
+                    <div className="text-center py-6 text-muted-foreground">
+                      <FileText className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                      <p className="text-sm">No lab results found</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {Object.entries(byDate).map(([date, results]) => (
+                        <div key={date}>
+                          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">{date}</p>
+                          <div className="space-y-1">
+                            {results.map(r => (
+                              <div
+                                key={r.id}
+                                className={`flex items-center justify-between px-3 py-2 rounded-lg text-sm ${r.is_abnormal ? 'bg-red-50 border border-red-200' : 'bg-gray-50'}`}
+                              >
+                                <div className="flex-1 min-w-0">
+                                  <span className={`font-medium ${r.is_abnormal ? 'text-red-700' : ''}`}>{r.test_name}</span>
+                                  {r.reference_range && (
+                                    <span className="text-xs text-muted-foreground ml-1 hidden sm:inline">({r.reference_range})</span>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-1 shrink-0 ml-3">
+                                  <span className={`font-bold ${r.is_abnormal ? 'text-red-700' : 'text-green-700'}`}>
+                                    {r.result_value}
+                                  </span>
+                                  {r.unit && <span className="text-xs text-muted-foreground">{r.unit}</span>}
+                                  {r.is_abnormal && <span className="text-red-500 text-xs">⚠</span>}
+                                  {r.result_status === 'final' && !r.is_abnormal && (
+                                    <CheckCircle className="w-3 h-3 text-green-500" />
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Trends Tab */}
+            {activeTab === 'trends' && (
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <TrendingUp className="w-4 h-4 text-blue-600" /> Parameter Trends
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {labLoading ? (
+                    <p className="text-sm text-muted-foreground">Loading…</p>
+                  ) : trendableTests.length === 0 ? (
+                    <div className="text-center py-6 text-muted-foreground">
+                      <TrendingUp className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                      <p className="text-sm">Not enough data for trend charts yet</p>
+                      <p className="text-xs mt-1">At least 2 results per test are needed</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {trendableTests.map(([testName, results]) => {
+                        const latest = results[0];
+                        const isExpanded = expandedTest === testName;
+                        const hasAbnormal = results.some(r => r.is_abnormal);
+                        return (
+                          <div key={testName} className={`border rounded-lg overflow-hidden ${hasAbnormal ? 'border-red-200' : 'border-gray-200'}`}>
+                            <button
+                              className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-gray-50 transition-colors"
+                              onClick={() => setExpandedTest(isExpanded ? null : testName)}
+                            >
+                              <div className="flex items-center gap-2 min-w-0">
+                                {hasAbnormal && <span className="text-red-500 text-xs shrink-0">⚠</span>}
+                                <span className="font-medium text-sm truncate">{testName}</span>
+                                <Badge variant="outline" className="text-xs shrink-0">{results.length}x</Badge>
+                              </div>
+                              <div className="flex items-center gap-3 shrink-0 ml-2">
+                                <div className="text-right">
+                                  <span className={`font-bold text-sm ${latest.is_abnormal ? 'text-red-600' : 'text-green-700'}`}>
+                                    {latest.result_value}
+                                  </span>
+                                  {latest.unit && <span className="text-xs text-muted-foreground ml-1">{latest.unit}</span>}
+                                </div>
+                                {isExpanded ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
+                              </div>
+                            </button>
+                            {isExpanded && (
+                              <div className="px-4 pb-4 border-t bg-gray-50">
+                                {latest.reference_range && (
+                                  <p className="text-xs text-muted-foreground mt-2">Reference: {latest.reference_range} {latest.unit || ''}</p>
+                                )}
+                                <TrendChart
+                                  results={results}
+                                  unit={latest.unit}
+                                  refRange={latest.reference_range}
+                                />
+                                <div className="mt-2 grid grid-cols-3 gap-2 text-center">
+                                  {results.slice(0, 6).map(r => (
+                                    <div key={r.id} className={`text-xs rounded p-1 ${r.is_abnormal ? 'bg-red-100 text-red-700' : 'bg-white border'}`}>
+                                      <div className="font-bold">{r.result_value}</div>
+                                      <div className="text-muted-foreground">{format(new Date(r.created_at), 'dd MMM')}</div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
 
             <p className="text-center text-xs text-muted-foreground pb-4">
               For queries contact reception · Reports refresh automatically
