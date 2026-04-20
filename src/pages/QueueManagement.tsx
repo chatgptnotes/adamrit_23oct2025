@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { Plus, CheckCircle, Phone, SkipForward, Tv, Clock } from 'lucide-react';
+import { Plus, CheckCircle, Phone, SkipForward, Tv, Clock, Zap } from 'lucide-react';
 import { format } from 'date-fns';
 
 const DEPARTMENTS = [
@@ -29,6 +29,8 @@ export default function QueueManagement() {
   const [patientName, setPatientName] = useState('');
   const [mobile, setMobile] = useState('');
   const [counter, setCounter] = useState('Counter 1');
+  const [billVisitId, setBillVisitId] = useState('');
+  const [billPatientName, setBillPatientName] = useState('');
 
   // DATA SOURCE: queue_tokens → filtered by department + today's date
   const { data: tokens = [], isLoading } = useQuery({
@@ -77,6 +79,27 @@ export default function QueueManagement() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  // DATA SOURCE: auto_queue_from_bill RPC → creates queue tokens from bill services
+  const autoQueueFromBill = useMutation({
+    mutationFn: async () => {
+      if (!billVisitId.trim()) throw new Error('Visit ID required');
+      if (!billPatientName.trim()) throw new Error('Patient name required');
+      const { data, error } = await supabase.rpc('auto_queue_from_bill', {
+        p_visit_id: billVisitId.trim(),
+        p_patient_name: billPatientName.trim(),
+      });
+      if (error) throw error;
+      return data as number;
+    },
+    onSuccess: (count) => {
+      toast.success(`${count} queue token${count !== 1 ? 's' : ''} created from bill`);
+      setBillVisitId('');
+      setBillPatientName('');
+      qc.invalidateQueries({ queryKey: ['queue-tokens', dept] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   const updateStatus = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: string }) => {
       const updates: Record<string, string | null> = { status };
@@ -107,6 +130,48 @@ export default function QueueManagement() {
           TV Display
         </Button>
       </div>
+
+      {/* Auto-Queue from Bill */}
+      <Card className="border-blue-200 bg-blue-50">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm flex items-center gap-2">
+            <Zap className="w-4 h-4 text-blue-600" />
+            Auto-Queue from Bill
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-wrap gap-3 items-end">
+            <div className="flex-1 min-w-40">
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">Visit ID</label>
+              <Input
+                placeholder="Paste visit UUID"
+                value={billVisitId}
+                onChange={e => setBillVisitId(e.target.value)}
+                className="font-mono text-xs"
+              />
+            </div>
+            <div className="flex-1 min-w-40">
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">Patient Name</label>
+              <Input
+                placeholder="Enter patient name"
+                value={billPatientName}
+                onChange={e => setBillPatientName(e.target.value)}
+              />
+            </div>
+            <Button
+              className="bg-blue-600 hover:bg-blue-700"
+              onClick={() => autoQueueFromBill.mutate()}
+              disabled={autoQueueFromBill.isPending || !billVisitId.trim() || !billPatientName.trim()}
+            >
+              <Zap className="w-4 h-4 mr-2" />
+              {autoQueueFromBill.isPending ? 'Creating…' : 'Create Tokens'}
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground mt-2">
+            Checks bill for Lab / Radiology / Pharmacy services and creates queue tokens automatically.
+          </p>
+        </CardContent>
+      </Card>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Issue Token */}

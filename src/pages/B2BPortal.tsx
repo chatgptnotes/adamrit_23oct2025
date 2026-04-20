@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { Building2, Plus, Phone, MapPin, Clock, X, FileText, IndianRupee } from 'lucide-react';
+import { Building2, Plus, Phone, MapPin, Clock, X, FileText, IndianRupee, LogOut } from 'lucide-react';
 import { format } from 'date-fns';
 
 // DATA SOURCE: b2b_partners → home_collection_requests (filtered by b2b_partner_id)
@@ -59,8 +59,27 @@ const emptyRequest = (): NewRequest => ({
 });
 
 export default function B2BPortal() {
+  // DATA SOURCE: localStorage → b2b_partner_id / b2b_partner_name (set by B2BLogin)
+  const sessionPartnerId = localStorage.getItem('b2b_partner_id');
+  const sessionPartnerName = localStorage.getItem('b2b_partner_name');
+
+  // Guard: redirect to login if no session
+  if (!sessionPartnerId) {
+    window.location.href = '/b2b-login';
+    return null;
+  }
+
+  // Clear localStorage session and redirect to login
+  const handleLogout = () => {
+    localStorage.removeItem('b2b_partner_id');
+    localStorage.removeItem('b2b_partner_name');
+    localStorage.removeItem('b2b_partner_code');
+    window.location.href = '/b2b-login';
+  };
+
   const qc = useQueryClient();
-  const [selectedPartnerId, setSelectedPartnerId] = useState('');
+  // Pre-select the logged-in partner; staff admin can still switch via the dropdown
+  const [selectedPartnerId, setSelectedPartnerId] = useState(sessionPartnerId);
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterDate, setFilterDate] = useState('');
   const [showForm, setShowForm] = useState(false);
@@ -161,16 +180,26 @@ export default function B2BPortal() {
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
             <Building2 className="w-6 h-6 text-blue-600" /> B2B Partner Portal
           </h1>
           <p className="text-sm text-muted-foreground">Aggregators, TPAs & franchise partners</p>
         </div>
-        <Button variant="outline" onClick={() => setShowPartnerForm(true)}>
-          <Plus className="w-4 h-4 mr-2" /> Add Partner
-        </Button>
+        <div className="flex items-center gap-3">
+          {/* Session badge showing logged-in partner name */}
+          <Badge variant="secondary" className="text-sm px-3 py-1.5 flex items-center gap-1.5">
+            <Building2 className="w-3.5 h-3.5" />
+            Logged in as: <span className="font-semibold">{sessionPartnerName}</span>
+          </Badge>
+          <Button variant="outline" size="sm" onClick={handleLogout}>
+            <LogOut className="w-4 h-4 mr-1.5" /> Logout
+          </Button>
+          <Button variant="outline" onClick={() => setShowPartnerForm(true)}>
+            <Plus className="w-4 h-4 mr-2" /> Add Partner
+          </Button>
+        </div>
       </div>
 
       {/* Add Partner Form */}

@@ -125,6 +125,7 @@ const QueueTV = lazy(() => import("../pages/QueueTV"));
 const HomeCollection = lazy(() => import("../pages/HomeCollection"));
 const PhlebotomistDashboard = lazy(() => import("../pages/PhlebotomistDashboard"));
 const B2BPortal = lazy(() => import("../pages/B2BPortal"));
+const B2BLogin = lazy(() => import("../pages/B2BLogin"));
 const MarketingIncentives = lazy(() => import("../pages/MarketingIncentives"));
 const DoctorView = lazy(() => import("../pages/DoctorView"));
 const PatientPortal = lazy(() => import("../pages/PatientPortal"));
@@ -132,6 +133,8 @@ const SelfCheckIn = lazy(() => import("../pages/SelfCheckIn"));
 const ReportDelivery = lazy(() => import("../pages/ReportDelivery"));
 const RadiologyWorklist = lazy(() => import("../pages/RadiologyWorklist"));
 const StaffAttendance = lazy(() => import("../pages/StaffAttendance"));
+const MarketingFieldTracker = lazy(() => import("../pages/MarketingFieldTracker"));
+const Appointments = lazy(() => import("../pages/Appointments"));
 
 // Loading component
 const PageLoader = () => (
@@ -259,6 +262,7 @@ export const AppRoutes = () => {
         <Route path="/queue-tv" element={<QueueTV />} />
         <Route path="/home-collection" element={<Suspense fallback={<PageLoader />}><HomeCollection /></Suspense>} />
         <Route path="/phlebotomist" element={<Suspense fallback={<PageLoader />}><PhlebotomistDashboard /></Suspense>} />
+        <Route path="/b2b-login" element={<Suspense fallback={<PageLoader />}><B2BLogin /></Suspense>} />
         <Route path="/b2b-portal" element={<Suspense fallback={<PageLoader />}><B2BPortal /></Suspense>} />
         <Route path="/marketing-incentives" element={<Suspense fallback={<PageLoader />}><MarketingIncentives /></Suspense>} />
         <Route path="/doctor-view" element={<Suspense fallback={<PageLoader />}><DoctorView /></Suspense>} />
@@ -267,6 +271,9 @@ export const AppRoutes = () => {
         <Route path="/report-delivery" element={<Suspense fallback={<PageLoader />}><ReportDelivery /></Suspense>} />
         <Route path="/radiology-worklist" element={<Suspense fallback={<PageLoader />}><RadiologyWorklist /></Suspense>} />
         <Route path="/attendance" element={<Suspense fallback={<PageLoader />}><StaffAttendance /></Suspense>} />
+        <Route path="/marketing-field" element={<Suspense fallback={<PageLoader />}><MarketingFieldTracker /></Suspense>} />
+        <Route path="/appointments" element={<Suspense fallback={<PageLoader />}><Appointments /></Suspense>} />
+        <Route path="/b2b-login" element={<Suspense fallback={<PageLoader />}><B2BLogin /></Suspense>} />
         {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
         <Route path="/master-data" element={<Suspense fallback={<PageLoader />}><MasterData /></Suspense>} />
         <Route path="*" element={<NotFound />} />
