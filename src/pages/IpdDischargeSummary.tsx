@@ -3696,15 +3696,11 @@ DD/MM/YYYY:-Test Category: Test1:Value1 unit, Test2:Value2 unit`);
               />
             </div>
             <div className="space-y-2">
-              <Label>Date Of Discharge:{isSummarySaved && <span className="text-xs text-gray-500 ml-1">(locked)</span>}</Label>
+              <Label>Date Of Discharge:</Label>
               <Input
                 type="date"
                 value={patientInfo.dateOfDischarge}
-                onChange={(e) => !isSummarySaved && setPatientInfo({...patientInfo, dateOfDischarge: e.target.value})}
-                readOnly={isSummarySaved}
-                disabled={isSummarySaved}
-                className={isSummarySaved ? "bg-gray-100 cursor-not-allowed" : ""}
-                title={isSummarySaved ? "Discharge date cannot be changed after summary is saved" : ""}
+                onChange={(e) => setPatientInfo({...patientInfo, dateOfDischarge: e.target.value})}
               />
             </div>
             <div className="space-y-2">
