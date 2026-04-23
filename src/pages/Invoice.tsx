@@ -2189,7 +2189,16 @@ const Invoice = () => {
   const billStatus = (billData as any)?.status as string | undefined;
   const isApproved = billStatus === 'APPROVED';
   const isPendingApproval = billStatus === 'PENDING_APPROVAL';
-  const printDisabled = !!billData?.id && !isApproved;
+
+  // Approval is required only for IPD + Private bills.
+  // OPD (any payer) and IPD Corporate/Panel bills bypass approval.
+  const visitPatientType = (visitData?.patient_type || '').toLowerCase().trim();
+  const visitCorporate = (visitData?.patients?.corporate || '').toLowerCase().trim();
+  const visitHasCorporate = visitCorporate.length > 0 && visitCorporate !== 'private';
+  const isIPDVisit = visitPatientType === 'ipd';
+  const needsApproval = isIPDVisit && !visitHasCorporate;
+
+  const printDisabled = !!billData?.id && needsApproval && !isApproved;
 
   return (
     <div className="min-h-screen bg-white p-4">
@@ -2203,7 +2212,7 @@ const Invoice = () => {
               Close
             </button>
             <div className="flex items-center gap-3">
-              {billData?.id && !isPendingApproval && !isApproved && (
+              {billData?.id && !isPendingApproval && !isApproved && needsApproval && (
                 <button
                   onClick={handleRequestApproval}
                   className="px-4 py-2 bg-orange-500 text-white rounded hover:bg-orange-600 transition-colors"
