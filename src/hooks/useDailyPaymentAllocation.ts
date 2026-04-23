@@ -228,9 +228,14 @@ export const useFundAccounts = (date: string) => {
 
       if (overrides) {
         for (const ov of overrides) {
+          // PostgREST returns numeric columns as strings. Coerce to Number
+          // so arithmetic (e.g. totalActual reduce) doesn't string-concat.
+          const actual = ov.actual_balance !== null && ov.actual_balance !== undefined
+            ? Number(ov.actual_balance)
+            : null;
           const existing = accounts.find(a => a.id === ov.account_ref_id);
           if (existing) {
-            existing.actual_balance = ov.actual_balance;
+            existing.actual_balance = actual;
             existing.notes = ov.notes || '';
           } else {
             // Manual-only account (not from Tally)
@@ -240,7 +245,7 @@ export const useFundAccounts = (date: string) => {
               type: ov.account_type || 'bank',
               hospital: ov.hospital_name || 'hope',
               ledger_balance: 0,
-              actual_balance: ov.actual_balance,
+              actual_balance: actual,
               notes: ov.notes || '',
               last_synced: null,
             });
