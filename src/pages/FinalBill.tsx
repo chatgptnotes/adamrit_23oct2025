@@ -2162,6 +2162,7 @@ const FinalBill = () => {
   const [isGeneratingDischargeSummary, setIsGeneratingDischargeSummary] = useState(false);
   const [patientInfo, setPatientInfo] = useState<any>(null);
   const [visitCorporateOverride, setVisitCorporateOverride] = useState<string>('');
+  const [visitPatientType, setVisitPatientType] = useState<string>('');
 
   // Refetch services when patient info or visit corporate override changes
   useEffect(() => {
@@ -4148,6 +4149,8 @@ const FinalBill = () => {
 
       // Store visit-level billing override (corporate column on visits table)
       setVisitCorporateOverride((visitData.corporate || '').toLowerCase().trim());
+      // Store visit patient type (IPD/OPD/Emergency) for approval gating
+      setVisitPatientType(((visitData as any).patient_type || '').toLowerCase().trim());
 
       // Combine patient info with surgery details
       const combinedInfo = {
@@ -16267,6 +16270,16 @@ Dr. Murali B K
     );
   }
 
+  // Approval gating: only IPD + Private bills need approval.
+  // OPD (any payer) and IPD Corporate/Panel (CGHS, ECHS, ESIC, etc.) bypass it.
+  const fbEffectiveCorporate = (visitCorporateOverride || patientInfo?.corporate || '').toLowerCase().trim();
+  const fbHasCorporate = fbEffectiveCorporate.length > 0 && fbEffectiveCorporate !== 'private';
+  const fbIsIPD = visitPatientType === 'ipd';
+  const needsApproval = fbIsIPD && !fbHasCorporate;
+  const billStatusStr = (billData as any)?.status as string | undefined;
+  const fbIsApproved = billStatusStr === 'APPROVED';
+  const fbPrintLockedByApproval = !!billData?.id && needsApproval && !fbIsApproved;
+
   return (
     <>
       {/* Discharge View Modal */}
@@ -23590,12 +23603,12 @@ Dr. Murali B K
                   variant="outline"
                   size="lg"
                   className="px-6 py-2"
-                  disabled={isBillSubmitted || isAmountReceived || (billData?.id && (billData as any)?.status !== 'APPROVED')}
-                  title={isBillSubmitted ? 'Print disabled - Bill already submitted' : isAmountReceived ? 'Print disabled - Amount already received' : (billData?.id && (billData as any)?.status !== 'APPROVED') ? 'Print disabled - Awaiting approval' : 'Print / Save PDF'}
+                  disabled={isBillSubmitted || isAmountReceived || fbPrintLockedByApproval}
+                  title={isBillSubmitted ? 'Print disabled - Bill already submitted' : isAmountReceived ? 'Print disabled - Amount already received' : fbPrintLockedByApproval ? 'Print disabled - Awaiting approval' : 'Print / Save PDF'}
                 >
-                  {isBillSubmitted || isAmountReceived ? '🔒 Print Locked' : (billData?.id && (billData as any)?.status !== 'APPROVED') ? '🔒 Awaiting Approval' : '🖨️ Print / Save PDF'}
+                  {isBillSubmitted || isAmountReceived ? '🔒 Print Locked' : fbPrintLockedByApproval ? '🔒 Awaiting Approval' : '🖨️ Print / Save PDF'}
                 </Button>
-                {billData?.id && (billData as any)?.status !== 'PENDING_APPROVAL' && (billData as any)?.status !== 'APPROVED' && (
+                {billData?.id && (billData as any)?.status !== 'PENDING_APPROVAL' && (billData as any)?.status !== 'APPROVED' && needsApproval && (
                   <Button
                     onClick={handleRequestApproval}
                     className="bg-orange-500 hover:bg-orange-600 text-white px-6 py-2"
@@ -23604,7 +23617,7 @@ Dr. Murali B K
                     Request Approval
                   </Button>
                 )}
-                {(billData as any)?.status === 'PENDING_APPROVAL' && (
+                {(billData as any)?.status === 'PENDING_APPROVAL' && needsApproval && (
                   <span className="flex items-center text-orange-600 font-medium px-4">
                     Pending Approval
                   </span>
