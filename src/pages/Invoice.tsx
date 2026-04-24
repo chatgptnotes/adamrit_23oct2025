@@ -2220,7 +2220,7 @@ const Invoice = () => {
                   Request Approval
                 </button>
               )}
-              {isPendingApproval && (
+              {isPendingApproval && needsApproval && (
                 <span className="text-orange-600 font-medium px-2">
                   Pending Approval
                 </span>
