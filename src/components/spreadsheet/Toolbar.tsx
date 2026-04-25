@@ -10,102 +10,82 @@ export const Toolbar: React.FC = () => {
   const [selectedColor, setSelectedColor] = useState('#000000');
 
   const handleUndo = () => {
-    console.log('Undo action');
     // Add undo functionality here
   };
 
   const handleRedo = () => {
-    console.log('Redo action');
     // Add redo functionality here
   };
 
   const handlePrint = () => {
-    console.log('Print action');
     window.print();
   };
 
   const handleSpellCheck = () => {
-    console.log('Spell check action');
     // Add spell check functionality here
   };
 
   const handlePaintFormat = () => {
-    console.log('Paint format action');
     // Add paint format functionality here
   };
 
   const handleZoomIn = () => {
-    console.log('Zoom in action');
     // Add zoom in functionality here
   };
 
   const handleSelectAll = () => {
-    console.log('Select all action');
     // Add select all functionality here
   };
 
   const handleBold = () => {
     setIsBold(!isBold);
-    console.log('Bold toggle:', !isBold);
   };
 
   const handleItalic = () => {
     setIsItalic(!isItalic);
-    console.log('Italic toggle:', !isItalic);
   };
 
   const handleStrikethrough = () => {
-    console.log('Strikethrough action');
     // Add strikethrough functionality here
   };
 
   const handleTextColor = (color: string) => {
     setSelectedColor(color);
-    console.log('Text color changed to:', color);
   };
 
   const handleFillColor = () => {
-    console.log('Fill color action');
     // Add fill color functionality here
   };
 
   const handleBorders = () => {
-    console.log('Borders action');
     // Add borders functionality here
   };
 
   const handleMerge = () => {
-    console.log('Merge cells action');
     // Add merge cells functionality here
   };
 
   const handleHorizontalAlign = (alignment: string) => {
-    console.log('Horizontal alignment:', alignment);
     // Add horizontal alignment functionality here
   };
 
   const handleVerticalAlign = () => {
-    console.log('Vertical alignment action');
     // Add vertical alignment functionality here
   };
 
   const handleWrapText = () => {
-    console.log('Wrap text action');
     // Add wrap text functionality here
   };
 
   const handleTextRotation = () => {
-    console.log('Text rotation action');
     // Add text rotation functionality here
   };
 
   const handleNumberFormat = () => {
-    console.log('Number format action');
     // Add number format functionality here
   };
 
   const handleMoreFormats = () => {
-    console.log('More formats action');
     // Add more formats functionality here
   };
 
@@ -114,7 +94,6 @@ export const Toolbar: React.FC = () => {
     if (currentSize > 8) {
       const newSize = (currentSize - 1).toString();
       setFontSize(newSize);
-      console.log('Font size decreased to:', newSize);
     }
   };
 
@@ -123,7 +102,6 @@ export const Toolbar: React.FC = () => {
     if (currentSize < 400) {
       const newSize = (currentSize + 1).toString();
       setFontSize(newSize);
-      console.log('Font size increased to:', newSize);
     }
   };
 

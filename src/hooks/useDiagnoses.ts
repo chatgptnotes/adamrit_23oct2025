@@ -27,7 +27,6 @@ export const useDiagnoses = () => {
 
   const addDiagnosisMutation = useMutation({
     mutationFn: async (params: { name: string, description?: string }) => {
-      console.log('Adding diagnosis with params:', params);
       const { data, error } = await supabase
         .from('diagnoses')
         .insert({ 

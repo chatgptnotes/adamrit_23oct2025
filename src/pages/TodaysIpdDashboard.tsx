@@ -633,7 +633,6 @@ const TodaysIpdDashboard = () => {
           return;
         }
 
-        console.log('File status updated successfully for visit:', visit.visit_id);
         refetch(); // Refresh the data
       } catch (error) {
         console.error('Error updating file status:', error);
@@ -689,7 +688,6 @@ const TodaysIpdDashboard = () => {
           return;
         }
 
-        console.log('Condonation delay claim updated successfully for visit:', visit.visit_id);
         refetch(); // Refresh the data
       } catch (error) {
         console.error('Error updating condonation delay claim:', error);
@@ -745,7 +743,6 @@ const TodaysIpdDashboard = () => {
           return;
         }
 
-        console.log('Condonation delay intimation updated successfully for visit:', visit.visit_id);
         refetch(); // Refresh the data
       } catch (error) {
         console.error('Error updating condonation delay intimation:', error);
@@ -808,7 +805,6 @@ const TodaysIpdDashboard = () => {
           return;
         }
 
-        console.log('Extension of stay updated successfully for visit:', visit.visit_id);
         refetch();
       } catch (error) {
         console.error('Error updating extension of stay:', error);
@@ -883,7 +879,6 @@ const TodaysIpdDashboard = () => {
           return;
         }
 
-        console.log('Additional approvals updated successfully for visit:', visit.visit_id);
         refetch();
       } catch (error) {
         console.error('Error updating additional approvals:', error);
@@ -966,7 +961,6 @@ const TodaysIpdDashboard = () => {
           return;
         }
 
-        console.log('Photos updated successfully for visit:', visit.visit_id);
         refetch();
       } catch (error) {
         console.error('Error updating photos:', error);
@@ -1046,7 +1040,6 @@ const TodaysIpdDashboard = () => {
           return;
         }
 
-        console.log('Signs updated successfully for visit:', visit.visit_id);
         refetch();
       } catch (error) {
         console.error('Error updating signs:', error);
@@ -1126,7 +1119,6 @@ const TodaysIpdDashboard = () => {
           return;
         }
 
-        console.log('Hospital stamps updated successfully for visit:', visit.visit_id);
         refetch();
       } catch (error) {
         console.error('Error updating hospital stamps:', error);
@@ -1206,7 +1198,6 @@ const TodaysIpdDashboard = () => {
           return;
         }
 
-        console.log('Dr surgeon stamps updated successfully for visit:', visit.visit_id);
         refetch();
       } catch (error) {
         console.error('Error updating dr surgeon stamps:', error);
@@ -1424,7 +1415,6 @@ const TodaysIpdDashboard = () => {
           return;
         }
 
-        console.log(`${docType} updated successfully for visit:`, visit.visit_id);
         refetch();
       } catch (error) {
         console.error(`Error updating ${docType}:`, error);
@@ -1552,7 +1542,6 @@ const TodaysIpdDashboard = () => {
         throw error;
       }
 
-      console.log(`✅ TodaysIpdDashboard: Found ${data?.length || 0} visits for ${hospitalConfig?.name}`);
 
       // Debug: Check comments and discharge_date in fetched data
       console.log('📊 Sample visit data (first visit):', data?.[0]);
@@ -2113,7 +2102,6 @@ const TodaysIpdDashboard = () => {
             alert(`Failed to save comment: ${error.message}`);
             setSavingComments(prev => ({ ...prev, [visitId]: false }));
           } else {
-            console.log('✅ Comment saved successfully for visit:', visitId, 'Response:', data);
             // Update the original comment after successful save
             setOriginalComments(prev => ({ ...prev, [visitId]: text }));
             // Show saved indicator
@@ -2152,7 +2140,6 @@ const TodaysIpdDashboard = () => {
         return;
       }
 
-      console.log('Sr No updated successfully for visit:', visitId);
       refetch(); // Refresh the data
     } catch (error) {
       console.error('Error updating sr_no:', error);
@@ -2171,7 +2158,6 @@ const TodaysIpdDashboard = () => {
         return;
       }
 
-      console.log('Billing Executive updated successfully for visit:', visitId);
       refetch(); // Refresh the data
     } catch (error) {
       console.error('Error updating billing_executive:', error);
@@ -2191,7 +2177,6 @@ const TodaysIpdDashboard = () => {
         return;
       }
 
-      console.log('✅ Billing Status updated successfully for visit:', visitId, 'with value:', value);
       refetch(); // Refresh the data
     } catch (error) {
       console.error('❌ Exception during billing_status update:', error);
@@ -2211,7 +2196,6 @@ const TodaysIpdDashboard = () => {
         return;
       }
 
-      console.log('✅ Billing Sub Status updated successfully for visit:', visitId, 'with value:', value);
       refetch(); // Refresh the data
     } catch (error) {
       console.error('❌ Exception during billing_sub_status update:', error);
@@ -2230,7 +2214,6 @@ const TodaysIpdDashboard = () => {
         return;
       }
 
-      console.log('Claim ID updated successfully for visit:', visitId);
       refetch();
     } catch (error) {
       console.error('Error updating claim_id:', error);
@@ -2249,7 +2232,6 @@ const TodaysIpdDashboard = () => {
         return;
       }
 
-      console.log('ESIC UHID updated successfully for visit:', visitId);
       refetch();
     } catch (error) {
       console.error('Error updating esic_uh_id:', error);
@@ -2268,7 +2250,6 @@ const TodaysIpdDashboard = () => {
         return;
       }
 
-      console.log('Bunch Number updated successfully for visit:', visitId);
       refetch(); // Refresh the data
     } catch (error) {
       console.error('Error updating bunch_no:', error);
@@ -2290,7 +2271,6 @@ const TodaysIpdDashboard = () => {
         return;
       }
 
-      console.log('Discharge revoked successfully for visit:', visitId);
       refetch(); // Refresh the data
       alert(`Discharge revoked for ${patientName}. Patient moved back to currently admitted.`);
     } catch (error) {
@@ -2500,7 +2480,6 @@ const TodaysIpdDashboard = () => {
   const handleDeleteVisit = async (visitId: string) => {
     if (window.confirm('Are you sure you want to mark this visit as inactive? The record will be preserved for audit purposes.')) {
       try {
-        console.log('Deactivating visit for visit ID:', visitId);
 
         const { error } = await supabase
           .from('visits')
@@ -2513,7 +2492,6 @@ const TodaysIpdDashboard = () => {
           return;
         }
 
-        console.log('Visit marked as inactive:', visitId);
         refetch();
         alert('Visit marked as inactive successfully.');
       } catch (error) {
@@ -3724,15 +3702,6 @@ const TodaysIpdDashboard = () => {
         {/* Print Preview */}
         {showPrintPreview && (() => {
           const finalSettings = { ...printSettings, selectedColumnIds: printSelectedIds };
-          console.log('=== IPD DASHBOARD PRINT DEBUG ===');
-          console.log('printSelectedIds:', printSelectedIds);
-          console.log('printSettings:', printSettings);
-          console.log('finalSettings:', finalSettings);
-          console.log('finalSettings.selectedColumnIds:', finalSettings.selectedColumnIds);
-          console.log('Number of columns to print:', finalSettings.selectedColumnIds.length);
-          console.log('Column IDs:', finalSettings.selectedColumnIds);
-          console.log('Total available columns:', IPD_PRINT_COLUMNS.length);
-          console.log('=================================');
 
           return (
             <PrintPreview

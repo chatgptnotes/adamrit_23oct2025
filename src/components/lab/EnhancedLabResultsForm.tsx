@@ -102,7 +102,6 @@ const EnhancedLabResultsForm: React.FC<EnhancedLabResultsFormProps> = ({
 
   useEffect(() => {
     if (selectedTest) {
-      console.log('Selected test changed to:', selectedTest);
       fetchSubTestsForTest(selectedTest);
       debugTestData(selectedTest);
     }
@@ -113,9 +112,7 @@ const EnhancedLabResultsForm: React.FC<EnhancedLabResultsFormProps> = ({
     console.log('🔍 Checking for formulas:');
     subTests.forEach((st, idx) => {
       if (st.formula) {
-        console.log(`  ${idx}. ✅ "${st.sub_test_name}" has formula: ${st.formula}`);
       } else {
-        console.log(`  ${idx}. ⚪ "${st.sub_test_name}" - no formula`);
       }
     });
 
@@ -154,7 +151,6 @@ const EnhancedLabResultsForm: React.FC<EnhancedLabResultsFormProps> = ({
       }
     });
 
-    console.log('Generated test results with nested:', results);
     console.log('🔍 SubTests with formulas:', subTests.filter(st => st.formula).map(st => ({
       name: st.sub_test_name,
       formula: st.formula
@@ -171,9 +167,7 @@ const EnhancedLabResultsForm: React.FC<EnhancedLabResultsFormProps> = ({
     console.log('🔍 Checking _subTestData in results:');
     updatedResults.forEach((r, idx) => {
       const subTestData = (r as any)._subTestData;
-      console.log(`  ${idx}. "${r.subTestName}" - has _subTestData:`, !!subTestData, 'has formula:', !!subTestData?.formula);
       if (subTestData?.formula) {
-        console.log(`     Formula: ${subTestData.formula}`);
       }
     });
 
@@ -236,7 +230,6 @@ const EnhancedLabResultsForm: React.FC<EnhancedLabResultsFormProps> = ({
       const subTestData = (resultWithFormula as any)._subTestData;
       if (subTestData && subTestData.formula && subTestData.formula.trim()) {
         console.log(`\n📐 Processing formula for "${subTestData.sub_test_name}":`);
-        console.log(`   Formula: ${subTestData.formula}`);
         let formula = subTestData.formula;
         let originalFormula = formula;
 
@@ -273,14 +266,12 @@ const EnhancedLabResultsForm: React.FC<EnhancedLabResultsFormProps> = ({
               hasNullDependency = true;
             } else if (value !== undefined && value !== null) {
               // Valid value found
-              console.log(`  ✅ Replacing "${testName}" with ${value}`);
               console.log(`  🔧 BEFORE: ${formula}`);
               formula = formula.replace(regex, value.toString());
               console.log(`  🔧 AFTER: ${formula}`);
               replacements++;
             } else {
               // Value not entered yet
-              console.log(`  ⚠️ "${testName}" - value not entered yet`);
               hasAllValues = false;
             }
           }
@@ -307,7 +298,6 @@ const EnhancedLabResultsForm: React.FC<EnhancedLabResultsFormProps> = ({
         // Check if formula still contains any test names (letters except scientific notation)
         const hasUnresolvedNames = /[a-zA-Z]/.test(formula.replace(/[eE][+-]?[0-9]+/g, '').replace(/[^a-zA-Z0-9+\-*/().\s]/g, ''));
         if (hasUnresolvedNames) {
-          console.log(`  ⚠️ Formula still has unresolved names: ${formula}`);
           hasAllValues = false;
         }
 
@@ -326,22 +316,17 @@ const EnhancedLabResultsForm: React.FC<EnhancedLabResultsFormProps> = ({
                 const calculatedValue = result.toFixed(2);
                 const previousValue = updatedResults[targetIndex].observedValue;
                 if (previousValue !== calculatedValue) {
-                  console.log(`  ✅ Formula calculated: ${originalFormula} = ${calculatedValue}`);
-                  console.log(`  ✅ Updating result at index ${targetIndex} (was: ${previousValue})`);
                   updatedResults[targetIndex].observedValue = calculatedValue;
                   changesMade = true; // Trigger another pass for chain calculations
                 }
               } else {
-                console.log(`  ❌ Invalid calculation result: ${result}`);
               }
             }
           } catch (error) {
             console.error(`  ❌ Error calculating formula for ${subTestData.sub_test_name}:`, error);
           }
         } else if (replacements === 0) {
-          console.log(`  ⏸️ No replacements made - formula dependencies not entered yet`);
         } else {
-          console.log(`  ⏸️ Skipping calculation - not all values available`);
         }
       }
     });
@@ -354,9 +339,6 @@ const EnhancedLabResultsForm: React.FC<EnhancedLabResultsFormProps> = ({
 
   const handleValueChange = (index: number, value: string) => {
     console.log(`\n🔄 VALUE CHANGE TRIGGERED for index ${index}:`);
-    console.log(`   Test: ${testResults[index]?.subTestName}`);
-    console.log(`   New Value: ${value}`);
-    console.log(`   Has _subTestData:`, !!(testResults[index] as any)._subTestData);
 
     // Deep copy to preserve _subTestData
     let updatedResults = testResults.map(r => ({ ...r }));
@@ -371,7 +353,6 @@ const EnhancedLabResultsForm: React.FC<EnhancedLabResultsFormProps> = ({
     console.log('📊 Current test results before calculation:');
     updatedResults.forEach((r, i) => {
       if (r.observedValue) {
-        console.log(`   ${i}. ${r.subTestName}: ${r.observedValue}`);
       }
     });
 
@@ -382,7 +363,6 @@ const EnhancedLabResultsForm: React.FC<EnhancedLabResultsFormProps> = ({
     console.log('📊 Test results after calculation:');
     updatedResults.forEach((r, i) => {
       if (r.observedValue) {
-        console.log(`   ${i}. ${r.subTestName}: ${r.observedValue}`);
       }
     });
 

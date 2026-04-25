@@ -66,7 +66,6 @@ export const useLedgerStatementData = ({
         throw error;
       }
 
-      console.log('Ledger statement data fetched:', data);
       return data as LedgerStatementEntry[];
     },
     enabled: !!accountName && !!fromDate && !!toDate,

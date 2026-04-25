@@ -463,8 +463,6 @@ const ReturnSales: React.FC = () => {
               const newSoldQty = currentSoldQty - item.quantity_to_return;
               
               console.log(`📊 Batch stock update: ${item.medicine_name} (${item.batch_number})`);
-              console.log(`   Current stock: ${currentStock}, Adding back: ${item.quantity_to_return}, New stock: ${newStock}`);
-              console.log(`   Current sold: ${currentSoldQty}, Reducing by: ${item.quantity_to_return}, New sold: ${newSoldQty}`);
               
               const { error: updateError } = await supabase
                 .from('medicine_batch_inventory')
@@ -478,7 +476,6 @@ const ReturnSales: React.FC = () => {
               if (updateError) {
                 console.error(`❌ Batch stock update error for ${item.medicine_name}:`, updateError);
               } else {
-                console.log(`✅ Batch stock updated successfully for ${item.medicine_name} (${item.batch_number}): ${currentStock} → ${newStock}`);
               }
             }
           } catch (error) {

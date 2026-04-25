@@ -97,11 +97,8 @@ const Invoice = () => {
   const { data: paymentData } = useQuery({
     queryKey: ['invoice-payments', visitId],
     queryFn: async () => {
-      console.log('=== FETCHING PAYMENTS FROM accounting_transactions TABLE ===');
-      console.log('visitId:', visitId);
 
       if (!visitId) {
-        console.log('No visit ID found for payments');
         return [];
       }
 
@@ -112,7 +109,6 @@ const Invoice = () => {
         .eq('visit_id', visitId)
         .single();
 
-      console.log('Visit UUID query result for payments:', { visitData, visitError });
 
       if (visitError || !visitData?.id) {
         console.error('Could not find visit UUID for payments:', visitError);
@@ -120,7 +116,6 @@ const Invoice = () => {
       }
 
       const visitUUID = visitData.id;
-      console.log('Found visit UUID for payments:', visitUUID);
 
       // Try querying accounting_transactions with UUID first
       let { data, error } = await supabase
@@ -129,11 +124,9 @@ const Invoice = () => {
         .eq('visit_id', visitUUID)
         .eq('transaction_type', 'payment');
 
-      console.log('Payments query with UUID result:', { data, error });
 
       // If UUID query returns empty, try with string visit_id
       if ((!data || data.length === 0) && !error) {
-        console.log('UUID query returned empty, trying with string visit_id...');
         const result = await supabase
           .from('accounting_transactions')
           .select('*')
@@ -142,7 +135,6 @@ const Invoice = () => {
 
         data = result.data;
         error = result.error;
-        console.log('Payments query with string visit_id result:', { data, error });
       }
 
       if (error) {
@@ -150,7 +142,6 @@ const Invoice = () => {
         return [];
       }
 
-      console.log('✅ Payments fetched:', data);
       return data || [];
     },
     enabled: !!visitId
@@ -160,11 +151,8 @@ const Invoice = () => {
   const { data: advanceData } = useQuery({
     queryKey: ['invoice-advances', visitId],
     queryFn: async () => {
-      console.log('=== FETCHING ADVANCES FROM accounting_transactions TABLE ===');
-      console.log('visitId:', visitId);
 
       if (!visitId) {
-        console.log('No visit ID found for advances');
         return [];
       }
 
@@ -175,7 +163,6 @@ const Invoice = () => {
         .eq('visit_id', visitId)
         .single();
 
-      console.log('Visit UUID query result for advances:', { visitData, visitError });
 
       if (visitError || !visitData?.id) {
         console.error('Could not find visit UUID for advances:', visitError);
@@ -183,7 +170,6 @@ const Invoice = () => {
       }
 
       const visitUUID = visitData.id;
-      console.log('Found visit UUID for advances:', visitUUID);
 
       // Try querying accounting_transactions with UUID first
       let { data, error } = await supabase
@@ -192,11 +178,9 @@ const Invoice = () => {
         .eq('visit_id', visitUUID)
         .eq('transaction_type', 'advance');
 
-      console.log('Advances query with UUID result:', { data, error });
 
       // If UUID query returns empty, try with string visit_id
       if ((!data || data.length === 0) && !error) {
-        console.log('UUID query returned empty, trying with string visit_id...');
         const result = await supabase
           .from('accounting_transactions')
           .select('*')
@@ -205,7 +189,6 @@ const Invoice = () => {
 
         data = result.data;
         error = result.error;
-        console.log('Advances query with string visit_id result:', { data, error });
       }
 
       if (error) {
@@ -213,7 +196,6 @@ const Invoice = () => {
         return [];
       }
 
-      console.log('✅ Advances fetched:', data);
       return data || [];
     },
     enabled: !!visitId
@@ -223,11 +205,8 @@ const Invoice = () => {
   const { data: advancePaymentData } = useQuery({
     queryKey: ['invoice-advance-payment', visitId],
     queryFn: async () => {
-      console.log('=== FETCHING ADVANCE PAYMENT FROM advance_payment TABLE ===');
-      console.log('visitId:', visitId);
 
       if (!visitId) {
-        console.log('No visit ID found for advance payment');
         return [];
       }
 
@@ -239,7 +218,6 @@ const Invoice = () => {
           .eq('visit_id', visitId)
           .eq('status', 'ACTIVE');
 
-        console.log('Advance payment query result:', { exactMatch, exactError });
 
         if (exactError) {
           console.error('Error fetching advance payment data:', exactError);
@@ -295,7 +273,6 @@ const Invoice = () => {
         return null;
       }
 
-      console.log('Final payment data:', data);
       return data;
     },
     enabled: !!visitId
@@ -305,11 +282,8 @@ const Invoice = () => {
   const { data: discountData } = useQuery({
     queryKey: ['invoice-discount', visitId],
     queryFn: async () => {
-      console.log('=== FETCHING DISCOUNT FROM visit_discounts TABLE ===');
-      console.log('visitId:', visitId);
 
       if (!visitId) {
-        console.log('No visit ID found for discount');
         return 0;
       }
 
@@ -320,7 +294,6 @@ const Invoice = () => {
         .eq('visit_id', visitId)
         .single();
 
-      console.log('Visit UUID query result for discount:', { visitData, visitError });
 
       if (visitError || !visitData?.id) {
         console.error('Could not find visit UUID for discount:', visitError);
@@ -328,7 +301,6 @@ const Invoice = () => {
       }
 
       const visitUUID = visitData.id;
-      console.log('Found visit UUID for discount:', visitUUID);
 
       // Fetch discount from visit_discounts table
       const { data, error } = await supabase
@@ -337,7 +309,6 @@ const Invoice = () => {
         .eq('visit_id', visitUUID)
         .maybeSingle();
 
-      console.log('Discount query result:', { data, error });
 
       if (error) {
         console.error('Error fetching discount:', error);
@@ -345,7 +316,6 @@ const Invoice = () => {
       }
 
       const discountAmount = data?.discount_amount || 0;
-      console.log('✅ Discount fetched from visit_discounts:', discountAmount);
 
       return discountAmount;
     },
@@ -356,23 +326,18 @@ const Invoice = () => {
   const { data: labOrdersData } = useQuery({
     queryKey: ['invoice-visit-labs', visitId],
     queryFn: async () => {
-      console.log('=== VISIT LABS DEBUG ===');
-      console.log('visitId:', visitId);
 
       if (!visitId) {
-        console.log('No visit ID found');
         return [];
       }
 
       // First get the UUID from visits table using visit_id string
-      console.log('Getting visit UUID for visit_id:', visitId);
       const { data: visitData, error: visitError } = await supabase
         .from('visits')
         .select('id')
         .eq('visit_id', visitId)
         .single();
 
-      console.log('Visit UUID query result:', { visitData, visitError });
 
       if (visitError || !visitData?.id) {
         console.error('Could not find visit UUID:', visitError);
@@ -380,10 +345,8 @@ const Invoice = () => {
       }
 
       const visitUUID = visitData.id;
-      console.log('Found visit UUID:', visitUUID);
 
       // Now fetch visit_labs using the UUID
-      console.log('Fetching visit_labs for visit UUID:', visitUUID);
 
       const { data, error } = await supabase
         .from('visit_labs')
@@ -404,14 +367,12 @@ const Invoice = () => {
         .eq('visit_id', visitUUID)
         .order('ordered_date', { ascending: false });
 
-      console.log('Visit labs query result:', { data, error });
 
       if (error) {
         console.error('Error fetching visit labs:', error);
         return [];
       }
 
-      console.log('Visit labs data fetched successfully:', data);
       return data || [];
     },
     enabled: !!visitId
@@ -422,20 +383,16 @@ const Invoice = () => {
     queryKey: ['invoice-visit-radiology', visitId],
     queryFn: async () => {
       if (!visitId) {
-        console.log('No visit ID found for radiology tests');
         return [];
       }
 
       // First get the UUID from visits table using visit_id string
-      console.log('=== RADIOLOGY DEBUG ===');
-      console.log('Getting visit UUID for radiology, visit_id:', visitId);
       const { data: visitData, error: visitError } = await supabase
         .from('visits')
         .select('id')
         .eq('visit_id', visitId)
         .single();
 
-      console.log('Visit UUID query for radiology result:', { visitData, visitError });
 
       if (visitError || !visitData?.id) {
         console.error('Could not find visit UUID for radiology:', visitError);
@@ -443,10 +400,8 @@ const Invoice = () => {
       }
 
       const visitUUID = visitData.id;
-      console.log('Found visit UUID for radiology:', visitUUID);
 
       // Now fetch visit_radiology using the UUID
-      console.log('Fetching visit radiology tests for visit UUID:', visitUUID);
 
       const { data, error } = await supabase
         .from('visit_radiology')
@@ -467,16 +422,13 @@ const Invoice = () => {
         return [];
       }
 
-      console.log('Visit radiology tests data fetched successfully:', data);
 
       // Also try to fetch all visit_radiology records for debugging
       if (!data || data.length === 0) {
-        console.log('No radiology data found, checking all visit_radiology records...');
         const { data: allRadiologyData, error: allRadiologyError } = await supabase
           .from('visit_radiology')
           .select('*')
           .limit(10);
-        console.log('All visit_radiology records (sample):', { allRadiologyData, allRadiologyError });
       }
 
       return data || [];
@@ -488,8 +440,6 @@ const Invoice = () => {
   const { data: surgeryOrdersData } = useQuery({
     queryKey: ['invoice-visit-surgeries', visitId],
     queryFn: async () => {
-      console.log('=== SURGERY ORDERS FETCH ===');
-      console.log('Fetching surgeries for visitId:', visitId);
 
       if (!visitId) return [];
 
@@ -518,7 +468,6 @@ const Invoice = () => {
         `)
         .eq('visit_id', visitData.id);
 
-      console.log('Surgery orders query result:', { data, error });
 
       if (error) {
         console.error('Error fetching surgery orders:', error);
@@ -533,7 +482,6 @@ const Invoice = () => {
   const { data: anesthetistData } = useQuery({
     queryKey: ['invoice-visit-anesthetists', visitId],
     queryFn: async () => {
-      console.log('=== ANESTHETIST FETCH ===');
       if (!visitId) return [];
 
       // Get visit UUID first
@@ -553,7 +501,6 @@ const Invoice = () => {
         .select('*')
         .eq('visit_id', visitData.id);
 
-      console.log('Anesthetist query result:', { data, error });
 
       if (error) {
         console.error('Error fetching anesthetists:', error);
@@ -568,8 +515,6 @@ const Invoice = () => {
   const { data: implantOrdersData } = useQuery({
     queryKey: ['invoice-visit-implants', visitId],
     queryFn: async () => {
-      console.log('=== IMPLANT ORDERS FETCH ===');
-      console.log('Fetching implants for visitId:', visitId);
 
       if (!visitId) return [];
 
@@ -591,7 +536,6 @@ const Invoice = () => {
         .eq('visit_id', visitData.id)
         .eq('status', 'Active');
 
-      console.log('Implant orders query result:', { data, error });
 
       if (error) {
         console.error('Error fetching implant orders:', error);
@@ -606,11 +550,8 @@ const Invoice = () => {
   const { data: mandatoryServicesData } = useQuery({
     queryKey: ['invoice-mandatory-services-junction', visitId],
     queryFn: async () => {
-      console.log('=== MANDATORY SERVICES JUNCTION FETCH ===');
-      console.log('Fetching mandatory services for visitId:', visitId);
 
       if (!visitId) {
-        console.log('No visitId provided');
         return [];
       }
 
@@ -626,7 +567,6 @@ const Invoice = () => {
         return [];
       }
 
-      console.log('Visit found:', visitData);
 
       // Fetch from junction table
       const { data, error } = await supabase
@@ -652,7 +592,6 @@ const Invoice = () => {
         .eq('visit_id', visitData.id)
         .order('selected_at', { ascending: false });
 
-      console.log('Mandatory services junction query result:', { data, error });
 
       if (error) {
         console.error('Error fetching mandatory services from junction table:', error);
@@ -677,7 +616,6 @@ const Invoice = () => {
         end_date: item.end_date
       }));
 
-      console.log('Mandatory services data mapped:', mappedData);
       return mappedData;
     },
     enabled: !!visitId
@@ -687,11 +625,8 @@ const Invoice = () => {
   const { data: clinicalServicesData } = useQuery({
     queryKey: ['invoice-clinical-services-junction', visitId],
     queryFn: async () => {
-      console.log('=== CLINICAL SERVICES JUNCTION FETCH ===');
-      console.log('Fetching clinical services for visitId:', visitId);
 
       if (!visitId) {
-        console.log('No visitId provided');
         return [];
       }
 
@@ -707,7 +642,6 @@ const Invoice = () => {
         return [];
       }
 
-      console.log('Visit found:', visitData);
 
       // Fetch from junction table
       const { data, error } = await supabase
@@ -733,7 +667,6 @@ const Invoice = () => {
         .eq('visit_id', visitData.id)
         .order('selected_at', { ascending: false });
 
-      console.log('Clinical services junction query result:', { data, error });
 
       if (error) {
         console.error('Error fetching clinical services from junction table:', error);
@@ -758,7 +691,6 @@ const Invoice = () => {
         end_date: item.end_date
       }));
 
-      console.log('Clinical services data mapped:', mappedData);
       return mappedData;
     },
     enabled: !!visitId
@@ -768,8 +700,6 @@ const Invoice = () => {
   const { data: accommodationData } = useQuery({
     queryKey: ['invoice-visit-accommodations', visitId],
     queryFn: async () => {
-      console.log('=== ACCOMMODATION FETCH ===');
-      console.log('Fetching accommodations for visitId:', visitId);
 
       if (!visitId) return [];
 
@@ -801,7 +731,6 @@ const Invoice = () => {
         .eq('visit_id', visitData.id)
         .order('start_date', { ascending: false });
 
-      console.log('Accommodation query result:', { data, error });
 
       if (error) {
         console.error('Error fetching accommodations:', error);
@@ -930,7 +859,6 @@ const Invoice = () => {
   // Helper function to get rate based on patient type
   const getMandatoryServiceRate = (service, patientCategory) => {
     if (!service) {
-      console.log('getMandatoryServiceRate: No service provided');
       return 0;
     }
 
@@ -947,24 +875,19 @@ const Invoice = () => {
     switch (patientCategory?.toLowerCase()) {
       case 'private':
         rate = parseFloat(service.private_rate) || 0;
-        console.log('Using private_rate:', rate);
         break;
       case 'tpa':
       case 'corporate':
         rate = parseFloat(service.tpa_rate) || 0;
-        console.log('Using tpa_rate:', rate);
         break;
       case 'cghs':
         rate = parseFloat(service.cghs_rate) || 0;
-        console.log('Using cghs_rate:', rate);
         break;
       case 'non_cghs':
         rate = parseFloat(service.non_cghs_rate) || 0;
-        console.log('Using non_cghs_rate:', rate);
         break;
       default:
         rate = parseFloat(service.private_rate) || 0; // Default to private rate
-        console.log('Using default private_rate:', rate);
         break;
     }
 
@@ -977,7 +900,6 @@ const Invoice = () => {
 
     // If filter is set to lab or radiology, show only that data
     if (chargeFilter === 'lab') {
-      console.log('Creating lab services (with rate recalculation), labOrdersData:', labOrdersData);
 
       if (labOrdersData && labOrdersData.length > 0) {
         // Get patient info to determine correct rate type
@@ -1009,21 +931,15 @@ const Invoice = () => {
           });
         });
       } else {
-        console.log('No visit labs data found');
       }
-      console.log('Lab services created:', services);
       return services;
     }
 
     if (chargeFilter === 'radiology') {
-      console.log('=== CREATING RADIOLOGY SERVICES ===');
-      console.log('radiologyOrdersData:', radiologyOrdersData);
-      console.log('radiologyOrdersData length:', radiologyOrdersData?.length);
 
       // Show visit radiology tests data
       if (radiologyOrdersData && radiologyOrdersData.length > 0) {
         radiologyOrdersData.forEach((visitRadiology) => {
-          console.log('Processing visit radiology test:', visitRadiology);
           // Use actual cost from visit_radiology table (stored cost for this visit)
           const rate = visitRadiology.cost ? parseFloat(visitRadiology.cost.toString()) : (visitRadiology.unit_rate ? parseFloat(visitRadiology.unit_rate.toString()) : 1000);
 
@@ -1044,20 +960,14 @@ const Invoice = () => {
           });
         });
       } else {
-        console.log('No visit radiology tests data found - empty or null array');
       }
-      console.log('Radiology services created:', services);
       return services;
     }
 
     if (chargeFilter === 'surgery') {
-      console.log('=== CREATING SURGERY SERVICES ===');
-      console.log('surgeryOrdersData:', surgeryOrdersData);
-      console.log('surgeryOrdersData length:', surgeryOrdersData?.length);
 
       if (surgeryOrdersData && surgeryOrdersData.length > 0) {
         surgeryOrdersData.forEach((visitSurgery: any) => {
-          console.log('Processing visit surgery:', visitSurgery);
           const rateStr = visitSurgery.cghs_surgery?.NABH_NABL_Rate || '0';
           const surgeryRate = parseFloat(String(rateStr).replace(/[^\d.]/g, '')) || 0;
 
@@ -1078,15 +988,11 @@ const Invoice = () => {
           });
         });
       } else {
-        console.log('No surgery orders data found');
       }
-      console.log('Surgery services created:', services);
       return services;
     }
 
     if (chargeFilter === 'implants') {
-      console.log('=== CREATING IMPLANT SERVICES ===');
-      console.log('implantOrdersData:', implantOrdersData);
 
       if (implantOrdersData && implantOrdersData.length > 0) {
         implantOrdersData.forEach((visitImplant: any) => {
@@ -1104,15 +1010,11 @@ const Invoice = () => {
           });
         });
       } else {
-        console.log('No implant orders data found');
       }
-      console.log('Implant services created:', services);
       return services;
     }
 
     if (chargeFilter === 'accommodation') {
-      console.log('=== CREATING ACCOMMODATION SERVICES ===');
-      console.log('accommodationData:', accommodationData);
 
       if (accommodationData && accommodationData.length > 0) {
         accommodationData.forEach((visitAccom: any) => {
@@ -1129,7 +1031,6 @@ const Invoice = () => {
           });
         });
       }
-      console.log('Accommodation services created:', services);
       return services;
     }
 
@@ -1142,7 +1043,6 @@ const Invoice = () => {
     // Don't add static General Ward - let mandatory services be the primary charges
     if (!billData?.bill_sections) {
       // Start with empty services array - mandatory services will be added later
-      console.log('No bill sections found, starting with empty services array');
     } else {
       // Add bill sections if they exist
       billData.bill_sections.forEach((section) => {
@@ -1173,9 +1073,6 @@ const Invoice = () => {
 
     // NOW INCLUDING lab and radiology charges in "All Charges" view as SUMMARY LINES
     // Calculate lab charges by recalculating rates dynamically (same logic as Final Bill)
-    console.log('=== CALCULATING LABORATORY CHARGES (DYNAMIC RATE CALCULATION) ===');
-    console.log('labOrdersData:', labOrdersData);
-    console.log('visitData patient info:', visitData?.patients);
 
     let totalLabCharges = 0;
 
@@ -1231,7 +1128,6 @@ const Invoice = () => {
         totalLabCharges += storedCost;
       });
 
-      console.log('✅ Total lab charges (using stored costs):', totalLabCharges);
     }
 
     // Add single summary line for all lab charges if total > 0
@@ -1250,7 +1146,6 @@ const Invoice = () => {
     }
 
     // Calculate total radiology charges and add as single line
-    console.log('Calculating total radiology charges for All Charges view');
     let totalRadiologyCharges = 0;
     if (radiologyOrdersData && radiologyOrdersData.length > 0) {
       radiologyOrdersData.forEach((visitRadiology) => {
@@ -1267,7 +1162,6 @@ const Invoice = () => {
 
       // Add single summary line for all radiology charges
       if (totalRadiologyCharges > 0) {
-        console.log('Adding Radiology Charges summary line:', totalRadiologyCharges);
         services.push({
           srNo: srNo++,
           item: 'Radiology Charges',
@@ -1280,15 +1174,10 @@ const Invoice = () => {
     }
 
     // Add mandatory services from junction table (actual saved services with correct rates)
-    console.log('=== MANDATORY SERVICES INTEGRATION (JUNCTION TABLE) ===');
-    console.log('mandatoryServicesData:', mandatoryServicesData);
-    console.log('mandatoryServicesData length:', mandatoryServicesData?.length);
 
     // ===== 1. REGISTRATION CHARGES (from mandatory services - if exists) =====
-    console.log('=== 1. REGISTRATION CHARGES ===');
     if (mandatoryServicesData && mandatoryServicesData.length > 0) {
       const registrationServices = mandatoryServicesData.filter((s) => isRegistrationCharges(s.service_name));
-      console.log('Registration charges services found:', registrationServices.length);
 
       registrationServices.forEach((mandatoryService) => {
         const startDate = mandatoryService.start_date ? format(new Date(mandatoryService.start_date), 'dd-MM-yyyy') : '';
@@ -1323,10 +1212,8 @@ const Invoice = () => {
     }
 
     // ===== 2. CONSULTANT DOCTOR CHARGES (from mandatory services) =====
-    console.log('=== 2. CONSULTANT DOCTOR CHARGES ===');
     if (mandatoryServicesData && mandatoryServicesData.length > 0) {
       const doctorChargesServices = mandatoryServicesData.filter((s) => isDoctorCharges(s.service_name));
-      console.log('Doctor charges services found:', doctorChargesServices.length);
 
       doctorChargesServices.forEach((mandatoryService) => {
         const startDate = mandatoryService.start_date ? format(new Date(mandatoryService.start_date), 'dd-MM-yyyy') : '';
@@ -1361,9 +1248,6 @@ const Invoice = () => {
     }
 
     // ===== 3. ACCOMMODATION CHARGES =====
-    console.log('=== 3. ACCOMMODATION CHARGES ===');
-    console.log('accommodationData:', accommodationData);
-    console.log('accommodationData length:', accommodationData?.length);
 
     if (accommodationData && accommodationData.length > 0) {
       accommodationData.forEach((visitAccom: any) => {
@@ -1403,13 +1287,9 @@ const Invoice = () => {
         });
       });
     } else {
-      console.log('No accommodation data found for this visit');
     }
 
     // ===== 4. SURGERY CHARGES =====
-    console.log('=== 4. SURGERY CHARGES ===');
-    console.log('surgeryOrdersData:', surgeryOrdersData);
-    console.log('surgeryOrdersData length:', surgeryOrdersData?.length);
 
     let totalSurgeryCharges = 0;
     const surgeryNames: string[] = [];
@@ -1432,7 +1312,6 @@ const Invoice = () => {
         const surgeryLabel = surgeryNames.length > 0
           ? `Surgery Charges - ${surgeryNames.join(', ')}`
           : 'Surgery Charges';
-        console.log('Adding Surgery Charges summary line:', totalSurgeryCharges, surgeryLabel);
         services.push({
           srNo: srNo++,
           item: surgeryLabel,
@@ -1443,11 +1322,9 @@ const Invoice = () => {
         });
       }
     } else {
-      console.log('No surgery orders found for this visit');
     }
 
     // ===== 5. IMPLANT CHARGES (from surgery data) =====
-    console.log('=== 4. IMPLANT CHARGES ===');
     let totalImplantCharges = 0;
     if (surgeryOrdersData && surgeryOrdersData.length > 0) {
       surgeryOrdersData.forEach((visitSurgery: any) => {
@@ -1462,7 +1339,6 @@ const Invoice = () => {
       });
 
       if (totalImplantCharges > 0) {
-        console.log('Adding Implant Charges summary line:', totalImplantCharges);
         services.push({
           srNo: srNo++,
           item: 'Implant Charges',
@@ -1475,9 +1351,6 @@ const Invoice = () => {
     }
 
     // ===== 6. ANESTHETIST CHARGES =====
-    console.log('=== 5. ANESTHETIST CHARGES ===');
-    console.log('anesthetistData:', anesthetistData);
-    console.log('anesthetistData length:', anesthetistData?.length);
 
     let totalAnesthetistCharges = 0;
     if (anesthetistData && anesthetistData.length > 0) {
@@ -1493,7 +1366,6 @@ const Invoice = () => {
 
       if (totalAnesthetistCharges > 0) {
         const anesthetistNames = anesthetistData.map((a: any) => a.anesthetist_name).filter(Boolean).join(', ');
-        console.log('Adding Anesthetist Charges summary line:', totalAnesthetistCharges, 'Names:', anesthetistNames);
         services.push({
           srNo: srNo++,
           item: anesthetistNames ? `Anesthetist Charges - ${anesthetistNames}` : 'Anesthetist Charges',
@@ -1504,17 +1376,14 @@ const Invoice = () => {
         });
       }
     } else {
-      console.log('No anesthetist data found for this visit');
     }
 
     // ===== 7. SURGEON DOCTOR RATE (individual doctor name entries) =====
-    console.log('=== 6. SURGEON DOCTOR ENTRIES ===');
     // From mandatory services - entries starting with Dr. or DR.
     if (mandatoryServicesData && mandatoryServicesData.length > 0) {
       const surgeonServices = mandatoryServicesData.filter((s) =>
         isSurgeonEntry(s.service_name) && !isDoctorCharges(s.service_name)
       );
-      console.log('Surgeon services found in mandatory:', surgeonServices.length);
 
       surgeonServices.forEach((mandatoryService) => {
         const startDate = mandatoryService.start_date ? format(new Date(mandatoryService.start_date), 'dd-MM-yyyy') : '';
@@ -1551,7 +1420,6 @@ const Invoice = () => {
     // From clinical services - entries starting with Dr. or DR.
     if (clinicalServicesData && clinicalServicesData.length > 0) {
       const surgeonClinicalServices = clinicalServicesData.filter((s) => isSurgeonEntry(s.service_name));
-      console.log('Surgeon services found in clinical:', surgeonClinicalServices.length);
 
       surgeonClinicalServices.forEach((clinicalService) => {
         const startDate = clinicalService.start_date ? format(new Date(clinicalService.start_date), 'dd-MM-yyyy') : '';
@@ -1586,13 +1454,9 @@ const Invoice = () => {
     }
 
     // ===== 8. CLINICAL SERVICES (excluding surgeon entries) =====
-    console.log('=== 7. CLINICAL SERVICES ===');
-    console.log('clinicalServicesData:', clinicalServicesData);
-    console.log('clinicalServicesData length:', clinicalServicesData?.length);
 
     if (clinicalServicesData && clinicalServicesData.length > 0) {
       const regularClinicalServices = clinicalServicesData.filter((s) => !isSurgeonEntry(s.service_name));
-      console.log('Regular clinical services (non-surgeon):', regularClinicalServices.length);
 
       regularClinicalServices.forEach((clinicalService) => {
         const startDate = clinicalService.start_date ? format(new Date(clinicalService.start_date), 'dd-MM-yyyy') : '';
@@ -1614,7 +1478,6 @@ const Invoice = () => {
         const itemDescription = `${clinicalService.service_name}${dateRange}`;
 
         if (rate > 0) {
-          console.log('Adding clinical service to invoice:', itemDescription, 'Rate:', rate);
           services.push({
             srNo: srNo++,
             item: itemDescription,
@@ -1626,19 +1489,14 @@ const Invoice = () => {
         }
       });
     } else {
-      console.log('No clinical services found in junction table for this visit');
     }
 
     // ===== 9. MANDATORY SERVICES (excluding registration, doctor charges and surgeon entries) =====
-    console.log('=== 9. MANDATORY SERVICES ===');
-    console.log('mandatoryServicesData:', mandatoryServicesData);
-    console.log('mandatoryServicesData length:', mandatoryServicesData?.length);
 
     if (mandatoryServicesData && mandatoryServicesData.length > 0) {
       const regularMandatoryServices = mandatoryServicesData.filter((s) =>
         !isRegistrationCharges(s.service_name) && !isDoctorCharges(s.service_name) && !isSurgeonEntry(s.service_name)
       );
-      console.log('Regular mandatory services (non-registration, non-doctor):', regularMandatoryServices.length);
 
       regularMandatoryServices.forEach((mandatoryService) => {
         const startDate = mandatoryService.start_date ? format(new Date(mandatoryService.start_date), 'dd-MM-yyyy') : '';
@@ -1660,7 +1518,6 @@ const Invoice = () => {
         const itemDescription = `${mandatoryService.service_name}${dateRange}`;
 
         if (rate > 0) {
-          console.log('Adding mandatory service to invoice:', itemDescription, 'Rate:', rate);
           services.push({
             srNo: srNo++,
             item: itemDescription,
@@ -1672,7 +1529,6 @@ const Invoice = () => {
         }
       });
     } else {
-      console.log('No mandatory services found in junction table for this visit');
     }
 
     // Add pharmacy charges if toggled on
@@ -1717,10 +1573,8 @@ const Invoice = () => {
 
   // Calculate actual financial amounts from database
   const calculateActualAmounts = () => {
-    console.log('=== CALCULATING FINANCIAL AMOUNTS ===');
 
     const totalBillAmount = billData?.total_amount || 0;
-    console.log('Total Bill Amount:', totalBillAmount);
 
     // Calculate total payments from advance_payment table (primary source)
     let advancePaymentTotal = 0;
@@ -1747,8 +1601,6 @@ const Invoice = () => {
     console.log('💵 Net Advance Payment:', netAdvancePayment);
 
     // Fallback: Calculate total payments from accounting_transactions (if no advance_payment data)
-    console.log('Payment Data (accounting_transactions):', paymentData);
-    console.log('Advance Data (accounting_transactions):', advanceData);
 
     const totalPayments = (paymentData || []).reduce((sum, payment) => sum + (payment.amount || 0), 0);
     const totalAdvances = (advanceData || []).reduce((sum, advance) => sum + (advance.amount || 0), 0);

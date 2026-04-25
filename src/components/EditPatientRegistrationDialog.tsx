@@ -111,7 +111,6 @@ export const EditPatientRegistrationDialog: React.FC<EditPatientRegistrationDial
   };
 
   const handleDateChange = (date: Date | undefined) => {
-    console.log('Date of birth changed:', date);
     setDateOfBirth(date);
   };
 
@@ -142,9 +141,6 @@ export const EditPatientRegistrationDialog: React.FC<EditPatientRegistrationDial
     setIsSubmitting(true);
 
     try {
-      console.log('Form submission started with data:', formData);
-      console.log('Date of birth:', dateOfBirth);
-      console.log('Patient ID:', patient.id);
 
       // Only update basic fields that definitely exist
       const updateData = {
@@ -178,7 +174,6 @@ export const EditPatientRegistrationDialog: React.FC<EditPatientRegistrationDial
         updated_at: new Date().toISOString()
       };
 
-      console.log('Update data being sent:', updateData);
 
       const { error } = await supabase
         .from('patients')
@@ -190,7 +185,6 @@ export const EditPatientRegistrationDialog: React.FC<EditPatientRegistrationDial
         throw error;
       }
 
-      console.log('Patient updated successfully');
 
       // Log patient edit activity
       logActivity('patient_edit', {

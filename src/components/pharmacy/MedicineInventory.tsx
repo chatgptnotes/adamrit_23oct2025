@@ -435,7 +435,6 @@ const AddMedicineForm: React.FC<{ onSuccess: () => void }> = ({ onSuccess }) => 
       console.error('Error adding medicine:', error);
       alert(`Error adding medicine: ${error.message}`);
     } else {
-      console.log('Adding medicine:', formData);
       alert('Medicine added successfully!');
       onSuccess();
     }

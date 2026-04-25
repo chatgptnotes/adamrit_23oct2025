@@ -100,7 +100,6 @@ export default function P2Form() {
   const fetchVisitSurgeries = async (visitId: string) => {
     try {
       setIsLoadingSurgeries(true);
-      console.log('Fetching surgeries for visitId:', visitId);
       
       // First, find the visit by visit_id to get the UUID
       const { data: visit, error: visitError } = await supabase
@@ -115,7 +114,6 @@ export default function P2Form() {
         return;
       }
 
-      console.log('Found visit UUID:', visit.id);
       
       // Now fetch visit surgeries using the UUID
       const { data: visitSurgeries, error: surgeriesError } = await supabase
@@ -136,7 +134,6 @@ export default function P2Form() {
         return;
       }
 
-      console.log('Fetched visit surgeries:', visitSurgeries);
 
       if (visitSurgeries && visitSurgeries.length > 0) {
         // Get unique surgery IDs
@@ -198,7 +195,6 @@ export default function P2Form() {
 
         toast.success(`${visitSurgeries.length} surgeries loaded successfully`);
       } else {
-        console.log('No surgeries found for visitId:', visitId);
         toast.info('No surgeries found for this visit');
       }
     } catch (error) {

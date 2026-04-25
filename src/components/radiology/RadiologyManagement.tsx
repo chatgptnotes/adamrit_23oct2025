@@ -225,7 +225,6 @@ const RadiologyManagement: React.FC<RadiologyManagementProps> = ({ masterOnly = 
   };
 
   const handleSubSpecialityClick = () => {
-    console.log('Button clicked! Opening form...');
     setShowSubSpecialityForm(true);
   };
 
@@ -355,7 +354,6 @@ const RadiologyManagement: React.FC<RadiologyManagementProps> = ({ masterOnly = 
   const handleSubSpecialitySubmit = async (specialityName: string) => {
     try {
       // Here you can add logic to save the sub specialty to database
-      console.log('Sub Specialty Name:', specialityName);
       
       // For now, just show success message
       alert(`Sub Specialty "${specialityName}" added successfully!`);
@@ -391,8 +389,6 @@ const RadiologyManagement: React.FC<RadiologyManagementProps> = ({ masterOnly = 
     try {
       setLoading(true);
       // Here you would implement the actual file import logic
-      console.log('Importing file:', selectedFile.name);
-      console.log('Selected tariff:', selectedTariff);
       
       // Simulate import process
       await new Promise(resolve => setTimeout(resolve, 2000));

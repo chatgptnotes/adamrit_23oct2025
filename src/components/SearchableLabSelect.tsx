@@ -37,7 +37,6 @@ const SearchableLabSelect = ({
     !selectedLabs.some(selected => selected.id === lab.id)
   );
 
-  console.log('Lab component state:', { searchTerm, showResults, isLoading, labs: labs.length, filteredLabs: filteredLabs.length });
 
   return (
     <div className="relative">

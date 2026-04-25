@@ -45,10 +45,6 @@ export const PatientFormFields: React.FC<PatientFormFieldsProps> = ({
   onDiagnosisChange,
   onIdMapping
 }) => {
-  console.log('PatientFormFields - formData.labs:', formData.labs);
-  console.log('PatientFormFields - formData.radiology:', formData.radiology);
-  console.log('PatientFormFields - formData.surgeon:', formData.surgeon);
-  console.log('PatientFormFields - formData.hopeSurgeon:', formData.hopeSurgeon);
   
   const handleFieldChange = (field: string, value: string, tableName?: string, fieldName?: string, idField?: string) => {
     onFormDataChange(field, value);
@@ -119,7 +115,6 @@ export const PatientFormFields: React.FC<PatientFormFieldsProps> = ({
             fieldName="name"
             value={formData.labs}
             onChange={(value) => {
-              console.log('Labs field changed to:', value);
               handleFieldChange('labs', value, 'lab', 'name', 'labId');
             }}
             placeholder="Search laboratory tests"
@@ -135,7 +130,6 @@ export const PatientFormFields: React.FC<PatientFormFieldsProps> = ({
             fieldName="name"
             value={formData.radiology}
             onChange={(value) => {
-              console.log('Radiology field changed to:', value);
               handleFieldChange('radiology', value, 'radiology', 'name', 'radiologyId');
             }}
             placeholder="Search radiology studies"
@@ -181,7 +175,6 @@ export const PatientFormFields: React.FC<PatientFormFieldsProps> = ({
             fieldName="name"
             value={formData.surgeon}
             onChange={(value) => {
-              console.log('ESIC Surgeon field changed to:', value);
               handleFieldChange('surgeon', value, 'esic_surgeons', 'name', 'esicSurgeonId');
             }}
             placeholder="Search ESIC surgeon"
@@ -212,7 +205,6 @@ export const PatientFormFields: React.FC<PatientFormFieldsProps> = ({
             fieldName="name"
             value={formData.hopeSurgeon || ''}
             onChange={(value) => {
-              console.log('Hope Surgeon field changed to:', value);
               handleFieldChange('hopeSurgeon', value, 'hope_surgeons', 'name', 'hopeSurgeonId');
             }}
             placeholder="Search Hope surgeon"

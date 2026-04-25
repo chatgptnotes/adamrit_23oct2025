@@ -118,7 +118,6 @@ const FinancialSummary = () => {
       console.log('🔍 [ADVANCE PAYMENT DEBUG] Current visitId:', visitId);
       
       if (!visitId) {
-        console.log('❌ [ADVANCE PAYMENT DEBUG] No visitId provided');
         return [];
       }
       
@@ -294,7 +293,6 @@ const FinancialSummary = () => {
         console.error('❌ Test data creation failed:', error);
         alert('Test data creation failed: ' + error.message);
       } else {
-        console.log('✅ Test data created successfully:', data);
         alert('Test advance payment of ₹5000 created! Refreshing page...');
         window.location.reload();
       }
@@ -481,7 +479,6 @@ const FinancialSummary = () => {
 
   // Handle submit for individual cell
   const handleSubmit = (row: keyof FinancialData, column: keyof FinancialRow) => {
-    console.log(`Submitted ${row} - ${column}:`, financialData[row][column]);
     // Here you can add API call to save the data
     alert(`✅ ${row} - ${column} updated successfully!`);
   };

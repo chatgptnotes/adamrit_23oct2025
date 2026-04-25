@@ -101,7 +101,6 @@ const formatDateStatus = (value: string | null): SpreadsheetCell => {
 // Function to fetch spreadsheet data with better caching control
 export const fetchSpreadsheetData = async (): Promise<SpreadsheetCell[][]> => {
   try {
-    console.log('Fetching fresh patient data from patient_data table...');
     
     // Use a fresh query to avoid cache issues
     const { data: patients, error } = await supabase
@@ -114,18 +113,14 @@ export const fetchSpreadsheetData = async (): Promise<SpreadsheetCell[][]> => {
       throw error;
     }
 
-    console.log('Fetched patients from patient_data:', patients?.length || 0);
     
     // Debug: Log first few MRN values to check visit_id storage
     if (patients && patients.length > 0) {
-      console.log('Sample MRN values from database:');
       patients.slice(0, 5).forEach((patient, index) => {
-        console.log(`Row ${index + 1}: MRN = "${patient.mrn}", Patient = "${patient.patient_name}"`);
       });
     }
 
     if (!patients || patients.length === 0) {
-      console.log('No patient data found, showing headers only');
       return [headerRow];
     }
 
@@ -187,10 +182,7 @@ export const fetchSpreadsheetData = async (): Promise<SpreadsheetCell[][]> => {
       formatDateStatus(patient.date_column_5)  // Shashank Task - show ✓/✗ from database
     ]);
 
-    console.log('Transformed rows for spreadsheet:', rows.length);
-    console.log('Sample MRN values for display:');
     rows.slice(0, 5).forEach((row, index) => {
-      console.log(`Display Row ${index + 1}: MRN = "${row[3]?.value}"`);
     });
     
     return [headerRow, ...rows];

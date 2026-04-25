@@ -385,7 +385,6 @@ export const useFinancialSummary = (billId?: string, visitId?: string, savedMedi
         return 0;
       }
 
-      console.log('✅ Found visit UUID:', visitData.id, 'for visit_id:', visitId);
 
       // Get visit_labs data using the UUID
       const { data: visitLabsData, error: visitLabsError } = await supabase
@@ -464,7 +463,6 @@ export const useFinancialSummary = (billId?: string, visitId?: string, savedMedi
         });
       });
 
-      console.log('✅ Lab tests total calculated:', total, 'from', visitLabsData.length, 'tests');
       return total;
     } catch (error) {
       console.error('❌ Error fetching lab tests total:', error);
@@ -630,7 +628,6 @@ const fetchAnesthetistTotal = async (): Promise<number> => {
         .single();
 
       if (visitError || !visitData) {
-        console.log('⚠️ Could not find visit for implant total');
         return 0;
       }
 
@@ -797,7 +794,6 @@ const fetchAnesthetistTotal = async (): Promise<number> => {
         return sum + amount;
       }, 0);
 
-      console.log('✅ Advance payment total calculated:', total, 'from', advancePaymentData.length, 'payments');
       return total;
     } catch (error) {
       console.error('❌ Error fetching advance payment total:', error);
@@ -843,7 +839,6 @@ const fetchAnesthetistTotal = async (): Promise<number> => {
         return sum + amount;
       }, 0);
 
-      console.log('✅ Refunded amount calculated:', total, 'from', refundData.length, 'refunds');
       return total;
     } catch (error) {
       console.error('❌ Error fetching refunded amount:', error);
@@ -887,7 +882,6 @@ const fetchAnesthetistTotal = async (): Promise<number> => {
     const loadSessionId = Math.random().toString(36).substr(2, 9);
 
     if (!billId) {
-      console.log('❌ [FINANCIAL SUMMARY] Cannot load: no billId provided');
       setIsInitializing(false);
       return;
     }
@@ -1071,7 +1065,6 @@ const fetchAnesthetistTotal = async (): Promise<number> => {
           // Use visitId for discount lookup (preferred), fallback to billId if visitId not available
           const lookupId = visitId || billId;
           if (!lookupId) {
-            console.log('⚠️ [DISCOUNT INTEGRATION] No visitId or billId available for discount lookup');
           } else {
             console.log('🔍 [DISCOUNT INTEGRATION] Using ID for discount lookup:', lookupId);
 
@@ -1092,7 +1085,6 @@ const fetchAnesthetistTotal = async (): Promise<number> => {
                 where: `visit_id = ${lookupId}`
               });
             } else if (!visitData) {
-              console.log('⚠️ [DISCOUNT INTEGRATION] No visit found for ID:', lookupId);
             } else {
               // Load discount from visit_discounts table
               console.log('🔍 [DISCOUNT INTEGRATION] Querying visit_discounts with visit UUID:', visitData.id);
@@ -1117,16 +1109,13 @@ const fetchAnesthetistTotal = async (): Promise<number> => {
                   });
                 }
               } else if (discountData) {
-                console.log('✅ [DISCOUNT INTEGRATION] SUCCESS! Found discount from database:', discountData.discount_amount);
                 // Only apply discount if approved (or if approval_status column doesn't exist yet)
                 const approvalStatus = (discountData as any).approval_status;
                 if (!approvalStatus || approvalStatus === 'approved') {
                   convertedData.discount.total = discountData.discount_amount?.toString() || '';
                 } else {
-                  console.log('⏳ [DISCOUNT INTEGRATION] Discount pending approval, not applying:', approvalStatus);
                   convertedData.discount.total = '0';
                 }
-                console.log('✅ [DISCOUNT INTEGRATION] Set convertedData.discount.total to:', convertedData.discount.total);
               } else {
                 console.log('📝 [DISCOUNT INTEGRATION] Query succeeded but no data returned');
                 console.log('📝 [DISCOUNT INTEGRATION] discountData:', discountData);
@@ -1188,15 +1177,9 @@ const fetchAnesthetistTotal = async (): Promise<number> => {
           });
         }
 
-        console.log('✅ [FINANCIAL SUMMARY] Loaded from database successfully');
         setHasLoadedFromDatabase(true);
       } else {
-        console.log('❌ [FINANCIAL SUMMARY] No saved data found for billId:', billId);
         console.log('🔍 [FINANCIAL SUMMARY] This means either:');
-        console.log('  1. No financial_summary record exists for this bill');
-        console.log('  2. The save operation failed silently');
-        console.log('  3. We are loading from a different billId than we saved to');
-        console.log('  4. The financial_summary table has different constraints than expected');
 
         // 🔥 CRITICAL FIX: Load discount from visit_discounts table even if financial_summary doesn't exist
         console.log('🔍 [DISCOUNT INTEGRATION - NO RECORD] Attempting to load discount from visit_discounts table...');
@@ -1226,7 +1209,6 @@ const fetchAnesthetistTotal = async (): Promise<number> => {
               console.log('🔍 [DISCOUNT INTEGRATION - NO RECORD] Discount query result:', { discountData, discountError });
 
               if (!discountError && discountData) {
-                console.log('✅ [DISCOUNT INTEGRATION - NO RECORD] SUCCESS! Found discount:', discountData.discount_amount);
                 // Only apply discount if approved
                 const approvalStatus = (discountData as any).approval_status;
                 const effectiveAmount = (!approvalStatus || approvalStatus === 'approved')
@@ -1239,7 +1221,6 @@ const fetchAnesthetistTotal = async (): Promise<number> => {
                     total: effectiveAmount
                   }
                 }));
-                console.log('✅ [DISCOUNT INTEGRATION - NO RECORD] Discount status:', approvalStatus, 'amount applied:', effectiveAmount);
                 setIsInitializing(false);
                 setHasLoadedFromDatabase(true);
                 return; // Exit early - discount loaded successfully
@@ -1258,7 +1239,6 @@ const fetchAnesthetistTotal = async (): Promise<number> => {
           const sessionBackup = sessionStorage.getItem(`financial_backup_${billId}`);
           if (sessionBackup) {
             const parsed = JSON.parse(sessionBackup);
-            console.log('✅ [SESSION RECOVERY] Found session backup, restoring discount values:', parsed);
             setFinancialSummaryDataTracked(prev => ({
               ...prev,
               discount: parsed.discount
@@ -1277,7 +1257,6 @@ const fetchAnesthetistTotal = async (): Promise<number> => {
         console.log('🚨 [EMERGENCY RECOVERY] Session backup not found, attempting emergency localStorage backup...');
         const emergencyData = loadEmergencyBackup(billId);
         if (emergencyData) {
-          console.log('✅ [EMERGENCY RECOVERY] Found emergency backup, restoring discount values');
           setFinancialSummaryDataTracked(prev => ({
             ...prev,
             discount: emergencyData
@@ -1285,7 +1264,6 @@ const fetchAnesthetistTotal = async (): Promise<number> => {
           emergencyBackupRef.current = JSON.stringify(emergencyData);
           toast.success('Recovered discount values from emergency backup');
         } else {
-          console.log('❌ [RECOVERY FAILED] No backups found - discount values will be empty');
         }
 
         setIsInitializing(false);
@@ -1334,7 +1312,6 @@ const fetchAnesthetistTotal = async (): Promise<number> => {
       toast.error('Bill ID is required to save financial summary. Please wait for bill creation.');
       return;
     }
-    console.log('✅ [FINANCIAL SUMMARY] Starting save process with saveSessionId:', saveSessionId);
 
     setIsSaving(true);
     console.log('🔄 [SAVE TRANSACTION] Starting comprehensive database transaction with enhanced logging...');
@@ -1358,7 +1335,6 @@ const fetchAnesthetistTotal = async (): Promise<number> => {
             errorCode: visitError.code
           });
           // Don't fail completely - proceed with null visit_id
-          console.log('⚠️ [SAVE TRANSACTION] Step 1 RECOVERY: Proceeding with null visit_id due to lookup failure');
         } else if (visitData) {
           visitUUID = visitData.id;
           console.log('✅ [SAVE TRANSACTION] Step 1 SUCCESS: Converted visitId to UUID:', {
@@ -1367,7 +1343,6 @@ const fetchAnesthetistTotal = async (): Promise<number> => {
           });
         }
       } else {
-        console.log('ℹ️ [SAVE TRANSACTION] Step 1 SKIPPED: No visitId provided, proceeding with null visit_id');
       }
 
       // Step 2: Log and validate discount values being saved
@@ -1387,7 +1362,6 @@ const fetchAnesthetistTotal = async (): Promise<number> => {
           version: 'session_backup_v1'
         };
         sessionStorage.setItem(`financial_backup_${billId}`, JSON.stringify(sessionBackup));
-        console.log('✅ [SAVE TRANSACTION] Step 2a: Session backup saved successfully');
       } catch (sessionError) {
         console.error('❌ [SAVE TRANSACTION] Step 2a ERROR: Session backup failed:', sessionError);
       }
@@ -1530,7 +1504,6 @@ const fetchAnesthetistTotal = async (): Promise<number> => {
         .select();
 
       const operationType = result.data && result.data.length > 0 ? 'UPSERT' : 'UNKNOWN';
-      console.log(`✅ [FINANCIAL SUMMARY] ${operationType} operation completed for billId:`, billId);
 
       if (result.error) {
         console.error('❌ [FINANCIAL SUMMARY] UPSERT operation failed:', {
@@ -1603,7 +1576,6 @@ const fetchAnesthetistTotal = async (): Promise<number> => {
         toast.error('Save operation unclear. Please refresh to check data.');
       }
 
-      console.log('✅ [FINANCIAL SUMMARY] Saved to database successfully with billId:', billId);
     } catch (error) {
       console.error('❌ [FINANCIAL SUMMARY] Unexpected error during save operation:', {
         error: error,
@@ -1629,7 +1601,6 @@ const fetchAnesthetistTotal = async (): Promise<number> => {
     try {
       // Use the main, tested save function instead of duplicate logic
       await saveFinancialSummary();
-      console.log('✅ [AUTO-SAVE] Auto-save completed successfully via main save function');
     } catch (error) {
       console.error('❌ [AUTO-SAVE] Auto-save failed:', error);
       toast.error('Auto-save failed - your changes may not be saved');
@@ -1703,14 +1674,12 @@ const fetchAnesthetistTotal = async (): Promise<number> => {
 
     // CRITICAL: Block during initialization
     if (isInitializing) {
-      console.log('⏳ [AUTO-POPULATE] Still initializing - operation blocked');
       setShouldAutoPopulateAfterLoad(true);
       return;
     }
 
     // CRITICAL: Check if we're still loading financial summary from database
     if (isLoading) {
-      console.log('⏳ [AUTO-POPULATE] Financial summary is still loading - queuing auto-populate to run after load completes');
       setShouldAutoPopulateAfterLoad(true);
       return;
     }
@@ -1766,7 +1735,6 @@ const fetchAnesthetistTotal = async (): Promise<number> => {
 
       // Calculate grand total (including surgery, anesthetist, and implant)
       const grandTotal = labTotal + clinicalTotal + mandatoryTotal + radiologyTotal + pharmacyTotal + accommodationTotal + surgeryTotal + anesthetistTotal + implantTotal;
-      console.log('✅ [AUTO-POPULATE] Step 1 Complete: Calculated totals only');
 
       // 🔥 STEP 2: Update ONLY totals, preserve existing discount values from state
       console.log('📝 [AUTO-POPULATE] Step 2: Updating totals only, preserving existing discount values...');
@@ -1869,7 +1837,6 @@ const fetchAnesthetistTotal = async (): Promise<number> => {
     });
 
     if (billId && billId.trim()) {
-      console.log('✅ [FINANCIAL SUMMARY] Valid billId found, triggering loadFinancialSummary...');
       loadFinancialSummary();
     } else {
       console.log('❌ [FINANCIAL SUMMARY] Invalid billId - cannot load financial summary:', {
@@ -1884,16 +1851,13 @@ const fetchAnesthetistTotal = async (): Promise<number> => {
     console.log('🚀 [FINANCIAL SUMMARY] Component mounted - force loading mechanism activated');
 
     const forceLoadWithRetry = () => {
-      console.log('⚡ [FORCE LOAD] Attempting immediate load with billId:', billId);
 
       if (billId && billId.trim()) {
-        console.log('✅ [FORCE LOAD] billId available immediately, triggering loadFinancialSummary');
         loadFinancialSummary();
         return;
       }
 
       // If billId not available, set up polling mechanism
-      console.log('⏳ [FORCE LOAD] billId not available, setting up polling mechanism');
       let attempts = 0;
       const maxAttempts = 10; // Try for up to 5 seconds
 
@@ -1902,11 +1866,9 @@ const fetchAnesthetistTotal = async (): Promise<number> => {
         console.log(`🔍 [FORCE LOAD] Polling attempt ${attempts}/${maxAttempts} for billId:`, billId);
 
         if (billId && billId.trim()) {
-          console.log('✅ [FORCE LOAD] billId found via polling, triggering loadFinancialSummary');
           clearInterval(pollForBillId);
           loadFinancialSummary();
         } else if (attempts >= maxAttempts) {
-          console.log('❌ [FORCE LOAD] Max polling attempts reached, giving up');
           clearInterval(pollForBillId);
         }
       }, 500); // Check every 500ms
@@ -1974,7 +1936,6 @@ const fetchAnesthetistTotal = async (): Promise<number> => {
 
         // STEP 2: Only fetch final payment if patient IS CURRENTLY DISCHARGED
         if (!visitData?.discharge_date) {
-          console.log('⚠️ Patient is not discharged (discharge_date is NULL), skipping final payment load for Amount Pending calculation');
           // Reset finalPayment to 0 for undischarged patients
           setFinancialSummaryDataTracked((prev) => ({
             ...prev,
@@ -1999,7 +1960,6 @@ const fetchAnesthetistTotal = async (): Promise<number> => {
         }
 
         if (data) {
-          console.log('✅ Final payment data loaded for discharged patient:', data);
 
           // Update finalPayment in state with the amount
           // For now, we'll put the full amount in the total
@@ -2060,7 +2020,6 @@ const fetchAnesthetistTotal = async (): Promise<number> => {
           advancePayment: '' // Not applicable for discounts
         };
 
-        console.log('✅ [DISCOUNT LOAD] Successfully loaded discount values:', discountValues);
         return discountValues;
       } else {
         console.log('📝 [DISCOUNT LOAD] No saved discount values found in database');
@@ -2108,7 +2067,6 @@ const fetchAnesthetistTotal = async (): Promise<number> => {
         return false;
       }
 
-      console.log('✅ [DISCOUNT SAVE] Successfully saved discount values');
       return true;
     } catch (error) {
       console.error('❌ [DISCOUNT SAVE] Exception saving discount values:', error);
@@ -2157,7 +2115,6 @@ const fetchAnesthetistTotal = async (): Promise<number> => {
       };
     });
 
-    console.log('✅ [MANUAL CALCULATE] Enhanced balance calculation completed');
   }, [loadSavedDiscountValues]);
 
   // Note: Auto-populate is now manual only via "Refresh table" button

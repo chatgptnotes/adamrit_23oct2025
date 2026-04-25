@@ -89,7 +89,6 @@ export async function saveTestConfigWithNested(
     const currentConfigId = savedConfig.id;
     savedIds.push(currentConfigId);
 
-    console.log(`✅ Saved "${config.sub_test_name}" with ${config.age_ranges?.length || 0} age ranges, ${config.normal_ranges?.length || 0} normal ranges`);
 
     // Recursively save nested configs
     if (config.nested_configs && config.nested_configs.length > 0) {

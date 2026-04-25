@@ -21,7 +21,6 @@ export const AddItemDialog: React.FC<AddItemDialogProps> = ({
   // Update formData when dialog opens with initialData or defaultValues
   useEffect(() => {
     if (isOpen) {
-      console.log('Dialog opened - Initializing form data:', { ...initialData, ...defaultValues });
       setFormData({ ...initialData, ...defaultValues });
     }
   }, [isOpen]); // Remove initialData and defaultValues from dependencies to prevent form reset
@@ -34,7 +33,6 @@ export const AddItemDialog: React.FC<AddItemDialogProps> = ({
   }, [isOpen]);
 
   const handleInputChange = (key: string, value: string) => {
-    console.log(`Input change - Key: ${key}, Value: ${value}`);
     setFormData(prev => ({ ...prev, [key]: value }));
   };
 

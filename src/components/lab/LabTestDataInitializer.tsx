@@ -264,7 +264,6 @@ export const LabTestDataInitializer: React.FC<LabTestDataInitializerProps> = ({ 
         throw verifyError;
       }
 
-      console.log('Verified yyy test data:', verifyData);
 
       setStatus('success');
       setMessage(`Successfully initialized ${testData.length} test configurations. Found ${verifyData?.length || 0} sub-tests for 'yyy'.`);

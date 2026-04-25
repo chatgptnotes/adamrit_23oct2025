@@ -6,7 +6,6 @@ import { useAuth } from '@/contexts/AuthContext';
 
 // Function to fetch all patients and format them like the Google Sheet
 async function fetchPatients(hospitalName: string): Promise<Patient[]> {
-  console.log('Fetching patients with usePatientData hook for hospital:', hospitalName);
   
   // First get patient IDs for the hospital
   const { data: patientsData, error: patientsError } = await supabase
@@ -22,7 +21,6 @@ async function fetchPatients(hospitalName: string): Promise<Patient[]> {
   const patientIds = patientsData?.map(p => p.patients_id) || [];
   
   if (patientIds.length === 0) {
-    console.log('No patients found for hospital:', hospitalName);
     return [];
   }
   
@@ -53,7 +51,6 @@ async function fetchPatients(hospitalName: string): Promise<Patient[]> {
     throw error;
   }
   
-  console.log('Fetched data in usePatientData:', data);
   
   if (!data) {
     return [];

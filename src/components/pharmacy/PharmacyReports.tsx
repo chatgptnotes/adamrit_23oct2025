@@ -26,12 +26,10 @@ const PharmacyReports: React.FC = () => {
     }).format(amount);
 
   const generateReport = () => {
-    console.log('Generating report:', { selectedReport, dateRange });
     alert(`Generating ${selectedReport} report from ${dateRange.from} to ${dateRange.to}`);
   };
 
   const exportReport = (format: 'PDF' | 'Excel' | 'CSV') => {
-    console.log('Exporting report:', { selectedReport, format });
     alert(`Exporting ${selectedReport} report as ${format} (Demo mode)`);
   };
 

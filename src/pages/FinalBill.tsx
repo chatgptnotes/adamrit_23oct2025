@@ -408,7 +408,6 @@ const DocumentModal: React.FC<DocumentModalProps> = ({
 
   // Debug logging
   useEffect(() => {
-    console.log(`DocumentModal ${title} - isOpen:`, isOpen);
   }, [isOpen, title]);
 
   // Fetch existing selections when modal opens
@@ -438,13 +437,11 @@ const DocumentModal: React.FC<DocumentModalProps> = ({
   };
 
   const handleToggleItem = async (option: string) => {
-    console.log(`Toggling item: ${option}`);
     setLoading(true);
     const newSelected = selectedItems.includes(option)
       ? selectedItems.filter(item => item !== option)
       : [...selectedItems, option];
 
-    console.log(`New selected items:`, newSelected);
     setSelectedItems(newSelected);
 
     try {
@@ -607,8 +604,6 @@ const FinalBill = () => {
           return;
         }
 
-        console.log('✅ Fetched bank accounts from database:', data);
-        console.log('✅ Number of banks fetched:', data?.length || 0);
 
         // If no banks found in database, show error
         if (!data || data.length === 0) {
@@ -664,7 +659,6 @@ const FinalBill = () => {
 
         if (data && visitData?.discharge_date) {
           // Has payment record AND still discharged → View only mode
-          console.log('✅ Found existing final payment data and patient is discharged:', data);
           setFinalPaymentAmount(data.amount?.toString() || '');
           setFinalPaymentMode(data.mode_of_payment || '');
           setFinalPaymentReason(data.reason_of_discharge || '');
@@ -674,7 +668,6 @@ const FinalBill = () => {
           toast.info('Patient already discharged - View only mode');
         } else if (data && !visitData?.discharge_date) {
           // Has old payment record BUT undischarged → Allow new payment
-          console.log('ℹ️ Found previous payment but patient is undischarged - allowing new payment');
           setFinalPaymentAmount(data.amount?.toString() || '');
           setFinalPaymentMode(data.mode_of_payment || '');
           setFinalPaymentReason(data.reason_of_discharge || '');
@@ -684,7 +677,6 @@ const FinalBill = () => {
           toast.info('Previous payment found. Patient re-admitted - You can make a new final payment');
         } else {
           // No payment record → Allow payment
-          console.log('ℹ️ No existing final payment data found');
           setFinalPaymentAmount('');
           setFinalPaymentMode('');
           setFinalPaymentReason('');
@@ -880,7 +872,6 @@ const FinalBill = () => {
         .select('id, name, code, category, private, Non_NABH_NABL_Rate, bhopal_nabh_rate, NABH_NABL_Rate, description');
 
       if (data && Array.isArray(data)) {
-        console.log('CGHS Surgeries loaded:', data.length, 'surgeries');
 
         // Corporate field takes priority - check if patient has a corporate panel first
         const hasCorporate = corporate.length > 0 && corporate !== 'private';
@@ -996,8 +987,6 @@ const FinalBill = () => {
           console.error('Error fetching lab services:', error);
           toast.error('Failed to load lab services');
         } else if (data) {
-          console.log('Lab services fetched successfully:', data.length, 'records for', currentHospital);
-          console.log('Sample lab services:', data.slice(0, 3));
 
           // Determine patient type to select appropriate rate
           const patientType = (visitDataResult?.patient_type || patientInfo?.patient_type || '').toLowerCase().trim();
@@ -1096,7 +1085,6 @@ const FinalBill = () => {
             };
           });
 
-          console.log('Mapped lab services sample:', mappedData.slice(0, 3));
 
           // Special logging for CBC to help debug rate issues
           const cbcServices = data.filter(item =>
@@ -1167,7 +1155,6 @@ const FinalBill = () => {
           console.error('❌ Error fetching radiology services:', error);
           toast.error('Failed to load radiology services');
         } else if (data) {
-          console.log('✅ Radiology services fetched successfully:', data.length, 'records');
           console.log('📋 Sample radiology services:', data.slice(0, 3));
 
           // Determine patient type to select appropriate rate
@@ -1255,7 +1242,6 @@ const FinalBill = () => {
           });
           setAvailableRadiologyServices(transformedData);
         } else {
-          console.log('⚠️ No radiology data returned from database');
         }
       } catch (error) {
         console.error('❌ Error in fetchRadiologyServices:', error);
@@ -1283,8 +1269,6 @@ const FinalBill = () => {
           console.error('Error fetching pharmacy services:', error);
           toast.error('Failed to load pharmacy services');
         } else if (data) {
-          console.log('Pharmacy services fetched successfully:', data.length, 'records');
-          console.log('Sample pharmacy services:', data.slice(0, 3));
           // Transform data to ensure proper field mapping for compatibility
           const transformedData = data.map(item => ({
             ...item,
@@ -1317,7 +1301,6 @@ const FinalBill = () => {
     queryFn: async () => {
       try {
         if (!visitId) {
-          console.log('⚠️ No visitId provided to visitData query');
           return null;
         }
 
@@ -1389,7 +1372,6 @@ const FinalBill = () => {
       const hospitalName = hospitalConfig?.name;
 
       if (!patientId || !hospitalName) {
-        console.log('⚠️ Missing patient ID or hospital name for pharmacy calculation');
         setPendingPharmacyAmount(0);
         return;
       }
@@ -1445,7 +1427,6 @@ const FinalBill = () => {
           }
 
           totalPaymentsReceived = (paymentsData || []).reduce((sum, payment) => sum + (payment.amount || 0), 0);
-          console.log('✅ Total payments received for this visit:', totalPaymentsReceived);
         }
 
         // 5. Calculate pending amount
@@ -1551,12 +1532,10 @@ const FinalBill = () => {
       // If bill already exists, don't create
       if (billData?.id) return;
 
-      console.log('Creating new bill for visit:', visitId);
       try {
         // Generate corporate-based bill number
         const corporateName = visitData.patients?.corporate;
         const billNo = await generateCorporateBillNumber(corporateName);
-        console.log('Generated bill number:', billNo, 'for corporate:', corporateName || 'PRIVATE');
 
         const { data: newBill, error: billError } = await supabase
           .from('bills')
@@ -1580,7 +1559,6 @@ const FinalBill = () => {
           return;
         }
 
-        console.log('Created new bill with ID:', newBill.id, 'Bill No:', billNo);
 
         // Log bill creation activity
         logActivity('bill_create', {
@@ -1649,7 +1627,6 @@ const FinalBill = () => {
           setIsAmountReceived(false);
         }
 
-        console.log('Bill preparation data loaded:', data);
         console.log('Bill submission data loaded:', {
           dateOfSubmission: data.date_of_submission,
           executiveWhoSubmitted: data.executive_who_submitted
@@ -1685,7 +1662,6 @@ const FinalBill = () => {
     const fetchAllSavedData = async () => {
       if (!visitId) return;
 
-      console.log('Fetching all saved data for visit ID:', visitId);
 
       try {
         // Fetch visit-related data (surgeries, diagnoses, complications, labs, radiology, medications, AI recommendations)
@@ -1701,7 +1677,6 @@ const FinalBill = () => {
           fetchBillPreparationData(visitId)
         ]);
 
-        console.log('All saved data fetched successfully');
       } catch (error) {
         console.error('Error fetching saved data:', error);
       }
@@ -1875,7 +1850,6 @@ const FinalBill = () => {
             default:
               updatedRow.adjustmentPercent = 0;
           }
-          console.log('✅ Updated adjustmentPercent to:', updatedRow.adjustmentPercent);
         }
 
         // Update second adjustment percentage based on selection
@@ -2206,8 +2180,6 @@ const FinalBill = () => {
           console.error('Error fetching implant services:', error);
           toast.error('Failed to load implant services');
         } else if (data) {
-          console.log('Implant services fetched successfully:', data.length, 'records');
-          console.log('Sample implant services:', data.slice(0, 3));
 
           // Determine patient type to select appropriate rate
           const patientType = (visitDataResult?.patient_type || patientInfo?.patient_type || '').toLowerCase().trim();
@@ -2328,7 +2300,6 @@ const FinalBill = () => {
           .single();
 
         if (visitError || !visitData) {
-          console.log('⚠️ Could not find visit for implants fetch');
           return;
         }
 
@@ -2358,7 +2329,6 @@ const FinalBill = () => {
           return;
         }
 
-        console.log('✅ Saved implants fetched:', implants?.length || 0);
         setSavedVisitImplants(implants || []);
 
         // Load saved implants into invoice items
@@ -2410,7 +2380,6 @@ const FinalBill = () => {
 
             return updated;
           });
-          console.log('✅ Saved implants loaded into invoice');
         }
       } catch (error) {
         console.error('❌ Error in fetchSavedVisitImplants:', error);
@@ -2495,7 +2464,6 @@ const FinalBill = () => {
   // Function to fetch saved OT Notes from database (supports multiple surgeries)
   const fetchSavedOtNotes = async () => {
     if (!visitId) {
-      console.log('❌ No visitId provided for fetchSavedOtNotes');
       return;
     }
 
@@ -2510,7 +2478,6 @@ const FinalBill = () => {
         .single();
 
       if (visitError || !visitData) {
-        console.log('No visit found for fetching OT Notes');
         return;
       }
 
@@ -2527,16 +2494,13 @@ const FinalBill = () => {
       }
 
       if (otNotesRecords && otNotesRecords.length > 0) {
-        console.log('Found saved OT Notes:', otNotesRecords.length, 'records');
 
         // Only load shared description from saved OT notes
         // Procedure names will come from Surgery Details via auto-populate
         setSharedDescription(otNotesRecords[0].description || '');
-        console.log('Loaded shared description from saved OT Notes');
 
         // Store full records so auto-populate can restore implant and other fields
         setSavedOtNotesData(otNotesRecords);
-        console.log('Stored saved OT Notes data for restoring implant values');
       }
     } catch (error) {
       console.error('Error in fetchSavedOtNotes:', error);
@@ -2561,18 +2525,14 @@ const FinalBill = () => {
     // Get surgeries from either source
     let surgeries: any[] = [];
     if (patientInfo?.surgeries?.length > 0) {
-      console.log('Using patientInfo surgeries:', patientInfo.surgeries);
       surgeries = patientInfo.surgeries;
     } else if (savedSurgeries?.length > 0) {
-      console.log('Using savedSurgeries:', savedSurgeries);
       surgeries = savedSurgeries;
     }
 
-    console.log('Surgeries found:', surgeries.length);
 
     // If we have surgeries from Surgery Details, ALWAYS create matching OT Notes forms
     if (surgeries.length > 0) {
-      console.log('Creating OT Notes forms for each surgery from Surgery Details...');
 
       const newForms = surgeries.map((surgery: any, index: number) => {
         // Handle both patientInfo.surgeries and savedSurgeries structure
@@ -2588,7 +2548,6 @@ const FinalBill = () => {
           );
 
         if (savedNote) {
-          console.log(`Found saved OT note for surgery ${index}:`, savedNote.implant || 'no implant');
         }
 
         return {
@@ -2602,10 +2561,8 @@ const FinalBill = () => {
         };
       });
 
-      console.log('Created forms:', newForms.length);
       setOtNotesDataList(newForms);
     } else {
-      console.log('No surgeries found to populate');
     }
   }, [patientInfo, savedSurgeries, savedOtNotesData]);
 
@@ -2797,7 +2754,6 @@ const FinalBill = () => {
       });
 
       setSavedRequisitions(savedMap);
-      console.log('✅ Loaded saved requisitions:', savedMap);
     } catch (error) {
       console.error('Error loading saved requisitions:', error);
     }
@@ -3316,7 +3272,6 @@ const FinalBill = () => {
             try {
               console.log('🔄 [PAGE LOAD RETRY] Retrying mandatory services fetch...');
               const retryResult = await fetchSavedMandatoryServicesData();
-              console.log('✅ [PAGE LOAD RETRY] Retry result:', retryResult?.length || 0);
             } catch (retryErr) {
               console.error('❌ [PAGE LOAD RETRY] Retry also failed:', retryErr);
             }
@@ -3405,7 +3360,6 @@ const FinalBill = () => {
         .eq('status', 'Active');
 
       if (fetchError || !allActiveServices || allActiveServices.length === 0) {
-        console.log('⚠️ [AUTO-DAILY] No active clinical services found for hospital:', hospitalConfig.name);
         return;
       }
 
@@ -3416,7 +3370,6 @@ const FinalBill = () => {
       );
 
       if (dailyServices.length === 0) {
-        console.log('⚠️ [AUTO-DAILY] No Doctor Charges or Nursing services found — skipping daily loop only');
       }
 
       if (dailyServices.length > 0) console.log('🔄 [AUTO-DAILY] Auto-adding daily services:', dailyServices.map(s => s.service_name), 'Days:', days);
@@ -3486,7 +3439,6 @@ const FinalBill = () => {
         if (upsertError) {
           console.error(`❌ [AUTO-DAILY] Failed to upsert ${service.service_name}:`, upsertError);
         } else {
-          console.log(`✅ [AUTO-DAILY] ${existing ? 'Updated' : 'Inserted'} ${service.service_name}: ${days} days × ₹${numericRate} = ₹${numericRate * days}`);
         }
       }
 
@@ -3544,7 +3496,6 @@ const FinalBill = () => {
           if (error) {
             console.error(`❌ [AUTO-ONETIME] Failed to insert ${service.service_name}:`, error);
           } else {
-            console.log(`✅ [AUTO-ONETIME] Inserted ${service.service_name}: ₹${numericRate}`);
           }
         }
       }
@@ -3603,7 +3554,6 @@ const FinalBill = () => {
           if (mlcError) {
             console.error(`❌ [AUTO-MLC] Failed to insert ${mlcService.service_name}:`, mlcError);
           } else {
-            console.log(`✅ [AUTO-MLC] Inserted ${mlcService.service_name}: ₹${numericMlcRate}`);
           }
         }
       }
@@ -3788,7 +3738,6 @@ const FinalBill = () => {
 
   // Function to update treatment log data (simplified)
   const updateTreatmentLogData = useCallback((dayNumber: number, field: 'date' | 'accommodation' | 'medication' | 'labAndRadiology', value: string) => {
-    console.log('Updating treatment log:', { dayNumber, field, value }); // Debug log
     setTreatmentLogData(prev => {
       const currentRow = prev[dayNumber] || { date: '', accommodation: '', medication: '', labAndRadiology: '' };
       const newData = {
@@ -3798,7 +3747,6 @@ const FinalBill = () => {
           [field]: value
         }
       };
-      console.log('New treatment log data:', newData); // Debug log
       return newData;
     });
   }, []);
@@ -3895,7 +3843,6 @@ const FinalBill = () => {
           toast.error('Invalid bank account selected. Please refresh and try again.');
           return;
         }
-        console.log('✅ Valid bank account selected:', selectedBank.account_name);
       }
 
       setIsSavingFinalPayment(true);
@@ -3914,7 +3861,6 @@ const FinalBill = () => {
         return;
       }
 
-      console.log('✅ Patient ID retrieved:', visitData.patient_id);
 
       // Check if final payment already exists
       const { data: existingPayment } = await supabase
@@ -4047,8 +3993,6 @@ const FinalBill = () => {
         return;
       }
 
-      console.log('✅ Visit discharge status updated successfully');
-      console.log('✅ Patient should now appear in Discharged Patients dashboard');
 
       toast.success('Patient discharged successfully!');
 
@@ -5475,7 +5419,6 @@ Generate a comprehensive COMBINED surgical note that covers ALL surgeries listed
 
 Make it detailed and professional as if written by an experienced surgeon.`;
 
-      console.log('Generating combined AI notes for all surgeries...');
 
       const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiApiKey}`, {
         method: 'POST',
@@ -5502,7 +5445,6 @@ Make it detailed and professional as if written by an experienced surgeon.`;
       }
 
       const data = await response.json();
-      console.log('Gemini API Response:', data);
 
       const generatedText = data.candidates?.[0]?.content?.parts?.[0]?.text;
       if (!generatedText) {
@@ -5610,7 +5552,6 @@ INSTRUCTIONS:
         return;
       }
 
-      console.log("Visit data found:", visitData);
 
       // Extract patient name from the joined data
       const patientName = visitData.patients?.name || patientData.name || 'Unknown';
@@ -5628,7 +5569,6 @@ INSTRUCTIONS:
         return;
       }
 
-      console.log("Existing OT notes deleted, inserting new records...");
 
       // Get surgery details from patientInfo if available (for billing info)
       const getSurgeryDetails = (index: number) => {
@@ -5700,7 +5640,6 @@ INSTRUCTIONS:
           saved_at: new Date().toISOString()
         };
 
-        console.log(`Saving surgery ${i + 1}:`, otNotesDataToSave);
 
         const { error: insertError } = await supabase
           .from('ot_notes')
@@ -5714,7 +5653,6 @@ INSTRUCTIONS:
         }
       }
 
-      console.log("All OT Notes saved successfully!");
       toast.success(`✅ ${surgeriesWithData.length} OT Notes saved successfully to database!`);
 
       // Reload from database to confirm save and get IDs
@@ -5907,10 +5845,8 @@ INSTRUCTIONS:
             if (rawItemsJson.medicineNote) setMedicineNote(rawItemsJson.medicineNote);
           }
           billDataLoadedRef.current = true;
-          console.log('✅ Bill items restored from bill_items_json');
         }
       } else if (billData.sections && billData.line_items) {
-        console.log('Loading saved bill data:', billData);
 
         const loadedItems: InvoiceItem[] = [];
 
@@ -5969,7 +5905,6 @@ INSTRUCTIONS:
           loadedItems.push(mainItem);
         });
 
-        console.log('Loaded invoice items:', loadedItems);
 
         if (!billDataLoadedRef.current) {
           if (loadedItems.length > 0) {
@@ -5982,7 +5917,6 @@ INSTRUCTIONS:
             // Don't set billDataLoadedRef so medicine/pathology/surgery can still populate
           }
         } else {
-          console.log('⚠️ Skipping - already loaded from DB');
         }
       } else {
         // No saved data, use initial sections only if not already loaded
@@ -6028,7 +5962,6 @@ INSTRUCTIONS:
           // Calculate total amount
           const totalAmount = pathologySubItems.reduce((sum, item) => sum + item.amount, 0);
 
-          console.log('✅ Pathology Charges updated with date ranges:', { pathologySubItems, totalAmount });
 
           return {
             ...item,
@@ -6036,7 +5969,6 @@ INSTRUCTIONS:
             amount: totalAmount
           };
         } else {
-          console.log('⚠️ No pathology charges found - updating to show empty state');
           // No pathology charges - show default message
           const defaultSubItem = {
             id: 'pathology_default',
@@ -6092,7 +6024,6 @@ INSTRUCTIONS:
           // Calculate total amount
           const totalAmount = medicationSubItems.reduce((sum, item) => sum + item.amount, 0);
 
-          console.log('✅ Medicine Charges updated with medication items:', { medicationSubItems, totalAmount });
 
           return {
             ...item,
@@ -6100,7 +6031,6 @@ INSTRUCTIONS:
             amount: totalAmount
           };
         } else {
-          console.log('⚠️ No medications found - updating Medicine Charges to show "No medications"');
           // No medications - show default message
           const defaultSubItem = {
             id: 'medicine_default',
@@ -6130,13 +6060,7 @@ INSTRUCTIONS:
       const patient = visitData.patients;
 
       // 🔍 DEBUG: Log available date values
-      console.log('═══════════════════════════════════════');
       console.log('📅 DATE OF ADMISSION DEBUG:');
-      console.log('visitData.admission_date:', visitData.admission_date);
-      console.log('visitData.visit_date:', visitData.visit_date);
-      console.log('visitData.created_at:', visitData.created_at);
-      console.log('patient.created_at:', patient?.created_at);
-      console.log('═══════════════════════════════════════');
 
       setPatientData(prev => {
         const diagnosisCandidate = getDiagnosisText();
@@ -6149,22 +6073,16 @@ INSTRUCTIONS:
 
         if (prev.dateOfAdmission) {
           calculatedDateOfAdmission = prev.dateOfAdmission;
-          console.log('✅ Using prev.dateOfAdmission:', calculatedDateOfAdmission);
         } else if (visitData.admission_date) {
           calculatedDateOfAdmission = format(new Date(visitData.admission_date), "yyyy-MM-dd");
-          console.log('✅ Using visitData.admission_date:', calculatedDateOfAdmission);
         } else if (visitData.visit_date) {
           calculatedDateOfAdmission = format(new Date(visitData.visit_date), "yyyy-MM-dd");
-          console.log('✅ Using visitData.visit_date:', calculatedDateOfAdmission);
         } else if (visitData.created_at) {
           calculatedDateOfAdmission = format(new Date(visitData.created_at), "yyyy-MM-dd");
-          console.log('✅ Using visitData.created_at:', calculatedDateOfAdmission);
         } else if (patient.created_at) {
           calculatedDateOfAdmission = format(new Date(patient.created_at), "yyyy-MM-dd");
-          console.log('✅ Using patient.created_at:', calculatedDateOfAdmission);
         } else {
           calculatedDateOfAdmission = "";
-          console.log('⚠️ No date available - using empty string');
         }
 
         console.log('🎯 Final dateOfAdmission value:', calculatedDateOfAdmission);
@@ -6747,10 +6665,8 @@ INSTRUCTIONS:
             };
           })
         );
-        console.log('✅ Formatted lab data with correct rates:', formattedLabData);
         setSavedLabData(formattedLabData);
       } else {
-        console.log('❌ No lab data found or error occurred');
         setSavedLabData([]);
       }
     } catch (error) {
@@ -6943,14 +6859,12 @@ INSTRUCTIONS:
 
       // All radiology data is already stored in the requisition record
       // No need to save to order_test_items table separately
-      console.log('✅ All radiology data stored successfully in requisition record');
 
       toast.success(`Radiology Requisition saved successfully! Requisition #${radiologyOrder.requisition_number}`);
       
       // Update saved requisitions state for radiology
       const requisitionKey = `rad-${selectedTests.map(t => t.radiology_name || t.name).sort().join('-')}`;
       setSavedRequisitions(prev => ({...prev, [requisitionKey]: true}));
-      console.log('✅ Radiology requisition saved, checkbox set for key:', requisitionKey);
       
       return radiologyOrder;
 
@@ -7013,7 +6927,6 @@ INSTRUCTIONS:
         return null;
       }
 
-      console.log('✅ Requisition saved to visit_labs:', savedRequisition);
       toast.success(`Galaxy Requisition saved successfully! ID: ${requisitionId}`);
       
       // Update saved requisitions state
@@ -7102,7 +7015,6 @@ INSTRUCTIONS:
         try {
           Object.assign(orderData, additionalInfo);
         } catch (e) {
-          console.log('Some optional fields not available in lab_orders table');
         }
       }
 
@@ -7148,14 +7060,12 @@ INSTRUCTIONS:
 
       // All test data is already stored in the requisition record
       // No need to save to order_test_items table separately
-      console.log('✅ All test data stored successfully in requisition record');
 
       toast.success(`Lab Requisition saved successfully! Requisition #${labOrder.requisition_number}`);
       
       // Update saved requisitions state for lab
       const requisitionKey = `lab-${selectedTests.map(t => t.lab_name || t.name).sort().join('-')}`;
       setSavedRequisitions(prev => ({...prev, [requisitionKey]: true}));
-      console.log('✅ Lab requisition saved, checkbox set for key:', requisitionKey);
       
 
 
@@ -7966,14 +7876,12 @@ INSTRUCTIONS:
       let parsedClinicalServices = [];
       if (visitData.clinical_service) {
         parsedClinicalServices = [visitData.clinical_service];
-        console.log('✅ [DB VERIFICATION] Clinical service found via join:', visitData.clinical_service);
       }
 
       // Parse joined mandatory service data
       let parsedMandatoryServices = [];
       if (visitData.mandatory_service) {
         parsedMandatoryServices = [visitData.mandatory_service];
-        console.log('✅ [DB VERIFICATION] Mandatory service found via join:', visitData.mandatory_service);
       }
 
       // Compare with current state
@@ -8070,9 +7978,7 @@ INSTRUCTIONS:
       });
 
       if (clinicalMatch && mandatoryMatch && clinicalServicesInitialized && mandatoryServicesInitialized) {
-        console.log('✅ [PERSISTENCE TEST] SUCCESS: Data persistence working correctly!');
       } else {
-        console.log('❌ [PERSISTENCE TEST] FAILURE: Data persistence has issues');
       }
 
     } catch (error) {
@@ -8165,7 +8071,6 @@ INSTRUCTIONS:
         .single();
 
       if (existingVisit && !existingError) {
-        console.log('✅ [ENSURE VISIT] Visit already exists:', existingVisit.id);
         return {
           success: true,
           visitUuid: existingVisit.id,
@@ -8190,7 +8095,6 @@ INSTRUCTIONS:
 
         if (patientLookup && !patientError) {
           patientUuid = patientLookup.id;
-          console.log('✅ [ENSURE VISIT] Found patient UUID:', patientUuid);
         }
       }
 
@@ -8237,7 +8141,6 @@ INSTRUCTIONS:
         };
       }
 
-      console.log('✅ [ENSURE VISIT] Visit created successfully:', createdVisit);
       toast.success('Visit record created automatically');
 
       return {
@@ -8308,7 +8211,6 @@ INSTRUCTIONS:
 
       // TEMPORARILY SKIP write test due to database trigger issues
       console.log('🔍 [SCHEMA VERIFICATION] Skipping write test temporarily due to trigger issues');
-      console.log('⚠️ [SCHEMA VERIFICATION] Assuming write access is available - will test during actual save');
 
       // TODO: Re-enable write test after database triggers are fixed
       const writeTestData = null;
@@ -8330,7 +8232,6 @@ INSTRUCTIONS:
         })
         .eq('visit_id', testVisit.visit_id);
 
-      console.log('✅ [SCHEMA VERIFICATION] Schema verification passed');
       return {
         columnsExist: true,
         canWrite: true,
@@ -8441,9 +8342,7 @@ INSTRUCTIONS:
           console.log('📋 [CLINICAL SERVICES FETCH] Processed service:', serviceData);
           return serviceData;
         });
-        console.log('✅ [CLINICAL SERVICES FETCH] Clinical services found via junction table:', processedClinicalServicesData.length);
       } else {
-        console.log('ℹ️ [CLINICAL SERVICES FETCH] No clinical services found in junction table');
         processedClinicalServicesData = [];
       }
 
@@ -8456,7 +8355,6 @@ INSTRUCTIONS:
       setSavedClinicalServicesData(processedClinicalServicesData);
       setClinicalServicesInitialized(true);
 
-      console.log('✅ [CLINICAL SERVICES FETCH] State updated successfully');
 
       // Verify state will be updated in next render
       setTimeout(() => {
@@ -8625,7 +8523,6 @@ INSTRUCTIONS:
         }
       }
 
-      console.log('⚠️ [RAW DB EMERGENCY] No services found with emergency method, proceeding with normal fetch...');
     } catch (emergencyError) {
       console.error('❌ [RAW DB EMERGENCY] Emergency recovery failed:', emergencyError);
     }
@@ -8793,7 +8690,6 @@ INSTRUCTIONS:
 
       // If no records found, try comprehensive fallback strategies
       if (!mandatoryServicesData || mandatoryServicesData.length === 0) {
-        console.log('⚠️ [FALLBACK LOGIC] No records found with primary visit UUID, trying fallback strategies...');
 
         // Strategy 1: Try with all visit UUIDs that have the same visit_id
         if (allVisits && allVisits.length > 1) {
@@ -8815,7 +8711,6 @@ INSTRUCTIONS:
               });
 
               if (fallbackData && fallbackData.length > 0) {
-                console.log('✅ [FALLBACK SUCCESS] Found records with alternative visit UUID!');
                 console.log('🔧 [UUID FIX] Updating visitData to use the correct UUID');
 
                 // Update visitData to use the correct UUID for rest of processing
@@ -8850,12 +8745,10 @@ INSTRUCTIONS:
 
         // Final check
         if (!mandatoryServicesData || mandatoryServicesData.length === 0) {
-          console.log('❌ [ALL FALLBACKS FAILED] Still no records found after all strategies');
           console.log('📢 [USER MESSAGE] No mandatory services found for this visit');
           setMandatoryServices([]);
           return;
         } else {
-          console.log('✅ [FALLBACK SUCCESS] Records found via fallback strategy!');
         }
       }
 
@@ -8875,7 +8768,6 @@ INSTRUCTIONS:
           if (servicesError) {
             console.error('❌ [SERVICES DETAILS] Error fetching service details:', servicesError);
           } else {
-            console.log('✅ [SERVICES DETAILS] Fetched service details:', servicesData);
 
             // Convert to lookup object for easy access
             servicesData?.forEach(service => {
@@ -9005,7 +8897,6 @@ INSTRUCTIONS:
 
           // ENSURE NON-ZERO AMOUNT: If all values are 0, default to 750 for mandatory services
           if (calculatedAmount === 0 && rateUsedValue === 0 && amountValue === 0) {
-            console.log('⚠️ [FALLBACK] All amounts are 0, using mandatory service default rate of 750');
             calculatedAmount = 750;
             rateType = 'standard';
           }
@@ -9056,9 +8947,7 @@ INSTRUCTIONS:
           });
           return serviceData;
         });
-        console.log('✅ [MANDATORY SERVICES FETCH] Mandatory services found via junction table:', processedMandatoryServicesData.length);
       } else {
-        console.log('ℹ️ [MANDATORY SERVICES FETCH] No mandatory services found in junction table');
         processedMandatoryServicesData = [];
       }
 
@@ -9098,8 +8987,6 @@ INSTRUCTIONS:
         });
       }, 100);
 
-      console.log('✅ [MANDATORY SERVICES FETCH] State updated successfully');
-      console.log('✅ [MANDATORY SERVICES FETCH] New data should contain', processedMandatoryServicesData.length, 'services');
 
       // CRITICAL: Return the processed data for external callers
       return processedMandatoryServicesData;
@@ -9131,7 +9018,6 @@ INSTRUCTIONS:
   // Function to fetch saved accommodation data
   const fetchSavedAccommodationData = async () => {
     if (!visitId) {
-      console.log('⚠️ [ACCOMMODATION FETCH] No visitId available');
       return [];
     }
 
@@ -9150,7 +9036,6 @@ INSTRUCTIONS:
         return [];
       }
 
-      console.log('✅ [ACCOMMODATION FETCH] Visit found:', visitData.id);
 
       // Fetch accommodation data with join
       const { data: accommodationData, error: accommodationError } = await supabase
@@ -9174,7 +9059,6 @@ INSTRUCTIONS:
         return [];
       }
 
-      console.log('✅ [ACCOMMODATION FETCH] Raw data:', accommodationData);
 
       // Format the data
       const formattedData = (accommodationData || []).map((item: any) => ({
@@ -9195,7 +9079,6 @@ INSTRUCTIONS:
         tpa_rate: item.accommodation?.tpa_rate
       }));
 
-      console.log('✅ [ACCOMMODATION FETCH] Formatted data:', formattedData);
 
       // Update state
       setSavedAccommodationData(formattedData);
@@ -9211,7 +9094,6 @@ INSTRUCTIONS:
   // Function to fetch saved implant data
   const fetchSavedImplantData = async () => {
     if (!visitId) {
-      console.log('⚠️ [IMPLANT FETCH] No visitId available');
       return [];
     }
 
@@ -9230,7 +9112,6 @@ INSTRUCTIONS:
         return [];
       }
 
-      console.log('✅ [IMPLANT FETCH] Visit found:', visitData.id);
 
       // Fetch implant data
       const { data: implantData, error: implantError } = await supabase
@@ -9244,7 +9125,6 @@ INSTRUCTIONS:
         return [];
       }
 
-      console.log('✅ [IMPLANT FETCH] Data:', implantData);
       setSavedImplantData(implantData || []);
       return implantData || [];
     } catch (error) {
@@ -9269,7 +9149,6 @@ INSTRUCTIONS:
           .order('created_at', { ascending: false });
         if (!error && data && data.length > 0) {
           rxData = data;
-          console.log('✅ [RX FETCH] Found', data.length, 'prescriptions by patient_id');
         }
       }
 
@@ -9310,7 +9189,6 @@ INSTRUCTIONS:
           });
 
           if (rxData.length > 0) {
-            console.log('✅ [RX FETCH] Found', rxData.length, 'prescriptions by name match');
           }
         }
       }
@@ -9339,7 +9217,6 @@ INSTRUCTIONS:
             rxData = todayRx.filter((rx: any) => pMap[rx.patient_id] === searchName);
           }
           if (rxData.length > 0) {
-            console.log('✅ [RX FETCH] Found', rxData.length, 'prescriptions from today by name');
           }
         }
       }
@@ -9387,7 +9264,6 @@ INSTRUCTIONS:
   // Function to fetch saved anesthetist data
   const fetchSavedAnesthetistData = async () => {
     if (!visitId) {
-      console.log('⚠️ [ANESTHETIST FETCH] No visitId available');
       return [];
     }
 
@@ -9406,7 +9282,6 @@ INSTRUCTIONS:
         return [];
       }
 
-      console.log('✅ [ANESTHETIST FETCH] Visit found:', visitData.id);
 
       // Fetch anesthetist data
       const { data: anesthetistData, error: anesthetistError } = await supabase
@@ -9420,7 +9295,6 @@ INSTRUCTIONS:
         return [];
       }
 
-      console.log('✅ [ANESTHETIST FETCH] Data:', anesthetistData);
       setSavedAnesthetistData(anesthetistData || []);
       return anesthetistData || [];
     } catch (error) {
@@ -9504,7 +9378,6 @@ INSTRUCTIONS:
         return;
       }
 
-      console.log('✅ [ACCOMMODATION ADD] Successfully added:', insertedData);
       toast.success(`Room "${accommodation.room_type}" added. Edit dates and rate type in the table below.`);
 
       // Refresh accommodation data
@@ -9536,7 +9409,6 @@ INSTRUCTIONS:
         return;
       }
 
-      console.log('✅ [ACCOMMODATION DELETE] Successfully deleted');
 
       // Update local state
       setSavedAccommodationData(prev => prev.filter(a => a.id !== accommodationId));
@@ -9548,7 +9420,6 @@ INSTRUCTIONS:
         try {
           await fetchSavedAccommodationData();
         } catch (fetchError) {
-          console.log('⚠️ [ACCOMMODATION DELETE] Fetch after delete failed (expected if no accommodations remain)');
         }
       }
 
@@ -9566,7 +9437,6 @@ INSTRUCTIONS:
   // Function to fetch saved pathology charges
   const fetchSavedPathologyCharges = async () => {
     if (!visitId) {
-      console.log('⚠️ [PATHOLOGY CHARGES FETCH] No visitId available');
       return [];
     }
 
@@ -9585,7 +9455,6 @@ INSTRUCTIONS:
         return [];
       }
 
-      console.log('✅ [PATHOLOGY CHARGES FETCH] Visit found:', visitData.id);
 
       // Fetch pathology charges data
       const { data: pathologyData, error: pathologyError } = await supabase
@@ -9599,7 +9468,6 @@ INSTRUCTIONS:
         return [];
       }
 
-      console.log('✅ [PATHOLOGY CHARGES FETCH] Raw data:', pathologyData);
 
       // Update state
       setSavedPathologyCharges(pathologyData || []);
@@ -9671,7 +9539,6 @@ INSTRUCTIONS:
         return;
       }
 
-      console.log('✅ [PATHOLOGY ADD] Successfully added:', insertedData);
       toast.success('Pathology date range added. Edit dates and rate in the table below.');
 
       // Refresh pathology data
@@ -9741,7 +9608,6 @@ INSTRUCTIONS:
         return;
       }
 
-      console.log('✅ [PATHOLOGY DELETE] Successfully deleted');
 
       // Update local state
       setSavedPathologyCharges(prev => prev.filter(p => p.id !== pathologyId));
@@ -9807,7 +9673,6 @@ INSTRUCTIONS:
         return;
       }
 
-      console.log('✅ [CLINICAL DELETE] Service deleted successfully, rows affected:', count);
 
       // Update local state immediately - no re-fetch needed
       setSavedClinicalServicesData(prev => prev.filter(s => s.junction_id !== junctionId));
@@ -9856,7 +9721,6 @@ INSTRUCTIONS:
         return;
       }
 
-      console.log('✅ [MANDATORY DELETE] Successfully deleted from junction table');
 
       // Update local state immediately
       setSavedMandatoryServicesData(prev => {
@@ -9873,11 +9737,9 @@ INSTRUCTIONS:
         try {
           await fetchSavedMandatoryServicesData();
         } catch (fetchError) {
-          console.log('⚠️ [MANDATORY DELETE] Fetch after delete failed (expected if no services remain):', fetchError);
           // Don't show error to user - state is already updated
         }
       } else {
-        console.log('✅ [MANDATORY DELETE] No remaining services, state already updated');
       }
 
       toast.success('Mandatory service deleted successfully');
@@ -10130,7 +9992,6 @@ INSTRUCTIONS:
             return;
           }
 
-          console.log('✅ Implant deleted from database:', (subItem as any).dbId);
 
           // Update saved implants state
           setSavedVisitImplants(prev => prev.filter(imp => imp.id !== (subItem as any).dbId));
@@ -10190,7 +10051,6 @@ INSTRUCTIONS:
         }
 
         // CREATE NEW INDIVIDUAL ENTRY: Always create a new record for each lab test with current timestamp
-        console.log('✅ [LAB NEW ENTRY] Creating new individual lab entry with timestamp...');
 
         // INDIVIDUAL ENTRY: Prepare lab data for visit_labs table (each test as separate entry)
         const individualCost = labService.amount || labService.cost || 0;
@@ -10243,7 +10103,6 @@ INSTRUCTIONS:
               toast.error('Failed to save lab to visit record');
               return;
             } else {
-              console.log('✅ Lab saved without quantity field:', retryData);
               toast.success(`${labService.name} saved to visit (quantity tracking unavailable)`);
             }
           }
@@ -10267,14 +10126,12 @@ INSTRUCTIONS:
               toast.error('Failed to save lab to visit record');
               return;
             } else {
-              console.log('✅ Lab saved without cost field:', retryData);
               toast.success(`${labService.name} saved to visit (without cost preservation)`);
             }
           } else {
             toast.error('Failed to save lab to visit record');
           }
         } else {
-          console.log('✅ Lab saved to visit_labs successfully:', data);
           toast.success(`${labService.name} saved to visit`);
 
           // Refresh saved labs data
@@ -10287,7 +10144,6 @@ INSTRUCTIONS:
         toast.error('Failed to save lab to visit record');
       }
     } else {
-      console.log('⚠️ No visitId available, cannot save lab');
       toast.error('No visit ID available - cannot save lab');
     }
   };
@@ -10296,7 +10152,6 @@ INSTRUCTIONS:
   const saveSingleRadiologyToVisit = async (radiologyService: any) => {
     try {
       if (!visitId) {
-        console.log('❌ No visit ID available for saving radiology');
         toast.error('No visit ID available - cannot save radiology');
         return;
       }
@@ -10317,15 +10172,12 @@ INSTRUCTIONS:
       }
 
       if (!visitData?.id) {
-        console.log('❌ Visit record not found for radiology save');
         toast.error('Visit record not found');
         return;
       }
 
-      console.log('✅ Found visit UUID for radiology:', visitData.id, 'for visit_id:', visitId);
 
       // CREATE NEW INDIVIDUAL ENTRY: Always create a new record for each radiology test with current timestamp
-      console.log('✅ [RADIOLOGY NEW ENTRY] Creating new individual radiology entry with timestamp...');
 
       // INDIVIDUAL ENTRY: Prepare radiology data for visit_radiology table (each test as separate entry)
       const individualCost = radiologyService.amount || radiologyService.cost || 0;
@@ -10351,7 +10203,6 @@ INSTRUCTIONS:
         console.error('❌ Error saving radiology to visit_radiology:', error);
         // Check if error is due to missing quantity/cost columns
         if (error.message && (error.message.includes('quantity') || error.message.includes('cost') || error.message.includes('unit_rate'))) {
-          console.log('⚠️ [RADIOLOGY SAVE] Missing quantity columns, using basic save...');
           toast.warning('Quantity tracking not available - please run database migration.');
 
           // Fallback to basic save without quantity columns
@@ -10371,7 +10222,6 @@ INSTRUCTIONS:
             console.error('❌ Basic radiology save also failed:', basicError);
             toast.error('Error saving radiology to visit');
           } else {
-            console.log('✅ Basic radiology save successful:', basicData);
             toast.success(`${radiologyService.name} saved to visit (basic mode)`);
           }
         } else if (error.code === '23505') {
@@ -10380,7 +10230,6 @@ INSTRUCTIONS:
           toast.error('Error saving radiology to visit');
         }
       } else {
-        console.log('✅ Radiology saved to visit_radiology successfully:', data);
         toast.success(`${radiologyService.name} saved to visit`);
       }
 
@@ -10399,11 +10248,9 @@ INSTRUCTIONS:
   const fetchSavedRadiology = async (visitId: string, patientInfoOverride?: any) => {
     try {
       if (!visitId) {
-        console.log('No visit ID provided for fetching radiology');
         return;
       }
 
-      console.log('Fetching saved radiology for visit ID:', visitId);
 
       // First get the actual visit UUID and patient_type from the visits table
       const { data: visitData, error: visitError } = await supabase
@@ -10418,12 +10265,10 @@ INSTRUCTIONS:
       }
 
       if (!visitData?.id) {
-        console.log('Visit record not found for radiology fetch');
         setSavedRadiologyData([]);
         return;
       }
 
-      console.log('Found visit UUID for radiology:', visitData.id, 'for visit_id:', visitId);
 
       // Then get visit_radiology data using the UUID, ordered by date (newest first)
       const { data: visitRadiologyData, error: visitRadiologyError } = await supabase
@@ -10437,17 +10282,14 @@ INSTRUCTIONS:
         return;
       }
 
-      console.log('Visit radiology raw data:', visitRadiologyData);
 
       if (!visitRadiologyData || visitRadiologyData.length === 0) {
-        console.log('No saved radiology found for this visit');
         setSavedRadiologyData([]);
         return;
       }
 
       // Get radiology details for each radiology_id
       const radiologyIds = visitRadiologyData.map((item: any) => item.radiology_id);
-      console.log('Radiology IDs to fetch:', radiologyIds);
 
       const { data: radiologyData, error: radiologyError } = await supabase
         .from('radiology')
@@ -10468,7 +10310,6 @@ INSTRUCTIONS:
         return;
       }
 
-      console.log('Radiology details data:', radiologyData);
 
       // Determine patient type to select appropriate rate
       // Use patientInfoOverride if provided (when called from fetchPatientInfo), otherwise use state
@@ -10574,14 +10415,12 @@ INSTRUCTIONS:
         };
       });
 
-      console.log('Final formatted radiology:', formattedRadiology);
       console.log('📊 Radiology cost summary:', formattedRadiology.map(r => ({
         name: r.radiology_name,
         cost: r.cost,
         type: typeof r.cost
       })));
       setSavedRadiologyData(formattedRadiology);
-      console.log('State updated - savedRadiologyData should now contain:', formattedRadiology.length, 'items');
     } catch (error) {
       console.error('Error in fetchSavedRadiology:', error);
     }
@@ -10646,7 +10485,6 @@ INSTRUCTIONS:
       return updated;
     });
 
-    console.log('✅ Radiology service added to invoice:', newRadiologyItem);
   };
 
   // Search queries for service selection based on search term and active tab
@@ -10706,7 +10544,6 @@ INSTRUCTIONS:
           );
         }
 
-        console.log('✅ Lab search results:', data?.length || 0, 'records');
 
         // Map the field names to expected format - use appropriate rates based on corporate type
         const mappedData = data?.map(item => {
@@ -10836,7 +10673,6 @@ INSTRUCTIONS:
         return [];
       }
 
-      console.log('✅ Radiology search results:', data?.length || 0, 'records found');
       console.log('📋 Sample radiology results:', data?.slice(0, 2));
 
       // Transform data - use appropriate rates based on corporate type
@@ -11008,7 +10844,6 @@ INSTRUCTIONS:
           return [];
         }
 
-        console.log('✅ Implant search results:', data?.length || 0, 'records');
 
         // Map the field names to expected format - use appropriate rates based on corporate type
         const mappedData = data?.map(item => {
@@ -11244,7 +11079,6 @@ INSTRUCTIONS:
         return;
       }
 
-      console.log('✅ Implant saved to database successfully');
 
       // Generate a unique ID for the invoice item
       const uniqueId = `implant-${implantService.id}-${Date.now()}`;
@@ -11292,7 +11126,6 @@ INSTRUCTIONS:
         return updated;
       });
 
-      console.log('✅ Implant service added to invoice:', newImplantItem);
       toast.success(`Added "${implantService.name}" to invoice`);
     } catch (error) {
       console.error('❌ Error in addImplantServiceToInvoice:', error);
@@ -11394,7 +11227,6 @@ INSTRUCTIONS:
       });
 
       if (!serviceSearchTerm || serviceSearchTerm.length < 2) {
-        console.log('⚠️ Search term too short or empty:', serviceSearchTerm);
         return [];
       }
 
@@ -11472,11 +11304,9 @@ INSTRUCTIONS:
         return [];
       }
 
-      console.log('✅ clinical_services table accessible. Sample data:', allServices);
       console.log('📊 Total services found in test query:', allServices?.length || 0);
 
       if (!allServices || allServices.length === 0) {
-        console.log('⚠️ No clinical services found in database at all');
         return [];
       }
 
@@ -11549,7 +11379,6 @@ INSTRUCTIONS:
           ) || [];
 
           searchError = null;
-          console.log('✅ Fallback filtering successful, found:', searchResults.length, 'services');
         } catch (fallbackError) {
           console.error('❌ Fallback query also failed:', fallbackError);
           return [];
@@ -11575,11 +11404,9 @@ INSTRUCTIONS:
         // Check if any service has hospital_name field
         const hasHospitalField = finalData.some(service => 'hospital_name' in service);
         if (hasHospitalField) {
-          console.log('✅ Hospital field found, filtering by:', hospitalFilter);
           finalData = finalData.filter(service => service.hospital_name === hospitalFilter);
           console.log('📊 After hospital filter:', finalData.length, 'services');
         } else {
-          console.log('ℹ️ No hospital_name field found, returning all active services');
         }
       }
 
@@ -11683,7 +11510,6 @@ INSTRUCTIONS:
       });
 
       if (!serviceSearchTerm || serviceSearchTerm.length < 2) {
-        console.log('⚠️ Search term too short or empty:', serviceSearchTerm);
         return [];
       }
 
@@ -11787,7 +11613,6 @@ INSTRUCTIONS:
           ) || [];
 
           searchError = null;
-          console.log('✅ Fallback mandatory services filtering successful, found:', searchResults.length, 'services');
         } catch (fallbackError) {
           console.error('❌ Fallback mandatory services query also failed:', fallbackError);
           return [];
@@ -11810,14 +11635,12 @@ INSTRUCTIONS:
         // Check if any service has hospital_name field
         const hasHospitalField = finalData.some(service => 'hospital_name' in service);
         if (hasHospitalField) {
-          console.log('✅ Hospital field found in mandatory services, filtering by:', hospitalFilter);
           // Include services that match hospital OR have no hospital_name set
           finalData = finalData.filter(service =>
             !service.hospital_name || service.hospital_name === hospitalFilter
           );
           console.log('📊 After hospital filter:', finalData.length, 'mandatory services');
         } else {
-          console.log('ℹ️ No hospital_name field found in mandatory services, returning all active services');
         }
       }
 
@@ -12143,7 +11966,6 @@ INSTRUCTIONS:
         );
       }
 
-      console.log('✅ Labs data fetched:', data?.length || 0, 'records');
       return data || [];
     },
     enabled: labSearchTerm.length >= 2,
@@ -12203,12 +12025,10 @@ INSTRUCTIONS:
   const fetchSavedDiagnoses = async (visitId: string) => {
     try {
       if (!visitId) {
-        console.log('No visit ID provided for fetching diagnoses');
         setSavedDiagnoses([]);
         return;
       }
 
-      console.log('Fetching saved diagnoses for visit ID:', visitId);
 
       // First get the actual visit UUID from the visits table
       const { data: visitData, error: visitError } = await supabase
@@ -12224,12 +12044,10 @@ INSTRUCTIONS:
       }
 
       if (!visitData) {
-        console.log('No visit found for visit_id:', visitId);
         setSavedDiagnoses([]);
         return;
       }
 
-      console.log('Found visit UUID for diagnoses:', visitData.id, 'for visit_id:', visitId);
 
       // Then get visit_diagnoses data using the UUID with join to get diagnosis details
       const { data: visitDiagnosesData, error: visitDiagnosesError } = await supabase
@@ -12249,10 +12067,8 @@ INSTRUCTIONS:
         return;
       }
 
-      console.log('Visit diagnoses raw data:', visitDiagnosesData);
 
       if (!visitDiagnosesData || visitDiagnosesData.length === 0) {
-        console.log('No saved diagnoses found for this visit');
         setSavedDiagnoses([]);
         return;
       }
@@ -12267,9 +12083,7 @@ INSTRUCTIONS:
         };
       });
 
-      console.log('Final formatted diagnoses:', formattedDiagnoses);
       setSavedDiagnoses(formattedDiagnoses);
-      console.log('State updated - savedDiagnoses should now contain:', formattedDiagnoses.length, 'items');
     } catch (error) {
       console.error('Error in fetchSavedDiagnoses:', error);
       setSavedDiagnoses([]);
@@ -12279,7 +12093,6 @@ INSTRUCTIONS:
   // Function to save selected diagnoses to visit_diagnoses junction table
   const saveDiagnosesToVisit = async (visitId: string) => {
     try {
-      console.log('Saving diagnoses to visit:', visitId, selectedDiagnoses);
 
       if (selectedDiagnoses.length === 0) {
         toast.error('No diagnoses selected to save');
@@ -12305,12 +12118,10 @@ INSTRUCTIONS:
       }
 
       if (!visitData) {
-        console.log('No visit found for visit_id:', visitId);
         toast.error('Visit not found. Cannot save diagnoses.');
         return;
       }
 
-      console.log('Found visit UUID for saving diagnoses:', visitData.id, 'for visit_id:', visitId);
 
       // Prepare data for insertion
       const diagnosesToSave = selectedDiagnoses.map((diagnosis, index) => ({
@@ -12320,7 +12131,6 @@ INSTRUCTIONS:
         notes: null
       }));
 
-      console.log('Diagnoses to save:', diagnosesToSave);
 
       // Insert directly using Supabase client
       try {
@@ -12358,19 +12168,13 @@ INSTRUCTIONS:
           toast.error(`Failed to save diagnoses: ${insertError.message}`);
         } else {
           toast.success(`${newDiagnosesToSave.length} new diagnoses added to visit ${visitId} successfully!`);
-          console.log('Saved diagnoses data:', data);
 
-          console.log('About to clear selected diagnoses...');
           // Clear selected diagnoses after successful save
           setSelectedDiagnoses([]);
 
-          console.log('About to fetch saved diagnoses...');
-          console.log('fetchSavedDiagnoses function:', typeof fetchSavedDiagnoses);
           // Fetch updated saved diagnoses to refresh the display
-          console.log('Fetching saved diagnoses after save with visit ID:', visitId);
           try {
             await fetchSavedDiagnoses(visitId);
-            console.log('Fetch completed successfully');
           } catch (fetchError) {
             console.error('Error fetching saved diagnoses after save:', fetchError);
           }
@@ -12389,7 +12193,6 @@ INSTRUCTIONS:
   // Function to delete a specific diagnosis
   const deleteDiagnosis = async (diagnosisId: string, visitId: string) => {
     try {
-      console.log('Deleting diagnosis:', diagnosisId, 'from visit:', visitId);
 
       // First get the actual visit UUID from the visits table
       const { data: visitData, error: visitError } = await supabase
@@ -12428,7 +12231,6 @@ INSTRUCTIONS:
   // Function to toggle primary status of a diagnosis
   const togglePrimaryDiagnosis = async (diagnosisId: string, visitId: string, currentIsPrimary: boolean) => {
     try {
-      console.log('Toggling primary status for diagnosis:', diagnosisId, 'current:', currentIsPrimary);
 
       // First get the actual visit UUID from the visits table
       const { data: visitData, error: visitError } = await supabase
@@ -12476,12 +12278,10 @@ INSTRUCTIONS:
   const fetchSavedSurgeriesFromVisit = async (visitId: string) => {
     try {
       if (!visitId) {
-        console.log('No visit ID provided for fetching surgeries');
         setSavedSurgeries([]);
         return;
       }
 
-      console.log('Fetching saved surgeries for visit ID:', visitId);
 
       // First get the actual visit UUID from the visits table
       const { data: visitData, error: visitError } = await supabase
@@ -12497,7 +12297,6 @@ INSTRUCTIONS:
       }
 
       if (!visitData?.id) {
-        console.log('Visit record not found for surgery fetch');
         setSavedSurgeries([]);
         return;
       }
@@ -12525,10 +12324,8 @@ INSTRUCTIONS:
         return;
       }
 
-      console.log('Visit surgeries raw data:', visitSurgeriesData);
 
       if (!visitSurgeriesData || visitSurgeriesData.length === 0) {
-        console.log('No saved surgeries found for this visit');
         setSavedSurgeries([]);
         return;
       }
@@ -12622,10 +12419,7 @@ INSTRUCTIONS:
         };
       });
 
-      console.log('Final formatted surgeries:', formattedSurgeries);
       setSavedSurgeries(formattedSurgeries);
-      console.log('State updated - savedSurgeries should now contain:', formattedSurgeries.length, 'items');
-      console.log('Current savedSurgeries state after setSavedSurgeries:', formattedSurgeries);
 
       // Surgery Treatment section removed
     } catch (error) {
@@ -12638,12 +12432,10 @@ INSTRUCTIONS:
   const fetchSavedComplications = async (visitId: string) => {
     try {
       if (!visitId) {
-        console.log('No visit ID provided for fetching complications');
         setSavedComplications([]);
         return;
       }
 
-      console.log('Fetching saved complications for visit ID:', visitId);
 
       // First get the actual visit UUID from the visits table
       const { data: visitData, error: visitError } = await supabase
@@ -12659,12 +12451,10 @@ INSTRUCTIONS:
       }
 
       if (!visitData?.id) {
-        console.log('Visit record not found for complications fetch');
         setSavedComplications([]);
         return;
       }
 
-      console.log('Found visit UUID for complications:', visitData.id, 'for visit_id:', visitId);
 
       // Then get visit_complications data using the UUID with join to get complication details
       const { data: visitComplicationsData, error: visitComplicationsError } = await supabase
@@ -12684,10 +12474,8 @@ INSTRUCTIONS:
         return;
       }
 
-      console.log('Visit complications raw data:', visitComplicationsData);
 
       if (!visitComplicationsData || visitComplicationsData.length === 0) {
-        console.log('No saved complications found for this visit');
         setSavedComplications([]);
         return;
       }
@@ -12702,9 +12490,7 @@ INSTRUCTIONS:
         };
       });
 
-      console.log('Final formatted complications:', formattedComplications);
       setSavedComplications(formattedComplications);
-      console.log('State updated - savedComplications should now contain:', formattedComplications.length, 'items');
     } catch (error) {
       console.error('Error in fetchSavedComplications:', error);
       setSavedComplications([]);
@@ -12716,11 +12502,9 @@ INSTRUCTIONS:
     console.log('🚀🚀🚀 fetchSavedLabs FUNCTION CALLED at:', new Date().toISOString(), 'with visitId:', visitId);
     try {
       if (!visitId) {
-        console.log('No visit ID provided for fetching labs');
         return;
       }
 
-      console.log('Fetching saved labs for visit ID:', visitId);
 
       // Get the actual visit UUID and patient_type from the visits table
       const { data: visitData, error: visitError } = await supabase
@@ -12735,12 +12519,10 @@ INSTRUCTIONS:
       }
 
       if (!visitData?.id) {
-        console.log('Visit record not found for labs fetch');
         setSavedLabData([]);
         return;
       }
 
-      console.log('Found visit UUID for labs:', visitData.id, 'for visit_id:', visitId);
 
       // Then get visit_labs data using the UUID, ordered by date (newest first)
       const { data: visitLabsData, error: visitLabsError } = await supabase
@@ -12754,17 +12536,14 @@ INSTRUCTIONS:
         return;
       }
 
-      console.log('Visit labs raw data:', visitLabsData);
 
       if (!visitLabsData || visitLabsData.length === 0) {
-        console.log('No saved labs found for this visit');
         setSavedLabData([]);
         return;
       }
 
       // Get lab details for each lab_id
       const labIds = visitLabsData.map((item: any) => item.lab_id);
-      console.log('Lab IDs to fetch:', labIds);
 
       const { data: labsData, error: labsError } = await supabase
         .from('lab')
@@ -12785,7 +12564,6 @@ INSTRUCTIONS:
         return;
       }
 
-      console.log('Labs details data:', labsData);
       console.log('🔍 Lab details with private rates:', labsData?.map(lab => ({
         id: lab.id,
         name: lab.name,
@@ -12891,10 +12669,8 @@ INSTRUCTIONS:
         };
       });
 
-      console.log('Final formatted labs:', formattedLabs);
       console.log('🔥 ABOUT TO UPDATE STATE with:', formattedLabs);
       setSavedLabData(formattedLabs);
-      console.log('✅ STATE UPDATED - savedLabData should now contain:', formattedLabs.length, 'items');
       console.log('🔍 Sample formatted lab:', formattedLabs?.[0]);
     } catch (error) {
       console.error('Error in fetchSavedLabs:', error);
@@ -12916,7 +12692,6 @@ INSTRUCTIONS:
         return;
       }
 
-      console.log('Deleting surgery with ID:', surgeryId);
 
       // Find the surgery that's being deleted to check if it's in OT Notes
       const surgeryBeingDeleted = savedSurgeries?.find(s => s.id === surgeryId) ||
@@ -12972,7 +12747,6 @@ INSTRUCTIONS:
                 .eq('id', summaryData.id);
             }
           } catch (e) {
-            console.log('Could not clean up discharge summary surgery cache:', e);
           }
         }
       }
@@ -13247,28 +13021,24 @@ Format the response as JSON:
   const updateDoctorsPlanComplications = (complications: string[]) => {
     // This function will be used to display complications in Doctor's Plan ESIC section
     // The complications will be displayed in the ESIC section automatically via state
-    console.log('Updating Doctor\'s Plan with complications:', complications);
   };
 
   // Function to update Doctor's Plan with selected labs
   const updateDoctorsPlanLabs = (labs: string[]) => {
     // This function will be used to display labs in Doctor's Plan ESIC section
     // The labs will be displayed in the ESIC section automatically via state
-    console.log('Updating Doctor\'s Plan with labs:', labs);
   };
 
   // Function to update Doctor's Plan with selected radiology
   const updateDoctorsPlanRadiology = (radiology: string[]) => {
     // This function will be used to display radiology in Doctor's Plan ESIC section
     // The radiology will be displayed in the ESIC section automatically via state
-    console.log('Updating Doctor\'s Plan with radiology:', radiology);
   };
 
   // Function to update Doctor's Plan with selected medications
   const updateDoctorsPlanMedications = (medications: string[]) => {
     // This function will be used to display medications in Doctor's Plan ESIC section
     // The medications will be displayed in the ESIC section automatically via state
-    console.log('Updating Doctor\'s Plan with medications:', medications);
   };
 
   // Function to save selected complications to database for persistence
@@ -13329,7 +13099,6 @@ Format the response as JSON:
   // Function to load selected complications from database
   const loadSelectedComplicationsFromDB = async (visitId: string) => {
     try {
-      console.log('Loading selected complications from DB for visit:', visitId);
 
       const { data: visitData, error: visitError } = await supabase
         .from('visits')
@@ -13338,11 +13107,9 @@ Format the response as JSON:
         .single();
 
       if (visitError || !visitData?.id) {
-        console.log('No visit data found for loading complications:', visitError);
         return;
       }
 
-      console.log('Found visit UUID for loading complications:', visitData.id);
 
       const { data: recommendation, error: fetchError } = await supabase
         .from('ai_clinical_recommendations' as any)
@@ -13352,23 +13119,19 @@ Format the response as JSON:
         .limit(1)
         .single();
 
-      console.log('AI recommendation data for complications:', recommendation, 'Error:', fetchError);
 
       if (!fetchError && recommendation) {
         const notesText = (recommendation as any).notes;
-        console.log('Notes text for parsing complications:', notesText);
 
         // Parse complications
         if (notesText && notesText.includes('Selected complications:')) {
           const complicationsMatch = notesText.match(/Selected complications: ([^|]*)/);
           if (complicationsMatch) {
             const complications = complicationsMatch[1].split(', ').filter((c: string) => c.trim());
-            console.log('Parsed complications from DB:', complications);
             setSelectedAIComplications(complications);
             setPersistentSelectedComplications(complications);
           }
         } else {
-          console.log('No selected complications found in notes');
         }
 
         // Parse medications
@@ -13635,7 +13398,6 @@ Format the response as JSON:
         return;
       }
 
-      console.log('Saving selected AI complications as additional diagnoses:', selectedAIComplications);
 
       // Add selected complications to the diagnosis text area
       const currentDiagnosis = patientData.diagnosis || '';
@@ -13705,7 +13467,6 @@ Format the response as JSON:
       // setSelectedAIComplications([]); // Commented out to keep selections persistent
 
       toast.success(`${complicationCount} complications saved as additional diagnoses!`);
-      console.log('Selected complications saved successfully');
 
     } catch (error) {
       console.error('Error saving selected complications:', error);
@@ -13725,7 +13486,6 @@ Format the response as JSON:
       const diagnosisText = getDiagnosisText();
       const surgeryNames = savedSurgeries.map(s => s.name).join(', ');
 
-      console.log('Generating AI recommendations for surgeries:', surgeryNames);
       const recommendations = await generateClinicalRecommendations(surgeryNames, diagnosisText);
 
       setAiRecommendations(recommendations);
@@ -13775,7 +13535,6 @@ Format the response as JSON:
         confidence_score: 0.85 // Default confidence score
       };
 
-      console.log('Saving AI recommendations to temporary storage:', aiRecommendationData);
 
       // Save to AI recommendations table
       const { data: savedRecommendation, error: saveError } = await supabase
@@ -13790,7 +13549,6 @@ Format the response as JSON:
         return;
       }
 
-      console.log('AI recommendations saved successfully:', savedRecommendation);
       toast.success('AI recommendations saved to database successfully!');
 
       // Also save complications to visit_complications for backward compatibility
@@ -13808,7 +13566,6 @@ Format the response as JSON:
         if (complicationsError) {
           console.error('Error saving complications:', complicationsError);
         } else {
-          console.log('Complications also saved to visit_complications table');
         }
       }
 
@@ -13831,12 +13588,10 @@ Format the response as JSON:
   const fetchAIRecommendations = async (visitId: string) => {
     try {
       if (!visitId) {
-        console.log('No visit ID provided for fetching AI recommendations');
         setSavedAIRecommendations([]);
         return;
       }
 
-      console.log('Fetching AI recommendations for visit ID:', visitId);
 
       // First get the actual visit UUID from the visits table
       const { data: visitData, error: visitError } = await supabase
@@ -13852,12 +13607,10 @@ Format the response as JSON:
       }
 
       if (!visitData?.id) {
-        console.log('Visit record not found for AI recommendations fetch');
         setSavedAIRecommendations([]);
         return;
       }
 
-      console.log('Found visit UUID for AI recommendations:', visitData.id, 'for visit_id:', visitId);
 
       // Fetch AI recommendations for this visit
       const { data: aiRecommendationsData, error: aiRecommendationsError } = await supabase
@@ -13872,17 +13625,13 @@ Format the response as JSON:
         return;
       }
 
-      console.log('AI recommendations raw data:', aiRecommendationsData);
 
       if (!aiRecommendationsData || aiRecommendationsData.length === 0) {
-        console.log('No saved AI recommendations found for this visit');
         setSavedAIRecommendations([]);
         return;
       }
 
-      console.log('Final AI recommendations:', aiRecommendationsData);
       setSavedAIRecommendations(aiRecommendationsData);
-      console.log('State updated - savedAIRecommendations should now contain:', aiRecommendationsData.length, 'items');
 
       // Set the latest recommendations as current AI recommendations for display
       if (aiRecommendationsData.length > 0) {
@@ -13904,7 +13653,6 @@ Format the response as JSON:
   // Function to save selected surgeries to visit_surgeries junction table
   const saveSurgeriesToVisit = async (visitId: string) => {
     try {
-      console.log('Saving surgeries to visit:', visitId, selectedSurgeries);
 
       if (selectedSurgeries.length === 0) {
         toast.error('No surgeries selected to save');
@@ -13990,7 +13738,6 @@ Format the response as JSON:
         };
       });
 
-      console.log('New surgeries to save:', surgeriesToSave);
 
       // Insert directly using Supabase client
       try {
@@ -14005,32 +13752,24 @@ Format the response as JSON:
           toast.error(`Failed to save surgeries: ${insertError.message}`);
         } else {
           toast.success(`${newSurgeries.length} new ${newSurgeries.length === 1 ? 'surgery' : 'surgeries'} saved to visit successfully!`);
-          console.log('Saved surgeries data:', data);
 
-          console.log('About to clear selected surgeries...');
           // Clear selected surgeries after successful save
           setSelectedSurgeries([]);
 
           // Generate clinical recommendations for each newly saved surgery
-          console.log('Generating clinical recommendations for new surgeries...');
           for (const surgery of newSurgeries) {
             try {
               const diagnosisText = getDiagnosisText();
               const recommendations = await generateClinicalRecommendations(surgery.name, diagnosisText);
               await saveClinicalRecommendations(visitId, recommendations);
-              console.log(`Generated recommendations for ${surgery.name}:`, recommendations);
             } catch (error) {
               console.error(`Error generating recommendations for ${surgery.name}:`, error);
             }
           }
 
-          console.log('About to fetch saved surgeries...');
-          console.log('fetchSavedSurgeries function:', typeof fetchSavedSurgeries);
           // Fetch updated saved surgeries to refresh the display
-          console.log('Fetching saved surgeries after save with visit ID:', visitId);
           try {
             await fetchSavedSurgeriesFromVisit(visitId);
-            console.log('Surgery fetch completed successfully');
 
             // Surgery Treatment section removed
 
@@ -14060,11 +13799,9 @@ Format the response as JSON:
   const fetchSavedMedications = async (visitId: string) => {
     try {
       if (!visitId) {
-        console.log('No visit ID provided for fetching medications');
         return;
       }
 
-      console.log('Fetching saved medications for visit ID:', visitId);
 
       // First get the actual visit UUID from the visits table
       const { data: visitData, error: visitError } = await supabase
@@ -14079,12 +13816,10 @@ Format the response as JSON:
       }
 
       if (!visitData?.id) {
-        console.log('Visit record not found for medications fetch');
         setSavedMedications([]);
         return;
       }
 
-      console.log('Found visit UUID for medications:', visitData.id, 'for visit_id:', visitId);
 
       // Then get visit_medications data using the UUID
       const { data: visitMedicationsData, error: visitMedicationsError } = await supabase
@@ -14097,17 +13832,14 @@ Format the response as JSON:
         return;
       }
 
-      console.log('Visit medications raw data:', visitMedicationsData);
 
       if (!visitMedicationsData || visitMedicationsData.length === 0) {
-        console.log('No saved medications found for this visit');
         setSavedMedications([]);
         return;
       }
 
       // Get medication details for each medication_id
       const medicationIds = visitMedicationsData.map((item: any) => item.medication_id);
-      console.log('Medication IDs to fetch:', medicationIds);
 
       const { data: medicationsData, error: medicationsError } = await supabase
         .from('medication')
@@ -14126,7 +13858,6 @@ Format the response as JSON:
         return;
       }
 
-      console.log('Medications details data:', medicationsData);
 
       // Combine the data
       const formattedMedications = visitMedicationsData.map((visitMedication: any) => {
@@ -14138,9 +13869,7 @@ Format the response as JSON:
         };
       });
 
-      console.log('Final formatted medications:', formattedMedications);
       setSavedMedications(formattedMedications);
-      console.log('State updated - savedMedications should now contain:', formattedMedications.length, 'items');
     } catch (error) {
       console.error('Error in fetchSavedMedications:', error);
     }
@@ -14149,7 +13878,6 @@ Format the response as JSON:
   // Function to save selected complications to visit_complications table
   const saveComplicationsToVisit = async (visitId: string) => {
     try {
-      console.log('Saving complications to visit:', visitId, selectedComplications);
 
       if (selectedComplications.length === 0) {
         toast.error('No complications selected to save');
@@ -14174,7 +13902,6 @@ Format the response as JSON:
         return;
       }
 
-      console.log('Found visit UUID:', visitData.id, 'for visit_id:', visitId);
 
       // Prepare data for insertion using the actual visit UUID
       const complicationsToSave = selectedComplications.map((complication) => ({
@@ -14182,7 +13909,6 @@ Format the response as JSON:
         complication_id: complication.id
       }));
 
-      console.log('Complications to save:', complicationsToSave);
 
       // Insert directly using Supabase client
       try {
@@ -14207,19 +13933,13 @@ Format the response as JSON:
           toast.error(`Failed to save complications: ${insertError.message}`);
         } else {
           toast.success(`${selectedComplications.length} complications saved to visit ${visitId} successfully!`);
-          console.log('Saved complications data:', data);
 
-          console.log('About to clear selected complications...');
           // Clear selected complications after successful save
           setSelectedComplications([]);
 
-          console.log('About to fetch saved complications...');
-          console.log('fetchSavedComplications function:', typeof fetchSavedComplications);
           // Fetch updated saved complications to refresh the display
-          console.log('Fetching saved complications after save with visit ID:', visitId);
           try {
             await fetchSavedComplications(visitId);
-            console.log('Complications fetch completed successfully');
           } catch (fetchError) {
             console.error('Error fetching saved complications after save:', fetchError);
           }
@@ -14238,7 +13958,6 @@ Format the response as JSON:
   // Function to save selected labs to visit_labs table
   const saveLabsToVisit = async (visitId: string) => {
     try {
-      console.log('Saving labs to visit:', visitId, selectedLabs);
 
       if (selectedLabs.length === 0) {
         toast.error('No labs selected to save');
@@ -14263,7 +13982,6 @@ Format the response as JSON:
         return;
       }
 
-      console.log('Found visit UUID for labs:', visitData.id, 'for visit_id:', visitId);
 
       // Determine correct rate based on patient type and corporate status
       // Check if patient is PRIVATE by checking BOTH patient_type AND corporate fields
@@ -14355,7 +14073,6 @@ Format the response as JSON:
         };
       });
 
-      console.log('Labs to save:', labsToSave);
 
       // Insert directly using Supabase client
       try {
@@ -14380,9 +14097,7 @@ Format the response as JSON:
           toast.error(`Failed to save labs: ${insertError.message}`);
         } else {
           toast.success(`${selectedLabs.length} labs saved to visit ${visitId} successfully!`);
-          console.log('Saved labs data:', data);
 
-          console.log('About to clear selected labs...');
           // Clear selected labs after successful save
           setSelectedLabs([]);
 
@@ -14393,12 +14108,9 @@ Format the response as JSON:
             console.error('Error refreshing saved data after lab save:', fetchError);
           }
 
-          console.log('About to fetch saved labs...');
           // Fetch updated saved labs to refresh the display
-          console.log('Fetching saved labs after save with visit ID:', visitId);
           try {
             await fetchSavedLabs(visitId);
-            console.log('Labs fetch completed successfully');
           } catch (fetchError) {
             console.error('Error fetching saved labs after save:', fetchError);
           }
@@ -14419,7 +14131,6 @@ Format the response as JSON:
   // Function to save selected radiology to visit_radiology table
   const saveRadiologyToVisit = async (visitId: string) => {
     try {
-      console.log('Saving radiology to visit:', visitId, selectedRadiology);
 
       if (selectedRadiology.length === 0) {
         toast.error('No radiology selected to save');
@@ -14444,7 +14155,6 @@ Format the response as JSON:
         return;
       }
 
-      console.log('Found visit UUID for radiology:', visitData.id, 'for visit_id:', visitId);
 
       // Prepare data for insertion using the actual visit UUID
       const radiologyToSave = selectedRadiology.map((radiology) => ({
@@ -14452,7 +14162,6 @@ Format the response as JSON:
         radiology_id: radiology.id
       }));
 
-      console.log('Radiology to save:', radiologyToSave);
 
       // Insert directly using Supabase client
       try {
@@ -14477,9 +14186,7 @@ Format the response as JSON:
           toast.error(`Failed to save radiology: ${insertError.message}`);
         } else {
           toast.success(`${selectedRadiology.length} radiology services saved to visit ${visitId} successfully!`);
-          console.log('Saved radiology data:', data);
 
-          console.log('About to clear selected radiology...');
           // Clear selected radiology after successful save
           setSelectedRadiology([]);
 
@@ -14490,12 +14197,9 @@ Format the response as JSON:
             console.error('Error refreshing saved data after radiology save:', fetchError);
           }
 
-          console.log('About to fetch saved radiology...');
           // Fetch updated saved radiology to refresh the display
-          console.log('Fetching saved radiology after save with visit ID:', visitId);
           try {
             await fetchSavedRadiology(visitId);
-            console.log('Radiology fetch completed successfully');
           } catch (fetchError) {
             console.error('Error fetching saved radiology after save:', fetchError);
           }
@@ -14514,7 +14218,6 @@ Format the response as JSON:
   // Function to save selected medications to visit_medications table
   const saveMedicationsToVisit = async (visitId: string) => {
     try {
-      console.log('Saving medications to visit:', visitId, selectedMedications);
 
       if (selectedMedications.length === 0) {
         toast.error('No medications selected to save');
@@ -14539,7 +14242,6 @@ Format the response as JSON:
         return;
       }
 
-      console.log('Found visit UUID for medications:', visitData.id, 'for visit_id:', visitId);
 
       // Prepare data for insertion using the actual visit UUID
       const medicationsToSave = selectedMedications.map((medication) => ({
@@ -14548,7 +14250,6 @@ Format the response as JSON:
         quantity: parseFloat(medication.quantity || '1') || 1 // Include quantity, cost will be fetched from medication table via foreign key
       }));
 
-      console.log('Medications to save:', medicationsToSave);
 
       // Insert directly using Supabase client
       try {
@@ -14573,17 +14274,13 @@ Format the response as JSON:
           toast.error(`Failed to save medications: ${insertError.message}`);
         } else {
           toast.success(`${selectedMedications.length} medications saved to visit ${visitId} successfully!`);
-          console.log('Saved medications data:', data);
 
-          console.log('About to clear selected medications...');
           // Clear selected medications after successful save
           setSelectedMedications([]);
 
-          console.log('About to refresh saved data...');
           // Refresh saved data to update the display
           try {
             await refreshSavedData();
-            console.log('Saved data refresh completed successfully');
           } catch (fetchError) {
             console.error('Error refreshing saved data after save:', fetchError);
           }
@@ -14634,7 +14331,6 @@ Format the response as JSON:
         return;
       }
 
-      console.log('✅ Printable content found');
 
       // Clone the content to avoid modifying the original
       const clonedContent = printableContent.cloneNode(true) as HTMLElement;
@@ -14669,7 +14365,6 @@ Format the response as JSON:
         return;
       }
 
-      console.log('✅ Print window opened successfully');
 
       // Create the print document with enhanced styles
       printWindow.document.write(`
@@ -14996,7 +14691,6 @@ Format the response as JSON:
 
       if (patientError) throw patientError;
 
-      console.log('Patient data fetched:', patientData);
 
       // Get diagnosis information from visit_diagnoses table
       const { data: diagnosisData, error: diagnosisError } = await supabase
@@ -16163,7 +15857,6 @@ Dr. Murali B K
 
       // Small delay before allowing data reload to prevent duplication
       setTimeout(() => {
-        console.log('✅ Save process completed, data reload allowed');
       }, 1000);
 
     } catch (error) {
@@ -16719,10 +16412,8 @@ Dr. Murali B K
                         <button
                           onClick={() => {
                             if (visitId) {
-                              console.log('Manual refresh - Visit ID:', visitId);
                               fetchSavedDiagnoses(visitId);
                             } else {
-                              console.log('No visit ID available for refresh');
                             }
                           }}
                           className="text-xs text-blue-600 hover:text-blue-800"
@@ -16776,7 +16467,6 @@ Dr. Murali B K
                         <div className="flex gap-2">
                           <button
                             onClick={() => {
-                              console.log('Surgery Treatment section removed');
                             }}
                             className="text-xs text-blue-600 hover:text-blue-800 bg-blue-50 px-2 py-1 rounded"
                           >
@@ -16785,10 +16475,8 @@ Dr. Murali B K
                           <button
             onClick={() => {
               if (visitId) {
-                console.log('Manual surgery refresh - Visit ID:', visitId);
                 fetchSavedSurgeriesFromVisit(visitId);
               } else {
-                console.log('No visit ID available for surgery refresh');
               }
             }}
                             className="text-xs text-green-600 hover:text-green-800"
@@ -16857,10 +16545,8 @@ Dr. Murali B K
                           <button
                             onClick={() => {
                               if (visitId) {
-                                console.log('Manual complications refresh - Visit ID:', visitId);
                                 fetchSavedComplications(visitId);
                               } else {
-                                console.log('No visit ID available for complications refresh');
                               }
                             }}
                             className="text-xs text-orange-600 hover:text-orange-800"
@@ -16959,10 +16645,8 @@ Dr. Murali B K
                         <button
                           onClick={() => {
                             if (visitId) {
-                              console.log('Manual labs refresh - Visit ID:', visitId);
                               fetchSavedLabs(visitId);
                             } else {
-                              console.log('No visit ID available for labs refresh');
                             }
                           }}
                           className="text-xs text-blue-600 hover:text-blue-800"
@@ -17046,10 +16730,8 @@ Dr. Murali B K
                         <button
                           onClick={() => {
                             if (visitId) {
-                              console.log('Manual radiology refresh - Visit ID:', visitId);
                               fetchSavedRadiology(visitId);
                             } else {
-                              console.log('No visit ID available for radiology refresh');
                             }
                           }}
                           className="text-xs text-purple-600 hover:text-purple-800"
@@ -17133,10 +16815,8 @@ Dr. Murali B K
                         <button
                           onClick={() => {
                             if (visitId) {
-                              console.log('Manual medications refresh - Visit ID:', visitId);
                               fetchSavedMedications(visitId);
                             } else {
-                              console.log('No visit ID available for medications refresh');
                             }
                           }}
                           className="text-xs text-green-600 hover:text-green-800"
@@ -17555,10 +17235,8 @@ Dr. Murali B K
                           <button
                             onClick={() => {
                               if (visitId) {
-                                console.log('Manual AI recommendations refresh - Visit ID:', visitId);
                                 fetchAIRecommendations(visitId);
                               } else {
-                                console.log('No visit ID available for AI recommendations refresh');
                               }
                             }}
                             className="text-xs text-green-600 hover:text-green-800"
@@ -17760,7 +17438,6 @@ Dr. Murali B K
                         size="sm"
                         className="w-full bg-blue-600 text-white"
                         onClick={() => {
-                          console.log('Save button clicked - visitId:', visitId);
                           if (visitId) {
                             saveDiagnosesToVisit(visitId);
                           } else {
@@ -17774,11 +17451,9 @@ Dr. Murali B K
                       <Button
                         className="w-full bg-green-600 text-white"
                         onClick={() => {
-                          console.log('Test fetch button clicked - Visit ID:', visitId);
                           if (visitId) {
                             fetchSavedDiagnoses(visitId);
                           } else {
-                            console.log('No visit ID available for test fetch');
                           }
                         }}
                       >
@@ -17926,9 +17601,6 @@ Dr. Murali B K
                       onClick={() => {
                         // Use actual bill ID if exists, otherwise we'll create a new bill in the function
                         const billId = billData?.id;
-                        console.log('Surgery save button clicked - billData:', billData);
-                        console.log('Surgery save button clicked - visitId:', visitId);
-                        console.log('Surgery save button clicked - final billId:', billId || visitId || "temp-bill-id");
                         saveSurgeriesToVisit(visitId);
                       }}
                     >
@@ -18035,8 +17707,6 @@ Dr. Murali B K
                       size="sm"
                       className="w-full bg-orange-600 text-white"
                       onClick={() => {
-                        console.log('Complications save button clicked - visitId:', visitId);
-                        console.log('Complications save button clicked - selectedComplications:', selectedComplications);
                         if (visitId) {
                           saveComplicationsToVisit(visitId);
                         } else {
@@ -18050,11 +17720,9 @@ Dr. Murali B K
                     <Button
                       className="w-full bg-yellow-600 text-white"
                       onClick={() => {
-                        console.log('Test complications fetch button clicked - Visit ID:', visitId);
                         if (visitId) {
                           fetchSavedComplications(visitId);
                         } else {
-                          console.log('No visit ID available for test complications fetch');
                         }
                       }}
                     >
@@ -18219,7 +17887,6 @@ Dr. Murali B K
                           }, 3000);
                         }
                       } else {
-                        console.log('❌ Search input not found');
                       }
 
                       // If no search term, provide helpful guidance
@@ -18711,7 +18378,6 @@ Dr. Murali B K
 
                                       const rateToSave = parseFloat(service.selectedRate) || 0;
                                       if (rateToSave <= 0) {
-                                        console.log('⚠️ [MANDATORY SAVE] WARNING: Rate is 0 or invalid, service may show as free');
                                         console.log('⚠️ [MANDATORY SAVE] Service data analysis:', {
                                           service,
                                           availableRates: {
@@ -18936,7 +18602,6 @@ Dr. Murali B K
                                       // Force a small delay to ensure all database operations are committed
                                       await new Promise(resolve => setTimeout(resolve, 100));
 
-                                      console.log('✅ Mandatory service saved successfully:', serviceToStore);
                                       toast.success(`Mandatory service "${service.service_name}" saved for ${service.patientCategory} patient (${service.rateType.toUpperCase()} rate: ₹${service.selectedRate})`);
                                       setServiceSearchTerm("");
 
@@ -19015,7 +18680,6 @@ Dr. Murali B K
                                           }
 
                                         } else {
-                                          console.log('❌ [IMMEDIATE CHECK] FAILED - Record not found immediately after save');
                                           console.log('🔍 [SAVE vs FETCH] Comparing save parameters vs expected fetch parameters:', {
                                             save_visit_id: visitData.id,
                                             save_service_id: service.id,
@@ -19031,7 +18695,6 @@ Dr. Murali B K
                                       console.log('🔄 [REFRESH] Refreshing mandatory services data...');
                                       try {
                                         await fetchSavedMandatoryServicesData();
-                                        console.log('✅ [REFRESH] Data refreshed successfully');
                                       } catch (refreshError) {
                                         console.error('❌ [REFRESH] Failed to refresh:', refreshError);
                                         toast.warning('Service saved but display may be delayed. Please refresh the page if needed.');
@@ -19255,7 +18918,6 @@ Dr. Murali B K
                                         return;
                                       }
 
-                                      console.log('✅ [CLINICAL SAVE] Schema verification passed');
 
                                       // Get visit UUID and current clinical_service_id
                                       console.log('🔍 [CLINICAL SAVE] Fetching visit data for visitId:', visitId);
@@ -19385,7 +19047,6 @@ Dr. Murali B K
                                       }
 
                                       // Verify the save was successful by checking the inserted row from junction result
-                                      console.log('✅ [CLINICAL SAVE] Verifying save from insert result...');
                                       const verificationData = junctionResult?.[0];
 
                                       if (!verificationData) {
@@ -19400,7 +19061,6 @@ Dr. Murali B K
                                         amount: verificationData.amount
                                       });
 
-                                      console.log('✅ [CLINICAL SERVICES SAVE] Service saved and verified successfully');
 
                                       toast.success(`Clinical service "${service.service_name}" saved successfully! (${service.patientCategory} - ${service.rateType.toUpperCase()} rate: ₹${service.selectedRate})`);
                                       setServiceSearchTerm("");
@@ -19558,8 +19218,6 @@ Dr. Murali B K
                           size="sm"
                           className="w-full bg-purple-600 text-white text-xs"
                           onClick={() => {
-                            console.log('Medications save button clicked - selectedMedications:', selectedMedications);
-                            console.log('Medications save button clicked - visitId:', visitId);
                             if (visitId) {
                               saveMedicationsToVisit(visitId);
                             } else {
@@ -19658,12 +19316,10 @@ Dr. Murali B K
                               console.log('🚨 [TAB SWITCH RECOVERY] No data in state, triggering emergency recovery...');
                               try {
                                 await fetchSavedMandatoryServicesData();
-                                console.log('✅ [TAB SWITCH RECOVERY] Emergency recovery completed');
                               } catch (recoveryError) {
                                 console.error('❌ [TAB SWITCH RECOVERY] Failed:', recoveryError);
                               }
                             } else {
-                              console.log('✅ [TAB SWITCH] Data already present in state:', savedMandatoryServicesData.length);
                             }
                           }}
                         >
@@ -19682,7 +19338,6 @@ Dr. Murali B K
                               console.log('🚨 [TAB SWITCH RECOVERY] No accommodation data, triggering fetch...');
                               try {
                                 await fetchSavedAccommodationData();
-                                console.log('✅ [TAB SWITCH RECOVERY] Accommodation data loaded');
                               } catch (recoveryError) {
                                 console.error('❌ [TAB SWITCH RECOVERY] Failed:', recoveryError);
                               }
@@ -20497,9 +20152,7 @@ Dr. Murali B K
                               console.log('🔥 [FINALBILL CALLBACK] calculateBalanceWithDiscount available:', !!calculateBalanceWithDiscount);
 
                               // Add delay to ensure database transaction is committed
-                              console.log('⏱️ [FINALBILL CALLBACK] Adding 1000ms delay for database commit...');
                               setTimeout(async () => {
-                                console.log('⏱️ [FINALBILL CALLBACK] Delay complete, reloading financial summary to show discount...');
 
                                 // Load financial summary to display discount from visit_discounts table
                                 if (loadFinancialSummary) {
@@ -20510,7 +20163,6 @@ Dr. Murali B K
                                   console.log('🧮 [FINALBILL CALLBACK] Auto-calculating balance with discount...');
                                   if (calculateBalanceWithDiscount) {
                                     await calculateBalanceWithDiscount();
-                                    console.log('✅ [FINALBILL CALLBACK] Balance calculation completed - discount deducted from total');
                                   } else {
                                     console.error('❌ [FINALBILL CALLBACK] calculateBalanceWithDiscount not available!');
                                   }
@@ -23785,7 +23437,6 @@ Dr. Murali B K
                             throw error;
                           }
 
-                          console.log('✅ Successfully saved bill preparation data:', data);
                           toast.success('Bill preparation data saved successfully');
 
                           // Update the form state with the saved data to reflect it immediately
@@ -23852,7 +23503,6 @@ Dr. Murali B K
                     <div className="flex items-end">
                       <Button
                         onClick={async () => {
-                          console.log('Bill Submission Data:', billSubmission);
 
                           if (!visitId) {
                             toast.error('No visit ID found');
@@ -23900,7 +23550,6 @@ Dr. Murali B K
                               throw new Error('No bill preparation record found to update');
                             }
 
-                            console.log('✅ Successfully saved bill submission data:', data);
                             toast.success('Bill submitted successfully');
 
                             // Update the form state with the saved data to reflect it immediately
@@ -24037,7 +23686,6 @@ Dr. Murali B K
                             throw new Error(`No bill preparation record found for visit ${visitId}. Please complete Bill Preparation first.`);
                           }
 
-                          console.log('✅ Found existing bill_preparation record:', existingRecord);
 
                           // Check if the required columns exist in the record structure
                           const requiredColumns = ['received_date', 'received_amount', 'deduction_amount', 'reason_for_deduction'];
@@ -24049,7 +23697,6 @@ Dr. Murali B K
                             throw new Error(`Missing database columns: ${missingColumns.join(', ')}. Please update your database schema.`);
                           }
 
-                          console.log('✅ All required columns exist in database');
 
                           // Prepare received amount data with enhanced validation
                           const receivedData = {
@@ -24096,8 +23743,6 @@ Dr. Murali B K
                             throw new Error('No bill preparation record found to update');
                           }
 
-                          console.log('✅ Successfully saved received amount data:', data);
-                          console.log('✅ Updated record:', data[0]);
 
                           // Update the form state with the saved data to reflect it immediately
                           setReceivedAmount({
@@ -24180,7 +23825,6 @@ Dr. Murali B K
                     </Select>
                     <Button
                       onClick={async () => {
-                        console.log('NMI Tracking Data:', nmiTracking);
 
                         if (!visitId) {
                           toast.error('No visit ID found');
@@ -24307,7 +23951,6 @@ Dr. Murali B K
                   />
                   <Button
                     onClick={async () => {
-                      console.log('Bill Link Data:', billLink);
 
                       if (!visitId) {
                         toast.error('No visit ID found');
@@ -24983,7 +24626,6 @@ Dr. Murali B K
                   {isPatientDischarged && (
                     <button
                       onClick={() => {
-                        console.log('Opening discharge invoice for visit:', visitId);
                         window.open(`/discharge-invoice/${visitId}`, '_blank');
                       }}
                       className="px-8 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-lg hover:from-green-700 hover:to-emerald-700 font-semibold transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"

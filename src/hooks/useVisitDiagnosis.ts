@@ -45,7 +45,6 @@ export const useVisitDiagnosis = (visitId: string) => {
         }
 
         if (!visitData) {
-          console.log('❌ No visit data found for:', visitId);
           return null;
         }
 
@@ -62,8 +61,6 @@ export const useVisitDiagnosis = (visitId: string) => {
           console.error('❌ Patient query error:', patientError);
         }
 
-        console.log('✅ Basic visit data fetched:', visitData);
-        console.log('✅ Patient data fetched:', patientData);
         console.log('🔍 Visit diagnosis_id:', visitData.diagnosis_id);
 
         // Step 2: Get single diagnosis if diagnosis_id exists
@@ -79,9 +76,7 @@ export const useVisitDiagnosis = (visitId: string) => {
 
           if (!diagnosisError && diagnosisData) {
             singleDiagnosis = diagnosisData;
-            console.log('✅ Single diagnosis found:', singleDiagnosis);
           } else {
-            console.log('❌ Single diagnosis query error:', diagnosisError);
           }
         }
 
@@ -101,9 +96,7 @@ export const useVisitDiagnosis = (visitId: string) => {
           .eq('visit_id', visitData.id);
 
         if (multipleError) {
-          console.log('❌ Multiple diagnoses query error:', multipleError);
         } else {
-          console.log('✅ Multiple diagnoses fetched:', multipleDiagnoses);
         }
 
         const visitDiagnoses = multipleDiagnoses || [];
@@ -134,8 +127,6 @@ export const useVisitDiagnosis = (visitId: string) => {
         // Combine secondary diagnoses
         const finalSecondaryDiagnoses = [...secondaryFromMultiple];
 
-        console.log('✅ Final primary diagnosis:', finalPrimaryDiagnosis);
-        console.log('✅ Final secondary diagnoses:', finalSecondaryDiagnoses);
 
         const result: VisitDiagnosisData = {
           visitId: visitData.visit_id,
@@ -156,7 +147,6 @@ export const useVisitDiagnosis = (visitId: string) => {
           condition: [] // Will be populated from discharge data
         };
 
-        console.log('✅ Processed visit diagnosis data:', result);
         return result;
 
       } catch (error) {

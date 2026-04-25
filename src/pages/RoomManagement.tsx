@@ -75,10 +75,8 @@ const RoomManagement: React.FC = () => {
 
       // Apply hospital filter - only show wards for logged-in hospital
       if (hospitalConfig?.name) {
-        console.log('✅ Applying hospital filter:', hospitalConfig.name);
         query = query.eq('hospital_name', hospitalConfig.name);
       } else {
-        console.log('⚠️ No hospital config - fetching all wards');
       }
 
       const { data, error } = await query;

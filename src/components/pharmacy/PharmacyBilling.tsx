@@ -644,16 +644,8 @@ const PharmacyBilling: React.FC = () => {
     // The pharmacy sale is saved to pharmacy_sales and pharmacy_sale_items tables
 
     // Debug logging
-    console.log('=== PHARMACY SALE DEBUG START ===');
-    console.log('Cart items:', cart);
-    console.log('Patient Info:', patientInfo);
-    console.log('Visit ID:', visitId);
-    console.log('Payment Method:', paymentMethod);
-    console.log('Totals:', totals);
 
     // Save to pharmacy_sales and pharmacy_sale_items tables
-    console.log('Patient ID:', patientInfo.id);
-    console.log('Visit ID:', visitId);
 
     const saleData: SaleData = {
       sale_type: saleType,
@@ -702,15 +694,9 @@ const PharmacyBilling: React.FC = () => {
       })
     };
 
-    console.log('Calling savePharmacySale with data:', saleData);
 
     const response = await savePharmacySale(saleData);
 
-    console.log('=== PHARMACY SAVE RESPONSE ===');
-    console.log('Response:', response);
-    console.log('Success:', response.success);
-    console.log('Sale ID:', response.sale_id);
-    console.log('Error:', response.error);
 
     if (!response.success) {
       console.error('❌ Error saving to pharmacy_sales:', response.error);
@@ -719,7 +705,6 @@ const PharmacyBilling: React.FC = () => {
       return;
     }
 
-    console.log('✅ Sale saved successfully! Sale ID:', response.sale_id);
 
     // Fire-and-forget: push pharmacy sale to Tally
     pushPharmacySaleToTally({
@@ -735,8 +720,6 @@ const PharmacyBilling: React.FC = () => {
     }).catch(console.error);
 
     // Deduct stock from medicine_batch_inventory table (batch-wise stock tracking)
-    console.log('=== UPDATING STOCK IN MEDICINE_BATCH_INVENTORY ===');
-    console.log('Cart items to process:', cart.length);
     console.log('Cart data:', JSON.stringify(cart.map(item => ({
       batch_inventory_id: item.batch_inventory_id,
       medicine_id: item.medicine_id,
@@ -774,11 +757,6 @@ const PharmacyBilling: React.FC = () => {
         const newSoldQty = currentSoldQty + item.quantity;
 
         console.log(`📊 Stock Update Details:`);
-        console.log(`  Medicine: ${item.medicine_name}`);
-        console.log(`  Batch: ${currentBatch.batch_number}`);
-        console.log(`  Current Stock: ${currentStock}`);
-        console.log(`  Sold Quantity: ${item.quantity}`);
-        console.log(`  New Stock: ${newStock}`);
 
         // Check if stock would go negative
         if (newStock < 0) {
@@ -802,15 +780,12 @@ const PharmacyBilling: React.FC = () => {
           console.error(`❌ Error updating stock for batch ${item.batch_inventory_id}:`, updateError);
           alert(`Error updating stock for ${item.medicine_name} (Batch: ${item.batch_number}): ${updateError.message}`);
         } else {
-          console.log(`✅ Stock updated successfully for ${item.medicine_name} (Batch: ${currentBatch.batch_number})`);
-          console.log(`Updated data:`, updateData);
         }
       } catch (error: any) {
         console.error('❌ Exception in stock update:', error);
         alert(`Exception during stock update for ${item.medicine_name}: ${error.message}`);
       }
     }
-    console.log('=== STOCK UPDATE COMPLETE ===\n');
 
     setCompletedSale(sale);
     setIsProcessingPayment(false);

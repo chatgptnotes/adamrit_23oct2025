@@ -340,14 +340,6 @@ export const PatientCard: React.FC<PatientCardProps> = ({ patient, onEdit, onDel
     }
   };
 
-  console.log('PatientCard patient data:', patient);
-  console.log('Hope surgeon:', patient.hopeSurgeon);
-  console.log('Hope consultants:', patient.hopeConsultants);
-  console.log('Patient patients_id field:', patient.patients_id);
-  console.log('PatientCard admission date:', patient.admissionDate);
-  console.log('PatientCard surgery date:', patient.surgeryDate);
-  console.log('PatientCard discharge date:', patient.dischargeDate);
-  console.log('PatientCard sanctionStatus:', patient.sanctionStatus);
 
   return (
     <>

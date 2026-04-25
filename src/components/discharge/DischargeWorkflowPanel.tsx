@@ -131,7 +131,6 @@ export const DischargeWorkflowPanel: React.FC<DischargeWorkflowPanelProps> = ({ 
       return updates;
     },
     onSuccess: (updates) => {
-      console.log('✅ Checklist update successful:', updates);
       queryClient.invalidateQueries({ queryKey: ['discharge-checklist', visit.id] });
       
       // Check if discharge is now complete and update currently-admitted-visits
@@ -227,7 +226,6 @@ export const DischargeWorkflowPanel: React.FC<DischargeWorkflowPanelProps> = ({ 
       return gatePassNumber;
     },
     onSuccess: (gatePassNumber) => {
-      console.log('✅ Gate Pass generated successfully:', gatePassNumber);
       toast({
         title: "Gate Pass Generated",
         description: `Gate Pass ${gatePassNumber} has been generated successfully.`,
@@ -349,7 +347,6 @@ export const DischargeWorkflowPanel: React.FC<DischargeWorkflowPanelProps> = ({ 
 
       if (error) throw error;
 
-      console.log('✅ Patient discharged successfully', nextDischargedSrNo ? `with Discharged Sr. No: ${nextDischargedSrNo}` : '');
     },
     onSuccess: () => {
       // Log patient discharge activity
@@ -384,7 +381,6 @@ export const DischargeWorkflowPanel: React.FC<DischargeWorkflowPanelProps> = ({ 
     // Temporary local state update for testing
     if (checklist) {
       const updatedChecklist = { ...checklist, [field]: value };
-      console.log('✅ Local update:', updatedChecklist);
       
       // Force re-render
       queryClient.setQueryData(['discharge-checklist', visit.id], updatedChecklist);

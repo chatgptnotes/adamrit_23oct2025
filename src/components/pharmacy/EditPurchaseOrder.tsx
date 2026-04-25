@@ -88,7 +88,6 @@ const EditPurchaseOrder: React.FC<EditPurchaseOrderProps> = ({ purchaseOrderId, 
 
       if (existingGRN) {
         // Load data from existing GRN
-        console.log(`Loading existing GRN (${existingGRN.status}):`, existingGRN.grn_number);
 
         const grnDetails = await GRNService.getGRNDetails(existingGRN.id);
 
@@ -283,7 +282,6 @@ const EditPurchaseOrder: React.FC<EditPurchaseOrderProps> = ({ purchaseOrderId, 
       let existingGrnStatus = grnStatus;
 
       if (!existingGrnId) {
-        console.log('grnId not in state, checking database for PO:', purchaseOrderId);
 
         // First, try to find by purchase_order_id
         let { data: existingGrn, error: queryError } = await supabaseClient
@@ -296,11 +294,9 @@ const EditPurchaseOrder: React.FC<EditPurchaseOrderProps> = ({ purchaseOrderId, 
           console.error('Error querying for existing GRN:', queryError);
         }
 
-        console.log('Query result for PO', purchaseOrderId, ':', existingGrn);
 
         // If not found by PO ID, look for orphaned DRAFT GRNs (with null purchase_order_id)
         if (!existingGrn) {
-          console.log('No GRN found by PO ID. Checking for orphaned DRAFT GRNs...');
           const { data: draftGrns } = await supabaseClient
             .from('goods_received_notes')
             .select('id, grn_number, status, purchase_order_id')
@@ -308,13 +304,11 @@ const EditPurchaseOrder: React.FC<EditPurchaseOrderProps> = ({ purchaseOrderId, 
             .order('created_at', { ascending: false })
             .limit(5);
 
-          console.log('Draft GRNs found:', draftGrns);
 
           // Find orphaned GRN (null purchase_order_id)
           if (draftGrns && draftGrns.length > 0) {
             const orphanedGrn = draftGrns.find(g => !g.purchase_order_id);
             if (orphanedGrn) {
-              console.log('Found orphaned DRAFT GRN:', orphanedGrn.grn_number, '- linking to this PO');
               // Link it to this PO
               await supabaseClient
                 .from('goods_received_notes')
@@ -326,7 +320,6 @@ const EditPurchaseOrder: React.FC<EditPurchaseOrderProps> = ({ purchaseOrderId, 
         }
 
         if (existingGrn) {
-          console.log('Using existing GRN:', existingGrn);
           existingGrnId = existingGrn.id;
           existingGrnNumber = existingGrn.grn_number;
           existingGrnStatus = existingGrn.status as 'DRAFT' | 'POSTED';
@@ -340,7 +333,6 @@ const EditPurchaseOrder: React.FC<EditPurchaseOrderProps> = ({ purchaseOrderId, 
 
       if (existingGrnId && existingGrnStatus === 'DRAFT') {
         // UPDATE existing GRN
-        console.log('Updating existing draft GRN:', existingGrnId);
 
         // Update GRN header
         const { error: updateError } = await supabaseClient
@@ -391,7 +383,6 @@ const EditPurchaseOrder: React.FC<EditPurchaseOrderProps> = ({ purchaseOrderId, 
         throw new Error('This GRN has already been posted to inventory and cannot be modified');
       } else {
         // CREATE new GRN (first time - no GRN exists for this PO)
-        console.log('Creating new GRN for PO:', purchaseOrderId);
         const grnPayload = {
           purchase_order_id: purchaseOrderId,
           grn_date: goodsReceivedDate.split('T')[0],

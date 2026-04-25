@@ -19,7 +19,6 @@ const PatientProfile = () => {
     queryFn: async () => {
       if (!patientId) return null;
       
-      console.log('Fetching patient with ID:', patientId);
       
       // Use select('*') to avoid FK join failures when diagnosis_id is null
       const { data, error } = await supabase
@@ -33,8 +32,6 @@ const PatientProfile = () => {
         throw error;
       }
       
-      console.log('Fetched patient data:', data);
-      console.log('Patient patients_id:', data?.patients_id);
       
       return data;
     },

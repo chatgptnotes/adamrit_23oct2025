@@ -65,10 +65,8 @@ export const useCorporateData = (): UseCorporateDataReturn => {
         setCorporateIdMap(idMap);
 
         setCorporateOptions(corporateOptions);
-        console.log('✅ Loaded ALL corporate options from database:', corporateOptions.length, 'total');
         console.log('🏢 Corporate options:', corporateOptions.map(opt => opt.label).join(', '));
       } else {
-        console.log('⚠️ No corporate records found in database');
         // Only use fallback if database is completely empty
         const fallbackOptions = [
           { value: "private", label: "Private" },

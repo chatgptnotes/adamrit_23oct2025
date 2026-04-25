@@ -68,7 +68,6 @@ const EnhancedRadiologyOrders: React.FC<EnhancedRadiologyOrdersProps> = ({ onBac
   const { data: radiologyOrders = [], isLoading, error, refetch } = useQuery({
     queryKey: ['radiology-orders', searchTerm, selectedStatus, fromDate, toDate],
     queryFn: async () => {
-      console.log('Fetching radiology orders...');
       
       let query = supabase
         .from('visit_radiology')
@@ -130,7 +129,6 @@ const EnhancedRadiologyOrders: React.FC<EnhancedRadiologyOrdersProps> = ({ onBac
         throw queryError;
       }
 
-      console.log('Raw radiology data:', data);
 
       // Group data by visit for better display
       const groupedByVisit = {};
@@ -222,7 +220,6 @@ const EnhancedRadiologyOrders: React.FC<EnhancedRadiologyOrdersProps> = ({ onBac
                 order.service.toLowerCase().includes(searchTerm.toLowerCase()));
       });
 
-      console.log('Transformed radiology orders:', filteredData);
       
       return filteredData;
     },
@@ -249,12 +246,10 @@ const EnhancedRadiologyOrders: React.FC<EnhancedRadiologyOrdersProps> = ({ onBac
   );
 
   const handleExportExcel = () => {
-    console.log('Exporting to Excel...');
     // Export functionality will be implemented
   };
 
   const handlePACS = () => {
-    console.log('Opening PACS...');
     // PACS functionality will be implemented
   };
 
@@ -267,7 +262,6 @@ const EnhancedRadiologyOrders: React.FC<EnhancedRadiologyOrdersProps> = ({ onBac
   };
 
   const handleViewDICOM = (orderId: string) => {
-    console.log('View DICOM for order:', orderId);
     // DICOM viewer functionality will be implemented
   };
 

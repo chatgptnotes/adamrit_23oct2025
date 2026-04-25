@@ -546,7 +546,6 @@ const CategoryFormContent: React.FC<{
             className="bg-green-600 hover:bg-green-700 px-3"
             onClick={() => {
               // Add new test parameter logic here
-              console.log('Add new parameter');
             }}
           >
             <Plus className="h-4 w-4" />
@@ -706,7 +705,6 @@ const LabPanelManager: React.FC = () => {
   // Function to load sub-tests from lab_test_config table
   const loadSubTestsFromDatabase = async (testName: string): Promise<SubTest[]> => {
     try {
-      console.log('Loading sub-tests for test:', testName);
 
       const { data, error } = await supabase
         .from('lab_test_config')
@@ -723,7 +721,6 @@ const LabPanelManager: React.FC = () => {
         return [];
       }
 
-      console.log('Loaded data from database:', data);
 
       if (!data || data.length === 0) {
         return [];
@@ -825,7 +822,6 @@ const LabPanelManager: React.FC = () => {
         return orderA - orderB;
       });
 
-      console.log('✅ Loaded sub-tests in order:', subTestsArray.map((st, i) => `${i + 1}. ${st.name}`));
 
       return subTestsArray;
     } catch (error) {
@@ -840,9 +836,6 @@ const LabPanelManager: React.FC = () => {
     
     try {
       console.log('🚀 SAVING TO DATABASE - ENHANCED ATOMIC APPROACH');
-      console.log('Test Name:', testName);
-      console.log('Lab ID:', labId);
-      console.log('Sub-Tests:', JSON.stringify(subTests, null, 2));
       
       // Start transaction-like operation with comprehensive error handling
       console.log('🔄 Starting atomic save operation...');
@@ -861,7 +854,6 @@ const LabPanelManager: React.FC = () => {
       if (deleteError1) {
         console.error('❌ Error in step 1 deletion:', deleteError1);
       } else {
-        console.log('✅ Step 1 deletion completed');
       }
       
       // Step 2: Delete by test_name only (catch any orphaned records)
@@ -874,7 +866,6 @@ const LabPanelManager: React.FC = () => {
       if (deleteError2) {
         console.error('❌ Error in step 2 deletion:', deleteError2);
       } else {
-        console.log('✅ Step 2 deletion completed');
       }
       
       // FORMULA PRESERVATION: Back up existing formulas before deletion
@@ -890,9 +881,7 @@ const LabPanelManager: React.FC = () => {
         existingFormulas = null;
       } else {
         existingFormulas = formulaData;
-        console.log(`✅ Backed up ${existingFormulas?.length || 0} existing formulas`);
         existingFormulas?.forEach((formula, idx) => {
-          console.log(`  Formula ${idx + 1}: ${formula.sub_test_name} = "${formula.formula}"`);
         });
       }
 
@@ -907,7 +896,6 @@ const LabPanelManager: React.FC = () => {
       if (deleteError3) {
         console.error('❌ Error in step 3 deletion:', deleteError3);
       } else {
-        console.log('✅ Step 3 deletion completed');
       }
       
       // Verification: Check if any records still exist
@@ -928,7 +916,6 @@ const LabPanelManager: React.FC = () => {
           }
         });
       } else {
-        console.log('✅ Verification passed: No remaining records found');
       }
 
       // Save each sub-test with JSONB structure
@@ -1053,7 +1040,6 @@ const LabPanelManager: React.FC = () => {
           nested_sub_tests: nestedSubTestsData
         };
 
-        console.log('✅ Final config data:', JSON.stringify(configData, null, 2));
 
         const { error } = await supabase
           .from('lab_test_config')
@@ -1088,11 +1074,9 @@ const LabPanelManager: React.FC = () => {
             console.error('⚠️ Error saving formula data:', formulaError);
             // Don't throw - formula is optional, continue with main data
           } else {
-            console.log(`✅ Saved formula for: ${subTest.name}`);
           }
         }
 
-        console.log(`✅ Saved sub-test: ${subTest.name} with ${nestedSubTestsData.length} nested sub-tests`);
       }
 
       console.log('🎉 All sub-tests saved successfully!');
@@ -1108,9 +1092,7 @@ const LabPanelManager: React.FC = () => {
       if (verifyError) {
         console.error('❌ Error in final verification:', verifyError);
       } else {
-        console.log(`✅ Final verification: Found ${savedRecords?.length || 0} records for ${testName}`);
         savedRecords?.forEach((record, idx) => {
-          console.log(`  Record ${idx + 1}: ${record.sub_test_name}`);
           if (record.nested_sub_tests && Array.isArray(record.nested_sub_tests)) {
             console.log(`    Nested sub-tests (${record.nested_sub_tests.length}):`, 
               record.nested_sub_tests.map((nst: any) => nst.name));
@@ -1146,9 +1128,7 @@ const LabPanelManager: React.FC = () => {
         console.log('🔍 FORMULA MATCHING DEBUG:');
         existingFormulas.forEach((formula, idx) => {
           const isMatch = currentSubTestNames.has(formula.sub_test_name);
-          console.log(`  Formula[${idx}]: "${formula.sub_test_name}" -> Match: ${isMatch}`);
           if (!isMatch) {
-            console.log(`    ❌ Not found in current sub-tests. Closest matches:`);
             const currentNamesArray = Array.from(currentSubTestNames);
             currentNamesArray.forEach(name => {
               const similarity = name.toLowerCase().includes(formula.sub_test_name.toLowerCase()) || 
@@ -1167,7 +1147,6 @@ const LabPanelManager: React.FC = () => {
           
           // 1. Exact match (original logic)
           if (currentSubTestNames.has(formulaName)) {
-            console.log(`✅ EXACT MATCH: "${formulaName}"`);
             return true;
           }
           
@@ -1176,7 +1155,6 @@ const LabPanelManager: React.FC = () => {
             name.toLowerCase() === formulaName.toLowerCase()
           );
           if (caseInsensitiveMatch) {
-            console.log(`✅ CASE-INSENSITIVE MATCH: "${formulaName}" -> "${caseInsensitiveMatch}"`);
             return true;
           }
           
@@ -1187,7 +1165,6 @@ const LabPanelManager: React.FC = () => {
             return nameLC.includes(formulaLC) || formulaLC.includes(nameLC);
           });
           if (fuzzyMatch) {
-            console.log(`✅ FUZZY MATCH: "${formulaName}" -> "${fuzzyMatch}"`);
             return true;
           }
           
@@ -1196,17 +1173,14 @@ const LabPanelManager: React.FC = () => {
             name.trim() === formulaName.trim()
           );
           if (trimmedMatch) {
-            console.log(`✅ TRIMMED MATCH: "${formulaName}" -> "${trimmedMatch}"`);
             return true;
           }
           
-          console.log(`❌ NO MATCH FOUND: "${formulaName}"`);
           return false;
         });
         
         console.log(`🔍 FINAL RESULT: Formulas to restore: ${formulasToRestore.length} out of ${existingFormulas.length}`);
         formulasToRestore.forEach((formula, idx) => {
-          console.log(`  ✅ Will restore[${idx}]: "${formula.sub_test_name}" = "${formula.formula}"`);
         });
         
         if (formulasToRestore.length > 0) {
@@ -1225,18 +1199,14 @@ const LabPanelManager: React.FC = () => {
           if (restoreError) {
             console.error('❌ Error restoring formulas:', restoreError);
           } else {
-            console.log('✅ Successfully restored formulas');
             formulasToRestore.forEach((formula, idx) => {
-              console.log(`  Restored formula ${idx + 1}: ${formula.sub_test_name} = "${formula.formula}"`);
             });
           }
         } else {
-          console.log('⚠️ NO FORMULAS MATCHED - Skipping restore (sub-tests may have been deleted)');
           // Don't restore formulas for deleted sub-tests
           // Only formulas for existing sub-tests should be preserved
         }
       } else {
-        console.log('ℹ️ No formulas to restore');
       }
       
     } catch (error) {
@@ -1248,7 +1218,6 @@ const LabPanelManager: React.FC = () => {
   // Function to test table structure
   const testTableStructure = async () => {
     try {
-      console.log('Testing lab_test_config table structure...');
       const { data, error } = await supabase
         .from('lab_test_config')
         .select('*')
@@ -1257,9 +1226,7 @@ const LabPanelManager: React.FC = () => {
       if (error) {
         console.error('Table structure test error:', error);
       } else {
-        console.log('Sample row from lab_test_config:', data);
         if (data && data.length > 0) {
-          console.log('Available columns:', Object.keys(data[0]));
         }
       }
     } catch (error) {
@@ -1338,13 +1305,11 @@ const LabPanelManager: React.FC = () => {
           }
 
           const validSubTests = newPanel.subTests.filter(st => st.name && st.name.trim() !== '');
-          console.log(`✅ Valid sub-tests to save: ${validSubTests.length}`);
 
           if (validSubTests.length > 0) {
             await saveSubTestsToDatabase(newPanel.testName, validSubTests, createdPanel.id);
           }
         } else {
-          console.log('⚠️ No sub-tests to save');
         }
 
         toast({
@@ -1447,13 +1412,11 @@ const LabPanelManager: React.FC = () => {
         }
 
         const validSubTests = updatedPanel.subTests.filter(st => st.name && st.name.trim() !== '');
-        console.log(`✅ Valid sub-tests to update: ${validSubTests.length}`);
 
         if (validSubTests.length > 0) {
           await saveSubTestsToDatabase(updatedPanel.testName, validSubTests, updatedPanel.id);
         }
       } else {
-        console.log('⚠️ No sub-tests to update');
       }
 
       toast({
@@ -1956,7 +1919,6 @@ const AddPanelForm: React.FC<AddPanelFormProps> = ({ onSubmit }) => {
     console.log('📋 [AddPanelForm] Sub-tests count:', formData.subTests?.length || 0);
     if (formData.subTests && formData.subTests.length > 0) {
       formData.subTests.forEach((st, idx) => {
-        console.log(`  Sub-test ${idx + 1}: name="${st.name}", unit="${st.unit}"`);
       });
     }
     onSubmit(formData);
@@ -2644,11 +2606,9 @@ const EditPanelForm: React.FC<EditPanelFormProps> = ({ panel, onSubmit }) => {
       }
 
       if (!data || data.length === 0) {
-        console.log('⚠️ No sub-tests found for test:', testName, 'lab_id:', labId);
         return [];
       }
 
-      console.log('✅ Found', data.length, 'sub-test records');
 
       // Load formulas from lab_test_formulas table (with lab_id filter if available)
       let formulaQuery = supabase
@@ -2792,7 +2752,6 @@ const EditPanelForm: React.FC<EditPanelFormProps> = ({ panel, onSubmit }) => {
             }
           });
           if (isNestedSubTest) {
-            console.log(`⏭️ Skipping formula for nested sub-test: "${subTestKey}"`);
             continue;
           }
 
@@ -2829,7 +2788,6 @@ const EditPanelForm: React.FC<EditPanelFormProps> = ({ panel, onSubmit }) => {
         return orderA - orderB;
       });
 
-      console.log('✅ Loaded sub-tests in order:', subTestsArray.map((st, i) => `${i + 1}. ${st.name}`));
 
       return subTestsArray;
     } catch (error) {

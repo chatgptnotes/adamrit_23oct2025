@@ -9,7 +9,6 @@ export const NavigationTabs = ({ activeTab }: NavigationTabsProps) => {
   const navigate = useNavigate();
 
   const handleTabClick = (tabName: string) => {
-    console.log('Tab clicked:', tabName); // Debug log
     switch (tabName) {
       case 'Dashboard':
         navigate('/dashboard');
@@ -24,17 +23,13 @@ export const NavigationTabs = ({ activeTab }: NavigationTabsProps) => {
         navigate('/patients');
         break;
       case 'Doctors':
-        console.log('Doctors page not implemented yet');
         break;
       case 'Reports':
-        console.log('Navigating to reports...');
         navigate('/reports');
         break;
       case 'Settings':
-        console.log('Settings page not implemented yet');
         break;
       default:
-        console.log('Unknown tab:', tabName);
         break;
     }
   };

@@ -64,7 +64,6 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   // Handle Google OAuth session - look up email in User table using RPC to bypass RLS
   const handleGoogleSession = async (email: string) => {
     const googleEmail = email.toLowerCase();
-    console.log('[OAuth] Processing Google session for:', googleEmail);
 
     // Use SECURITY DEFINER RPC function to bypass RLS
     const { data: rows, error } = await supabaseAnon
@@ -81,7 +80,6 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       return;
     }
 
-    console.log('[OAuth] User found:', data.email, 'role:', data.role);
 
     const appUser: User = {
       id: data.id,
@@ -153,7 +151,6 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       // Check for existing Supabase session (e.g., user refreshed the page while still logged in via Google)
       supabase.auth.getSession().then(async ({ data: { session } }) => {
         if (session?.user?.email) {
-          console.log('[OAuth] Existing session found for:', session.user.email);
           await handleGoogleSession(session.user.email);
         } else {
           setIsAuthLoading(false);
@@ -163,7 +160,6 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     }
 
     // Step 5: OAuth callback — wait for PKCE code exchange to complete
-    console.log('[OAuth] Detected OAuth callback, waiting for session exchange...');
     let resolved = false;
 
     const processOAuthSession = async (email: string) => {
@@ -185,7 +181,6 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
     // Register auth state change listener — this fires when PKCE exchange completes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('[OAuth] Auth event:', event, session?.user?.email);
       if (session?.user?.email && !resolved) {
         await processOAuthSession(session.user.email);
       }
@@ -218,7 +213,6 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
       if (isStaffPin) {
         const pin = credentials.password.substring(1); // Remove @ prefix
-        console.log('Staff pin login attempt');
         const result = await supabase
           .from('User')
           .select('*')
@@ -228,7 +222,6 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         data = result.data;
         error = result.error;
       } else {
-        console.log('Login attempt for:', credentials.email);
         const result = await supabase
           .from('User')
           .select('*')
@@ -245,7 +238,6 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
       // Staff pin login: pin already verified by the query, skip password check
       if (!isStaffPin) {
-        console.log('User found, checking password...');
 
         // Check if password is hashed (new users) or plain text (existing users)
         let isPasswordValid = false;

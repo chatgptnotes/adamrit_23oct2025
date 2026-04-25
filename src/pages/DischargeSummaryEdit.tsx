@@ -157,7 +157,6 @@ function parseMedication(medString: string | any): { name: string; strength: str
             !part.match(/\d+\s*days?/i) &&
             !part.match(/^(once|twice|thrice|four)$/i)) {
           name = part.replace(/-/g, ' ');
-          console.log('Found medication name in parts:', name);
           break;
         }
       }
@@ -505,7 +504,6 @@ export default function DischargeSummaryEdit() {
     try {
       setIsFetchingData(true);
       setFetchProgress('Fetching patient demographics...');
-      console.log('Fetching comprehensive discharge data for patient:', visitId);
 
       // 1. Fetch complete patient data from patients table
       const { data: fullPatientData, error: patientError } = await supabase
@@ -556,11 +554,8 @@ export default function DischargeSummaryEdit() {
       // 4. Use diagnosis data from the hook - no more database query here
       console.log('🔍 Using diagnosis data from hook:', visitDiagnosis);
       if (visitDiagnosis) {
-        console.log('✅ Primary Diagnosis:', visitDiagnosis.primaryDiagnosis);
-        console.log('✅ Secondary Diagnoses:', visitDiagnosis.secondaryDiagnoses);
         console.log('📊 Total diagnosis count:', 1 + (visitDiagnosis.secondaryDiagnoses?.length || 0));
       } else {
-        console.log('⚠️ No diagnosis data available from hook');
       }
 
       // Check if we have valid visitData with UUID for subsequent queries
@@ -587,9 +582,6 @@ export default function DischargeSummaryEdit() {
           .single();
 
         console.log('🔍 FinalBill-style visit resolution:');
-        console.log('- Original visitData.id:', visitData.id);
-        console.log('- FinalBill resolution visitData.id:', visitDataForComplications?.id);
-        console.log('- UUIDs match:', visitData.id === visitDataForComplications?.id);
 
         // Use the UUID that FinalBill would use for saving complications
         const complicationsVisitUUID = visitDataForComplications?.id || visitData.id;
@@ -665,26 +657,17 @@ export default function DischargeSummaryEdit() {
           );
 
           console.log('🔍 SMART MATCHING RESULTS:');
-          console.log('- Complications by FinalBill UUID:', complicationsByFinalBillUUID?.length || 0);
-          console.log('- Complications by visit_id TEXT:', complicationsByVisitText?.length || 0);
-          console.log('- Total patient complications:', complicationsForPatient?.length || 0);
 
           if (complicationsByFinalBillUUID && complicationsByFinalBillUUID.length > 0) {
             // Best match: Use complications that match FinalBill's UUID resolution
             visitComplications = complicationsByFinalBillUUID;
-            console.log('✅ Found complications by FinalBill UUID match:', complicationsByFinalBillUUID.length);
-            console.log('✅ Matched complications:', complicationsByFinalBillUUID.map(c => c.complications?.name));
           } else if (complicationsByVisitText && complicationsByVisitText.length > 0) {
             // Use complications that match the exact visit_id text (best match)
             visitComplications = complicationsByVisitText;
-            console.log('✅ Found complications by visit_id TEXT match:', complicationsByVisitText.length);
-            console.log('✅ Matched complications:', complicationsByVisitText.map(c => c.complications?.name));
           } else if (complicationsForPatient && complicationsForPatient.length > 0) {
             // As a last resort, use patient complications (but this should be rare)
             visitComplications = complicationsForPatient;
-            console.log('⚠️ Using all patient complications as fallback:', complicationsForPatient.length);
           } else {
-            console.log('❌ No complications found for this visit or patient');
             visitComplications = [];
           }
           compError = allCompsError;
@@ -693,13 +676,10 @@ export default function DischargeSummaryEdit() {
         if (compError && compError.code !== 'PGRST116') {
           console.error('❌ Error fetching complications:', compError);
         } else {
-          console.log('✅ Final complications count:', visitComplications?.length || 0);
           if (visitComplications && visitComplications.length > 0) {
-            console.log('✅ Complications:', visitComplications.map(c => c.complications?.name).filter(Boolean));
           }
         }
       } else {
-        console.log('❌ No visitData.id available for complications query');
       }
 
       setFetchProgress('Fetching lab reports & results...');
@@ -735,7 +715,6 @@ export default function DischargeSummaryEdit() {
 
       for (const attempt of labQueryAttempts) {
         if (!attempt.value) {
-          console.log(`⏭️ Skipping lab query attempt: ${attempt.desc} - value is null`);
           continue;
         }
 
@@ -760,7 +739,6 @@ export default function DischargeSummaryEdit() {
           if (result.data && result.data.length > 0) {
             labOrders = result.data;
             labError = result.error;
-            console.log(`✅ Lab orders fetched successfully using ${attempt.desc}:`, labOrders.length, 'orders');
 
             // Debug: Show detailed structure of lab orders
             if (labOrders && labOrders.length > 0) {
@@ -793,7 +771,6 @@ export default function DischargeSummaryEdit() {
 
       // If still no lab orders, set empty array
       if (!labOrders) {
-        console.log('❌ No lab orders found after all attempts');
         labOrders = [];
       }
 
@@ -838,7 +815,6 @@ export default function DischargeSummaryEdit() {
             .order('created_at', { ascending: true });
 
           if (!resultsError && results && results.length > 0) {
-            console.log(`✅ Found ${results.length} lab results by visit UUID`);
             labResultsData = results;
           }
         } catch (error) {
@@ -856,7 +832,6 @@ export default function DischargeSummaryEdit() {
             .order('created_at', { ascending: true });
 
           if (!resultsError && results && results.length > 0) {
-            console.log(`✅ Found ${results.length} lab results by exact patient name (ilike)`);
             labResultsData = results;
           }
         } catch (error) {
@@ -874,7 +849,6 @@ export default function DischargeSummaryEdit() {
             .order('created_at', { ascending: true });
 
           if (!resultsError && results && results.length > 0) {
-            console.log(`✅ Found ${results.length} lab results by fuzzy patient name`);
             // If we have visit_id, prefer visit-specific results
             if (visitData?.id) {
               const visitSpecific = results.filter((r: any) => r.visit_id === visitData.id);
@@ -889,7 +863,6 @@ export default function DischargeSummaryEdit() {
       }
 
       if (!labResultsData || labResultsData.length === 0) {
-        console.log('ℹ️ No lab results found for patient:', patientNameForQuery);
         labResultsData = [];
       }
 
@@ -912,7 +885,6 @@ export default function DischargeSummaryEdit() {
           if (visitLabsError) {
             console.error('❌ Error fetching visit_labs:', visitLabsError);
           } else if (visitLabsRaw && visitLabsRaw.length > 0) {
-            console.log('✅ Found visit_labs:', visitLabsRaw.length, 'lab orders');
 
             // Get lab details for each lab_id
             const labIds = visitLabsRaw.map((item: any) => item.lab_id);
@@ -943,13 +915,11 @@ export default function DischargeSummaryEdit() {
               console.log('📋 Formatted visit_labs data:', visitLabsData);
             }
           } else {
-            console.log('ℹ️ No lab orders found in visit_labs');
           }
         } catch (error) {
           console.error('💥 Exception fetching visit_labs:', error);
         }
       } else {
-        console.log('⏭️ Skipping visit_labs fetch - no visit UUID available');
       }
 
       // Store visit_labs in state for AI generation
@@ -977,9 +947,7 @@ export default function DischargeSummaryEdit() {
 
           radiologyOrders = result.data;
           radError = result.error;
-          console.log('✅ Radiology orders fetched:', radiologyOrders);
         } catch (error) {
-          console.log('Radiology table might not exist, using empty data');
           radiologyOrders = [];
         }
 
@@ -988,7 +956,6 @@ export default function DischargeSummaryEdit() {
           radiologyOrders = [];
         }
       } else {
-        console.log('❌ No visitData.id available for radiology orders query');
         radiologyOrders = [];
       }
 
@@ -1009,10 +976,8 @@ export default function DischargeSummaryEdit() {
 
           if (prescriptions && !prescError) {
             prescriptionData = prescriptions;
-            console.log('✅ Prescription data fetched:', prescriptions);
           }
         } catch (error) {
-          console.log('Prescriptions table might not exist, checking visit_pharmacy');
         }
 
         // Try visit_medications table first (plural) with JOIN to get medication names
@@ -1033,12 +998,9 @@ export default function DischargeSummaryEdit() {
 
             if (visitMedications && !medError) {
               prescriptionData = visitMedications;
-              console.log('✅ Visit medication data fetched:', visitMedications);
             } else if (medError) {
-              console.log('Error fetching visit_medications:', medError);
             }
           } catch (error) {
-            console.log('Error accessing visit_medications table:', error);
           }
         }
 
@@ -1060,10 +1022,8 @@ export default function DischargeSummaryEdit() {
 
             if (visitPharmacy && !pharmError) {
               prescriptionData = visitPharmacy;
-              console.log('✅ Visit pharmacy data fetched:', visitPharmacy);
             }
           } catch (error) {
-            console.log('Visit pharmacy table might not exist');
           }
         }
       }
@@ -1079,8 +1039,6 @@ export default function DischargeSummaryEdit() {
 
       // Process complications - only use complications specifically linked to this visit
       console.log('🔍 DEBUG: Processing complications...');
-      console.log('- visitComplications raw data:', visitComplications);
-      console.log('- visitComplications length:', visitComplications?.length || 0);
 
       if (visitComplications && visitComplications.length > 0) {
         console.log('🔍 DEBUG: Individual complications:');
@@ -1172,7 +1130,6 @@ export default function DischargeSummaryEdit() {
 
       // Process visit_labs enriched with actual results from lab_results
       if (visitLabsData && visitLabsData.length > 0) {
-        console.log('✅ Processing visit_labs data enriched with lab_results:', visitLabsData.length, 'orders');
 
         // Track which lab_results have been matched to avoid duplicates
         const matchedLabResultIds = new Set<string>();
@@ -1241,7 +1198,6 @@ export default function DischargeSummaryEdit() {
       }
       // Fallback: process lab_results directly if no visit_labs
       else if (labResultsData && labResultsData.length > 0) {
-        console.log('✅ Processing lab results data (no visit_labs):', labResultsData);
 
         // Group results by test category or main_test_name for better organization
         const groupedResults = {};
@@ -1276,7 +1232,6 @@ export default function DischargeSummaryEdit() {
       }
 
         console.log('🔬 Formatted lab results:', formattedLabResultsLocal);
-        console.log('⚠️ Abnormal results:', abnormalResultsLocal);
 
         // Debug final data before summary generation
         console.log('📋 FINAL SUMMARY DATA:');
@@ -1322,8 +1277,6 @@ export default function DischargeSummaryEdit() {
         // Use fetched prescription data if available
         medicationsToUse = prescriptionData.map(p => {
           // Log the complete structure to find the correct field
-          console.log('Full medication record:', JSON.stringify(p, null, 2));
-          console.log('Available fields:', Object.keys(p));
 
           // Check if data is from visit_medications table
           // Try ALL possible field names for medication name
@@ -1332,7 +1285,6 @@ export default function DischargeSummaryEdit() {
           // First check if medication object exists (from JOIN)
           if (p.medication && typeof p.medication === 'object' && p.medication.name) {
             medName = p.medication.name;
-            console.log('Found medication name from JOIN:', medName);
           }
           // Otherwise check various possible field names
           else {
@@ -1347,7 +1299,6 @@ export default function DischargeSummaryEdit() {
                   p[field] !== 'MEDICATION' && p[field] !== 'N/A' &&
                   p[field] !== 'as directed') {
                 medName = p[field];
-                console.log(`Found medication name in field '${field}':`, medName);
                 break;
               }
             }
@@ -1357,7 +1308,6 @@ export default function DischargeSummaryEdit() {
               for (const field of possibleNameFields) {
                 if (p[field] && typeof p[field] === 'object' && p[field].name) {
                   medName = p[field].name;
-                  console.log(`Found medication name in ${field}.name:`, medName);
                   break;
                 }
               }
@@ -1377,7 +1327,6 @@ export default function DischargeSummaryEdit() {
           const frequency = p.frequency || 'as directed';
           const duration = p.duration || p.days || 'As directed';
 
-          console.log(`Creating medication string: "${medName} ${dosage} ${route} ${frequency} ${duration}"`);
 
           // Return formatted medication string with actual name
           // Make sure to include all fields properly separated
@@ -1387,7 +1336,6 @@ export default function DischargeSummaryEdit() {
       } else {
         // No medications prescribed
         medicationsToUse = [];
-        console.log('ℹ️ No medications prescribed for this visit');
       }
 
       medicationsTable = `**MEDICATIONS (TREATMENT ON DISCHARGE):**
@@ -1731,7 +1679,6 @@ PLEASE CONTACT: 7030974619, 9373111709.
 
     // First ensure we have fetched all required data
     if (!formattedLabResults || formattedLabResults.length === 0 || !complications) {
-      console.log('Fetching comprehensive data before AI generation...');
       await handleFetchData();
     }
 
@@ -1758,7 +1705,6 @@ PLEASE CONTACT: 7030974619, 9373111709.
           .order('created_at', { ascending: true });
 
         if (visitMedications && visitMedications.length > 0) {
-          console.log('Raw visit_medications data:', JSON.stringify(visitMedications, null, 2));
           medicationsData = visitMedications.map(med => {
             // Extract actual medication name from various possible fields
             let medName = '';
@@ -1766,7 +1712,6 @@ PLEASE CONTACT: 7030974619, 9373111709.
             // First check if medication object exists (from JOIN)
             if (med.medication && typeof med.medication === 'object' && med.medication.name) {
               medName = med.medication.name;
-              console.log('Found medication name from JOIN:', medName);
             }
             // Otherwise check various possible field names
             else {
@@ -1780,7 +1725,6 @@ PLEASE CONTACT: 7030974619, 9373111709.
                 if (med[field] && typeof med[field] === 'string' &&
                     med[field] !== 'MEDICATION' && med[field] !== 'N/A') {
                   medName = med[field];
-                  console.log(`Found medication name in field '${field}':`, medName);
                   break;
                 }
               }
@@ -1803,11 +1747,9 @@ PLEASE CONTACT: 7030974619, 9373111709.
               days: med.duration || med.days || ''
             };
           });
-          console.log('✅ Medications fetched for AI generation:', medicationsData);
         }
       }
     } catch (error) {
-      console.log('Error fetching medications for AI generation:', error);
     }
 
     // Fetch required data that might be missing
@@ -1837,7 +1779,6 @@ PLEASE CONTACT: 7030974619, 9373111709.
 
       visitDiagnosisLocal = diagData;
     } catch (error) {
-      console.log('No visit diagnosis data available');
     }
 
     // Fetch complete patient data if not available
@@ -1852,10 +1793,8 @@ PLEASE CONTACT: 7030974619, 9373111709.
 
         if (patientData) {
           fullPatientData = patientData;
-          console.log('✅ Full patient data fetched:', patientData);
         }
       } catch (error) {
-        console.log('Error fetching full patient data:', error);
       }
     }
 
@@ -1925,7 +1864,6 @@ PLEASE CONTACT: 7030974619, 9373111709.
         };
       }
     } catch (error) {
-      console.log('No OT data available');
     }
 
     // Fetch radiology investigations
@@ -1960,7 +1898,6 @@ PLEASE CONTACT: 7030974619, 9373111709.
         }
       }
     } catch (error) {
-      console.log('Error fetching radiology data:', error);
     }
 
     // Process lab investigations - merge visit_labs with lab_results for actual values
@@ -2441,9 +2378,6 @@ IMPORTANT:
       console.log('🤖 Using edited prompt:', editablePrompt);
 
       console.log('🔍 API Request Details:');
-      console.log('- Prompt length:', editablePrompt.length);
-      console.log('- Patient data keys:', Object.keys(editablePatientData));
-      console.log('- About to call Gemini API...');
 
       // Comprehensive medical discharge summary request
       const systemPrompt = 'You are an expert medical professional specializing in creating comprehensive OPD summaries for hospitals. Generate detailed, professional medical documentation following Indian medical standards and terminology. Include ALL provided medical data including investigations, lab results, radiology findings, OT notes, and complications.';
@@ -2472,9 +2406,6 @@ IMPORTANT:
       });
 
       console.log('📡 API Response received:');
-      console.log('- Status:', response.status);
-      console.log('- Status Text:', response.statusText);
-      console.log('- Headers:', Object.fromEntries(response.headers));
 
       if (!response.ok) {
         // Try to get error details from response
@@ -2516,14 +2447,12 @@ IMPORTANT:
       } else if (aiResponse && (aiResponse.includes('DISCHARGE SUMMARY') || aiResponse.includes('OPD SUMMARY') || aiResponse.includes('Diagnosis:'))) {
         // AI returned proper plain text format
         aiGeneratedSummary = aiResponse;
-        console.log('✅ AI returned proper plain text format');
       } else {
         aiGeneratedSummary = null; // Force fallback for invalid content
       }
 
       // Generate fallback template if needed
       if (!aiGeneratedSummary) {
-        console.log('⚠️ Using fallback template with plain text formatting');
         aiGeneratedSummary = `OPD SUMMARY
 ================================================================================
 
@@ -3108,7 +3037,6 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
           const details = {};
 
           // Debug logging
-          console.log('Patient details data to parse:', detailsData);
 
           detailsData.forEach(line => {
             // Use regex to find all key-value pairs in the line
@@ -3123,7 +3051,6 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
               // Store the key-value pair
               if (key) {
                 details[key] = value || 'N/A';
-                console.log(`Parsed: "${key}" = "${value}"`);
               }
             }
 
@@ -3154,7 +3081,6 @@ URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 937
             }
           });
 
-          console.log('Parsed patient details:', details);
 
           // Create a two-column table layout for patient details
           let html = '<table style="width: 100%; margin: 20px 0; border-collapse: collapse;">';

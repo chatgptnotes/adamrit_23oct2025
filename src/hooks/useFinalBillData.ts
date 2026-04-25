@@ -111,11 +111,9 @@ export const useFinalBillData = (visitId: string) => {
         }
 
         if (!billsData) {
-          console.log('ℹ️ No bill found for patient, returning null');
           return null;
         }
 
-        console.log('✅ Bill found:', billsData.bill_no);
 
         // Get sections
         const { data: sectionsData, error: sectionsError } = await supabase
@@ -149,7 +147,6 @@ export const useFinalBillData = (visitId: string) => {
           line_items: lineItemsData || []
         } as BillData;
 
-        console.log('✅ Successfully loaded bill data with', result.line_items.length, 'line items');
         return result;
       } catch (err) {
         console.error('❌ Unexpected error in useFinalBillData:', err);
@@ -326,8 +323,6 @@ export const useFinalBillData = (visitId: string) => {
         }
       }
 
-      console.log('✅ Bill saved successfully with ID:', bill.id);
-      console.log('✅ Saved total_amount:', bill.total_amount);
 
       // WhatsApp alert for invoices > Rs. 1,00,000
       if (bill.total_amount >= 100000) {

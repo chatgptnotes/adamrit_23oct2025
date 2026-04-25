@@ -134,7 +134,6 @@ export const InventoryReports: React.FC<InventoryReportsProps> = ({ inventory })
 
   const downloadReport = (reportType: string) => {
     // In real implementation, this would generate and download a CSV/PDF report
-    console.log(`Downloading ${reportType} report for ${timeRange}`);
   };
 
   const renderValuationReport = () => (

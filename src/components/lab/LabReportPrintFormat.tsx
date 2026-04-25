@@ -61,7 +61,6 @@ const LabReportPrintFormat: React.FC<LabReportPrintFormatProps> = ({
 
   const handleDownload = () => {
     // Convert to PDF functionality
-    console.log('Downloading report as PDF...');
   };
 
   return (

@@ -59,7 +59,6 @@ export const importBulkPatientData = async (csvText: string) => {
     }
 
     const headers = lines[0].split('\t').map(h => h.trim());
-    console.log('CSV Headers:', headers);
 
     const patients: BulkPatientData[] = [];
     const errors: string[] = [];
@@ -310,7 +309,6 @@ export const importBulkPatientData = async (csvText: string) => {
       }
 
       insertedCount += data?.length || 0;
-      console.log(`Inserted batch ${Math.floor(i / batchSize) + 1}, rows: ${data?.length}`);
     }
 
     return {

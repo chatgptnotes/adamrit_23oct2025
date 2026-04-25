@@ -53,13 +53,11 @@ export async function generateGRNNumber(): Promise<string> {
       break; // Number is unique
     }
 
-    console.log(`GRN number ${grn_number} already exists, trying next...`);
     sequence++;
     grn_number = `${prefix}${year}${month}${sequence.toString().padStart(4, '0')}`;
     maxAttempts--;
   }
 
-  console.log(`Generated unique GRN number: ${grn_number}`);
   return grn_number;
 }
 
@@ -232,7 +230,6 @@ export async function postGRN(
           .maybeSingle();
 
         if (existingBatch) {
-          console.log(`Batch inventory already exists for GRN ${grnData.grn_number}, batch ${item.batch_number}`);
           // Fetch the existing batch to add to our return array
           const { data: existingFullBatch } = await supabaseClient
             .from('medicine_batch_inventory')

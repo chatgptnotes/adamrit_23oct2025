@@ -19,7 +19,6 @@ export const useSearchableRadiology = () => {
 
       const { data, error } = await query;
       
-      console.log('Radiology search query result:', { data, error, searchTerm });
       
       if (error) {
         console.error('Error fetching radiology studies:', error);

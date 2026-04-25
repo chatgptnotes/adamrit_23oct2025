@@ -73,7 +73,6 @@ const DischargeInvoice = () => {
         return { totalAmount: 0, amountPaid: 0, discount: 0 };
       }
 
-      console.log('✅ Found visit UUID:', visitUUID.id);
 
       // Fetch all service data in parallel
       const [

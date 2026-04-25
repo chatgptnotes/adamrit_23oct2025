@@ -17,12 +17,6 @@ export default function LabTestConfigManager() {
   // Function to save sub-tests (now saves nested sub-tests in JSONB)
   const saveSubTest = async (subTest: SubTest, index: number): Promise<void> => {
     try {
-      console.log('=== SAVING SUB-TEST ===');
-      console.log('Sub-test name:', subTest.name);
-      console.log('Sub-test unit:', subTest.unit);
-      console.log('Sub-test ageRanges:', subTest.ageRanges);
-      console.log('Sub-test normalRanges:', subTest.normalRanges);
-      console.log('Sub-test subTests:', subTest.subTests);
 
       // Get first values for backward compatibility
       const firstAgeRange = subTest.ageRanges?.[0];
@@ -48,11 +42,6 @@ export default function LabTestConfigManager() {
 
       // Prepare nested_sub_tests JSONB data (inherits parent's is_mandatory)
       const nestedSubTestsData = subTest.subTests?.map(nst => {
-        console.log('=== NESTED SUB-TEST ===');
-        console.log('Nested name:', nst.name);
-        console.log('Nested unit:', nst.unit);
-        console.log('Nested ageRanges:', nst.ageRanges);
-        console.log('Nested normalRanges:', nst.normalRanges);
 
         return {
           name: nst.name,
@@ -75,10 +64,6 @@ export default function LabTestConfigManager() {
         };
       }) || [];
 
-      console.log('=== FINAL DATA TO SAVE ===');
-      console.log('ageRangesData:', JSON.stringify(ageRangesData, null, 2));
-      console.log('normalRangesData:', JSON.stringify(normalRangesData, null, 2));
-      console.log('nestedSubTestsData:', JSON.stringify(nestedSubTestsData, null, 2));
 
       // Insert this sub-test with nested sub-tests in JSONB
       const { data, error } = await supabase
@@ -111,9 +96,6 @@ export default function LabTestConfigManager() {
         throw new Error(`Failed to save ${subTest.name}: ${error.message}`);
       }
 
-      console.log(`✅ Saved ${subTest.name} with ID: ${data.id}`);
-      console.log(`   Age Ranges: ${ageRangesData.length}, Normal Ranges: ${normalRangesData.length}`);
-      console.log(`   Nested Sub-Tests: ${nestedSubTestsData.length}`);
     } catch (error) {
       console.error(`Error saving ${subTest.name}:`, error);
       throw error;
@@ -129,7 +111,6 @@ export default function LabTestConfigManager() {
     console.log('📊 subTests:', subTests);
 
     if (!testName.trim()) {
-      console.log('❌ SAVE BLOCKED: Test name is empty');
       toast({
         title: 'Cannot Auto-Save',
         description: 'Please enter test name first',
@@ -139,7 +120,6 @@ export default function LabTestConfigManager() {
     }
 
     if (!labId.trim()) {
-      console.log('❌ SAVE BLOCKED: Lab ID is empty');
       toast({
         title: 'Cannot Auto-Save',
         description: 'Please enter lab ID first',
@@ -149,7 +129,6 @@ export default function LabTestConfigManager() {
     }
 
     if (subTests.length === 0) {
-      console.log('❌ No sub-tests added');
       toast({
         title: 'Error',
         description: 'Please add at least one sub-test',
@@ -158,14 +137,9 @@ export default function LabTestConfigManager() {
       return;
     }
 
-    console.log('✅ Validation passed, starting save...');
     setIsLoading(true);
 
     try {
-      console.log('Starting save process...');
-      console.log('Test Name:', testName);
-      console.log('Lab ID:', labId);
-      console.log('Sub-Tests:', JSON.stringify(subTests, null, 2));
 
       // Delete existing records for this test to ensure clean save with new sequence
       console.log('🗑️ Deleting old records for:', testName, 'Lab ID:', labId);
@@ -179,7 +153,6 @@ export default function LabTestConfigManager() {
         console.error('Error deleting old records:', deleteError);
         throw new Error(`Failed to delete old records: ${deleteError.message}`);
       }
-      console.log('✅ Old records deleted successfully');
 
       let totalSaved = 0;
       let totalNested = 0;
@@ -206,7 +179,6 @@ export default function LabTestConfigManager() {
         .eq('test_name', testName);
 
       if (!verifyError && verifyData) {
-        console.log('Verification - Saved data:');
         console.table(verifyData);
         verifyData.forEach(row => {
           console.log(`${row.sub_test_name}:`, {

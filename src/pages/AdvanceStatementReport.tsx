@@ -156,8 +156,6 @@ const AdvanceStatementReport = () => {
         throw error;
       }
 
-      console.log(`✅ Fetched ${data?.length || 0} advance statement records for hospital: ${hospitalConfig?.name}`);
-      console.log('Sample data:', data?.[0]);
       console.log('🔍 Query filters applied: admission_date not null, discharge_date is null, patient_type = IPD, hospital_name =', hospitalConfig?.name);
       console.log('🔍 Date filters: from:', dateFrom, 'to:', dateTo);
       console.log('🔍 Raw data length:', data?.length || 0);

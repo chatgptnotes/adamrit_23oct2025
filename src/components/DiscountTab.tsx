@@ -35,7 +35,6 @@ export const DiscountTab: React.FC<DiscountTabProps> = ({
   useEffect(() => {
     const loadDiscountData = async () => {
       if (!visitId) {
-        console.log('⚠️ [DISCOUNT LOAD] No visitId provided');
         return;
       }
 
@@ -57,11 +56,9 @@ export const DiscountTab: React.FC<DiscountTabProps> = ({
         }
 
         if (!visitData) {
-          console.log('⚠️ [DISCOUNT LOAD] No visit found for visitId:', visitId);
           return;
         }
 
-        console.log('✅ [DISCOUNT LOAD] Found visit UUID:', visitData.id);
 
         // Load discount data using visit UUID
         const { data: discountData, error: discountError } = await supabase
@@ -77,7 +74,6 @@ export const DiscountTab: React.FC<DiscountTabProps> = ({
         }
 
         if (discountData) {
-          console.log('✅ [DISCOUNT LOAD] Found existing discount:', discountData);
           setDiscountData({
             id: discountData.id,
             discount_amount: discountData.discount_amount || 0,

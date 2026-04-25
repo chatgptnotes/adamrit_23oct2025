@@ -9,7 +9,6 @@ export const useSearchableHopeSurgery = () => {
   const { data: surgeries = [], isLoading, error } = useQuery({
     queryKey: ['hope-surgeons', searchTerm],
     queryFn: async () => {
-      console.log('Fetching Hope surgeons with search term:', searchTerm);
       
       let query = supabase
         .from('hope_surgeons')
@@ -27,7 +26,6 @@ export const useSearchableHopeSurgery = () => {
         throw error;
       }
       
-      console.log('Hope surgeons data fetched:', data);
       return data;
     }
   });

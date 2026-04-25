@@ -592,7 +592,6 @@ export function useTallyWebSocket() {
         toast.info(`Ledger ${data.type.split('_')[1]}: ${data.ledgerName}`);
         break;
       default:
-        console.log('Unknown message type:', data.type);
     }
   };
 

@@ -336,7 +336,6 @@ const TestCatalog: React.FC = () => {
         const worksheet = workbook.Sheets[sheetName];
         const jsonData = XLSX.utils.sheet_to_json(worksheet);
 
-        console.log('Imported data:', jsonData);
         alert(`Imported ${jsonData.length} tests (mock - no database save)`);
       } catch (err) {
         alert('Import failed - invalid file format');
@@ -716,7 +715,6 @@ const AddTestForm: React.FC<{ onSuccess: () => void }> = ({ onSuccess }) => {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    console.log('Adding test:', formData);
     alert('Test added successfully! (Demo mode)');
     onSuccess();
   };

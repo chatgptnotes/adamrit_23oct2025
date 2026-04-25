@@ -214,10 +214,8 @@ const CurrentlyAdmittedPatients = () => {
         throw error;
       }
 
-      console.log(`✅ CurrentlyAdmittedPatients: Found ${visitsData?.length || 0} visits for ${hospitalConfig?.name}`);
       
       if (!visitsData || visitsData.length === 0) {
-        console.log('No visits found');
         return [];
       }
 

@@ -66,8 +66,6 @@ export const BasicInfoFields: React.FC<BasicInfoFieldsProps> = ({
   };
 
   const handleSurgeryRemove = (surgeryToRemove: string) => {
-    console.log('Removing surgery:', surgeryToRemove);
-    console.log('Current surgery string:', formData.surgery);
     
     const current = formData.surgery || '';
     // Try different separators
@@ -80,9 +78,7 @@ export const BasicInfoFields: React.FC<BasicInfoFieldsProps> = ({
       surgeries = [current];
     }
     
-    console.log('Parsed surgeries:', surgeries);
     const filtered = surgeries.filter(s => s.trim() !== surgeryToRemove.trim());
-    console.log('After removal:', filtered);
     
     onFieldChange('surgery', filtered.join(', '));
   };
@@ -96,8 +92,6 @@ export const BasicInfoFields: React.FC<BasicInfoFieldsProps> = ({
       formData.surgery.split(',').map(s => s.trim()).filter(s => s.length > 0)
     ) : [];
   
-  console.log('BasicInfoFields formData.surgery:', formData.surgery);
-  console.log('BasicInfoFields assignedSurgeries:', assignedSurgeries);
 
   return (
     <div className="space-y-6">

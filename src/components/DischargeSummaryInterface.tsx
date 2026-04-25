@@ -113,7 +113,6 @@ The patient was admitted with a history of LEFT CONGENITAL INGUINAL HERNIA. The 
 
   const handleFinalDischarge = () => {
     // Final discharge functionality
-    console.log('Processing final discharge...');
   };
 
   const handleCopySummary = () => {

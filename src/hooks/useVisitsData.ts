@@ -121,7 +121,6 @@ export const useVisitsData = () => {
         throw error;
       }
       
-      console.log('✅ Successfully fetched visits data:', data?.length, 'records');
       return data || [];
     },
   });
@@ -199,7 +198,6 @@ export const useVisitData = (visitId: string | undefined) => {
         throw error;
       }
       
-      console.log('✅ Successfully fetched visit data:', data);
       return data;
     },
   });
@@ -233,7 +231,6 @@ export const usePatientVisits = (patientId: string | undefined) => {
         throw error;
       }
       
-      console.log('✅ Successfully fetched patient visits:', data?.length, 'records');
       return data || [];
     },
   });

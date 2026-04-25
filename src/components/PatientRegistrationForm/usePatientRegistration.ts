@@ -127,7 +127,6 @@ export const usePatientRegistration = (onClose: () => void) => {
         try {
           // Generate custom patient ID for each attempt
           const customPatientId = await generatePatientId(hospitalConfig.id);
-          console.log(`Attempt ${attempt}: Generated custom patient ID:`, customPatientId);
 
           // Create record in patients table
           const patientData = {
@@ -197,7 +196,6 @@ export const usePatientRegistration = (onClose: () => void) => {
     try {
       const { newPatient, customPatientId } = await createPatientWithRetry();
 
-      console.log('Patient registered successfully in patients table:', newPatient);
 
       // Log patient creation activity
       logActivity('patient_create', {
@@ -225,7 +223,6 @@ export const usePatientRegistration = (onClose: () => void) => {
           remark_2: `Registered: ${new Date().toLocaleDateString()}`
         };
 
-        console.log('CREATING patient_data record with patient_id:', customPatientId);
 
         const { data: patientDataResult, error: patientDataError } = await supabase
           .from('patient_data')
@@ -237,8 +234,6 @@ export const usePatientRegistration = (onClose: () => void) => {
           console.error('Error creating patient_data record:', patientDataError);
           // Don't fail the whole process for this
         } else {
-          console.log('Patient_data record created successfully:', patientDataResult);
-          console.log('Stored patient_id in patient_data:', patientDataResult.patient_id);
         }
       } catch (patientDataError) {
         console.error('Error handling patient_data creation:', patientDataError);
