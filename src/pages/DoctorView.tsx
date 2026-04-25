@@ -55,6 +55,7 @@ const DoctorView = () => {
   };
 
   const calculateAge = (dob) => {
+    if (!dob) return 'N/A';
     const birthDate = new Date(dob);
     const today = new Date();
     let age = today.getFullYear() - birthDate.getFullYear();

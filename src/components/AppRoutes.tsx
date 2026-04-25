@@ -263,7 +263,7 @@ export const AppRoutes = () => {
         <Route path="/marketing-incentives" element={<Suspense fallback={<PageLoader />}><MarketingIncentives /></Suspense>} />
         <Route path="/doctor-view" element={<Suspense fallback={<PageLoader />}><DoctorView /></Suspense>} />
         <Route path="/patient-portal" element={<PatientPortal />} />
-        <Route path="/kiosk" element={<SelfCheckIn />} />
+        <Route path="/self-check-in" element={<SelfCheckIn />} />
         <Route path="/report-delivery" element={<Suspense fallback={<PageLoader />}><ReportDelivery /></Suspense>} />
         <Route path="/radiology-worklist" element={<Suspense fallback={<PageLoader />}><RadiologyWorklist /></Suspense>} />
         <Route path="/attendance" element={<Suspense fallback={<PageLoader />}><StaffAttendance /></Suspense>} />
