@@ -5,8 +5,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Search, TestTube, Clock, Phone, User, FileText, CheckCircle, TrendingUp, X, ChevronDown, ChevronUp } from 'lucide-react';
+import { Search, TestTube, Clock, Phone, User, FileText, CheckCircle, TrendingUp, X, ChevronDown, ChevronUp, Download } from 'lucide-react';
 import { format } from 'date-fns';
+import jsPDF from 'jspdf';
+import * as XLSX from 'xlsx';
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, ReferenceLine,
   ResponsiveContainer, CartesianGrid,
@@ -199,6 +201,84 @@ export default function PatientPortal() {
     })
     .sort((a, b) => b[1].length - a[1].length);
 
+  const handleDownloadPDF = () => {
+    if (!selectedPatient) return;
+    const pdf = new jsPDF();
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    const margin = 20;
+    let y = 20;
+
+    const checkPage = (needed = 8) => {
+      if (y + needed > pageHeight - 20) { pdf.addPage(); y = 20; }
+    };
+
+    // Header
+    pdf.setFontSize(16);
+    pdf.setFont('helvetica', 'bold');
+    pdf.text('Lab Reports', pageWidth / 2, y, { align: 'center' });
+    y += 10;
+
+    pdf.setFontSize(11);
+    pdf.setFont('helvetica', 'normal');
+    const patientLine = `${selectedPatient.name}  |  ${selectedPatient.age ? selectedPatient.age + 'y' : ''}  ${selectedPatient.gender || ''}  |  ${selectedPatient.mobile || ''}`;
+    pdf.text(patientLine, pageWidth / 2, y, { align: 'center' });
+    y += 6;
+
+    pdf.setFontSize(9);
+    pdf.setTextColor(120, 120, 120);
+    pdf.text(`Generated: ${format(new Date(), 'dd MMM yyyy, hh:mm a')}`, pageWidth / 2, y, { align: 'center' });
+    pdf.setTextColor(0, 0, 0);
+    y += 10;
+
+    // Results grouped by date
+    Object.entries(byDate).forEach(([date, results]) => {
+      checkPage(12);
+      pdf.setFontSize(10);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text(date, margin, y);
+      y += 6;
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(9);
+
+      results.forEach(r => {
+        checkPage(7);
+        const abnormal = r.is_abnormal ? ' [!]' : '';
+        const val = `${r.result_value || '—'} ${r.unit || ''}`.trim();
+        const ref = r.reference_range ? `  (Ref: ${r.reference_range})` : '';
+        const line = `  ${r.test_name}${abnormal}:  ${val}${ref}`;
+        const wrapped = pdf.splitTextToSize(line, pageWidth - margin * 2);
+        if (r.is_abnormal) pdf.setTextColor(200, 0, 0);
+        pdf.text(wrapped, margin, y);
+        pdf.setTextColor(0, 0, 0);
+        y += wrapped.length * 5.5;
+      });
+      y += 4;
+    });
+
+    const safePatientName = selectedPatient.name.replace(/[^a-zA-Z0-9]/g, '_');
+    pdf.save(`Lab_Report_${safePatientName}_${format(new Date(), 'yyyyMMdd')}.pdf`);
+  };
+
+  const handleDownloadExcel = () => {
+    if (!selectedPatient) return;
+    const rows = labResults.map(r => ({
+      'Date': format(new Date(r.created_at), 'dd MMM yyyy'),
+      'Test Name': r.test_name,
+      'Result': r.result_value || '',
+      'Unit': r.unit || '',
+      'Reference Range': r.reference_range || '',
+      'Status': r.result_status || '',
+      'Abnormal': r.is_abnormal ? 'Yes' : 'No',
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    ws['!cols'] = [{ wch: 14 }, { wch: 40 }, { wch: 12 }, { wch: 10 }, { wch: 20 }, { wch: 10 }, { wch: 10 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Lab Reports');
+    const safePatientName = selectedPatient.name.replace(/[^a-zA-Z0-9]/g, '_');
+    XLSX.writeFile(wb, `Lab_Report_${safePatientName}_${format(new Date(), 'yyyyMMdd')}.xlsx`);
+  };
+
   const handleSearch = () => setSearchMobile(mobileInput.trim());
 
   return (
@@ -331,6 +411,18 @@ export default function PatientPortal() {
                 )}
               </Button>
             </div>
+
+            {/* Download buttons */}
+            {labResults.length > 0 && (
+              <div className="flex gap-2">
+                <Button size="sm" variant="outline" onClick={handleDownloadPDF} className="flex-1">
+                  <Download className="w-3.5 h-3.5 mr-1.5" /> PDF
+                </Button>
+                <Button size="sm" variant="outline" onClick={handleDownloadExcel} className="flex-1">
+                  <Download className="w-3.5 h-3.5 mr-1.5" /> Excel
+                </Button>
+              </div>
+            )}
 
             {/* Reports Tab */}
             {activeTab === 'reports' && (

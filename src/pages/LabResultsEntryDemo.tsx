@@ -12,7 +12,8 @@ const LabResultsEntryDemo: React.FC = () => {
     type: "OPD / BSNL",
     refBy: "Dr. Desai",
     labSampleId: "26b7bc2b-ae4d-4d9b-87ac-09a462333a3e",
-    date: "28/08/2025"
+    date: "28/08/2025",
+    phone: "9876543210"
   };
 
   return (

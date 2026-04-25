@@ -8,6 +8,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { Loader2, FileUp, Save, Eye, Printer, Download, ArrowLeft, Plus, List } from 'lucide-react';
 import { useLabTestConfig, TestResult } from '@/hooks/useLabTestConfig';
+import { WhatsAppReportButton } from './WhatsAppReportButton';
 
 interface Patient {
   name: string;
@@ -17,6 +18,7 @@ interface Patient {
   refBy: string;
   labSampleId: string;
   date: string;
+  phone?: string;
 }
 
 interface EnhancedLabResultsFormProps {
@@ -699,6 +701,11 @@ const EnhancedLabResultsForm: React.FC<EnhancedLabResultsFormProps> = ({
                 <Download className="h-4 w-4 mr-2" />
                 Download Files
               </Button>
+              <WhatsAppReportButton
+                patientName={patient.name}
+                mobile={patient.phone || null}
+                testNames={selectedTest ? [selectedTest] : []}
+              />
             </div>
           )}
         </div>
