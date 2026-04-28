@@ -12409,7 +12409,7 @@ INSTRUCTIONS:
         });
 
         return {
-          id: visitSurgery.surgery_id,
+          id: visitSurgery.id,
           name: surgeryDetail?.name || `Unknown Surgery (${visitSurgery.surgery_id})`,
           code: surgeryDetail?.code || 'Unknown',
           nabh_nabl_rate: selectedRate,
@@ -12693,11 +12693,11 @@ INSTRUCTIONS:
         return;
       }
 
+      // surgeryId is the visit_surgeries row ID
       // Find the surgery that's being deleted to check if it's in OT Notes
-      const surgeryBeingDeleted = savedSurgeries?.find(s => s.id === surgeryId) ||
-                                   patientInfo?.surgeries?.find((s: any) => s.surgery_id === surgeryId);
+      const surgeryBeingDeleted = savedSurgeries?.find(s => s.id === surgeryId);
 
-      // Get the actual visit UUID from visits table (more reliable than using visitData)
+      // Get the actual visit UUID from visits table (for cleanup operations)
       const { data: visitUUIDData, error: visitError } = await supabase
         .from('visits')
         .select('id')
@@ -12711,25 +12711,11 @@ INSTRUCTIONS:
 
       const visitUUID = visitUUIDData.id;
 
-      // Find the visit_surgeries row ID that matches this surgery
-      // This handles both CGHS (surgery_id set) and Yojana (yojana_procedure_id set) surgeries
-      const { data: surgeryRowData, error: findError } = await supabase
-        .from('visit_surgeries')
-        .select('id')
-        .eq('visit_id', visitUUID)
-        .or(`surgery_id.eq.${surgeryId},yojana_procedure_id.eq.${surgeryId}`)
-        .single();
-
-      if (findError || !surgeryRowData?.id) {
-        toast.error('Surgery record not found');
-        return;
-      }
-
-      // Delete using the row's primary key (works for both CGHS and Yojana)
+      // Delete the visit_surgeries row directly using its ID
       const { error: deleteError } = await supabase
         .from('visit_surgeries' as any)
         .delete()
-        .eq('id', surgeryRowData.id);
+        .eq('id', surgeryId);
 
       if (deleteError) {
         console.error('Error deleting surgery:', deleteError);
