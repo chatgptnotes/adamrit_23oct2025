@@ -12303,6 +12303,7 @@ INSTRUCTIONS:
       }
 
       // Get visit_surgeries data with join to get surgery details
+      // Include both cghs_surgery (for CGHS surgeries) and yojana_mh_procedures (for Yojana surgeries)
       const { data: visitSurgeriesData, error: visitSurgeriesError } = await supabase
         .from('visit_surgeries' as any)
         .select(`
@@ -12315,6 +12316,10 @@ INSTRUCTIONS:
             private,
             Non_NABH_NABL_Rate,
             bhopal_nabh_rate
+          ),
+          yojana_mh_procedures:yojana_procedure_id (
+            procedure_name,
+            procedure_code
           )
         `)
         .eq('visit_id', visitData.id);
@@ -12326,10 +12331,15 @@ INSTRUCTIONS:
       }
 
 
+      console.log('✅ visitSurgeriesData fetched:', visitSurgeriesData);
+
       if (!visitSurgeriesData || visitSurgeriesData.length === 0) {
+        console.log('⚠️ No surgeries found, setting empty list');
         setSavedSurgeries([]);
         return;
       }
+
+      console.log('📋 Processing surgeries, count:', visitSurgeriesData.length);
 
       // Determine patient type for rate selection
       const patientType = (patientInfo?.patient_type || '').toLowerCase().trim();
@@ -12397,6 +12407,12 @@ INSTRUCTIONS:
           rateSource = 'nabh';
         }
 
+        // Fallback: for Yojana surgeries, use the rate stored in visit_surgeries.rate
+        if (selectedRate === 'N/A' && visitSurgery.rate) {
+          selectedRate = visitSurgery.rate.toString();
+          rateSource = 'visit_surgeries_rate';
+        }
+
         console.log('🔍 Surgery rate selection:', {
           surgery: surgeryDetail?.name,
           privateRate: surgeryDetail?.private,
@@ -12408,10 +12424,37 @@ INSTRUCTIONS:
           isPrivatePatient
         });
 
+        // Get surgery name with fallbacks: CGHS → Yojana → notes field → Unknown
+        let surgeryName = '';
+        let surgeryCode = '';
+
+        if (surgeryDetail?.name) {
+          // CGHS surgery
+          surgeryName = surgeryDetail.name;
+          surgeryCode = surgeryDetail.code || '';
+        } else if (visitSurgery.yojana_mh_procedures?.procedure_name) {
+          // Yojana surgery
+          surgeryName = visitSurgery.yojana_mh_procedures.procedure_name;
+          surgeryCode = visitSurgery.yojana_mh_procedures.procedure_code || '';
+        } else if (visitSurgery.notes) {
+          // Fallback: read from notes field (saved by FinalBill)
+          try {
+            const notesData = JSON.parse(visitSurgery.notes);
+            surgeryName = notesData.name || '';
+            surgeryCode = notesData.code || '';
+          } catch (e) {
+            surgeryName = visitSurgery.notes;
+          }
+        }
+
+        if (!surgeryName) {
+          surgeryName = `Unknown Surgery (${visitSurgery.surgery_id || visitSurgery.yojana_procedure_id})`;
+        }
+
         return {
           id: visitSurgery.id,
-          name: surgeryDetail?.name || `Unknown Surgery (${visitSurgery.surgery_id})`,
-          code: surgeryDetail?.code || 'Unknown',
+          name: surgeryName,
+          code: surgeryCode || 'Unknown',
           nabh_nabl_rate: selectedRate,
           is_primary: visitSurgery.is_primary || false,
           status: visitSurgery.status || 'planned',
@@ -13666,29 +13709,37 @@ Format the response as JSON:
   // Function to save selected surgeries to visit_surgeries junction table
   const saveSurgeriesToVisit = async (visitId: string) => {
     try {
+      console.log('🔴 [SURGERY SAVE] Starting saveSurgeriesToVisit:', { visitId, selectedSurgeriesCount: selectedSurgeries.length });
 
       if (selectedSurgeries.length === 0) {
+        console.warn('⚠️ [SURGERY SAVE] No surgeries selected');
         toast.error('No surgeries selected to save');
         return;
       }
 
       // Get the actual visit UUID from the visits table
+      console.log('🔴 [SURGERY SAVE] Fetching visit UUID...');
       const { data: visitData, error: visitError } = await supabase
         .from('visits')
         .select('id')
         .eq('visit_id', visitId)
         .single();
 
+      console.log('🔴 [SURGERY SAVE] Visit fetch result:', { visitData, visitError });
+
       if (visitError) {
-        console.error('Error fetching visit UUID for surgeries:', visitError);
+        console.error('❌ [SURGERY SAVE] Error fetching visit UUID:', visitError);
         toast.error('Visit not found. Cannot save surgeries.');
         return;
       }
 
       if (!visitData?.id) {
+        console.error('❌ [SURGERY SAVE] visitData.id is missing');
         toast.error('Visit record not found. Cannot save surgeries.');
         return;
       }
+
+      console.log('✅ [SURGERY SAVE] Got visit UUID:', visitData.id);
 
       // First, check which surgeries already exist for this visit.
       // We fetch both surgery_id (CGHS) and yojana_procedure_id so duplicate detection
@@ -13718,13 +13769,19 @@ Format the response as JSON:
       const newSurgeries = selectedSurgeries.filter(surgery => !existingSurgeryIds.has(surgery.id));
       const duplicateSurgeries = selectedSurgeries.filter(surgery => existingSurgeryIds.has(surgery.id));
 
+      console.log('🔴 [SURGERY SAVE] Duplicate detection:', { newSurgeriesCount: newSurgeries.length, duplicateSurgeriesCount: duplicateSurgeries.length, duplicateSurgeries: duplicateSurgeries.map(s => s.name) });
+
       if (duplicateSurgeries.length > 0) {
         const duplicateNames = duplicateSurgeries.map(s => s.name).join(', ');
+        console.warn('⚠️ [SURGERY SAVE] Duplicate surgeries detected:', duplicateNames);
         toast.warning(`The following surgeries are already added: ${duplicateNames}`);
       }
 
       if (newSurgeries.length === 0) {
+        console.log('ℹ️ [SURGERY SAVE] All surgeries already exist - fetching to display them');
         toast.info('All selected surgeries are already added to this visit');
+        // Even if all are duplicates, fetch to show them
+        await fetchSavedSurgeriesFromVisit(visitId);
         return;
       }
 
@@ -13760,16 +13817,31 @@ Format the response as JSON:
 
       // Insert directly using Supabase client
       try {
+        console.log('🔴 [SURGERY SAVE] Inserting surgeries to visit_surgeries:', surgeriesToSave);
         // Insert only new surgeries
         const { data, error: insertError } = await supabase
           .from('visit_surgeries' as any)
           .insert(surgeriesToSave)
           .select();
 
+        console.log('🔴 [SURGERY SAVE] Insert result:', { data, insertError });
+
         if (insertError) {
-          console.error('Error inserting surgeries:', insertError);
+          console.error('❌ [SURGERY SAVE] Error inserting surgeries:', insertError);
+
+          // Check if error is due to duplicate surgeries
+          if (insertError.message?.includes('duplicate') || insertError.code === '23505') {
+            console.log('ℹ️ [SURGERY SAVE] Duplicate surgeries detected - fetching existing surgeries instead');
+            toast.info('Some surgeries are already saved for this visit');
+            // Still fetch to show the existing surgeries
+            await fetchSavedSurgeriesFromVisit(visitId);
+            return;
+          }
+
           toast.error(`Failed to save surgeries: ${insertError.message}`);
+          return;
         } else {
+          console.log('✅ [SURGERY SAVE] Surgeries inserted successfully');
           toast.success(`${newSurgeries.length} new ${newSurgeries.length === 1 ? 'surgery' : 'surgeries'} saved to visit successfully!`);
 
           // Clear selected surgeries after successful save
@@ -13782,22 +13854,24 @@ Format the response as JSON:
               const recommendations = await generateClinicalRecommendations(surgery.name, diagnosisText);
               await saveClinicalRecommendations(visitId, recommendations);
             } catch (error) {
-              console.error(`Error generating recommendations for ${surgery.name}:`, error);
+              console.error(`⚠️ Error generating recommendations for ${surgery.name}:`, error);
             }
           }
 
           // Fetch updated saved surgeries to refresh the display
+          console.log('🔴 [SURGERY SAVE] Fetching saved surgeries after insert...');
           try {
             await fetchSavedSurgeriesFromVisit(visitId);
+            console.log('✅ [SURGERY SAVE] Fetched saved surgeries');
 
             // Surgery Treatment section removed
 
           } catch (fetchError) {
-            console.error('Error fetching saved surgeries after save:', fetchError);
+            console.error('❌ [SURGERY SAVE] Error fetching saved surgeries after save:', fetchError);
           }
         }
       } catch (dbError) {
-        console.error('Database operation failed:', dbError);
+        console.error('❌ [SURGERY SAVE] Database operation failed:', dbError);
         toast.error('Failed to save surgeries to database');
       }
 

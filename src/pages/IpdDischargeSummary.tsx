@@ -143,7 +143,10 @@ const IpdDischargeSummary = () => {
 
   // Force complete cache clear and component refresh
   React.useEffect(() => {
-    console.log('🔄 IpdDischargeSummary component mounted - clearing all caches for visitId:', visitId);
+    console.log('🔴 [IpdDischargeSummary] Component mounted with visitId:', visitId);
+    if (!visitId) {
+      console.error('❌ [IpdDischargeSummary] visitId is missing or undefined!');
+    }
 
     // Clear all React Query cache
     try {
@@ -1128,6 +1131,8 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
   useEffect(() => {
     // Wait for OT Notes to finish loading before setting surgery details
     if (isOtNotesLoading) return;
+
+    console.log('🏥 Surgery Effect triggered:', { visitSurgeryData, otNotesData, isOtNotesLoading });
 
     if (visitSurgeryData && visitSurgeryData.length > 0) {
       try {
