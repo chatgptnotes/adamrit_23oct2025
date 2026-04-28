@@ -751,6 +751,10 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
               code,
               NABH_NABL_Rate,
               description
+            ),
+            yojana_mh_procedures:yojana_procedure_id (
+              procedure_name,
+              procedure_code
             )
           `)
           .eq('visit_id', visitUUID)
@@ -760,7 +764,9 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
           return null;
         }
 
-        console.log('🔍 Raw surgery data:', JSON.stringify(data, null, 2));
+        console.log('🔍 Raw surgery data count:', data?.length);
+        console.log('🔍 First surgery:', JSON.stringify(data?.[0], null, 2));
+        console.log('🔍 Surgery IDs:', data?.map(s => ({ id: s.id, surgery_id: s.surgery_id, yojana_id: s.yojana_procedure_id, cghs_surgery: s.cghs_surgery })));
         return data;
       } catch (error) {
         return null;
@@ -768,7 +774,7 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
     },
     enabled: !!visitId,
     retry: false,
-    staleTime: 30000
+    staleTime: 0
   });
 
   // Fetch OT Notes data to get surgeon, anesthetist, implant info
@@ -1050,7 +1056,8 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
           }
         }
 
-        if (summary.surgery_details) {
+        // Only load saved surgery_details if there's no fresh surgery data from billing
+        if (summary.surgery_details && (!visitSurgeryData || visitSurgeryData.length === 0)) {
           try {
             const surgeryData = JSON.parse(summary.surgery_details);
             // Handle both old format (single object) and new format (object with surgeryRows array)
@@ -1092,7 +1099,7 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
         }
       }
     }
-  }, [patientData]);
+  }, [patientData, visitSurgeryData]);
 
   // Update investigations with lab and radiology results data
   useEffect(() => {
@@ -1157,8 +1164,21 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
                              (isFirst && otNotesData?.date ? new Date(otNotesData.date) :
                              (surgery?.created_at ? new Date(surgery.created_at) : null));
 
-          // Get procedure name from cghs_surgery
-          const procedurePerformed = surgeryInfo?.name ? `${surgeryInfo.name} (${surgeryInfo.code || ''})` : '';
+          // Get procedure name from cghs_surgery, fallback to yojana, then to saved notes
+          let procedurePerformed = '';
+          if (surgeryInfo?.name) {
+            procedurePerformed = `${surgeryInfo.name} (${surgeryInfo.code || ''})`;
+          } else if ((surgery as any)?.yojana_mh_procedures?.procedure_name) {
+            procedurePerformed = `${(surgery as any).yojana_mh_procedures.procedure_name}`;
+          } else if (surgery?.notes) {
+            // Fallback: read from saved notes (backup from FinalBill)
+            try {
+              const notesData = JSON.parse(surgery.notes);
+              procedurePerformed = `${notesData.name || ''} (${notesData.code || ''})`.trim();
+            } catch (e) {
+              procedurePerformed = surgery.notes;
+            }
+          }
 
           return {
             id: surgery.id || Date.now().toString() + index,
