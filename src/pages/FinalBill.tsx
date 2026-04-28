@@ -4,6 +4,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { supabase } from "@/integrations/supabase/client"
+import { geminiGenerateContentUrl } from "@/lib/gemini"
 import { format, differenceInDays } from "date-fns"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -5420,7 +5421,7 @@ Generate a comprehensive COMBINED surgical note that covers ALL surgeries listed
 Make it detailed and professional as if written by an experienced surgeon.`;
 
 
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiApiKey}`, {
+      const response = await fetch(geminiGenerateContentUrl(geminiApiKey), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'

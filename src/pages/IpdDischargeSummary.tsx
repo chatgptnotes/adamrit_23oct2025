@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Calendar, CalendarDays, Loader2 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import { geminiGenerateContentUrl } from "@/lib/gemini";
 import { format } from 'date-fns';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -4226,7 +4227,7 @@ Rules:
 - If multiple surgeries, combine into one cohesive paragraph — do NOT list them separately.
 - Do NOT use bullet points, headings, or placeholders. Plain paragraph only.`;
 
-                    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${import.meta.env.VITE_GEMINI_API_KEY}`, {
+                    const response = await fetch(geminiGenerateContentUrl(import.meta.env.VITE_GEMINI_API_KEY), {
                       method: 'POST',
                       headers: {
                         'Content-Type': 'application/json'
@@ -4564,7 +4565,7 @@ Do NOT omit any medication. Each medication = one row. Use the data exactly as p
 10. For ADVICE: If specific advice is provided in the input, use it EXACTLY as given — do NOT paraphrase or shorten it. Only write a generic 2-3 sentence advice paragraph if NO advice data is present in the input.`;
 
                           // Call Google Gemini API
-                          const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${import.meta.env.VITE_GEMINI_API_KEY}`, {
+                          const response = await fetch(geminiGenerateContentUrl(import.meta.env.VITE_GEMINI_API_KEY), {
                             method: 'POST',
                             headers: {
                               'Content-Type': 'application/json'

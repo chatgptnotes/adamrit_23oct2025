@@ -13,6 +13,7 @@ import { ArrowLeft, Save, Printer, Sparkles, Download, Eye, Loader2, Edit3, Sett
 import { useDebounce } from 'use-debounce';
 import DischargeSummary from '@/components/DischargeSummary';
 import { useVisitDiagnosis } from '@/hooks/useVisitDiagnosis';
+import { geminiGenerateContentUrl } from '@/lib/gemini';
 import { useToast } from '@/hooks/use-toast';
 
 interface Patient {
@@ -2304,7 +2305,7 @@ IMPORTANT:
       };
 
       const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${import.meta.env.VITE_GEMINI_API_KEY}`,
+        geminiGenerateContentUrl(import.meta.env.VITE_GEMINI_API_KEY),
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -2397,7 +2398,7 @@ IMPORTANT:
       console.log('🔍 Request body:', JSON.stringify(requestBody, null, 2));
 
       // Call Google Gemini API
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${import.meta.env.VITE_GEMINI_API_KEY}`, {
+      const response = await fetch(geminiGenerateContentUrl(import.meta.env.VITE_GEMINI_API_KEY), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
