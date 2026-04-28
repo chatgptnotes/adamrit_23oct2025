@@ -12693,17 +12693,43 @@ INSTRUCTIONS:
         return;
       }
 
-
       // Find the surgery that's being deleted to check if it's in OT Notes
       const surgeryBeingDeleted = savedSurgeries?.find(s => s.id === surgeryId) ||
                                    patientInfo?.surgeries?.find((s: any) => s.surgery_id === surgeryId);
 
-      // Find the surgery record in visit_surgeries table
+      // Get the actual visit UUID from visits table (more reliable than using visitData)
+      const { data: visitUUIDData, error: visitError } = await supabase
+        .from('visits')
+        .select('id')
+        .eq('visit_id', visitId)
+        .single();
+
+      if (visitError || !visitUUIDData?.id) {
+        toast.error('Visit record not found');
+        return;
+      }
+
+      const visitUUID = visitUUIDData.id;
+
+      // Find the visit_surgeries row ID that matches this surgery
+      // This handles both CGHS (surgery_id set) and Yojana (yojana_procedure_id set) surgeries
+      const { data: surgeryRowData, error: findError } = await supabase
+        .from('visit_surgeries')
+        .select('id')
+        .eq('visit_id', visitUUID)
+        .or(`surgery_id.eq.${surgeryId},yojana_procedure_id.eq.${surgeryId}`)
+        .single();
+
+      if (findError || !surgeryRowData?.id) {
+        toast.error('Surgery record not found');
+        return;
+      }
+
+      // Delete using the row's primary key (works for both CGHS and Yojana)
       const { error: deleteError } = await supabase
         .from('visit_surgeries' as any)
         .delete()
-        .eq('surgery_id', surgeryId)
-        .eq('visit_id', visitData?.id);
+        .eq('id', surgeryRowData.id);
 
       if (deleteError) {
         console.error('Error deleting surgery:', deleteError);
@@ -12722,11 +12748,11 @@ INSTRUCTIONS:
       await fetchPatientInfo();
 
       // Also clean up cached surgery_details in ipd_discharge_summary
-      if (visitData?.id) {
+      if (visitUUID) {
         const { data: summaryData } = await supabase
           .from('ipd_discharge_summary')
           .select('id, surgery_details')
-          .eq('visit_id', visitData.id)
+          .eq('visit_id', visitUUID)
           .order('created_at', { ascending: false })
           .limit(1)
           .single();
