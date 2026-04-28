@@ -13725,6 +13725,12 @@ Format the response as JSON:
         const parsedRate = parseFloat(
           surgery.NABH_NABL_Rate?.toString().replace(/[^\d.]/g, '') || '0'
         );
+        // Store surgery name and code as backup so it displays even if JOIN fails
+        const surgeryMetadata = JSON.stringify({
+          name: surgery.name || '',
+          code: surgery.code || '',
+          category: surgery.category || ''
+        });
         return {
           visit_id: visitData.id,
           surgery_id: isYojanaSurgery ? null : surgery.id,
@@ -13732,7 +13738,7 @@ Format the response as JSON:
           is_primary: false,
           status: 'planned',
           sanction_status: surgery.sanction_status || 'Not Sanctioned',
-          notes: null,
+          notes: surgeryMetadata,
           rate: parsedRate,
           rate_type: surgery.rateSource || 'private',
         };
