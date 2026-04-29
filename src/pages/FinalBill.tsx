@@ -5409,28 +5409,19 @@ Surgery ${index + 1}:
 - Implant: ${surgery.implant || 'N/A'}
 - Date: ${surgery.date || new Date().toISOString()}`).join('\n');
 
-      const surgeryPrompt = `OT Notes: Act like a surgeon. Make a detailed combined surgery/OT note for ALL the following surgeries. Include the implants used and the quantities. Come up with creative detailed surgery notes based on the following information:
+      const surgeryPrompt = `Write a brief 3-4 line clinical summary for the following surgeries:
 
-PATIENT INFORMATION:
-Patient Name: ${visitData.patients?.name || '[Patient Name]'}
-Age: ${visitData.patients?.age || '[Age]'}
-Gender: ${visitData.patients?.gender || '[Gender]'}
+PATIENT: ${visitData.patients?.name || '[Patient Name]'} (Age: ${visitData.patients?.age || '[Age]'})
 
-SURGERY DETAILS FROM PATIENT RECORDS:
-${surgeryInfo}
-
-ALL SURGERIES PERFORMED:
+SURGERIES:
 ${allSurgeriesInfo}
 
-Generate a comprehensive COMBINED surgical note that covers ALL surgeries listed above. Include:
-- Pre-operative findings
-- Surgical technique and steps for each procedure
-- Implants used (with specific quantities and sizes)
-- Post-operative condition
-- Complications (if any)
-- Instructions for post-operative care
-
-Make it detailed and professional as if written by an experienced surgeon.`;
+Requirements:
+- Write ONLY 3-4 lines maximum
+- Use formal clinical terminology
+- Include: procedure, surgical approach, and post-op condition
+- Do NOT use bullet points, numbers, or formatting
+- Keep it concise and professional`;
 
 
       const response = await fetch(geminiGenerateContentUrl(geminiApiKey), {
@@ -5441,12 +5432,12 @@ Make it detailed and professional as if written by an experienced surgeon.`;
         body: JSON.stringify({
           contents: [{
             parts: [{
-              text: 'You are an experienced surgeon writing detailed operative notes. Generate comprehensive, professional surgical documentation with specific details about implants, quantities, and surgical techniques. When multiple surgeries are performed, include details for all procedures in a single combined note.\n\n' + surgeryPrompt
+              text: 'You are a medical documentation specialist. Generate ONLY 3-4 lines of clinical summary.\n\n' + surgeryPrompt
             }]
           }],
           generationConfig: {
-            temperature: 0.7,
-            maxOutputTokens: 2000
+            temperature: 0.4,
+            maxOutputTokens: 120
           }
         })
       });

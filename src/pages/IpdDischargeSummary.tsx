@@ -4248,15 +4248,15 @@ DD/MM/YYYY:-Test Category: Test1:Value1 unit, Test2:Value2 unit`);
                       `Surgery ${i + 1}: ${s.alias || s.procedurePerformed || 'Not specified'} (Surgeon: ${s.surgeon || 'Not specified'}, Anesthesia: ${s.anesthesia || 'Not specified'})`
                     ).join('\n');
 
-                    const prompt = `You are a senior medical documentation specialist. Write a concise, professional surgical summary for the procedure(s) listed below:
+                    const prompt = `Write a brief 3-4 line clinical summary for the following surgeries:
 ${allProcedures}
 
 Rules:
-- Total summary must NOT exceed 200 words.
-- Write in formal clinical terminology.
-- Cover: procedure performed, surgical approach, key intraoperative findings, hemodynamic stability, and immediate post-op condition.
-- If multiple surgeries, combine into one cohesive paragraph — do NOT list them separately.
-- Do NOT use bullet points, headings, or placeholders. Plain paragraph only.`;
+- Write ONLY 3-4 lines maximum.
+- Use formal clinical terminology.
+- Include: procedure, surgical approach, and post-op condition.
+- Do NOT use bullet points, numbers, or formatting.
+- Keep it concise and professional.`;
 
                     const response = await fetch(geminiGenerateContentUrl(import.meta.env.VITE_GEMINI_API_KEY), {
                       method: 'POST',
@@ -4270,8 +4270,8 @@ Rules:
                           }]
                         }],
                         generationConfig: {
-                          temperature: 0.4,
-                          maxOutputTokens: 300
+                          temperature: 0.3,
+                          maxOutputTokens: 120
                         }
                       })
                     });
