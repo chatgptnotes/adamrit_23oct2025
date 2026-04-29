@@ -4248,15 +4248,12 @@ DD/MM/YYYY:-Test Category: Test1:Value1 unit, Test2:Value2 unit`);
                       `Surgery ${i + 1}: ${s.alias || s.procedurePerformed || 'Not specified'} (Surgeon: ${s.surgeon || 'Not specified'}, Anesthesia: ${s.anesthesia || 'Not specified'})`
                     ).join('\n');
 
-                    const prompt = `Write a brief 3-4 line clinical summary for the following surgeries:
+                    const prompt = `Write a brief 3-4 line surgical summary. Must include all details below:
+
+SURGERIES:
 ${allProcedures}
 
-Rules:
-- Write ONLY 3-4 lines maximum.
-- Use formal clinical terminology.
-- Include: procedure, surgical approach, and post-op condition.
-- Do NOT use bullet points, numbers, or formatting.
-- Keep it concise and professional.`;
+INSTRUCTIONS: Write exactly 3-4 lines. Include procedure name, surgeon name, type of anaesthesia, and post-operative condition. Use formal medical language. No bullet points or numbering. Write as a continuous paragraph.`;
 
                     const response = await fetch(geminiGenerateContentUrl(import.meta.env.VITE_GEMINI_API_KEY), {
                       method: 'POST',
@@ -4270,8 +4267,8 @@ Rules:
                           }]
                         }],
                         generationConfig: {
-                          temperature: 0.3,
-                          maxOutputTokens: 120
+                          temperature: 0.5,
+                          maxOutputTokens: 200
                         }
                       })
                     });

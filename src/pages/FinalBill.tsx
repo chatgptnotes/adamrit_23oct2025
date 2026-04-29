@@ -5409,19 +5409,14 @@ Surgery ${index + 1}:
 - Implant: ${surgery.implant || 'N/A'}
 - Date: ${surgery.date || new Date().toISOString()}`).join('\n');
 
-      const surgeryPrompt = `Write a brief 3-4 line clinical summary for the following surgeries:
+      const surgeryPrompt = `Write a brief 3-4 line surgical summary. Must include all details below:
 
 PATIENT: ${visitData.patients?.name || '[Patient Name]'} (Age: ${visitData.patients?.age || '[Age]'})
 
 SURGERIES:
 ${allSurgeriesInfo}
 
-Requirements:
-- Write ONLY 3-4 lines maximum
-- Use formal clinical terminology
-- Include: procedure, surgical approach, and post-op condition
-- Do NOT use bullet points, numbers, or formatting
-- Keep it concise and professional`;
+INSTRUCTIONS: Write exactly 3-4 lines. Include procedure name, surgeon name, type of anaesthesia, and post-operative condition. Use formal medical language. No bullet points or numbering. Write as a continuous paragraph.`;
 
 
       const response = await fetch(geminiGenerateContentUrl(geminiApiKey), {
@@ -5436,8 +5431,8 @@ Requirements:
             }]
           }],
           generationConfig: {
-            temperature: 0.4,
-            maxOutputTokens: 120
+            temperature: 0.5,
+            maxOutputTokens: 200
           }
         })
       });
