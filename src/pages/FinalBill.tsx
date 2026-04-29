@@ -2537,8 +2537,10 @@ const FinalBill = () => {
 
       const newForms = surgeries.map((surgery: any, index: number) => {
         // Handle both patientInfo.surgeries and savedSurgeries structure
-        const surgeryName = surgery.cghs_surgery?.name || surgery.name || '';
-        const surgeryCode = surgery.cghs_surgery?.code || surgery.code || '';
+        // Use fallback to savedSurgeries when cghs_surgery is null
+        const savedSurgery = savedSurgeries?.find((s: any) => s.id === surgery.id);
+        const surgeryName = surgery.cghs_surgery?.name || savedSurgery?.name || surgery.name || '';
+        const surgeryCode = surgery.cghs_surgery?.code || savedSurgery?.code || surgery.code || '';
         const procedureName = surgeryName ? `${surgeryName} (${surgeryCode})` : '';
 
         // Find matching saved OT note by index or procedure name to restore saved values
@@ -17005,16 +17007,19 @@ Dr. Murali B K
                             <h6 className="font-semibold text-green-800 mb-2">Surgery Details</h6>
                             {/* Display surgeries from patientInfo if available */}
                             {patientInfo && patientInfo.surgeries && patientInfo.surgeries.length > 0 &&
-                              patientInfo.surgeries.map((surgery: any, index: number) => (
-                                <div key={`patient-surgery-${index}`} className="mb-2 p-2 bg-white rounded border">
-                                  <div className="text-xs">
-                                    <div><span className="font-medium">Surgery:</span> {surgery.cghs_surgery?.name || 'N/A'}</div>
-                                    <div><span className="font-medium">Code:</span> {surgery.cghs_surgery?.code || 'N/A'}</div>
-                                    <div><span className="font-medium">Rate:</span> ₹{surgery.cghs_surgery?.NABH_NABL_Rate || 'N/A'}</div>
-                                    <div><span className="font-medium">Status:</span> {surgery.sanction_status || 'N/A'}</div>
+                              patientInfo.surgeries.map((surgery: any, index: number) => {
+                                const savedSurgery = savedSurgeries?.find((s: any) => s.id === surgery.id);
+                                return (
+                                  <div key={`patient-surgery-${index}`} className="mb-2 p-2 bg-white rounded border">
+                                    <div className="text-xs">
+                                      <div><span className="font-medium">Surgery:</span> {surgery.cghs_surgery?.name || savedSurgery?.name || 'N/A'}</div>
+                                      <div><span className="font-medium">Code:</span> {surgery.cghs_surgery?.code || savedSurgery?.code || 'N/A'}</div>
+                                      <div><span className="font-medium">Rate:</span> ₹{surgery.cghs_surgery?.NABH_NABL_Rate || savedSurgery?.nabh_nabl_rate || 'N/A'}</div>
+                                      <div><span className="font-medium">Status:</span> {surgery.sanction_status || 'Not Sanctioned'}</div>
+                                    </div>
                                   </div>
-                                </div>
-                              ))
+                                );
+                              })
                             }
                             {/* Display surgeries from savedSurgeries if patientInfo surgeries not available */}
                             {(!patientInfo || !patientInfo.surgeries || patientInfo.surgeries.length === 0) &&
