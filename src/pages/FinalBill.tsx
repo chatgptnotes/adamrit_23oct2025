@@ -2401,6 +2401,7 @@ const FinalBill = () => {
     anaesthetist: string;
     anaesthesia: string;
     implant: string;
+    alias: string;
   }>>([{
     id: crypto.randomUUID(),
     date: new Date().toISOString().slice(0, 16),
@@ -2408,7 +2409,8 @@ const FinalBill = () => {
     surgeons: [],
     anaesthetist: '',
     anaesthesia: '',
-    implant: ''
+    implant: '',
+    alias: ''
   }]);
 
   // Shared description for all surgeries
@@ -2426,7 +2428,8 @@ const FinalBill = () => {
       surgeons: [],
       anaesthetist: '',
       anaesthesia: '',
-      implant: ''
+      implant: '',
+      alias: ''
     }]);
   };
 
@@ -2560,7 +2563,8 @@ const FinalBill = () => {
           surgeons: savedNote?.surgeon ? savedNote.surgeon.split(', ').filter(Boolean) : [],
           anaesthetist: savedNote?.anaesthetist || '',
           anaesthesia: savedNote?.anaesthesia || '',
-          implant: savedNote?.implant || ''
+          implant: savedNote?.implant || '',
+          alias: savedNote?.alias || ''
         };
       });
 
@@ -5389,10 +5393,16 @@ Description: ${surgery.cghs_surgery?.description || 'Standard surgical procedure
         return;
       }
 
-      // Generate ONE combined description for all surgeries
+      // Extract alias lines from surgeries (to display at top of description)
+      const aliasLines = otNotesDataList
+        .filter(s => s.alias?.trim())
+        .map((s, i) => otNotesDataList.length > 1 ? `Surgery ${i + 1}: ${s.alias}` : s.alias)
+        .join('\n');
+
+      // Generate ONE combined description for all surgeries (using alias instead of procedure)
       const allSurgeriesInfo = otNotesDataList.map((surgery, index) => `
 Surgery ${index + 1}:
-- Procedure: ${surgery.procedure || 'N/A'}
+- Procedure: ${surgery.alias || surgery.procedure || 'N/A'}
 - Surgeon: ${surgery.surgeons.length > 0 ? surgery.surgeons.join(', ') : 'Dr. [Surgeon Name]'}
 - Anaesthetist: ${surgery.anaesthetist || 'Dr. [Anaesthetist Name]'}
 - Anaesthesia: ${surgery.anaesthesia || 'General Anaesthesia'}
@@ -5454,8 +5464,13 @@ Make it detailed and professional as if written by an experienced surgeon.`;
         throw new Error('No response from Gemini API');
       }
 
+      // Combine alias lines at top with AI-generated summary below
+      const finalDescription = aliasLines
+        ? `${aliasLines}\n\n${generatedText}`
+        : generatedText;
+
       // Set the single shared description
-      setSharedDescription(generatedText);
+      setSharedDescription(finalDescription);
       toast.success('AI surgery notes generated successfully!');
 
     } catch (error) {
@@ -5633,6 +5648,7 @@ INSTRUCTIONS:
           anaesthetist: surgery.anaesthetist,
           anaesthesia: surgery.anaesthesia,
           implant: surgery.implant,
+          alias: surgery.alias,
 
           // Description (shared for all surgeries)
           description: sharedDescription,
@@ -17192,6 +17208,18 @@ Dr. Murali B K
                                     </option>
                                   ))}
                                 </select>
+                              </div>
+
+                              {/* Alias Field */}
+                              <div className="mb-3">
+                                <label className="block text-xs font-medium text-gray-600 mb-1">Alias</label>
+                                <input
+                                  type="text"
+                                  className="w-full text-xs border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                  placeholder="Enter surgery alias or custom description"
+                                  value={surgeryForm.alias}
+                                  onChange={(e) => updateSurgeryField(surgeryForm.id, 'alias', e.target.value)}
+                                />
                               </div>
                             </div>
                           ))}

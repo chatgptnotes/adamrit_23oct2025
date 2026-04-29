@@ -237,6 +237,7 @@ const IpdDischargeSummary = () => {
     anesthetist: string;
     anesthesia: string;
     implant: string;
+    alias: string;
   }>>([{
     id: '1',
     date: '',
@@ -244,7 +245,8 @@ const IpdDischargeSummary = () => {
     surgeon: '',
     anesthetist: '',
     anesthesia: '',
-    implant: ''
+    implant: '',
+    alias: ''
   }]);
   const [sharedSurgeryDescription, setSharedSurgeryDescription] = useState('');
 
@@ -257,7 +259,8 @@ const IpdDischargeSummary = () => {
       surgeon: '',
       anesthetist: '',
       anesthesia: '',
-      implant: ''
+      implant: '',
+      alias: ''
     }]);
   };
 
@@ -1164,6 +1167,10 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
           const savedImplant = savedSurgeryRows[index]?.implant || '';
           const implant = isFirst && otNotesData?.implant ? otNotesData.implant : (savedImplant || surgery?.implant || '');
 
+          // For alias: prefer OT notes for first surgery, then check saved data
+          const savedAlias = savedSurgeryRows[index]?.alias || '';
+          const alias = isFirst && otNotesData?.alias ? otNotesData.alias : (savedAlias || '');
+
           // Use surgery date from visit_surgeries or OT notes
           const surgeryDate = surgery?.surgery_date ? new Date(surgery.surgery_date) :
                              (isFirst && otNotesData?.date ? new Date(otNotesData.date) :
@@ -1192,7 +1199,8 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
             surgeon: surgeon,
             anesthetist: anesthetist,
             anesthesia: anesthesia,
-            implant: implant
+            implant: implant,
+            alias: alias
           };
         });
 
@@ -1219,7 +1227,8 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
           surgeon: otNotesData?.surgeon || '',
           anesthetist: otNotesData?.anaesthetist || '',
           anesthesia: otNotesData?.anaesthesia || '',
-          implant: otNotesData?.implant || ''
+          implant: otNotesData?.implant || '',
+          alias: otNotesData?.alias || ''
         }]);
 
         // Don't set shared description from OT notes - it will be loaded from ipd_discharge_summary if saved
@@ -1233,6 +1242,9 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
       }
     }
   }, [visitSurgeryData, otNotesData, patientData, isOtNotesLoading]);
+
+  // Do NOT auto-generate shared description - let user manually enter alias or type description
+  // The description will be generated when user clicks "AI Generate" with an alias or manually entered
 
   // Update diagnosis when data is loaded from visit_diagnoses table or direct diagnosis_id
   useEffect(() => {
@@ -4193,6 +4205,14 @@ DD/MM/YYYY:-Test Category: Test1:Value1 unit, Test2:Value2 unit`);
                     placeholder="e.g., N/A if no implant"
                   />
                 </div>
+                <div className="space-y-2">
+                  <Label>Alias:</Label>
+                  <Input
+                    value={surgery.alias}
+                    onChange={(e) => updateSurgeryRow(surgery.id, 'alias', e.target.value)}
+                    placeholder="Enter surgery alias or custom description"
+                  />
+                </div>
               </div>
             </div>
           ))}
@@ -4217,9 +4237,15 @@ DD/MM/YYYY:-Test Category: Test1:Value1 unit, Test2:Value2 unit`);
                       description: "Generating description with AI...",
                     });
 
-                    // Build context from all surgery details
+                    // Extract alias lines from surgeries (to display at top of description)
+                    const aliasLines = surgeryRows
+                      .filter(s => s.alias?.trim())
+                      .map((s, i) => surgeryRows.length > 1 ? `Surgery ${i + 1}: ${s.alias}` : s.alias)
+                      .join('\n');
+
+                    // Build context from all surgery details (using alias instead of procedurePerformed)
                     const allProcedures = surgeryRows.map((s, i) =>
-                      `Surgery ${i + 1}: ${s.procedurePerformed || 'Not specified'} (Surgeon: ${s.surgeon || 'Not specified'}, Anesthesia: ${s.anesthesia || 'Not specified'})`
+                      `Surgery ${i + 1}: ${s.alias || s.procedurePerformed || 'Not specified'} (Surgeon: ${s.surgeon || 'Not specified'}, Anesthesia: ${s.anesthesia || 'Not specified'})`
                     ).join('\n');
 
                     const prompt = `You are a senior medical documentation specialist. Write a concise, professional surgical summary for the procedure(s) listed below:
@@ -4259,7 +4285,12 @@ Rules:
                     const generatedDescription = data.candidates?.[0]?.content?.parts?.[0]?.text;
 
                     if (generatedDescription) {
-                      setSharedSurgeryDescription(generatedDescription);
+                      // Combine alias lines at top with AI-generated summary below
+                      const finalDescription = aliasLines
+                        ? `${aliasLines}\n\n${generatedDescription}`
+                        : generatedDescription;
+
+                      setSharedSurgeryDescription(finalDescription);
                       toast({
                         title: "Success",
                         description: "Description generated successfully!",
