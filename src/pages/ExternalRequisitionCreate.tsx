@@ -5,6 +5,7 @@ import { FileText, ArrowLeft, Save, X } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { SCAN_CENTERS } from '@/types/externalRequisition';
 
 const ExternalRequisitionCreate = () => {
   const navigate = useNavigate();
@@ -12,7 +13,8 @@ const ExternalRequisitionCreate = () => {
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
-    serviceName: ''
+    serviceName: '',
+    scanCenter: ''
   });
 
   const [errors, setErrors] = useState<{[key: string]: string}>({});
@@ -42,6 +44,7 @@ const ExternalRequisitionCreate = () => {
         .from('external_requisitions')
         .insert({
           service_name: formData.serviceName.trim(),
+          scan_center: formData.scanCenter || null,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         });
@@ -115,7 +118,22 @@ const ExternalRequisitionCreate = () => {
               )}
             </div>
 
-
+            {/* Scan Center */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Scan Center
+              </label>
+              <select
+                value={formData.scanCenter}
+                onChange={(e) => setFormData(prev => ({ ...prev, scanCenter: e.target.value }))}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+              >
+                <option value="">Select Scan Center</option>
+                {SCAN_CENTERS.map((center) => (
+                  <option key={center} value={center}>{center}</option>
+                ))}
+              </select>
+            </div>
 
             {/* Form Actions */}
             <div className="flex justify-end gap-3 pt-6 border-t">
