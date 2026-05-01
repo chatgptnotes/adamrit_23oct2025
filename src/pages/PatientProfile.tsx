@@ -127,7 +127,7 @@ const PatientProfile = () => {
 
         {/* Main Content */}
         <div className="flex-1 min-w-0 p-6">
-          <PatientTabs patient={patient} visitId={visits.length > 0 ? visits[0].id : undefined} />
+          <PatientTabs patient={patient} visitId={visits.length > 0 ? visits[0].visit_id : undefined} />
         </div>
       </div>
     </div>

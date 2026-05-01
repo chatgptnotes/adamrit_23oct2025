@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { X, Check, Eye, FileText, UserCheck, Trash2, DollarSign, MessageSquare, FileTextIcon, Activity, ClipboardEdit, Circle, Loader2 } from 'lucide-react';
+import { X, Check, Eye, FileText, UserCheck, Trash2, DollarSign, MessageSquare, FileTextIcon, Activity, ClipboardEdit, Circle, Loader2, ScanLine } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { VisitRegistrationForm } from '@/components/VisitRegistrationForm';
 import { supabase } from '@/integrations/supabase/client';
@@ -13,6 +13,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { printSticker } from '@/utils/stickerPrinter';
 import { useQuery } from '@tanstack/react-query';
 import { RefereeDoaPaymentModal } from '@/components/ipd/RefereeDoaPaymentModal';
+import { MriOrderModal } from '@/components/ipd/MriOrderModal';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { calculateReferralAmount, formatIndianCurrency } from '@/utils/referralCalculator';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -283,6 +284,8 @@ export const OpdPatientTable = ({ patients, refetch, isMarketingManager = false 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [radiologyModalOpen, setRadiologyModalOpen] = useState(false);
+  const [selectedVisitForRadiology, setSelectedVisitForRadiology] = useState<Patient | null>(null);
 
   const visiblePatients = patients.filter(patient => !hiddenPatients.has(patient.visit_id || ''));
   const totalPages = Math.ceil(visiblePatients.length / pageSize);
@@ -1420,6 +1423,7 @@ Verified by: [To be verified by doctor]`;
             <TableHead className="text-center font-medium print:hidden">Discharge Intimation</TableHead>
             <TableHead className="text-center font-medium print:hidden">Stickers</TableHead>
             <TableHead className="text-center font-medium print:hidden">OPD Summary</TableHead>
+            <TableHead className="text-center font-medium print:hidden">Radiology</TableHead>
             <TableHead className="text-center font-medium print:hidden">Actions</TableHead>
           </TableRow>
         </TableHeader>
@@ -1633,6 +1637,18 @@ Verified by: [To be verified by doctor]`;
                   title="View/Add OPD Summary"
                 >
                   <FileTextIcon className="h-4 w-4 text-purple-600" />
+                </Button>
+              </TableCell>
+              {/* Screen-only: Radiology */}
+              <TableCell className="text-center print:hidden">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 w-8 p-0 hover:bg-violet-50"
+                  onClick={() => { setSelectedVisitForRadiology(patient); setRadiologyModalOpen(true); }}
+                  title="Add Radiology Order"
+                >
+                  <ScanLine className="h-4 w-4 text-violet-600" />
                 </Button>
               </TableCell>
               {/* Screen-only: Actions */}
@@ -1907,6 +1923,28 @@ Verified by: [To be verified by doctor]`;
       ))}
 
       {/* OPD Summary Dialogs - removed (now uses dedicated page) */}
+
+      {/* Radiology Order Modal */}
+      {selectedVisitForRadiology && (
+        <MriOrderModal
+          isOpen={radiologyModalOpen}
+          onClose={() => { setRadiologyModalOpen(false); setSelectedVisitForRadiology(null); }}
+          department="OPD"
+          visit={{
+            id: selectedVisitForRadiology.id,
+            visit_id: selectedVisitForRadiology.visit_id || '',
+            patient_id: selectedVisitForRadiology.patient_id,
+            appointment_with: selectedVisitForRadiology.appointment_with,
+            patients: selectedVisitForRadiology.patients ? {
+              id: selectedVisitForRadiology.patients.id,
+              name: selectedVisitForRadiology.patients.name,
+              patients_id: selectedVisitForRadiology.patients.patients_id,
+              age: selectedVisitForRadiology.patients.age,
+              gender: selectedVisitForRadiology.patients.gender,
+            } : undefined,
+          }}
+        />
+      )}
     </div>
   );
 };

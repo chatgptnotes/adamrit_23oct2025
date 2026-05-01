@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useDebounce } from 'use-debounce';
 import { Badge } from '@/components/ui/badge';
-import { Eye, FileText, Search, Calendar, DollarSign, Trash2, FolderOpen, FolderX, CheckCircle, XCircle, Clock, MinusCircle, RotateCcw, Printer, Filter, MessageSquare, ClipboardList, ArrowUpDown, Circle, ChevronLeft, ChevronRight, Upload, Bell, Download, Loader2 } from 'lucide-react';
+import { Eye, FileText, Search, Calendar, DollarSign, Trash2, FolderOpen, FolderX, CheckCircle, XCircle, Clock, MinusCircle, RotateCcw, Printer, Filter, MessageSquare, ClipboardList, ArrowUpDown, Circle, ChevronLeft, ChevronRight, Upload, Bell, Download, Loader2, Brain } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -48,6 +48,7 @@ import { DateRangePicker } from '@/components/ui/date-range-picker';
 import { DateRange } from 'react-day-picker';
 import '@/styles/print.css';
 import { RefereeDoaPaymentModal } from '@/components/ipd/RefereeDoaPaymentModal';
+import { MriOrderModal } from '@/components/ipd/MriOrderModal';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { calculateReferralAmount, formatIndianCurrency } from '@/utils/referralCalculator';
 
@@ -334,6 +335,10 @@ const TodaysIpdDashboard = () => {
   const [originalComments, setOriginalComments] = useState<Record<string, string>>({});
   const [savingComments, setSavingComments] = useState<Record<string, boolean>>({});
   const [savedComments, setSavedComments] = useState<Record<string, boolean>>({});
+
+  // MRI Order Modal State
+  const [mriModalOpen, setMriModalOpen] = useState(false);
+  const [selectedVisitForMri, setSelectedVisitForMri] = useState<any>(null);
 
   // Getpass Notification Modal State
   const [isNotificationModalOpen, setIsNotificationModalOpen] = useState(false);
@@ -2778,6 +2783,7 @@ const TodaysIpdDashboard = () => {
                 <TableHead className="font-semibold">Discharge Intimation</TableHead>
                 <TableHead className="font-semibold">Summaries and Certificates</TableHead>
                 <TableHead className="font-semibold">Getpass Notification</TableHead>
+                <TableHead className="font-semibold">Radiology</TableHead>
                 {(isAdmin || isMarketingManager) && <TableHead className="font-semibold">Actions</TableHead>}
               </TableRow>
               <TableRow className="bg-muted/30">
@@ -2865,7 +2871,7 @@ const TodaysIpdDashboard = () => {
                   )}
                   <TableCell className="font-mono text-sm">
                     <button
-                      onClick={() => handleVisitIdClick(visit.patient_id, visit.visit_id)}
+                      onClick={() => handleVisitIdClick(visit.patients?.id, visit.visit_id)}
                       className="text-blue-600 hover:text-blue-800 hover:underline font-medium transition-colors"
                     >
                       {visit.visit_id}
@@ -3201,6 +3207,20 @@ const TodaysIpdDashboard = () => {
                       Add Notification
                     </Button>
                   </TableCell>
+                  <TableCell>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 w-8 p-0 hover:bg-violet-50"
+                      onClick={() => {
+                        setSelectedVisitForMri(visit);
+                        setMriModalOpen(true);
+                      }}
+                      title="Add Scan / Radiology Order"
+                    >
+                      <Brain className="h-4 w-4 text-violet-600" />
+                    </Button>
+                  </TableCell>
                   {(isAdmin || isMarketingManager) && (
                    <TableCell>
                      <div className="flex items-center gap-2">
@@ -3432,6 +3452,18 @@ const TodaysIpdDashboard = () => {
             }}
             patientName={selectedVisitForDocument.patients?.name || 'Unknown'}
             visitId={selectedVisitForDocument.visit_id}
+          />
+        )}
+
+        {/* Radiology Order Modal */}
+        {selectedVisitForMri && (
+          <MriOrderModal
+            isOpen={mriModalOpen}
+            onClose={() => {
+              setMriModalOpen(false);
+              setSelectedVisitForMri(null);
+            }}
+            visit={selectedVisitForMri}
           />
         )}
 

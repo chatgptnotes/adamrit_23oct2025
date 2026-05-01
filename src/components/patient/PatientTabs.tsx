@@ -38,7 +38,7 @@ const PatientTabs = ({ patient, visitId }: PatientTabsProps) => {
       </TabsContent>
 
       <TabsContent value="billing" className="space-y-4">
-        <FinalBillTab patient={patient} />
+        <FinalBillTab patient={patient} visitId={visitId} />
       </TabsContent>
 
       <TabsContent value="edit-billing" className="space-y-4">
