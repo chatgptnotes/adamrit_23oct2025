@@ -697,20 +697,25 @@ const AdvanceStatementReport = () => {
         <head>
           <title>Advance Statement Report</title>
           <style>
+            @page {
+              size: A4 landscape;
+              margin: 10mm;
+            }
             @media print {
-              body { margin: 0; padding: 20px; font-family: Arial, sans-serif; }
+              body { margin: 0; padding: 10px; font-family: Arial, sans-serif; }
               h1 { font-size: 18px; margin-bottom: 20px; text-align: center; }
               h2 { font-size: 16px; margin: 15px 0 10px 0; }
-              table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-              th, td { border: 1px solid #000; padding: 8px; text-align: left; vertical-align: top; font-size: 12px; }
+              table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 11px; }
+              th, td { border: 1px solid #000; padding: 6px; text-align: left; vertical-align: top; font-size: 11px; }
               th { background-color: #f5f5f5; font-weight: bold; }
-              .patient-details { margin-bottom: 5px; }
-              .diagnosis-item { background-color: #f0f8ff; padding: 4px; margin: 2px 0; border-radius: 3px; display: inline-block; }
-              .surgery-item { background-color: #f0fff0; padding: 4px; margin: 2px 0; border-radius: 3px; }
+              .patient-details { margin-bottom: 5px; font-size: 10px; }
+              .diagnosis-item { background-color: #f0f8ff; padding: 4px; margin: 2px 0; border-radius: 3px; display: inline-block; font-size: 10px; }
+              .surgery-item { background-color: #f0fff0; padding: 4px; margin: 2px 0; border-radius: 3px; font-size: 10px; }
               .stats { display: flex; justify-content: space-around; margin: 20px 0; }
               .stat-item { text-align: center; }
               .stat-number { font-size: 20px; font-weight: bold; }
               .stat-label { font-size: 12px; color: #666; }
+              .corporate-cell { color: #000000 !important; font-weight: bold; }
             }
             @media screen {
               body { margin: 20px; font-family: Arial, sans-serif; }
@@ -825,9 +830,8 @@ const AdvanceStatementReport = () => {
                   ? format(new Date(item.admission_date), 'dd/MM/yyyy')
                   : 'N/A';
 
-                // Corporate type text - single indigo color
+                // Corporate type text - will be black in print via CSS class
                 const corporateText = patient?.corporate || 'N/A';
-                const corporateColor = patient?.corporate ? '#4f46e5' : '#6b7280'; // indigo-600 or gray
 
                 // Financial calculations
                 const patientId = patient?.id || '';
@@ -849,7 +853,7 @@ const AdvanceStatementReport = () => {
                   <tr>
                     <td style="text-align: center;">${index + 1}</td>
                     <td>${patientDetailsText}</td>
-                    ${hospitalType === 'hope' ? `<td style="text-align: center;"><strong style="color: ${corporateColor};">${corporateText}</strong></td>` : ''}
+                    ${hospitalType === 'hope' ? `<td style="text-align: center;" class="corporate-cell"><strong>${corporateText}</strong></td>` : ''}
                     <td>${roomBedText}</td>
                     <td style="text-align: center;">${admissionDateText}</td>
                     <td>${diagnosisText}</td>
@@ -1238,9 +1242,9 @@ const AdvanceStatementReport = () => {
                       <span className="text-gray-500">N/A</span>
                     );
 
-                    // Corporate type display - single indigo color
+                    // Corporate type display - blue on desktop, black on print
                     const corporateDisplay = patient?.corporate ? (
-                      <span className="text-sm font-medium text-indigo-600">{patient.corporate}</span>
+                      <span className="text-sm font-medium text-indigo-600 print:text-black">{patient.corporate}</span>
                     ) : (
                       <span className="text-gray-500">N/A</span>
                     );
