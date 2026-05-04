@@ -472,7 +472,12 @@ const DailyPaymentAllocation = () => {
   const activeSchedule = schedule.filter(e => e.status !== 'skipped');
   const totalDue = activeSchedule.reduce((s, e) => s + (e.daily_amount + e.carryforward_amount), 0);
   const totalPaid = activeSchedule.reduce((s, e) => s + e.paid_amount, 0);
-  const totalAvailable = effectiveCash + funds.totalActual;
+
+  // Only sum accounts belonging to the selected hospital so fund total matches obligation total
+  const hospitalBankTotal = funds.accounts
+    .filter(a => a.hospital === selectedHospital)
+    .reduce((s, a) => s + (a.actual_balance ?? a.ledger_balance), 0);
+  const totalAvailable = effectiveCash + hospitalBankTotal;
   const surplus = totalAvailable - totalDue;
   const coveragePercent = totalDue > 0 ? Math.min(Math.round((totalAvailable / totalDue) * 100), 100) : 100;
 
@@ -484,7 +489,8 @@ const DailyPaymentAllocation = () => {
       formatINR(a.ledger_balance),
       a.actual_balance !== null ? formatINR(a.actual_balance) : '—',
     ]);
-    rows.push(['TOTAL', '', '', formatINR(funds.totalLedger), formatINR(funds.totalActual)]);
+    rows.push(['TOTAL (All Accounts)', '', '', formatINR(funds.totalLedger), formatINR(funds.totalActual)]);
+    rows.push([`TOTAL (${selectedHospital} only)`, '', '', '', formatINR(hospitalBankTotal)]);
     printTable('Available Funds', headers, rows, selectedDate);
   };
 
@@ -1203,7 +1209,15 @@ table{width:100%;border-collapse:collapse;margin-top:12px}
               <TableRow className="bg-gray-50 font-bold">
                 <TableCell colSpan={3}>TOTAL (All Accounts)</TableCell>
                 <TableCell className="text-right font-mono">{formatINR(funds.totalLedger)}</TableCell>
-                <TableCell className="text-right font-mono text-blue-700">{formatINR(funds.totalActual)}</TableCell>
+                <TableCell className="text-right font-mono text-gray-500">{formatINR(funds.totalActual)}</TableCell>
+                <TableCell colSpan={2}></TableCell>
+              </TableRow>
+              <TableRow className="bg-blue-50 font-bold">
+                <TableCell colSpan={3} className="text-blue-700 capitalize">TOTAL ({selectedHospital} only — used in summary)</TableCell>
+                <TableCell className="text-right font-mono text-blue-700">
+                  {formatINR(funds.accounts.filter(a => a.hospital === selectedHospital).reduce((s, a) => s + a.ledger_balance, 0))}
+                </TableCell>
+                <TableCell className="text-right font-mono text-blue-700">{formatINR(hospitalBankTotal)}</TableCell>
                 <TableCell colSpan={2}></TableCell>
               </TableRow>
             </TableBody>
