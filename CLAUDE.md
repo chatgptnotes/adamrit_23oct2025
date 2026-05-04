@@ -35,7 +35,7 @@ This project uses the Ironbark learning loop with auto-sync to the community ski
 - **Background sync**: Every 30 min, `sync-cli.js` pulls new community skills and pushes local ones
 - **Opt-out**: `IRONBARK_SYNC_DISABLED=1`
 
-### Available Harvested Skills (64)
+### Available Harvested Skills (65)
 
 Loaded from `~/.claude/skills/harvested/`. Reference any skill below by name or path when the task matches.
 
@@ -43,6 +43,7 @@ Loaded from `~/.claude/skills/harvested/`. Reference any skill below by name or 
 |-------|-------------|------|
 | `async-ai-advisory-hot-path` |  | `C:/Users/MY HOME/.claude/skills/harvested/async-ai-advisory-hot-path/SKILL.md` |
 | `auto-tenant-fetch-wrapper` |  | `C:/Users/MY HOME/.claude/skills/harvested/auto-tenant-fetch-wrapper/SKILL.md` |
+| `bni-crm-build-pitfalls` |  | `C:/Users/MY HOME/.claude/skills/harvested/bni-crm-build-pitfalls/SKILL.md` |
 | `chatbot-reply-intent-gate` |  | `C:/Users/MY HOME/.claude/skills/harvested/chatbot-reply-intent-gate/SKILL.md` |
 | `claude-vps-ssh-access` |  | `C:/Users/MY HOME/.claude/skills/harvested/claude-vps-ssh-access/SKILL.md` |
 | `cloud-to-vps-http-bridge` |  | `C:/Users/MY HOME/.claude/skills/harvested/cloud-to-vps-http-bridge/SKILL.md` |

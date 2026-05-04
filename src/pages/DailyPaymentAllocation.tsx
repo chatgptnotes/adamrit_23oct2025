@@ -473,11 +473,11 @@ const DailyPaymentAllocation = () => {
   const totalDue = activeSchedule.reduce((s, e) => s + (e.daily_amount + e.carryforward_amount), 0);
   const totalPaid = activeSchedule.reduce((s, e) => s + e.paid_amount, 0);
 
-  // Only sum BANK accounts (cash already counted in effectiveCash)
-  const hospitalBankTotal = funds.accounts
-    .filter(a => a.hospital === selectedHospital && a.actual_balance !== null && a.type === 'bank')
+  // Sum ALL entered actual balances from ALL hospitals (cash + banks)
+  const totalBankAndCash = funds.accounts
+    .filter(a => a.actual_balance !== null)
     .reduce((s, a) => s + a.actual_balance, 0);
-  const totalAvailable = effectiveCash + hospitalBankTotal;
+  const totalAvailable = totalBankAndCash;
   const surplus = totalAvailable - totalDue;
   const coveragePercent = totalDue > 0 ? Math.min(Math.round((totalAvailable / totalDue) * 100), 100) : 100;
 
@@ -1206,14 +1206,14 @@ table{width:100%;border-collapse:collapse;margin-top:12px}
                 })
               )}
               {/* Totals */}
-              <TableRow className="bg-blue-50 font-bold border-t-2 border-blue-200">
-                <TableCell colSpan={3} className="text-blue-800 capitalize">
-                  TOTAL — Banks ({selectedHospital})
+              <TableRow className="bg-green-50 font-bold border-t-2 border-green-200">
+                <TableCell colSpan={3} className="text-green-800">
+                  TOTAL (All Hospitals - All Cash + Banks)
                 </TableCell>
                 <TableCell className="text-right font-mono text-gray-600">
-                  {formatINR(funds.accounts.filter(a => a.hospital === selectedHospital && a.type === 'bank').reduce((s, a) => s + a.ledger_balance, 0))}
+                  {formatINR(funds.accounts.reduce((s, a) => s + a.ledger_balance, 0))}
                 </TableCell>
-                <TableCell className="text-right font-mono text-blue-800 text-base">{formatINR(hospitalBankTotal)}</TableCell>
+                <TableCell className="text-right font-mono text-green-800 text-base">{formatINR(totalBankAndCash)}</TableCell>
                 <TableCell colSpan={2}></TableCell>
               </TableRow>
             </TableBody>
@@ -1225,11 +1225,10 @@ table{width:100%;border-collapse:collapse;margin-top:12px}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card>
           <CardContent className="p-4">
-            <div className="text-sm text-muted-foreground mb-1">Total Available (Cash + Banks)</div>
+            <div className="text-sm text-muted-foreground mb-1">Total Available (All Cash + Banks from All Hospitals)</div>
             <p className="text-2xl font-bold text-green-700">{formatINR(totalAvailable)}</p>
-            <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
-              <div>Cash: <span className="font-medium text-green-800">{formatINR(effectiveCash)}</span></div>
-              <div className="capitalize">Banks ({selectedHospital}): <span className="font-medium text-blue-800">{formatINR(hospitalBankTotal)}</span></div>
+            <div className="text-xs text-muted-foreground mt-1">
+              Sum of all entered actual balances across Hope and Ayushman
             </div>
           </CardContent>
         </Card>
