@@ -45,6 +45,7 @@ export const useVisitsData = () => {
           condonation_delay_claim,
           condonation_delay_intimation,
           extension_of_stay,
+          extension_days_count,
           additional_approvals,
           discharge_summary_signed,
           nurse_clearance,

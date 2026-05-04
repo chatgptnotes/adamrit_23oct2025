@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import * as XLSX from 'xlsx';
+import { ExtensionDaysCell } from '@/components/ipd/ExtensionDaysCell';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -2772,6 +2773,7 @@ const TodaysIpdDashboard = () => {
                 {!hideColumns && <TableHead className="font-semibold">Condonation Delay -submission</TableHead>}
                 {!hideColumns && <TableHead className="font-semibold">Condonation Delay -intimation</TableHead>}
                 {!hideColumns && <TableHead className="font-semibold">Extension of Stay</TableHead>}
+                {!hideColumns && <TableHead className="font-semibold">Extension Days</TableHead>}
                 {!hideColumns && <TableHead className="font-semibold">Additional Approvals</TableHead>}
                 {!hideColumns && <TableHead className="font-semibold">Visit Type</TableHead>}
                 <TableHead className="font-semibold">Admission Date</TableHead>
@@ -3071,6 +3073,14 @@ const TodaysIpdDashboard = () => {
                       {isAdmin ? <ExtensionOfStayToggle visit={visit} /> : (
                         <Badge variant="outline" className="capitalize">{visit.extension_of_stay || '—'}</Badge>
                       )}
+                    </TableCell>
+                  )}
+                  {!hideColumns && (
+                    <TableCell>
+                      <ExtensionDaysCell
+                        visitUuid={visit.id}
+                        currentCount={(visit as any).extension_days_count ?? 0}
+                      />
                     </TableCell>
                   )}
                   {!hideColumns && (
