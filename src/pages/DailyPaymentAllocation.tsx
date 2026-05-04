@@ -473,10 +473,10 @@ const DailyPaymentAllocation = () => {
   const totalDue = activeSchedule.reduce((s, e) => s + (e.daily_amount + e.carryforward_amount), 0);
   const totalPaid = activeSchedule.reduce((s, e) => s + e.paid_amount, 0);
 
-  // Only sum accounts belonging to the selected hospital so fund total matches obligation total
+  // Only sum ENTERED actual balances for selected hospital (do not use ledger fallback)
   const hospitalBankTotal = funds.accounts
-    .filter(a => a.hospital === selectedHospital)
-    .reduce((s, a) => s + (a.actual_balance ?? a.ledger_balance), 0);
+    .filter(a => a.hospital === selectedHospital && a.actual_balance !== null)
+    .reduce((s, a) => s + a.actual_balance, 0);
   const totalAvailable = effectiveCash + hospitalBankTotal;
   const surplus = totalAvailable - totalDue;
   const coveragePercent = totalDue > 0 ? Math.min(Math.round((totalAvailable / totalDue) * 100), 100) : 100;
@@ -1170,16 +1170,9 @@ table{width:100%;border-collapse:collapse;margin-top:12px}
                             className="w-32 h-8 text-right font-mono ml-auto"
                           />
                         ) : (
-                          <div className="text-right">
-                            {acc.actual_balance !== null ? (
-                              <span className="font-mono font-bold text-blue-700">{formatINR(acc.actual_balance)}</span>
-                            ) : (
-                              <span className="font-mono text-gray-500 italic" title="No actual balance entered — using Tally ledger value">
-                                {formatINR(acc.ledger_balance)}
-                                <span className="text-xs ml-1">(ledger)</span>
-                              </span>
-                            )}
-                          </div>
+                          <span className={`font-mono font-bold ${acc.actual_balance !== null ? 'text-blue-700' : 'text-gray-400'}`}>
+                            {acc.actual_balance !== null ? formatINR(acc.actual_balance) : '—'}
+                          </span>
                         )}
                       </TableCell>
                       <TableCell>
@@ -1212,11 +1205,10 @@ table{width:100%;border-collapse:collapse;margin-top:12px}
                   );
                 })
               )}
-              {/* Totals — each row above shows its effective balance (blue = actual entered, gray italic = ledger fallback) */}
+              {/* Totals */}
               <TableRow className="bg-blue-50 font-bold border-t-2 border-blue-200">
                 <TableCell colSpan={3} className="text-blue-800 capitalize">
                   TOTAL — Banks ({selectedHospital})
-                  <span className="text-xs font-normal text-blue-600 ml-2">used in Total Available below</span>
                 </TableCell>
                 <TableCell className="text-right font-mono text-gray-600">
                   {formatINR(funds.accounts.filter(a => a.hospital === selectedHospital).reduce((s, a) => s + a.ledger_balance, 0))}
