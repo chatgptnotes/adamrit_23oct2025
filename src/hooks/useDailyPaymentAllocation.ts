@@ -198,6 +198,10 @@ export const useFundAccounts = (date: string) => {
               // Skip hidden/inactive ledgers
               if (l.is_hidden) continue;
 
+              // Prevent duplicate accounts if multiple tally_config rows map to same company
+              const alreadyExists = accounts.some(a => a.name.toLowerCase() === l.name.toLowerCase());
+              if (alreadyExists) continue;
+
               const pg = (l.parent_group || '').toLowerCase();
               const type = pg.includes('cash') ? 'cash' as const : 'bank' as const;
 
@@ -233,12 +237,15 @@ export const useFundAccounts = (date: string) => {
           const actual = ov.actual_balance !== null && ov.actual_balance !== undefined
             ? Number(ov.actual_balance)
             : null;
-          const existing = accounts.find(a => a.id === ov.account_ref_id);
+          // Try ID match first (direct Tally account), then name match (Tally re-synced with new ID)
+          const existing =
+            accounts.find(a => a.id === ov.account_ref_id) ||
+            accounts.find(a => a.name.toLowerCase() === (ov.account_name || '').toLowerCase());
           if (existing) {
             existing.actual_balance = actual;
             existing.notes = ov.notes || '';
           } else {
-            // Manual-only account (not from Tally)
+            // Truly manual account (not from Tally)
             accounts.push({
               id: ov.id,
               name: ov.account_name,
