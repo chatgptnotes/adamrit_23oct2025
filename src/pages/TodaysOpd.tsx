@@ -184,7 +184,8 @@ const TodaysOpd = () => {
 
       return data || [];
     },
-    refetchInterval: 30000 // Refresh every 30 seconds
+    refetchInterval: 60000,
+    staleTime: 30000,
   });
 
   // Filter patients based on search term and corporate (date filtering is done at DB level)

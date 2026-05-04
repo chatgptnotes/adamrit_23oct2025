@@ -259,6 +259,7 @@ export const useFundAccounts = (date: string) => {
       return { accounts, totalLedger, totalActual, lastSyncAt };
     },
     refetchInterval: 60000,
+    staleTime: 30000,
   });
 
   // Save actual balance for an account

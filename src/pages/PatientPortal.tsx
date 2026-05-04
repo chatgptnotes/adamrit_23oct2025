@@ -174,8 +174,8 @@ export default function PatientPortal() {
       return (data || []) as QueueToken[];
     },
     enabled: !!selectedPatient,
-    refetchInterval: 10000,
-    staleTime: 5000,
+    refetchInterval: 60000,
+    staleTime: 30000,
   });
 
   // Group by date for reports tab

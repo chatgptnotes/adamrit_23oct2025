@@ -39,8 +39,8 @@ export default function StaffAttendance() {
       if (error) throw error;
       return data || [];
     },
-    refetchInterval: 30000,
-    staleTime: 15000,
+    refetchInterval: 60000,
+    staleTime: 30000,
   });
 
   // DATA SOURCE: staff_attendance for selected month

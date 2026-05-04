@@ -547,7 +547,8 @@ const PrescriptionQueue: React.FC = () => {
   } = useQuery<Prescription[]>({
     queryKey: ['prescription-queue'],
     queryFn: fetchPrescriptions,
-    refetchInterval: 30000, // auto-refresh every 30 seconds
+    refetchInterval: 60000,
+    staleTime: 30000,
   });
 
   // Filter by status tab

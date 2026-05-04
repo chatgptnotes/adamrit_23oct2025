@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -330,6 +330,7 @@ const TodaysIpdDashboard = () => {
   const [billingStatusInputs, setBillingStatusInputs] = useState({});
   const [bunchNumberInputs, setBunchNumberInputs] = useState({});
   const [referralLetterStatus, setReferralLetterStatus] = useState<Record<string, boolean>>({});
+  const referralDebounceMap = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const [commentDialogs, setCommentDialogs] = useState<Record<string, boolean>>({});
   const [commentTexts, setCommentTexts] = useState<Record<string, string>>({});
   const [originalComments, setOriginalComments] = useState<Record<string, string>>({});
@@ -1830,23 +1831,25 @@ const TodaysIpdDashboard = () => {
           table: 'patient_documents',
           filter: 'document_type_id=eq.1' // Only referral letters
         },
-        async (payload: any) => {
-          console.log('📄 Referral letter change detected:', payload);
+        (payload: any) => {
           const visitId = payload.new?.visit_id || payload.old?.visit_id;
           const patientName = payload.new?.patient_name || payload.old?.patient_name;
-          if (visitId) {
-            // Re-check referral status for this visit
+          if (!visitId) return;
+          // Debounce per visitId to absorb rapid successive uploads for the same visit
+          const existing = referralDebounceMap.current.get(visitId);
+          if (existing) clearTimeout(existing);
+          referralDebounceMap.current.set(visitId, setTimeout(async () => {
+            referralDebounceMap.current.delete(visitId);
             const isUploaded = await checkReferralLetterUploaded(visitId, patientName);
-            setReferralLetterStatus(prev => ({
-              ...prev,
-              [visitId]: isUploaded
-            }));
-          }
+            setReferralLetterStatus(prev => ({ ...prev, [visitId]: isUploaded }));
+          }, 1000));
         }
       )
       .subscribe();
 
     return () => {
+      referralDebounceMap.current.forEach(t => clearTimeout(t));
+      referralDebounceMap.current.clear();
       supabase.removeChannel(channel);
     };
   }, []);

@@ -223,7 +223,8 @@ const EnhancedRadiologyOrders: React.FC<EnhancedRadiologyOrdersProps> = ({ onBac
       
       return filteredData;
     },
-    refetchInterval: 30000, // Refresh every 30 seconds
+    refetchInterval: 60000,
+    staleTime: 30000,
   });
 
   // Calculate stats from real data
