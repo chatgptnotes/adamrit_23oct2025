@@ -85,6 +85,7 @@ const AdvanceStatementReport = () => {
           reason_for_visit,
           package_days,
           package_amount,
+          extension_days_count,
           ipd_admission_notes,
           patients!inner (
             id,
@@ -1136,6 +1137,7 @@ const AdvanceStatementReport = () => {
                   <TableHead className="min-w-[120px]">Admission Date</TableHead>
                   <TableHead className="min-w-[200px]">Diagnosis</TableHead>
                   <TableHead className="min-w-[100px]">Package Days</TableHead>
+                  <TableHead className="min-w-[100px]">Extension Days</TableHead>
                   <TableHead className="min-w-[120px]">Package Amount</TableHead>
                   <TableHead className="min-w-[120px]">Lab Amount</TableHead>
                   <TableHead className="min-w-[120px]">Pharmacy</TableHead>
@@ -1277,6 +1279,9 @@ const AdvanceStatementReport = () => {
                               }
                             }}
                           />
+                        </TableCell>
+                        <TableCell className="text-center font-semibold">
+                          {(item as any).extension_days_count ?? 0}
                         </TableCell>
                         <TableCell className="text-center">
                           <Input
