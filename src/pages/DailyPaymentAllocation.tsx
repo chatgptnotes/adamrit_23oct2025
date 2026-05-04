@@ -473,9 +473,9 @@ const DailyPaymentAllocation = () => {
   const totalDue = activeSchedule.reduce((s, e) => s + (e.daily_amount + e.carryforward_amount), 0);
   const totalPaid = activeSchedule.reduce((s, e) => s + e.paid_amount, 0);
 
-  // Only sum ENTERED actual balances for selected hospital (do not use ledger fallback)
+  // Only sum BANK accounts (cash already counted in effectiveCash)
   const hospitalBankTotal = funds.accounts
-    .filter(a => a.hospital === selectedHospital && a.actual_balance !== null)
+    .filter(a => a.hospital === selectedHospital && a.actual_balance !== null && a.type === 'bank')
     .reduce((s, a) => s + a.actual_balance, 0);
   const totalAvailable = effectiveCash + hospitalBankTotal;
   const surplus = totalAvailable - totalDue;
@@ -1211,7 +1211,7 @@ table{width:100%;border-collapse:collapse;margin-top:12px}
                   TOTAL — Banks ({selectedHospital})
                 </TableCell>
                 <TableCell className="text-right font-mono text-gray-600">
-                  {formatINR(funds.accounts.filter(a => a.hospital === selectedHospital).reduce((s, a) => s + a.ledger_balance, 0))}
+                  {formatINR(funds.accounts.filter(a => a.hospital === selectedHospital && a.type === 'bank').reduce((s, a) => s + a.ledger_balance, 0))}
                 </TableCell>
                 <TableCell className="text-right font-mono text-blue-800 text-base">{formatINR(hospitalBankTotal)}</TableCell>
                 <TableCell colSpan={2}></TableCell>
