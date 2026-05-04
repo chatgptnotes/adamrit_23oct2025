@@ -243,7 +243,7 @@ export const useFundAccounts = (date: string) => {
               id: ov.id,
               name: ov.account_name,
               type: ov.account_type || 'bank',
-              hospital: ov.hospital_name || 'hope',
+              hospital: (ov.hospital_name || 'hope').toLowerCase(),
               ledger_balance: 0,
               actual_balance: actual,
               notes: ov.notes || '',

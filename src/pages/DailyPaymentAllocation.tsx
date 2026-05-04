@@ -1170,9 +1170,16 @@ table{width:100%;border-collapse:collapse;margin-top:12px}
                             className="w-32 h-8 text-right font-mono ml-auto"
                           />
                         ) : (
-                          <span className={`font-mono font-bold ${acc.actual_balance !== null ? 'text-blue-700' : 'text-gray-400'}`}>
-                            {acc.actual_balance !== null ? formatINR(acc.actual_balance) : '—'}
-                          </span>
+                          <div className="text-right">
+                            {acc.actual_balance !== null ? (
+                              <span className="font-mono font-bold text-blue-700">{formatINR(acc.actual_balance)}</span>
+                            ) : (
+                              <span className="font-mono text-gray-500 italic" title="No actual balance entered — using Tally ledger value">
+                                {formatINR(acc.ledger_balance)}
+                                <span className="text-xs ml-1">(ledger)</span>
+                              </span>
+                            )}
+                          </div>
                         )}
                       </TableCell>
                       <TableCell>
@@ -1205,19 +1212,16 @@ table{width:100%;border-collapse:collapse;margin-top:12px}
                   );
                 })
               )}
-              {/* Totals */}
-              <TableRow className="bg-gray-50 font-bold">
-                <TableCell colSpan={3}>TOTAL (All Accounts)</TableCell>
-                <TableCell className="text-right font-mono">{formatINR(funds.totalLedger)}</TableCell>
-                <TableCell className="text-right font-mono text-gray-500">{formatINR(funds.totalActual)}</TableCell>
-                <TableCell colSpan={2}></TableCell>
-              </TableRow>
-              <TableRow className="bg-blue-50 font-bold">
-                <TableCell colSpan={3} className="text-blue-700 capitalize">TOTAL ({selectedHospital} only — used in summary)</TableCell>
-                <TableCell className="text-right font-mono text-blue-700">
+              {/* Totals — each row above shows its effective balance (blue = actual entered, gray italic = ledger fallback) */}
+              <TableRow className="bg-blue-50 font-bold border-t-2 border-blue-200">
+                <TableCell colSpan={3} className="text-blue-800 capitalize">
+                  TOTAL — Banks ({selectedHospital})
+                  <span className="text-xs font-normal text-blue-600 ml-2">used in Total Available below</span>
+                </TableCell>
+                <TableCell className="text-right font-mono text-gray-600">
                   {formatINR(funds.accounts.filter(a => a.hospital === selectedHospital).reduce((s, a) => s + a.ledger_balance, 0))}
                 </TableCell>
-                <TableCell className="text-right font-mono text-blue-700">{formatINR(hospitalBankTotal)}</TableCell>
+                <TableCell className="text-right font-mono text-blue-800 text-base">{formatINR(hospitalBankTotal)}</TableCell>
                 <TableCell colSpan={2}></TableCell>
               </TableRow>
             </TableBody>
@@ -1231,6 +1235,10 @@ table{width:100%;border-collapse:collapse;margin-top:12px}
           <CardContent className="p-4">
             <div className="text-sm text-muted-foreground mb-1">Total Available (Cash + Banks)</div>
             <p className="text-2xl font-bold text-green-700">{formatINR(totalAvailable)}</p>
+            <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
+              <div>Cash: <span className="font-medium text-green-800">{formatINR(effectiveCash)}</span></div>
+              <div className="capitalize">Banks ({selectedHospital}): <span className="font-medium text-blue-800">{formatINR(hospitalBankTotal)}</span></div>
+            </div>
           </CardContent>
         </Card>
         <Card>
