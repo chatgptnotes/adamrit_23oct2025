@@ -261,7 +261,7 @@ export const useFundAccounts = (date: string) => {
       }
 
       const totalLedger = accounts.reduce((s, a) => s + a.ledger_balance, 0);
-      const totalActual = accounts.reduce((s, a) => s + (a.actual_balance ?? a.ledger_balance), 0);
+      const totalActual = accounts.reduce((s, a) => s + (a.actual_balance !== null ? a.actual_balance : 0), 0);
 
       return { accounts, totalLedger, totalActual, lastSyncAt };
     },
