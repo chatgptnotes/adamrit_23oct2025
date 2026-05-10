@@ -38,6 +38,7 @@ import EditPurchaseOrder from './EditPurchaseOrder';
 import CreditPayments from './CreditPayments';
 import LowStockMedicines from './LowStockMedicines';
 import PrescriptionQueue from './PrescriptionQueue';
+import AIReorderTab from './AIReorderTab';
 
 const PharmacyDashboard: React.FC = () => {
   const [searchParams] = useSearchParams();
@@ -127,6 +128,7 @@ const PharmacyDashboard: React.FC = () => {
           <TabsTrigger value="purchase-order">Purchase Order</TabsTrigger>
           <TabsTrigger value="low-stock">Low Stock</TabsTrigger>
           <TabsTrigger value="prescriptions">Prescriptions</TabsTrigger>
+          {import.meta.env.VITE_BRAIN_PHARMACY === 'true' && <TabsTrigger value="ai-reorder">AI Reorder</TabsTrigger>}
           </div>
         </TabsList>
 
@@ -495,6 +497,10 @@ const PharmacyDashboard: React.FC = () => {
 
         <TabsContent value="prescriptions">
           <PrescriptionQueue />
+        </TabsContent>
+
+        <TabsContent value="ai-reorder">
+          <AIReorderTab />
         </TabsContent>
       </Tabs>
     </div>
