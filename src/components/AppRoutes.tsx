@@ -18,6 +18,7 @@ import CurrentlyAdmittedPatients from "../pages/CurrentlyAdmittedPatients";
 const DischargedPatients = lazy(() => import("../pages/DischargedPatients"));
 const Accommodation = lazy(() => import("../pages/Accommodation"));
 const RoomManagement = lazy(() => import("../pages/RoomManagement"));
+const DirectorDashboard = lazy(() => import("../pages/DirectorDashboard"));
 
 // Import authentication pages
 import LoginPage from "./LoginPage";
@@ -140,12 +141,36 @@ const PageLoader = () => (
   </div>
 );
 
+// Director Dashboard route guard
+import { useAuth } from "@/contexts/AuthContext";
+import { useNavigate } from "react-router-dom";
+import { useEffect } from "react";
+
+const DirectorRoute = () => {
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const DIRECTOR_EMAILS = ['cmd@hopehospital.com', 'finance@hopehospital.com'];
+
+  useEffect(() => {
+    if (!user || !DIRECTOR_EMAILS.includes(user.email.toLowerCase())) {
+      navigate('/dashboard', { replace: true });
+    }
+  }, [user, navigate]);
+
+  if (!user || !DIRECTOR_EMAILS.includes(user.email.toLowerCase())) {
+    return null;
+  }
+
+  return <Suspense fallback={<PageLoader />}><DirectorDashboard /></Suspense>;
+};
+
 export const AppRoutes = () => {
   return (
     <Suspense fallback={<PageLoader />}>
       <Routes>
         <Route path="/" element={<LandingPage />} />
         <Route path="/dashboard" element={<Index />} />
+        <Route path="/director-dashboard" element={<DirectorRoute />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<SignupPage />} />
         <Route path="/signup-simple" element={<SimpleSignup />} />

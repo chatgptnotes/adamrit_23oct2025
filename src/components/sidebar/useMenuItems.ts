@@ -43,6 +43,15 @@ export const useMenuItems = (props: AppSidebarProps): { mainItems: MenuItem[]; m
           }
         }
 
+        // Hide Director Dashboard for non-authorized emails
+        if (item.title === "Director Dashboard") {
+          const DIRECTOR_EMAILS = ['cmd@hopehospital.com', 'finance@hopehospital.com'];
+          const userEmail = user?.email?.toLowerCase() || '';
+          if (!DIRECTOR_EMAILS.includes(userEmail)) {
+            return false;
+          }
+        }
+
         // Hide Lab Master & Radiology Master for all users except specific admins
         if (item.title === "Lab Master" || item.title === "Radiology Master" || item.title === "Surgery") {
           const MASTER_ADMIN_EMAILS = [
