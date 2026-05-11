@@ -5,7 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Stethoscope, Search } from 'lucide-react';
+import { Stethoscope, Search, Home } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { LabsSection } from '@/components/DoctorView/LabsSection';
 import { RadiologySection } from '@/components/DoctorView/RadiologySection';
 import { MedicationsSection } from '@/components/DoctorView/MedicationsSection';
@@ -149,7 +150,24 @@ const DoctorView = () => {
                       </div>
                     </div>
                   </div>
-                  <Badge className="bg-blue-600 text-white px-4 py-2">ACTIVE</Badge>
+                  <div className="flex flex-col items-end gap-2">
+                    <Badge className="bg-blue-600 text-white px-4 py-2">ACTIVE</Badge>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="gap-1 text-green-700 border-green-300 hover:bg-green-50"
+                      onClick={() => {
+                        window.location.href =
+                          '/home-collection?patient_name=' +
+                          encodeURIComponent(selectedPatient.name) +
+                          '&mobile=' +
+                          encodeURIComponent(selectedPatient.phone || '');
+                      }}
+                    >
+                      <Home className="w-3.5 h-3.5" />
+                      Book Home Collection
+                    </Button>
+                  </div>
                 </div>
               </CardHeader>
             </Card>

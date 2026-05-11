@@ -135,6 +135,12 @@ const SelfCheckIn = lazy(() => import("../pages/SelfCheckIn"));
 const ReportDelivery = lazy(() => import("../pages/ReportDelivery"));
 const RadiologyWorklist = lazy(() => import("../pages/RadiologyWorklist"));
 const StaffAttendance = lazy(() => import("../pages/StaffAttendance"));
+const B2BLogin = lazy(() => import("../pages/B2BLogin"));
+const MarketingFieldTracker = lazy(() => import("../pages/MarketingFieldTracker"));
+const Appointments = lazy(() => import("../pages/Appointments"));
+const TelephonyDashboard = lazy(() => import("../pages/TelephonyDashboard"));
+const PaymentQR = lazy(() => import("../pages/PaymentQR"));
+const QueueStatus = lazy(() => import("../pages/QueueStatus"));
 
 // Loading component
 const PageLoader = () => (
@@ -290,6 +296,12 @@ export const AppRoutes = () => {
         <Route path="/report-delivery" element={<Suspense fallback={<PageLoader />}><ReportDelivery /></Suspense>} />
         <Route path="/radiology-worklist" element={<Suspense fallback={<PageLoader />}><RadiologyWorklist /></Suspense>} />
         <Route path="/attendance" element={<Suspense fallback={<PageLoader />}><StaffAttendance /></Suspense>} />
+        <Route path="/b2b-login" element={<Suspense fallback={<PageLoader />}><B2BLogin /></Suspense>} />
+        <Route path="/marketing-field" element={<Suspense fallback={<PageLoader />}><MarketingFieldTracker /></Suspense>} />
+        <Route path="/appointments" element={<Suspense fallback={<PageLoader />}><Appointments /></Suspense>} />
+        <Route path="/telephony" element={<Suspense fallback={<PageLoader />}><TelephonyDashboard /></Suspense>} />
+        <Route path="/payment-qr" element={<Suspense fallback={<PageLoader />}><PaymentQR /></Suspense>} />
+        <Route path="/queue-status" element={<QueueStatus />} />
         {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
         <Route path="/master-data" element={<Suspense fallback={<PageLoader />}><MasterData /></Suspense>} />
         <Route path="*" element={<NotFound />} />
