@@ -495,8 +495,7 @@ const DailyPaymentAllocation = () => {
       formatINR(a.ledger_balance),
       a.actual_balance !== null ? formatINR(a.actual_balance) : '—',
     ]);
-    rows.push(['TOTAL (All Accounts)', '', '', formatINR(funds.totalLedger), formatINR(funds.totalActual)]);
-    rows.push([`TOTAL (${selectedHospital} only)`, '', '', '', formatINR(hospitalBankTotal)]);
+    rows.push(['TOTAL (All Hospitals - All Cash + Banks)', '', '', formatINR(funds.totalLedger), formatINR(totalBankAndCash)]);
     printTable('Available Funds', headers, rows, selectedDate);
   };
 
