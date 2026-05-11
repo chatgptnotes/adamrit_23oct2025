@@ -20,7 +20,12 @@ import { useToast } from "@/hooks/use-toast";
 import { HospitalType, getHospitalConfig } from "@/types/hospital";
 
 // Role-based default landing routes
-const getRoleDefaultRoute = (role: string): string => {
+const DIRECTOR_EMAILS = ['cmd@hopehospital.com', 'finance@hopehospital.com'];
+
+const getRoleDefaultRoute = (role: string, email?: string): string => {
+  if (email && DIRECTOR_EMAILS.includes(email.toLowerCase())) {
+    return '/director-dashboard';
+  }
   switch (role) {
     case 'pharmacist':
     case 'pharmacy':
@@ -73,7 +78,7 @@ const RoleRedirect: React.FC<{ user: { role: string; email: string } }> = ({ use
     if (hasRedirected.current) return;
     const genericRoutes = ['/', '/dashboard', '/login'];
     if (genericRoutes.includes(location.pathname)) {
-      const targetRoute = getRoleDefaultRoute(user.role);
+      const targetRoute = getRoleDefaultRoute(user.role, user.email);
       if (location.pathname !== targetRoute) {
         hasRedirected.current = true;
         navigate(targetRoute, { replace: true });
