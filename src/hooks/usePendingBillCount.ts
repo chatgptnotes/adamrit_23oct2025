@@ -17,7 +17,8 @@ export const usePendingBillCount = () => {
       return count || 0;
     },
     enabled: isAdminUser,
-    refetchInterval: 30000,
+    refetchInterval: 60000,
+    staleTime: 30000,
   });
 
   return count;

@@ -73,8 +73,8 @@ export default function SelfCheckIn() {
       });
       return counts;
     },
-    refetchInterval: 15000,
-    staleTime: 10000,
+    refetchInterval: 60000,
+    staleTime: 30000,
   });
 
   const issueToken = useMutation({

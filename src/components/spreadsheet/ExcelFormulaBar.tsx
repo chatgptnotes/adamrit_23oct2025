@@ -39,7 +39,6 @@ export const ExcelFormulaBar: React.FC<ExcelFormulaBarProps> = ({
   };
 
   const handleFormulaSubmit = () => {
-    console.log('Formula submitted:', formula);
     onFormulaChange?.(formula);
   };
 
@@ -56,7 +55,6 @@ export const ExcelFormulaBar: React.FC<ExcelFormulaBarProps> = ({
   };
 
   const handleFunctionClick = () => {
-    console.log('Function wizard clicked');
     // Open function wizard/selector
     const commonFunctions = ['SUM', 'AVERAGE', 'COUNT', 'MAX', 'MIN', 'IF'];
     const selectedFunction = prompt(`Select function:\n${commonFunctions.join(', ')}`);

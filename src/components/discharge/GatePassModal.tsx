@@ -44,7 +44,6 @@ export const GatePassModal: React.FC<GatePassModalProps> = ({ visitId, isOpen, o
   const { data: gatePass, isLoading, error } = useQuery({
     queryKey: ['gate-pass', visitId],
     queryFn: async () => {
-      console.log('Fetching gate pass for visitId:', visitId);
       const { data, error } = await supabase
         .from('gate_passes')
         .select(`
@@ -66,7 +65,6 @@ export const GatePassModal: React.FC<GatePassModalProps> = ({ visitId, isOpen, o
         console.error('Gate pass query error:', error);
         throw error;
       }
-      console.log('Gate pass data fetched:', data);
       return data as GatePassData;
     },
     enabled: isOpen, // Only fetch when modal is open

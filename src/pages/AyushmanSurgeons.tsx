@@ -146,7 +146,6 @@ const AyushmanSurgeons = () => {
   );
 
   const handleAdd = (formData: Record<string, string>) => {
-    console.log('Submitting form data:', formData);
 
     // Create the data object with basic fields
     const surgeonData: any = {
@@ -170,7 +169,6 @@ const AyushmanSurgeons = () => {
       surgeonData.private_rate = parseFloat(formData.private_rate);
     }
 
-    console.log('Final surgeon data:', surgeonData);
     addMutation.mutate(surgeonData);
   };
 

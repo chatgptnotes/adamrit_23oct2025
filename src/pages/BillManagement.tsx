@@ -98,7 +98,6 @@ const BillManagement: React.FC = () => {
       totalDeduction: filteredBillsForPrint.reduce((sum, b) => sum + (b.deduction_amount || 0), 0)
     };
 
-    console.log('Printing data:', { filteredBillsForPrint, printStats });
 
     const printWindow = window.open('', '_blank', 'width=1200,height=900');
     if (!printWindow) return;

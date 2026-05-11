@@ -31,7 +31,6 @@ export const DatabaseStatus: React.FC = () => {
       setMessage(`Connected! Found ${data?.length || 0} test configurations in database.`);
 
       // Log data for debugging
-      console.log('Database data:', data);
     } catch (error) {
       console.error('Database connection error:', error);
       setStatus('error');

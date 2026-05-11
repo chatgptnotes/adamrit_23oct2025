@@ -1404,7 +1404,6 @@ export function useLabSubspecialties() {
           throw supabaseError;
         }
 
-        console.log('✅ [DEBUG] Subspecialties loaded:', data?.length || 0, 'items');
         console.log('📋 [DEBUG] Subspecialties data:', data);
         setSubspecialties(data || []);
       } catch (err) {

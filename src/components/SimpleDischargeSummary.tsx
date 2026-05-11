@@ -82,7 +82,6 @@ export default function SimpleDischargeSummary({ patientData }: SimpleDischargeS
   const currentTime = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
 
   // Debug log to check data
-  console.log('SimpleDischargeSummary received data:', patientData);
 
   return (
     <div className="discharge-summary-simple w-full bg-white p-4 print:p-2">

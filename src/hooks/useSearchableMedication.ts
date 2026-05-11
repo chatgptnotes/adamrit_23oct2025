@@ -19,7 +19,6 @@ export const useSearchableMedication = () => {
 
       const { data, error } = await query;
       
-      console.log('Medication search query result:', { data, error, searchTerm });
       
       if (error) {
         console.error('Error fetching medications:', error);

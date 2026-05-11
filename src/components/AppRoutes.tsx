@@ -1,5 +1,7 @@
 import { Routes, Route } from "react-router-dom";
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useEffect } from "react";
+import { useAuth } from "@/contexts/AuthContext";
+import { useNavigate } from "react-router-dom";
 
 // Import critical pages synchronously
 import LandingPage from "../pages/LandingPage";
@@ -18,6 +20,7 @@ import CurrentlyAdmittedPatients from "../pages/CurrentlyAdmittedPatients";
 const DischargedPatients = lazy(() => import("../pages/DischargedPatients"));
 const Accommodation = lazy(() => import("../pages/Accommodation"));
 const RoomManagement = lazy(() => import("../pages/RoomManagement"));
+const DirectorDashboard = lazy(() => import("../pages/DirectorDashboard"));
 
 // Import authentication pages
 import LoginPage from "./LoginPage";
@@ -125,7 +128,6 @@ const QueueTV = lazy(() => import("../pages/QueueTV"));
 const HomeCollection = lazy(() => import("../pages/HomeCollection"));
 const PhlebotomistDashboard = lazy(() => import("../pages/PhlebotomistDashboard"));
 const B2BPortal = lazy(() => import("../pages/B2BPortal"));
-const B2BLogin = lazy(() => import("../pages/B2BLogin"));
 const MarketingIncentives = lazy(() => import("../pages/MarketingIncentives"));
 const DoctorView = lazy(() => import("../pages/DoctorView"));
 const PatientPortal = lazy(() => import("../pages/PatientPortal"));
@@ -133,11 +135,6 @@ const SelfCheckIn = lazy(() => import("../pages/SelfCheckIn"));
 const ReportDelivery = lazy(() => import("../pages/ReportDelivery"));
 const RadiologyWorklist = lazy(() => import("../pages/RadiologyWorklist"));
 const StaffAttendance = lazy(() => import("../pages/StaffAttendance"));
-const MarketingFieldTracker = lazy(() => import("../pages/MarketingFieldTracker"));
-const Appointments = lazy(() => import("../pages/Appointments"));
-const TelephonyDashboard = lazy(() => import("../pages/TelephonyDashboard"));
-const PaymentQR = lazy(() => import("../pages/PaymentQR"));
-const QueueStatus = lazy(() => import("../pages/QueueStatus"));
 
 // Loading component
 const PageLoader = () => (
@@ -146,12 +143,32 @@ const PageLoader = () => (
   </div>
 );
 
+// Director Dashboard route guard
+const DirectorRoute = () => {
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const DIRECTOR_EMAILS = ['cmd@hopehospital.com', 'finance@hopehospital.com'];
+
+  useEffect(() => {
+    if (!user || !DIRECTOR_EMAILS.includes(user.email.toLowerCase())) {
+      navigate('/dashboard', { replace: true });
+    }
+  }, [user, navigate]);
+
+  if (!user || !DIRECTOR_EMAILS.includes(user.email.toLowerCase())) {
+    return null;
+  }
+
+  return <Suspense fallback={<PageLoader />}><DirectorDashboard /></Suspense>;
+};
+
 export const AppRoutes = () => {
   return (
     <Suspense fallback={<PageLoader />}>
       <Routes>
         <Route path="/" element={<LandingPage />} />
         <Route path="/dashboard" element={<Index />} />
+        <Route path="/director-dashboard" element={<DirectorRoute />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<SignupPage />} />
         <Route path="/signup-simple" element={<SimpleSignup />} />
@@ -265,21 +282,14 @@ export const AppRoutes = () => {
         <Route path="/queue-tv" element={<QueueTV />} />
         <Route path="/home-collection" element={<Suspense fallback={<PageLoader />}><HomeCollection /></Suspense>} />
         <Route path="/phlebotomist" element={<Suspense fallback={<PageLoader />}><PhlebotomistDashboard /></Suspense>} />
-        <Route path="/b2b-login" element={<Suspense fallback={<PageLoader />}><B2BLogin /></Suspense>} />
         <Route path="/b2b-portal" element={<Suspense fallback={<PageLoader />}><B2BPortal /></Suspense>} />
         <Route path="/marketing-incentives" element={<Suspense fallback={<PageLoader />}><MarketingIncentives /></Suspense>} />
         <Route path="/doctor-view" element={<Suspense fallback={<PageLoader />}><DoctorView /></Suspense>} />
         <Route path="/patient-portal" element={<PatientPortal />} />
-        <Route path="/kiosk" element={<SelfCheckIn />} />
+        <Route path="/self-check-in" element={<SelfCheckIn />} />
         <Route path="/report-delivery" element={<Suspense fallback={<PageLoader />}><ReportDelivery /></Suspense>} />
         <Route path="/radiology-worklist" element={<Suspense fallback={<PageLoader />}><RadiologyWorklist /></Suspense>} />
         <Route path="/attendance" element={<Suspense fallback={<PageLoader />}><StaffAttendance /></Suspense>} />
-        <Route path="/marketing-field" element={<Suspense fallback={<PageLoader />}><MarketingFieldTracker /></Suspense>} />
-        <Route path="/appointments" element={<Suspense fallback={<PageLoader />}><Appointments /></Suspense>} />
-        <Route path="/b2b-login" element={<Suspense fallback={<PageLoader />}><B2BLogin /></Suspense>} />
-        <Route path="/telephony" element={<Suspense fallback={<PageLoader />}><TelephonyDashboard /></Suspense>} />
-        <Route path="/payment-qr" element={<Suspense fallback={<PageLoader />}><PaymentQR /></Suspense>} />
-        <Route path="/queue-status" element={<QueueStatus />} />
         {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
         <Route path="/master-data" element={<Suspense fallback={<PageLoader />}><MasterData /></Suspense>} />
         <Route path="*" element={<NotFound />} />

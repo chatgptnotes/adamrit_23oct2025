@@ -32,7 +32,6 @@ export const useVisitMedicalSummary = (visitId: string | undefined) => {
       
       // If visitId looks like a TEXT visit_id (starts with "IH"), get the UUID
       if (visitId.startsWith('IH')) {
-        console.log('Converting TEXT visit_id to UUID:', visitId);
         const { data: visitData } = await supabase
           .from('visits')
           .select('id')
@@ -41,9 +40,7 @@ export const useVisitMedicalSummary = (visitId: string | undefined) => {
         
         if (visitData) {
           actualVisitUUID = visitData.id;
-          console.log('Found UUID for visit:', actualVisitUUID);
         } else {
-          console.log('No visit found for visit_id:', visitId);
           return {
             labs: '',
             radiology: '',

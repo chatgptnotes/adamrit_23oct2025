@@ -88,16 +88,13 @@ const Prescriptions = () => {
   const totalAmount = salesData.billDetails.reduce((sum, bill) => sum + bill.netAmount, 0);
 
   const handleNewPrescription = () => {
-    console.log('Creating new prescription');
   };
 
   const handlePrint = (prescriptionId?: number) => {
-    console.log('Printing prescription:', prescriptionId);
     window.print();
   };
 
   const handleEdit = (prescriptionId: number) => {
-    console.log('Editing prescription:', prescriptionId);
   };
 
   const handleRowSelect = (index: number) => {
@@ -117,7 +114,6 @@ const Prescriptions = () => {
   };
 
   const handleMoneyCollected = () => {
-    console.log('Money collected functionality');
   };
 
   const handleClosePrescriptionModal = () => {

@@ -13,3 +13,8 @@ dist/
 tally-exports/*.xml
 tally-exports/*.XML
 .env*.local
+
+# Dev server and test artifacts
+dev-server.log
+e2e-test-results/
+e2e/*.spec.ts

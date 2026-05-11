@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Calendar, CalendarDays, Loader2 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import { geminiGenerateContentUrl } from "@/lib/gemini";
 import { format } from 'date-fns';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -142,7 +143,10 @@ const IpdDischargeSummary = () => {
 
   // Force complete cache clear and component refresh
   React.useEffect(() => {
-    console.log('🔄 IpdDischargeSummary component mounted - clearing all caches for visitId:', visitId);
+    console.log('🔴 [IpdDischargeSummary] Component mounted with visitId:', visitId);
+    if (!visitId) {
+      console.error('❌ [IpdDischargeSummary] visitId is missing or undefined!');
+    }
 
     // Clear all React Query cache
     try {
@@ -166,9 +170,7 @@ const IpdDischargeSummary = () => {
         });
       }
 
-      console.log('✅ All React Query caches and storage cleared');
     } catch (error) {
-      console.log('Cache clearing completed with minor issues:', error);
     }
   }, [visitId, queryClient]);
 
@@ -235,6 +237,7 @@ const IpdDischargeSummary = () => {
     anesthetist: string;
     anesthesia: string;
     implant: string;
+    alias: string;
   }>>([{
     id: '1',
     date: '',
@@ -242,7 +245,8 @@ const IpdDischargeSummary = () => {
     surgeon: '',
     anesthetist: '',
     anesthesia: '',
-    implant: ''
+    implant: '',
+    alias: ''
   }]);
   const [sharedSurgeryDescription, setSharedSurgeryDescription] = useState('');
 
@@ -255,7 +259,8 @@ const IpdDischargeSummary = () => {
       surgeon: '',
       anesthetist: '',
       anesthesia: '',
-      implant: ''
+      implant: '',
+      alias: ''
     }]);
   };
 
@@ -374,7 +379,6 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
           .single();
 
         if (visitError) {
-          console.log('❌ Visit not found with visit_id:', visitId, visitError.message);
 
           // Fallback: Check if there's lab data for this visit_id
           const { data: labData } = await supabase
@@ -384,7 +388,6 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
             .limit(1);
 
           if (labData && labData.length > 0) {
-            console.log('✅ Found lab results, creating fallback data');
             const labResult = labData[0];
 
             return {
@@ -412,7 +415,6 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
           throw new Error(`Visit ID ${visitId} not found`);
         }
 
-        console.log('✅ Found visit data with patients:', visitData);
 
         // Get discharge summary if exists
         const { data: summaryData } = await supabase
@@ -422,7 +424,6 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
           .single();
 
         if (summaryData) {
-          console.log('✅ Found existing discharge summary');
         }
 
         return {
@@ -432,7 +433,6 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
         };
 
       } catch (error) {
-        console.log('❌ Error in patient data fetch:', error.message);
         throw error;
       }
     },
@@ -516,7 +516,6 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
       }
 
       if (error) {
-        console.log('❌ No lab results found for visit_id:', visitId, error.message);
         return {
           rawData: [],
           groupedResults: {},
@@ -524,7 +523,6 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
         };
       }
 
-      console.log('✅ Lab results data found:', data?.length || 0, 'results');
 
       if (!data || data.length === 0) {
         return {
@@ -616,7 +614,6 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
 
         if (!radiologyUUIDError && radiologyViaUUID && radiologyViaUUID.length > 0) {
           radiologyResults = radiologyViaUUID;
-          console.log('✅ Found radiology data via visit UUID:', radiologyResults.length, 'studies');
         }
       }
 
@@ -664,7 +661,6 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
               description: order.clinical_indication
             }
           }));
-          console.log('✅ Found radiology data via radiology_orders:', radiologyResults.length, 'orders');
         }
       }
 
@@ -743,11 +739,9 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
           .single();
         visitUUID = visitData?.id;
       } catch (error) {
-        console.log('❌ Error finding visit UUID:', error);
       }
 
       if (!visitUUID) {
-        console.log('❌ No visit UUID found for surgery data fetch');
         return null;
       }
 
@@ -763,27 +757,30 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
               code,
               NABH_NABL_Rate,
               description
+            ),
+            yojana_mh_procedures:yojana_procedure_id (
+              procedure_name,
+              procedure_code
             )
           `)
           .eq('visit_id', visitUUID)
           .order('created_at', { ascending: false });
 
         if (error) {
-          console.log('❌ Error fetching surgery data:', error.message);
           return null;
         }
 
-        console.log('✅ Surgery data found:', data?.length || 0, 'surgeries');
-        console.log('🔍 Raw surgery data:', JSON.stringify(data, null, 2));
+        console.log('🔍 Raw surgery data count:', data?.length);
+        console.log('🔍 First surgery:', JSON.stringify(data?.[0], null, 2));
+        console.log('🔍 Surgery IDs:', data?.map(s => ({ id: s.id, surgery_id: s.surgery_id, yojana_id: s.yojana_procedure_id, cghs_surgery: s.cghs_surgery })));
         return data;
       } catch (error) {
-        console.log('❌ Surgery query failed:', error);
         return null;
       }
     },
     enabled: !!visitId,
     retry: false,
-    staleTime: 30000
+    staleTime: 0
   });
 
   // Fetch OT Notes data to get surgeon, anesthetist, implant info
@@ -805,11 +802,9 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
           .single();
         visitUUID = visitData?.id;
       } catch (error) {
-        console.log('❌ Error finding visit UUID for OT notes:', error);
       }
 
       if (!visitUUID) {
-        console.log('❌ No visit UUID found for OT notes fetch');
         return null;
       }
 
@@ -824,15 +819,12 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
           .limit(1);
 
         if (error) {
-          console.log('❌ Error fetching OT notes:', error.message);
           return null;
         }
 
-        console.log('✅ OT Notes data found:', data?.length || 0, 'records');
         console.log('🔍 Raw OT notes data:', JSON.stringify(data, null, 2));
         return data?.[0] || null;
       } catch (error) {
-        console.log('❌ OT notes query failed:', error);
         return null;
       }
     },
@@ -860,11 +852,9 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
           .single();
         visitUUID = visitData?.id;
       } catch (error) {
-        console.log('❌ Error finding visit UUID for diagnosis:', error);
       }
 
       if (!visitUUID) {
-        console.log('❌ No visit UUID found for diagnosis fetch');
         return null;
       }
 
@@ -899,11 +889,9 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
           .order('created_at', { ascending: false });
 
         if (error) {
-          console.log('❌ Error fetching diagnosis data:', error.message);
           return null;
         }
 
-        console.log('✅ Diagnosis data found:', data?.length || 0, 'diagnoses');
         console.log('🔍 Detailed diagnosis data:', JSON.stringify(data, null, 2));
 
         // Also check what's in visit_diagnoses table without join
@@ -917,7 +905,6 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
 
         return data;
       } catch (error) {
-        console.log('❌ Diagnosis query failed:', error);
         return null;
       }
     },
@@ -1064,7 +1051,6 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
               setMedicationRows(meds);
             }
           } catch (e) {
-            console.log('Error parsing medications:', e);
           }
         }
 
@@ -1073,11 +1059,11 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
             const examData = JSON.parse(summary.examination_data);
             setExamination(examData);
           } catch (e) {
-            console.log('Error parsing examination data:', e);
           }
         }
 
-        if (summary.surgery_details) {
+        // Only load saved surgery_details if there's no fresh surgery data from billing
+        if (summary.surgery_details && (!visitSurgeryData || visitSurgeryData.length === 0)) {
           try {
             const surgeryData = JSON.parse(summary.surgery_details);
             // Handle both old format (single object) and new format (object with surgeryRows array)
@@ -1099,7 +1085,6 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
               setSharedSurgeryDescription(surgeryData.description || '');
             }
           } catch (e) {
-            console.log('Error parsing surgery details:', e);
           }
         }
       }
@@ -1117,11 +1102,10 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
             spo2: vitals.oxygen_saturation || prev.spo2,
           }));
         } catch (e) {
-          console.log('No vital signs data to parse');
         }
       }
     }
-  }, [patientData]);
+  }, [patientData, visitSurgeryData]);
 
   // Update investigations with lab and radiology results data
   useEffect(() => {
@@ -1151,6 +1135,8 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
     // Wait for OT Notes to finish loading before setting surgery details
     if (isOtNotesLoading) return;
 
+    console.log('🏥 Surgery Effect triggered:', { visitSurgeryData, otNotesData, isOtNotesLoading });
+
     if (visitSurgeryData && visitSurgeryData.length > 0) {
       try {
         // Get previously saved surgery data (if any) to preserve implants
@@ -1164,7 +1150,6 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
               savedSurgeryRows = savedData.surgeryRows;
             }
           } catch (e) {
-            console.log('Could not parse saved surgery details');
           }
         }
 
@@ -1182,13 +1167,30 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
           const savedImplant = savedSurgeryRows[index]?.implant || '';
           const implant = isFirst && otNotesData?.implant ? otNotesData.implant : (savedImplant || surgery?.implant || '');
 
+          // For alias: prefer OT notes for first surgery, then check saved data
+          const savedAlias = savedSurgeryRows[index]?.alias || '';
+          const alias = isFirst && otNotesData?.alias ? otNotesData.alias : (savedAlias || '');
+
           // Use surgery date from visit_surgeries or OT notes
           const surgeryDate = surgery?.surgery_date ? new Date(surgery.surgery_date) :
                              (isFirst && otNotesData?.date ? new Date(otNotesData.date) :
                              (surgery?.created_at ? new Date(surgery.created_at) : null));
 
-          // Get procedure name from cghs_surgery
-          const procedurePerformed = surgeryInfo?.name ? `${surgeryInfo.name} (${surgeryInfo.code || ''})` : '';
+          // Get procedure name from cghs_surgery, fallback to yojana, then to saved notes
+          let procedurePerformed = '';
+          if (surgeryInfo?.name) {
+            procedurePerformed = `${surgeryInfo.name} (${surgeryInfo.code || ''})`;
+          } else if ((surgery as any)?.yojana_mh_procedures?.procedure_name) {
+            procedurePerformed = `${(surgery as any).yojana_mh_procedures.procedure_name}`;
+          } else if (surgery?.notes) {
+            // Fallback: read from saved notes (backup from FinalBill)
+            try {
+              const notesData = JSON.parse(surgery.notes);
+              procedurePerformed = `${notesData.name || ''} (${notesData.code || ''})`.trim();
+            } catch (e) {
+              procedurePerformed = surgery.notes;
+            }
+          }
 
           return {
             id: surgery.id || Date.now().toString() + index,
@@ -1197,7 +1199,8 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
             surgeon: surgeon,
             anesthetist: anesthetist,
             anesthesia: anesthesia,
-            implant: implant
+            implant: implant,
+            alias: alias
           };
         });
 
@@ -1211,7 +1214,6 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
         });
 
       } catch (error) {
-        console.log('❌ Error updating surgery details:', error);
       }
     } else if (otNotesData) {
       // Fallback: Populate from OT Notes even if no visit_surgeries data
@@ -1225,7 +1227,8 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
           surgeon: otNotesData?.surgeon || '',
           anesthetist: otNotesData?.anaesthetist || '',
           anesthesia: otNotesData?.anaesthesia || '',
-          implant: otNotesData?.implant || ''
+          implant: otNotesData?.implant || '',
+          alias: otNotesData?.alias || ''
         }]);
 
         // Don't set shared description from OT notes - it will be loaded from ipd_discharge_summary if saved
@@ -1236,10 +1239,12 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
           anaesthesia: otNotesData?.anaesthesia
         });
       } catch (error) {
-        console.log('❌ Error populating from OT Notes:', error);
       }
     }
   }, [visitSurgeryData, otNotesData, patientData, isOtNotesLoading]);
+
+  // Do NOT auto-generate shared description - let user manually enter alias or type description
+  // The description will be generated when user clicks "AI Generate" with an alias or manually entered
 
   // Update diagnosis when data is loaded from visit_diagnoses table or direct diagnosis_id
   useEffect(() => {
@@ -1247,7 +1252,6 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
     if ((!visitDiagnosisData || visitDiagnosisData.length === 0) && patientData?.diagnoses?.name) {
       if (!diagnosis || diagnosis.trim() === '' || diagnosis === 'Enter diagnosis details...') {
         setDiagnosis(patientData.diagnoses.name);
-        console.log('✅ Diagnosis field updated from direct diagnosis_id:', patientData.diagnoses.name);
       }
       return;
     }
@@ -1298,7 +1302,6 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
         // Update diagnosis field only if empty
         if (!diagnosis || diagnosis.trim() === '' || diagnosis === 'Enter diagnosis details...') {
           setDiagnosis(diagnosisText.trim());
-          console.log('✅ Diagnosis field updated with:', diagnosisText.trim());
         }
 
         console.log('✅ Diagnosis data processed:', {
@@ -1309,7 +1312,6 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
         });
 
       } catch (error) {
-        console.log('❌ Error formatting diagnosis data:', error);
       }
     }
   }, [visitDiagnosisData, diagnosis, patientData]);
@@ -1415,7 +1417,6 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
           console.log('📝 Restored shared description from saved discharge summary');
         }
 
-        console.log('✅ Form populated with existing discharge summary data');
 
       } catch (error) {
         console.error('❌ Error populating form with existing data:', error);
@@ -1650,7 +1651,6 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
       console.log('🆔 Initial UUIDs - Visit:', visitUUID, 'Patient:', patientUUID);
 
       if (!visitUUID) {
-        console.log('⚠️ No visitUUID found, querying visits table...');
         const { data: visitData, error: visitError } = await supabase
           .from('visits')
           .select('id, patient_id')
@@ -1664,7 +1664,6 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
 
         visitUUID = visitData?.id;
         patientUUID = visitData?.patient_id;
-        console.log('✅ Fetched UUIDs - Visit:', visitUUID, 'Patient:', patientUUID);
       }
 
       // Validate required UUIDs
@@ -1791,7 +1790,6 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
         summaryError = result.error;
       } else {
         // Insert new record
-        console.log('➕ Inserting new discharge summary');
         const result = await supabase
           .from('ipd_discharge_summary')
           .insert(dischargeData)
@@ -1811,7 +1809,6 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
         throw new Error(`Database error: ${summaryError.message}${summaryError.hint ? ' - ' + summaryError.hint : ''}`);
       }
 
-      console.log('✅ IPD discharge summary saved successfully:', dischargeSummary.id);
       console.log('📋 Summary contains:', {
         medications: medicationRows.length,
         investigations: investigations.length,
@@ -1912,15 +1909,12 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
         return;
       }
 
-      console.log('✅ Summary data loaded for print:', summaryData);
 
       // Add patient_id and mobile to summaryData for print
       if (patientDetails) {
         console.log('📝 Adding patient details to summary:', patientDetails);
         summaryData.patient_id = patientDetails.patients_id;
         summaryData.mobile_no = patientDetails.phone; // Changed from mobile to phone
-        console.log('✅ Updated summaryData.patient_id:', summaryData.patient_id);
-        console.log('✅ Updated summaryData.mobile_no:', summaryData.mobile_no);
       } else {
         console.warn('⚠️ No patient details found to add to summary');
       }
@@ -2079,7 +2073,6 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
             descriptionToUse = surgeryData.sharedDescription || surgeryData.description || '';
           }
         } catch (e) {
-          console.log('Error parsing surgery_details:', e);
         }
       }
       console.log('🔍 Surgery rows for print:', surgeryRowsToUse?.length || 0);
@@ -2772,7 +2765,6 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
         return;
       }
 
-      console.log('✅ Found discharge summary data:', summaryData);
 
       // Format all data into a readable text format for the textbox
       let formattedText = '';
@@ -2869,7 +2861,6 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
         description: "Discharge summary data loaded successfully!",
       });
 
-      console.log('✅ Discharge summary data formatted and displayed');
 
     } catch (error) {
       console.error('❌ Error fetching discharge summary data:', error);
@@ -3004,12 +2995,10 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
 
       // Note: Don't return early here - continue to check visit_labs and radiology tables
       if (!data || data.length === 0) {
-        console.log('No lab_results found, will check visit_labs table next...');
       }
 
       // Process lab results
       if (data && data.length > 0) {
-        console.log('✅ Found lab results:', data.length);
 
         const groupedLabResults = data.reduce((acc, result) => {
           const date = result.created_at;
@@ -3135,7 +3124,6 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
 
             // Skip if this test already has detailed results from lab_results
             if (testsWithResults.has(testName.toLowerCase())) {
-              console.log(`⏭️ Skipping ${testName} - already has detailed results`);
               return acc;
             }
 
@@ -3207,7 +3195,6 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
 
         if (radiologyViaUUID && radiologyViaUUID.length > 0) {
           radiologyResults = radiologyViaUUID;
-          console.log('✅ Found radiology data via visit UUID:', radiologyResults.length, 'studies');
         }
       }
 
@@ -3275,7 +3262,6 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
         // IMPORTANT: Clean any JSON that might still be in the text
         console.log('🧹 Auto-cleaning fetched data before displaying...');
         const cleanedResults = cleanJSONFromText(finalResults);
-        console.log('✅ Auto-clean complete, setting investigations');
 
         setInvestigations(cleanedResults);
 
@@ -3347,7 +3333,6 @@ DD/MM/YYYY:-Test Category: Test1:Value1 unit, Test2:Value2 unit`);
         window.location.reload();
       }, 1000);
     } catch (error) {
-      console.log('Cache clearing attempt completed');
       toast({
         title: "Cache Clear Attempted",
         description: "Cache clearing attempted. Please refresh the page manually.",
@@ -3376,9 +3361,7 @@ DD/MM/YYYY:-Test Category: Test1:Value1 unit, Test2:Value2 unit`);
           }
         });
 
-        console.log('✅ Browser cache fully cleared on component mount');
       } catch (error) {
-        console.log('Cache clearing completed with minor issues');
       }
     }
   }, [queryClient]);
@@ -3696,15 +3679,11 @@ DD/MM/YYYY:-Test Category: Test1:Value1 unit, Test2:Value2 unit`);
               />
             </div>
             <div className="space-y-2">
-              <Label>Date Of Discharge:{isSummarySaved && <span className="text-xs text-gray-500 ml-1">(locked)</span>}</Label>
+              <Label>Date Of Discharge:</Label>
               <Input
                 type="date"
                 value={patientInfo.dateOfDischarge}
-                onChange={(e) => !isSummarySaved && setPatientInfo({...patientInfo, dateOfDischarge: e.target.value})}
-                readOnly={isSummarySaved}
-                disabled={isSummarySaved}
-                className={isSummarySaved ? "bg-gray-100 cursor-not-allowed" : ""}
-                title={isSummarySaved ? "Discharge date cannot be changed after summary is saved" : ""}
+                onChange={(e) => setPatientInfo({...patientInfo, dateOfDischarge: e.target.value})}
               />
             </div>
             <div className="space-y-2">
@@ -4226,6 +4205,14 @@ DD/MM/YYYY:-Test Category: Test1:Value1 unit, Test2:Value2 unit`);
                     placeholder="e.g., N/A if no implant"
                   />
                 </div>
+                <div className="space-y-2">
+                  <Label>Alias:</Label>
+                  <Input
+                    value={surgery.alias}
+                    onChange={(e) => updateSurgeryRow(surgery.id, 'alias', e.target.value)}
+                    placeholder="Enter surgery alias or custom description"
+                  />
+                </div>
               </div>
             </div>
           ))}
@@ -4250,22 +4237,25 @@ DD/MM/YYYY:-Test Category: Test1:Value1 unit, Test2:Value2 unit`);
                       description: "Generating description with AI...",
                     });
 
-                    // Build context from all surgery details
+                    // Extract alias lines from surgeries (to display at top of description)
+                    const aliasLines = surgeryRows
+                      .filter(s => s.alias?.trim())
+                      .map((s, i) => surgeryRows.length > 1 ? `Surgery ${i + 1}: ${s.alias}` : s.alias)
+                      .join('\n');
+
+                    // Build context from all surgery details (using alias instead of procedurePerformed)
                     const allProcedures = surgeryRows.map((s, i) =>
-                      `Surgery ${i + 1}: ${s.procedurePerformed || 'Not specified'} (Surgeon: ${s.surgeon || 'Not specified'}, Anesthesia: ${s.anesthesia || 'Not specified'})`
+                      `Surgery ${i + 1}: ${s.alias || s.procedurePerformed || 'Not specified'} (Surgeon: ${s.surgeon || 'Not specified'}, Anesthesia: ${s.anesthesia || 'Not specified'})`
                     ).join('\n');
 
-                    const prompt = `You are a senior medical documentation specialist. Write a concise, professional surgical summary for the procedure(s) listed below:
+                    const prompt = `Write a brief 3-4 line surgical summary. Must include all details below:
+
+SURGERIES:
 ${allProcedures}
 
-Rules:
-- Total summary must NOT exceed 200 words.
-- Write in formal clinical terminology.
-- Cover: procedure performed, surgical approach, key intraoperative findings, hemodynamic stability, and immediate post-op condition.
-- If multiple surgeries, combine into one cohesive paragraph — do NOT list them separately.
-- Do NOT use bullet points, headings, or placeholders. Plain paragraph only.`;
+INSTRUCTIONS: Write exactly 3-4 lines. Include procedure name, surgeon name, type of anaesthesia, and post-operative condition. Use formal medical language. No bullet points or numbering. Write as a continuous paragraph.`;
 
-                    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${import.meta.env.VITE_GEMINI_API_KEY}`, {
+                    const response = await fetch(geminiGenerateContentUrl(import.meta.env.VITE_GEMINI_API_KEY), {
                       method: 'POST',
                       headers: {
                         'Content-Type': 'application/json'
@@ -4277,8 +4267,8 @@ Rules:
                           }]
                         }],
                         generationConfig: {
-                          temperature: 0.4,
-                          maxOutputTokens: 300
+                          temperature: 0.5,
+                          maxOutputTokens: 200
                         }
                       })
                     });
@@ -4292,7 +4282,12 @@ Rules:
                     const generatedDescription = data.candidates?.[0]?.content?.parts?.[0]?.text;
 
                     if (generatedDescription) {
-                      setSharedSurgeryDescription(generatedDescription);
+                      // Combine alias lines at top with AI-generated summary below
+                      const finalDescription = aliasLines
+                        ? `${aliasLines}\n\n${generatedDescription}`
+                        : generatedDescription;
+
+                      setSharedSurgeryDescription(finalDescription);
                       toast({
                         title: "Success",
                         description: "Description generated successfully!",
@@ -4603,7 +4598,7 @@ Do NOT omit any medication. Each medication = one row. Use the data exactly as p
 10. For ADVICE: If specific advice is provided in the input, use it EXACTLY as given — do NOT paraphrase or shorten it. Only write a generic 2-3 sentence advice paragraph if NO advice data is present in the input.`;
 
                           // Call Google Gemini API
-                          const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${import.meta.env.VITE_GEMINI_API_KEY}`, {
+                          const response = await fetch(geminiGenerateContentUrl(import.meta.env.VITE_GEMINI_API_KEY), {
                             method: 'POST',
                             headers: {
                               'Content-Type': 'application/json'
@@ -4638,7 +4633,6 @@ Do NOT omit any medication. Each medication = one row. Use the data exactly as p
                               description: "Discharge summary generated successfully!",
                             });
 
-                            console.log('✅ Generated Summary:', generatedSummary);
                           } else {
                             throw new Error('No response from ChatGPT');
                           }

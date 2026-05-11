@@ -108,7 +108,6 @@ const OldBills = () => {
         return hasLineItems && hasValidTotal && hasValidBillNo;
       });
 
-      console.log(`Filtered ${validBills.length} valid bills out of ${data?.length || 0} total bills`);
       return validBills;
     },
     enabled: !!visitId

@@ -18,7 +18,6 @@ const Diagnoses = () => {
   );
 
   const handleAddDiagnosis = (name: string, description?: string) => {
-    console.log('Calling addDiagnosis with:', { name, description });
     addDiagnosis({ name, description });
   };
 

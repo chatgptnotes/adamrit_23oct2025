@@ -34,7 +34,6 @@ export const SearchAndControls: React.FC<SearchAndControlsProps> = ({
 
   const handlePatientLookupSelect = (patient: any) => {
     // Could be used to navigate to patient details or start a visit
-    console.log('Patient selected from lookup:', patient);
   };
 
   const handleNewPatientFromLookup = () => {
@@ -43,7 +42,6 @@ export const SearchAndControls: React.FC<SearchAndControlsProps> = ({
 
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
-    console.log('Search term changed:', value);
     onSearchChange(value);
   };
 

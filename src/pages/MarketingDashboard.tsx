@@ -13,6 +13,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useCorporateBulkPayments } from '@/hooks/useCorporateBulkPayments';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { geminiGenerateContentUrl } from '@/lib/gemini';
 import { ClinicalKPIs } from '@/components/ClinicalKPIs';
 
 const db = supabase as any;
@@ -537,7 +538,7 @@ Return JSON only:
   "meetingDate": "${todayDate}"
 }`;
 
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${import.meta.env.VITE_GEMINI_API_KEY}`, {
+      const res = await fetch(geminiGenerateContentUrl(import.meta.env.VITE_GEMINI_API_KEY), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -550,14 +551,12 @@ Return JSON only:
       });
       
       const data = await res.json();
-      console.log('Gemini response:', data);
       
       if (data.error) {
         throw new Error(data.error.message);
       }
       
       let text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-      console.log('Raw text:', text);
       
       // Clean up JSON if needed
       text = text.trim();
@@ -580,7 +579,6 @@ Return JSON only:
       if (!extracted.marketingStaff && user?.username) {
         extracted.marketingStaff = user.username;
       }
-      console.log('Extracted:', extracted);
       setMessages(prev => {
         const newMessages = [...prev, { role: 'assistant' as const, text: '', extracted }];
         const newIdx = newMessages.length - 1;
@@ -625,14 +623,12 @@ Return JSON only:
 
         if (existingCorps && existingCorps.length > 0) {
           corporateId = existingCorps[0].id;
-          console.log('Found existing corporate:', existingCorps[0].name);
         } else {
           const { data: newCorp } = await db.from('corporate_master')
             .insert({ name: e.corporate, category: 'government' })
             .select('id')
             .single();
           corporateId = newCorp?.id;
-          console.log('Created new corporate:', e.corporate);
         }
       }
 
@@ -646,7 +642,6 @@ Return JSON only:
 
         if (existingAreas && existingAreas.length > 0) {
           areaId = existingAreas[0].id;
-          console.log('Found existing area:', existingAreas[0].area_name);
         } else {
           const { data: newArea } = await db.from('corporate_areas')
             .insert({
@@ -657,7 +652,6 @@ Return JSON only:
             .select('id')
             .single();
           areaId = newArea?.id;
-          console.log('Created new area:', e.area);
         }
       }
 

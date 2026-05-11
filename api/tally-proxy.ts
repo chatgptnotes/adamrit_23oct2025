@@ -36,11 +36,15 @@ function getAttr(xml: string, attr: string): string {
 }
 
 function buildExportXml(reportId: string, companyName: string, extraVars = ''): string {
+  // companyName is intentionally not embedded in SVCURRENTCOMPANY because
+  // Tally silently returns 0 records when the name doesn't match exactly
+  // (case, spacing, & vs &amp;). Tally uses the currently-loaded company
+  // when SVCURRENTCOMPANY is omitted, which is what we want.
+  void companyName
   return `<ENVELOPE>
   <HEADER><VERSION>1</VERSION><TALLYREQUEST>Export</TALLYREQUEST><TYPE>Data</TYPE><ID>${reportId}</ID></HEADER>
   <BODY><DESC><STATICVARIABLES>
     <SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT>
-    <SVCURRENTCOMPANY>${companyName}</SVCURRENTCOMPANY>
     ${extraVars}
   </STATICVARIABLES></DESC></BODY>
 </ENVELOPE>`
@@ -93,7 +97,7 @@ async function handleTestConnection(body: any) {
   <HEADER><VERSION>1</VERSION><TALLYREQUEST>Export</TALLYREQUEST><TYPE>Data</TYPE><ID>List of Companies</ID></HEADER>
   <BODY><DESC><STATICVARIABLES>
     <SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT>
-    ${companyName ? `<SVCURRENTCOMPANY>${companyName}</SVCURRENTCOMPANY>` : ''}
+    ${companyName ? `<SVCURRENTCOMPANY>${escapeXml(companyName)}</SVCURRENTCOMPANY>` : ''}
   </STATICVARIABLES></DESC></BODY>
 </ENVELOPE>`
 
@@ -250,6 +254,10 @@ async function handleSync(body: any) {
   const { action, serverUrl, companyName, companyId, dateRange } = body
   if (!serverUrl || !companyName || !action) return { error: 'Missing required fields' }
 
+  // Tally company names can contain &, <, > which must be escaped before
+  // being embedded inside <SVCURRENTCOMPANY> — otherwise Tally rejects the XML.
+  const safeCompany = escapeXml(companyName)
+
   const supabase = getSupabase()
   const startTime = Date.now()
 
@@ -267,11 +275,12 @@ async function handleSync(body: any) {
   try {
     switch (action) {
       case 'ledgers': {
-        // TallyPrime Collection-based export
+        // TallyPrime Collection-based export — SVCURRENTCOMPANY omitted; Tally
+        // uses the currently-loaded company. Sending it caused silent 0-record
+        // responses when name didn't match exactly (case/spacing/&-encoding).
         const xml = `<ENVELOPE>
   <HEADER><VERSION>1</VERSION><TALLYREQUEST>Export</TALLYREQUEST><TYPE>Collection</TYPE><ID>Ledger Collection</ID></HEADER>
   <BODY><DESC>
-    <STATICVARIABLES><SVCURRENTCOMPANY>${companyName}</SVCURRENTCOMPANY></STATICVARIABLES>
     <TDL><TDLMESSAGE>
       <COLLECTION NAME="Ledger Collection" ISMODIFY="No">
         <TYPE>Ledger</TYPE>
@@ -319,7 +328,6 @@ async function handleSync(body: any) {
         const xml = `<ENVELOPE>
   <HEADER><VERSION>1</VERSION><TALLYREQUEST>Export</TALLYREQUEST><TYPE>Collection</TYPE><ID>Group Collection</ID></HEADER>
   <BODY><DESC>
-    <STATICVARIABLES><SVCURRENTCOMPANY>${companyName}</SVCURRENTCOMPANY></STATICVARIABLES>
     <TDL><TDLMESSAGE>
       <COLLECTION NAME="Group Collection" ISMODIFY="No">
         <TYPE>Group</TYPE>
@@ -360,7 +368,6 @@ async function handleSync(body: any) {
         const xml = `<ENVELOPE>
   <HEADER><VERSION>1</VERSION><TALLYREQUEST>Export</TALLYREQUEST><TYPE>Collection</TYPE><ID>StockItem Collection</ID></HEADER>
   <BODY><DESC>
-    <STATICVARIABLES><SVCURRENTCOMPANY>${companyName}</SVCURRENTCOMPANY></STATICVARIABLES>
     <TDL><TDLMESSAGE>
       <COLLECTION NAME="StockItem Collection" ISMODIFY="No">
         <TYPE>StockItem</TYPE>
@@ -413,20 +420,13 @@ async function handleSync(body: any) {
         const defaultFrom = `${fyYear}-04-01`
         const from = dateRange?.from || defaultFrom
         const to = dateRange?.to || new Date().toISOString().split('T')[0]
-        // Use Day Book export (reliable with date range) as primary
-        const dayBookXml = buildExportXml('Day Book', companyName,
-          `<SVFROMDATE>${from.replace(/-/g, '')}</SVFROMDATE><SVTODATE>${to.replace(/-/g, '')}</SVTODATE>`)
-        let response: string
-        try {
-          response = await fetchFromTally(serverUrl, dayBookXml, 120000)
-        } catch {
-          // Fallback to Collection export without CHILDOF filter
-          const collectionXml = `<ENVELOPE>
+        // Use Voucher Collection as primary — returns every voucher in the loaded
+        // company across all dates. Day Book has been observed to ignore
+        // SVFROMDATE/SVTODATE in some TallyPrime versions, returning only 1
+        // record from outside the requested range. Collection is reliable.
+        const collectionXml = `<ENVELOPE>
   <HEADER><VERSION>1</VERSION><TALLYREQUEST>Export</TALLYREQUEST><TYPE>Collection</TYPE><ID>Voucher Collection</ID></HEADER>
   <BODY><DESC>
-    <STATICVARIABLES>
-      <SVCURRENTCOMPANY>${companyName}</SVCURRENTCOMPANY>
-    </STATICVARIABLES>
     <TDL><TDLMESSAGE>
       <COLLECTION NAME="Voucher Collection" ISMODIFY="No">
         <TYPE>Voucher</TYPE>
@@ -436,7 +436,14 @@ async function handleSync(body: any) {
     </TDLMESSAGE></TDL>
   </DESC></BODY>
 </ENVELOPE>`
-          response = await fetchFromTally(serverUrl, collectionXml, 120000)
+        let response: string
+        try {
+          response = await fetchFromTally(serverUrl, collectionXml, 180000)
+        } catch {
+          // Fallback to Day Book export with date range
+          const dayBookXml = buildExportXml('Day Book', safeCompany,
+            `<SVFROMDATE>${from.replace(/-/g, '')}</SVFROMDATE><SVTODATE>${to.replace(/-/g, '')}</SVTODATE>`)
+          response = await fetchFromTally(serverUrl, dayBookXml, 120000)
         }
         const elements = getAll(response, 'VOUCHER')
         // Batch upsert vouchers for speed
@@ -504,7 +511,7 @@ async function handleSync(body: any) {
         ]
         for (const report of reportIds) {
           try {
-            const xml = buildExportXml(report.id, companyName, report.extra)
+            const xml = buildExportXml(report.id, safeCompany, report.extra)
             const response = await fetchFromTally(serverUrl, xml, 120000)
             await supabase.from('tally_reports').insert({
               company_id: companyId,
@@ -524,7 +531,7 @@ async function handleSync(body: any) {
         else if (action === 'gst-r3b') { gstReportId = 'GSTR-3B'; gstType = 'gstr3b' }
         else { gstReportId = 'Day Book'; gstType = 'gst_ledger' }
         try {
-          const xml = buildExportXml(gstReportId, companyName,
+          const xml = buildExportXml(gstReportId, safeCompany,
             `<SVFROMDATE>${gstFrom.replace(/-/g, '')}</SVFROMDATE><SVTODATE>${gstTo.replace(/-/g, '')}</SVTODATE>`)
           const response = await fetchFromTally(serverUrl, xml, 120000)
           await supabase.from('tally_gst_data').insert({

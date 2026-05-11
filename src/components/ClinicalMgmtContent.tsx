@@ -152,7 +152,6 @@ const ClinicalMgmtContent = () => {
       surgeries: selectedSurgeries.length,
       complications: selectedComplications.length
     };
-    console.log('Saving clinical data:', summary);
     alert('Clinical data saved successfully!');
   };
 

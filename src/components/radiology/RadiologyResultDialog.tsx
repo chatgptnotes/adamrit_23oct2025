@@ -147,7 +147,6 @@ export const RadiologyResultDialog: React.FC<RadiologyResultDialogProps> = ({
         return;
       }
 
-      console.log('✅ Save successful! Updated record:', data[0]);
 
       // Upload file to storage bucket if selected
       if (formData.uploadedFile) {
@@ -175,11 +174,9 @@ export const RadiologyResultDialog: React.FC<RadiologyResultDialogProps> = ({
             file_type: file.type
           }).eq('id', orderData.id);
 
-          console.log('✅ File uploaded:', urlData.publicUrl);
         }
       }
 
-      console.log('✅ SUCCESS! Radiology result saved!');
       alert('Radiology result saved successfully!');
       onClose();
       

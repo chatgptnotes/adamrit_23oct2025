@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { X, Check, Eye, FileText, UserCheck, Trash2, DollarSign, MessageSquare, FileTextIcon, Activity, ClipboardEdit, Circle, Loader2 } from 'lucide-react';
+import { X, Check, Eye, FileText, UserCheck, Trash2, DollarSign, MessageSquare, FileTextIcon, Activity, ClipboardEdit, Circle, Loader2, ScanLine } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { VisitRegistrationForm } from '@/components/VisitRegistrationForm';
 import { supabase } from '@/integrations/supabase/client';
@@ -13,6 +13,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { printSticker } from '@/utils/stickerPrinter';
 import { useQuery } from '@tanstack/react-query';
 import { RefereeDoaPaymentModal } from '@/components/ipd/RefereeDoaPaymentModal';
+import { MriOrderModal } from '@/components/ipd/MriOrderModal';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { calculateReferralAmount, formatIndianCurrency } from '@/utils/referralCalculator';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -283,6 +284,8 @@ export const OpdPatientTable = ({ patients, refetch, isMarketingManager = false 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [radiologyModalOpen, setRadiologyModalOpen] = useState(false);
+  const [selectedVisitForRadiology, setSelectedVisitForRadiology] = useState<Patient | null>(null);
 
   const visiblePatients = patients.filter(patient => !hiddenPatients.has(patient.visit_id || ''));
   const totalPages = Math.ceil(visiblePatients.length / pageSize);
@@ -409,7 +412,6 @@ export const OpdPatientTable = ({ patients, refetch, isMarketingManager = false 
       [patient.id]: true
     }));
 
-    console.log('✅ Comment dialog opened with text:', existingComment);
   };
 
   const handleCommentChange = (visitId: string, text: string) => {
@@ -451,7 +453,6 @@ export const OpdPatientTable = ({ patients, refetch, isMarketingManager = false 
             alert(`Failed to save comment: ${error.message}`);
             setSavingComments(prev => ({ ...prev, [visitId]: false }));
           } else {
-            console.log('✅ Comment saved successfully for visit:', visitId, 'Response:', data);
             // Update the original comment after successful save
             setOriginalComments(prev => ({ ...prev, [visitId]: text }));
             // Show saved indicator
@@ -519,7 +520,6 @@ export const OpdPatientTable = ({ patients, refetch, isMarketingManager = false 
   // Fetch discharge data from all relevant tables
   const handleFetchData = async (patient: Patient) => {
     try {
-      console.log('Fetching comprehensive discharge data for patient:', patient.visit_id);
 
       // Ensure we have basic patient data to work with
       if (!patient.id && !patient.visit_id) {
@@ -549,7 +549,6 @@ export const OpdPatientTable = ({ patients, refetch, isMarketingManager = false 
       }
 
       // 3. Fetch OT notes for surgery details with comprehensive debugging
-      console.log('═══ OT NOTES FETCH DEBUG START ═══');
       console.log('Patient data:', {
         id: patient.id,
         visit_id: patient.visit_id,
@@ -563,11 +562,8 @@ export const OpdPatientTable = ({ patients, refetch, isMarketingManager = false 
         .select('id, visit_id, patient_id, patient_name, surgery_name, surgeon')
         .limit(10);
 
-      console.log('Sample OT notes in database:', allOtNotes);
-      console.log('Total OT notes found:', allOtNotes?.length || 0);
 
       // Try fetching by visit_id first
-      console.log('Attempt 1: Fetching OT notes for visit_id:', patient.id);
       let { data: otNote, error: otError } = await supabase
         .from('ot_notes')
         .select('*')
@@ -580,7 +576,6 @@ export const OpdPatientTable = ({ patients, refetch, isMarketingManager = false 
         // Try with patient_id
         const patientId = patient.patient_id || patient.patients?.id;
         if (patientId) {
-          console.log('Attempt 2: Trying with patient_id:', patientId);
           const { data: otNoteAlt, error: otErrorAlt } = await supabase
             .from('ot_notes')
             .select('*')
@@ -591,7 +586,6 @@ export const OpdPatientTable = ({ patients, refetch, isMarketingManager = false 
 
           if (!otErrorAlt && otNoteAlt) {
             otNote = otNoteAlt;
-            console.log('✓ OT notes found with patient_id');
           } else if (otErrorAlt) {
             console.error('Error with patient_id query:', otErrorAlt);
           }
@@ -599,7 +593,6 @@ export const OpdPatientTable = ({ patients, refetch, isMarketingManager = false 
 
         // Try with patient name as last resort
         if (!otNote && patient.patients?.name) {
-          console.log('Attempt 3: Trying with patient_name:', patient.patients.name);
           const { data: otNoteByName, error: nameError } = await supabase
             .from('ot_notes')
             .select('*')
@@ -610,7 +603,6 @@ export const OpdPatientTable = ({ patients, refetch, isMarketingManager = false 
 
           if (!nameError && otNoteByName) {
             otNote = otNoteByName;
-            console.log('✓ OT notes found with patient_name');
           } else if (nameError) {
             console.error('Error with patient_name query:', nameError);
           }
@@ -618,7 +610,6 @@ export const OpdPatientTable = ({ patients, refetch, isMarketingManager = false 
 
         // If still no data, try without any filter to see if table has data
         if (!otNote) {
-          console.log('Attempt 4: Getting most recent OT note (any patient)');
           const { data: anyOtNote } = await supabase
             .from('ot_notes')
             .select('*')
@@ -627,7 +618,6 @@ export const OpdPatientTable = ({ patients, refetch, isMarketingManager = false 
             .single();
 
           if (anyOtNote) {
-            console.log('⚠️ Found OT note but not for this patient:', anyOtNote);
             console.log('This indicates ID mismatch. OT note has:', {
               visit_id: anyOtNote.visit_id,
               patient_id: anyOtNote.patient_id,
@@ -650,14 +640,12 @@ export const OpdPatientTable = ({ patients, refetch, isMarketingManager = false 
           patient_id: otNote.patient_id
         });
       } else {
-        console.log('❌ NO OT NOTES FOUND for this patient');
         console.log('Consider creating OT notes with:', {
           visit_id: patient.id,
           patient_id: patient.patient_id || patient.patients?.id,
           patient_name: patient.patients?.name
         });
       }
-      console.log('═══ OT NOTES FETCH DEBUG END ═══');
 
       // 4. Fetch diagnoses for the visit
       const { data: visitDiagnoses, error: diagError } = await supabase
@@ -714,7 +702,6 @@ export const OpdPatientTable = ({ patients, refetch, isMarketingManager = false 
         labOrders = result.data;
         labError = result.error;
       } catch (error) {
-        console.log('Lab table might not exist, using fallback data');
         labOrders = [];
       }
 
@@ -735,17 +722,14 @@ export const OpdPatientTable = ({ patients, refetch, isMarketingManager = false 
         // Step 1: Get visit_lab IDs from the labOrders we already fetched
         const visitLabIds = labOrders?.map(l => l.id).filter(Boolean) || [];
 
-        console.log('═══════════════════════════════════════');
         console.log('🔍 DEBUG: Lab Orders Data:', labOrders);
         console.log('📋 Extracted visit_lab IDs:', visitLabIds);
-        console.log('═══════════════════════════════════════');
 
         if (visitLabIds.length === 0) {
           console.warn('⚠️ No visit_labs found, cannot fetch lab results');
           alert(`⚠️ No lab tests ordered for this visit.\nVisit ID: ${patient.visit_id}\nPatient: ${patient.patients?.name}`);
           labResults = [];
         } else {
-          console.log(`✅ Found ${visitLabIds.length} visit_lab IDs`);
           alert(`🔍 Searching lab results...\n\nFound ${visitLabIds.length} lab tests ordered.\nSearching for results in lab_results table...`);
 
           // Step 2: Fetch lab_results using visit_lab_id
@@ -763,11 +747,7 @@ export const OpdPatientTable = ({ patients, refetch, isMarketingManager = false 
             .in('visit_lab_id', visitLabIds)
             .order('created_at', { ascending: true });
 
-          console.log('═══════════════════════════════════════');
           console.log('🧪 RAW Lab Results Query Response:');
-          console.log('Data:', resultsData);
-          console.log('Error:', resultsErr);
-          console.log('═══════════════════════════════════════');
 
           labResultsError = resultsErr;
 
@@ -776,7 +756,6 @@ export const OpdPatientTable = ({ patients, refetch, isMarketingManager = false 
             alert(`❌ Error fetching lab results:\n${resultsErr.message}\n\nCode: ${resultsErr.code}`);
             labResults = [];
           } else if (resultsData && resultsData.length > 0) {
-            console.log(`✅ SUCCESS! Found ${resultsData.length} lab results from lab_results table`);
 
             // Show raw data in alert for debugging
             const rawDataPreview = resultsData.slice(0, 2).map(r =>
@@ -842,7 +821,6 @@ export const OpdPatientTable = ({ patients, refetch, isMarketingManager = false 
         radiologyOrders = result.data;
         radError = result.error;
       } catch (error) {
-        console.log('Radiology table might not exist, using fallback data');
         radiologyOrders = [];
       }
 
@@ -910,10 +888,8 @@ export const OpdPatientTable = ({ patients, refetch, isMarketingManager = false 
           }
         }).filter(Boolean);
 
-        console.log('✅ All formatted lab results:', labResultsList);
       } else {
         // Fallback to visit_labs result_value if lab_results table has no data
-        console.log('⚠️ No lab_results found, using visit_labs data as fallback');
         labResultsList = labOrders?.filter(l => l.result_value).map(l => `${l.lab?.name}: ${l.result_value}`) || [];
       }
 
@@ -1137,7 +1113,6 @@ Prepared by: Medical Records Department
   // Generate discharge summary using AI
   const handleAIGenerate = async (patient: Patient) => {
     try {
-      console.log('Generating AI discharge summary for patient:', patient.visit_id);
 
       // Simulate AI generation (in real implementation, this would call an AI service)
       const aiGeneratedSummary = `DISCHARGE SUMMARY (AI Generated)
@@ -1208,7 +1183,6 @@ Verified by: [To be verified by doctor]`;
 
   const calculateAge = (dateOfBirth?: string) => {
     if (!dateOfBirth) {
-      console.log('Date of birth is missing for patient');
       return null;
     }
 
@@ -1217,7 +1191,6 @@ Verified by: [To be verified by doctor]`;
 
       // Check if date is valid
       if (isNaN(birthDate.getTime())) {
-        console.log('Invalid date of birth:', dateOfBirth);
         return null;
       }
 
@@ -1239,7 +1212,6 @@ Verified by: [To be verified by doctor]`;
     if (patientId && visitId) {
       navigate(`/patient-profile?patient=${patientId}&visit=${visitId}`);
     } else {
-      console.log('Missing required IDs for navigation');
     }
   };
 
@@ -1276,7 +1248,6 @@ Verified by: [To be verified by doctor]`;
       return;
     }
 
-    console.log('✅ Navigating to final bill page:', `/final-bill/${patient.visit_id}`);
     navigate(`/final-bill/${patient.visit_id}`);
   };
 
@@ -1452,6 +1423,7 @@ Verified by: [To be verified by doctor]`;
             <TableHead className="text-center font-medium print:hidden">Discharge Intimation</TableHead>
             <TableHead className="text-center font-medium print:hidden">Stickers</TableHead>
             <TableHead className="text-center font-medium print:hidden">OPD Summary</TableHead>
+            <TableHead className="text-center font-medium print:hidden">Radiology</TableHead>
             <TableHead className="text-center font-medium print:hidden">Actions</TableHead>
           </TableRow>
         </TableHeader>
@@ -1665,6 +1637,18 @@ Verified by: [To be verified by doctor]`;
                   title="View/Add OPD Summary"
                 >
                   <FileTextIcon className="h-4 w-4 text-purple-600" />
+                </Button>
+              </TableCell>
+              {/* Screen-only: Radiology */}
+              <TableCell className="text-center print:hidden">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 w-8 p-0 hover:bg-violet-50"
+                  onClick={() => { setSelectedVisitForRadiology(patient); setRadiologyModalOpen(true); }}
+                  title="Add Radiology Order"
+                >
+                  <ScanLine className="h-4 w-4 text-violet-600" />
                 </Button>
               </TableCell>
               {/* Screen-only: Actions */}
@@ -1939,6 +1923,28 @@ Verified by: [To be verified by doctor]`;
       ))}
 
       {/* OPD Summary Dialogs - removed (now uses dedicated page) */}
+
+      {/* Radiology Order Modal */}
+      {selectedVisitForRadiology && (
+        <MriOrderModal
+          isOpen={radiologyModalOpen}
+          onClose={() => { setRadiologyModalOpen(false); setSelectedVisitForRadiology(null); }}
+          department="OPD"
+          visit={{
+            id: selectedVisitForRadiology.id,
+            visit_id: selectedVisitForRadiology.visit_id || '',
+            patient_id: selectedVisitForRadiology.patient_id,
+            appointment_with: selectedVisitForRadiology.appointment_with,
+            patients: selectedVisitForRadiology.patients ? {
+              id: selectedVisitForRadiology.patients.id,
+              name: selectedVisitForRadiology.patients.name,
+              patients_id: selectedVisitForRadiology.patients.patients_id,
+              age: selectedVisitForRadiology.patients.age,
+              gender: selectedVisitForRadiology.patients.gender,
+            } : undefined,
+          }}
+        />
+      )}
     </div>
   );
 };

@@ -333,7 +333,6 @@ const Index = () => {
   };
 
   const handleSearchChange = (value: string) => {
-    console.log('Search term updated in Index:', value);
     setSearchTerm(value);
   };
 

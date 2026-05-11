@@ -81,7 +81,6 @@ const Medications = () => {
         is_implant: is_implant || false
       };
 
-      console.log('Inserting medication data:', insertData);
 
       const { data, error } = await supabase
         .from('medication')
@@ -162,7 +161,6 @@ const Medications = () => {
         is_implant: is_implant || false
       };
 
-      console.log('Updating medication data:', updateData);
 
       const { data, error } = await supabase
         .from('medication')

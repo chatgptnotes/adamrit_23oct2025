@@ -124,7 +124,6 @@ const FinancialSummary = () => {
 
   // Handle submit for individual cell
   const handleSubmit = (row: keyof FinancialData, column: keyof FinancialRow) => {
-    console.log(`Submitted ${row} - ${column}:`, financialData[row][column]);
     // Here you can add API call to save the data
     alert(`✅ ${row} - ${column} updated successfully!`);
   };

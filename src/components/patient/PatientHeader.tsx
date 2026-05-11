@@ -17,16 +17,10 @@ const PatientHeader = ({ patient, patientId, calculateAge, visits }: PatientHead
   const visitId = searchParams.get('visit');
   
   // Debug logging to see what we have
-  console.log('Patient data in header:', patient);
-  console.log('Patient ID from URL:', patientId);
-  console.log('Visit ID from URL:', visitId);
-  console.log('Patient patients_id field:', patient?.patients_id);
-  console.log('Patient object keys:', patient ? Object.keys(patient) : 'No patient');
   
   // Determine what to display for UID - only show patients_id
   const displayPatientId = patient?.patients_id || 'Not assigned';
   
-  console.log('Final displayPatientId:', displayPatientId);
   
   // Get current visit data for Bunch No. and Sr. no
   const getCurrentVisit = () => {

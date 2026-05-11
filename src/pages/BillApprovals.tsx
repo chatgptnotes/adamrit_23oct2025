@@ -94,6 +94,7 @@ const BillApprovals = () => {
     },
     enabled: isAdmin,
     refetchInterval: 120000,
+    staleTime: 60000,
   });
 
   // Fetch approved bills (APPROVED + FINALIZED)
@@ -111,6 +112,7 @@ const BillApprovals = () => {
     },
     enabled: isAdmin,
     refetchInterval: 120000,
+    staleTime: 60000,
   });
 
   // Fetch pending discount approvals
@@ -124,28 +126,29 @@ const BillApprovals = () => {
         .order('created_at', { ascending: false }) as { data: any; error: any };
       if (error) return [];
       if (!data || data.length === 0) return [];
-      const enriched = await Promise.all(
-        data.map(async (disc: any) => {
-          let patientName = 'Unknown';
-          let visitId = '';
-          let registrationNumber = '';
-          if (disc.visit_id) {
-            const { data: visit } = await supabase
-              .from('visits')
-              .select('visit_id, patient_id, patients(name, registration_number)')
-              .eq('id', disc.visit_id)
-              .single() as { data: any };
-            if (visit?.patients?.name) patientName = visit.patients.name;
-            if (visit?.patients?.registration_number) registrationNumber = visit.patients.registration_number;
-            if (visit?.visit_id) visitId = visit.visit_id;
-          }
-          return { ...disc, patientName, visitIdStr: visitId, registrationNumber };
-        })
-      );
-      return enriched;
+      // Batch fetch all visits in one query instead of N individual queries
+      const visitIds = data.map((d: any) => d.visit_id).filter(Boolean);
+      const visitMap = new Map<string, { visit_id: string; patients?: { name?: string; registration_number?: string } }>();
+      if (visitIds.length > 0) {
+        const { data: visits } = await supabase
+          .from('visits')
+          .select('id, visit_id, patients(name, registration_number)')
+          .in('id', visitIds) as { data: any };
+        (visits || []).forEach((v: any) => visitMap.set(v.id, v));
+      }
+      return data.map((disc: any) => {
+        const visit = disc.visit_id ? visitMap.get(disc.visit_id) : undefined;
+        return {
+          ...disc,
+          patientName: visit?.patients?.name || 'Unknown',
+          visitIdStr: visit?.visit_id || '',
+          registrationNumber: visit?.patients?.registration_number || '',
+        };
+      });
     },
     enabled: isAdmin,
     refetchInterval: 120000,
+    staleTime: 60000,
   });
 
   // Fetch pending package approvals
@@ -166,6 +169,7 @@ const BillApprovals = () => {
     },
     enabled: isAdmin,
     refetchInterval: 120000,
+    staleTime: 60000,
   });
 
   const handleApprovePackage = async (visitUUID: string, visitId: string, packageAmount: string) => {

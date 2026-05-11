@@ -51,7 +51,6 @@ export const usePatientOperations = (diagnoses: Diagnosis[]) => {
 
   const updatePatientMutation = useMutation({
     mutationFn: async ({ patientId, updatedData }: { patientId: string, updatedData: Partial<Patient> }) => {
-      console.log('Updating patient with data:', updatedData);
       
       // Only update core patient identification fields
       // All medical data is now managed via visits and junction tables
@@ -75,7 +74,6 @@ export const usePatientOperations = (diagnoses: Diagnosis[]) => {
         throw error;
       }
 
-      console.log('Updated patient data:', data);
       return data;
     },
     onSuccess: () => {

@@ -253,7 +253,6 @@ const DirectSaleBill: React.FC = () => {
         }
       });
 
-      console.log('✅ Medication search results with batches:', mappedData);
       setMedicationSuggestions(prev => ({ ...prev, [medicineId]: mappedData }));
 
       if (mappedData.length > 0) {
@@ -287,7 +286,6 @@ const DirectSaleBill: React.FC = () => {
         throw error;
       }
 
-      console.log('✅ Available batches:', data);
 
       // Update the medicine row with available batches
       setMedicines(prev => prev.map(m => {
@@ -547,7 +545,6 @@ const DirectSaleBill: React.FC = () => {
           if (updateError) {
             console.error('Error updating stock:', updateError);
           } else {
-            console.log(`✅ Stock deducted for ${med.itemName}: ${soldQty} units (New stock: ${newStock})`);
           }
 
           // Log stock movement

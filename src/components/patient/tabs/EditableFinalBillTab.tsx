@@ -28,6 +28,7 @@ interface BillItem {
   qty: number;
   amount: number;
   type: 'standard' | 'surgical';
+  category?: 'radiology';
 }
 
 interface PatientInfo {
@@ -57,7 +58,7 @@ const sexOptions = ['Male', 'Female', 'Other'];
 export const EditableFinalBillTab: React.FC<EditableFinalBillTabProps> = ({ patient, visitId }) => {
   const queryClient = useQueryClient();
   const { billData, isLoading, saveBill, isSaving } = useFinalBillData(visitId);
-  
+
   const [patientInfo, setPatientInfo] = useState<PatientInfo>({
     billNo: '',
     claimId: '',
@@ -93,10 +94,7 @@ export const EditableFinalBillTab: React.FC<EditableFinalBillTabProps> = ({ pati
         .eq('id', patient.id)
         .maybeSingle();
       
-      if (error) {
-        console.error('Error fetching patient:', error);
-        return null;
-      }
+      if (error) return null;
       
       return data;
     },
@@ -108,21 +106,38 @@ export const EditableFinalBillTab: React.FC<EditableFinalBillTabProps> = ({ pati
     queryKey: ['visit-data', visitId],
     queryFn: async () => {
       if (!visitId) return null;
-      
+
       const { data, error } = await supabase
         .from('visits')
         .select('*')
         .eq('visit_id', visitId)
         .maybeSingle();
-      
-      if (error) {
-        console.error('Error fetching visit:', error);
-        return null;
-      }
-      
+
+      if (error) return null;
+
       return data;
     },
     enabled: !!visitId,
+  });
+
+  // Fetch radiology orders for this patient/visit
+  const { data: radiologyOrders } = useQuery({
+    queryKey: ['radiology-orders', patient?.id],
+    queryFn: async () => {
+      if (!patient?.id) return [];
+
+      const { data, error } = await supabase
+        .from('radiology_orders')
+        .select('*')
+        .eq('patient_id', patient.id)
+        .eq('ordering_department', 'IPD')
+        .order('order_date', { ascending: false });
+
+      if (error) return [];
+
+      return data || [];
+    },
+    enabled: !!patient?.id,
   });
 
   // Initialize patient info when data is loaded
@@ -151,6 +166,13 @@ export const EditableFinalBillTab: React.FC<EditableFinalBillTabProps> = ({ pati
     }
   }, [patientData, visitData, billData]);
 
+  // Helper function to determine if item is radiology
+  const isRadiologyItem = (description: string): boolean => {
+    if (!description) return false;
+    const radiologyKeywords = ['mri', 'ct', 'usg', 'x-ray', 'scan', 'ultrasound', 'radiology'];
+    return radiologyKeywords.some(keyword => description.toLowerCase().includes(keyword));
+  };
+
   // Initialize bill items when bill data is loaded
   useEffect(() => {
     if (billData?.line_items) {
@@ -163,10 +185,55 @@ export const EditableFinalBillTab: React.FC<EditableFinalBillTabProps> = ({ pati
         qty: item.qty || 1,
         amount: item.amount || 0,
         type: item.item_type || 'standard',
+        category: isRadiologyItem(item.item_description) ? 'radiology' : undefined,
       }));
       setBillItems(items);
     }
   }, [billData]);
+
+  // Auto-import radiology orders as bill line items
+  useEffect(() => {
+    if (!radiologyOrders || radiologyOrders.length === 0) return;
+
+    setBillItems(prevItems => {
+      let newItems = [...prevItems];
+      let importedCount = 0;
+
+      radiologyOrders.forEach((order) => {
+        const notes = order.notes || '';
+        const typeMatch = notes.match(/Type:\s*([^.]+)/);
+        const procMatch = notes.match(/Procedure:\s*([^.]+)/);
+        const scanType = typeMatch ? typeMatch[1].trim() : '';
+        const procedure = procMatch ? procMatch[1].trim() : 'Scan';
+        const description = scanType ? `${scanType} – ${procedure}` : procedure;
+
+        const isDuplicate = newItems.some(
+          item => item.description.toLowerCase().includes(description.toLowerCase())
+        );
+
+        if (!isDuplicate) {
+          newItems.push({
+            id: `radiology-${order.id}`,
+            srNo: (newItems.length + 1).toString(),
+            description,
+            code: '',
+            rate: order.estimated_cost || 0,
+            qty: 1,
+            amount: order.estimated_cost || 0,
+            type: 'standard',
+            category: 'radiology',
+          });
+          importedCount++;
+        }
+      });
+
+      if (importedCount > 0) {
+        toast.info(`${importedCount} scan order(s) auto-imported — please verify rates`);
+      }
+
+      return newItems;
+    });
+  }, [radiologyOrders]);
 
   const addNewItem = () => {
     const newItem: BillItem = {
@@ -237,7 +304,6 @@ export const EditableFinalBillTab: React.FC<EditableFinalBillTabProps> = ({ pati
       setIsEditing(false);
       
     } catch (error) {
-      console.error('Error saving bill:', error);
       toast.error('Failed to save bill. Please try again.');
     }
   };
@@ -296,7 +362,9 @@ export const EditableFinalBillTab: React.FC<EditableFinalBillTabProps> = ({ pati
                 <td className="border border-gray-300 p-2 text-center"></td>
                 <td className="border border-gray-300 p-2 text-center">11276</td>
                 <td className="border border-gray-300 p-2 text-center">6565</td>
-                <td className="border border-gray-300 p-2 text-center">28000</td>
+                <td className="border border-gray-300 p-2 text-center font-semibold text-blue-700">
+                  {billItems.filter(item => isRadiologyItem(item.description)).reduce((sum, item) => sum + item.amount, 0).toLocaleString('en-IN')}
+                </td>
                 <td className="border border-gray-300 p-2 text-center"></td>
                 <td className="border border-gray-300 p-2 text-center"></td>
                 <td className="border border-gray-300 p-2 text-center"></td>

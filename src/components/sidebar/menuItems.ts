@@ -1,4 +1,4 @@
-import { BarChart3, Calendar, PhoneCall, Users, UserPlus, Database, Activity, FileText, TestTube, Camera, Pill, MapPin, Stethoscope, UserCog, ScrollText, Calculator, Syringe, Shield, Building2, ClipboardList, ShieldCheck, Receipt, HeartHandshake, ExternalLink, UserCheck, Bed, DoorOpen, LayoutDashboard, BookOpen, Clock, TrendingUp, Scissors, Heart, Cross, ClipboardCheck, ArrowLeftRight, Wallet, Navigation, Award, Smartphone, MonitorSmartphone, MessageCircle, ScanLine, Footprints, Phone, QrCode } from 'lucide-react';
+import { BarChart3, Calendar, PhoneCall, Users, UserPlus, Database, Activity, FileText, TestTube, Camera, Pill, MapPin, Stethoscope, UserCog, ScrollText, Calculator, Syringe, Shield, Building2, ClipboardList, ShieldCheck, Receipt, HeartHandshake, ExternalLink, UserCheck, Bed, DoorOpen, LayoutDashboard, BookOpen, Clock, TrendingUp, Scissors, Heart, Cross, ClipboardCheck, ArrowLeftRight, Wallet, Navigation, Award, Smartphone, MonitorSmartphone, MessageCircle, ScanLine } from 'lucide-react';
 
 export type MenuSection = 'main' | 'masters';
 
@@ -15,6 +15,11 @@ export const menuItems: MenuItemDef[] = [
     title: "Dashboard",
     url: "/",
     icon: BarChart3,
+  },
+  {
+    title: "Director Dashboard",
+    url: "/director-dashboard",
+    icon: LayoutDashboard,
   },
   {
     title: "Patient Dashboard",
@@ -215,26 +220,6 @@ export const menuItems: MenuItemDef[] = [
     title: "Marketing Incentives",
     url: "/marketing-incentives",
     icon: Award,
-  },
-  {
-    title: "Marketing Field Tracker",
-    url: "/marketing-field",
-    icon: Footprints,
-  },
-  {
-    title: "Appointments",
-    url: "/appointments",
-    icon: Calendar,
-  },
-  {
-    title: "Telephony Dashboard",
-    url: "/telephony",
-    icon: Phone,
-  },
-  {
-    title: "Payment QR",
-    url: "/payment-qr",
-    icon: QrCode,
   },
   {
     title: "Doctor View",

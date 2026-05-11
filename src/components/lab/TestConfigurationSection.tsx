@@ -292,11 +292,9 @@ const TestConfigurationSection: React.FC<TestConfigurationSectionProps> = ({
     if (onReorder) {
       console.log('🔄 Drag-drop complete! Triggering auto-save...');
       setTimeout(() => {
-        console.log('⏰ Calling onReorder (auto-save)...');
         onReorder();
       }, 100);
     } else {
-      console.log('⚠️ onReorder callback not provided');
     }
   };
 
@@ -520,7 +518,6 @@ const TestConfigurationSection: React.FC<TestConfigurationSectionProps> = ({
     // Update local state - use recursive helper to also update nested subTests
     const updatedSubTests = updateSubTestFormula(subTests, currentSubTestForFormula.id, formula);
 
-    console.log('Formula saved:', formula, 'for subtest:', currentSubTestForFormula.name);
     onSubTestsChange(updatedSubTests);
 
     // Also update the stored object
@@ -555,7 +552,6 @@ const TestConfigurationSection: React.FC<TestConfigurationSectionProps> = ({
             variant: "destructive"
           });
         } else {
-          console.log(`✅ Formula saved to database for: ${currentSubTestForFormula.name}`);
           toast({
             title: "Success",
             description: `Formula saved successfully for ${currentSubTestForFormula.name}`,
@@ -574,7 +570,6 @@ const TestConfigurationSection: React.FC<TestConfigurationSectionProps> = ({
       }
     } else {
       // No labId available, just close dialog (will save on panel save)
-      console.log('⚠️ No labId available, formula will be saved when panel is saved');
       toast({
         title: "Info",
         description: "Formula updated. Click 'Save Panel' to persist changes.",

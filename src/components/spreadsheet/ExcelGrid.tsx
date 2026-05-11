@@ -112,7 +112,6 @@ export const ExcelGrid: React.FC<{
     const srNo = data[row][0]?.value;
     if (!srNo) return;
 
-    console.log('Saving to database:', { srNo, columnName, value });
 
     try {
       const { error } = await supabase
@@ -124,7 +123,6 @@ export const ExcelGrid: React.FC<{
         console.error('Error saving to database:', error);
         alert('Error saving data to database');
       } else {
-        console.log('Data saved successfully');
       }
     } catch (error) {
       console.error('Database save error:', error);
@@ -154,7 +152,6 @@ export const ExcelGrid: React.FC<{
     );
     
     setData(newData);
-    console.log('Applied formatting:', formatting, 'to cells:', cellsToFormat);
   };
 
   // Expose formatting function

@@ -27,7 +27,6 @@ export const addClinicalServiceToVisitForeignKey = async (data: VisitServiceData
       throw error;
     }
 
-    console.log('✅ Clinical service added successfully using UUID foreign key');
     return true;
   } catch (error) {
     console.error('❌ Failed to add clinical service:', error);
@@ -53,7 +52,6 @@ export const addMandatoryServiceToVisitForeignKey = async (data: VisitServiceDat
       throw error;
     }
 
-    console.log('✅ Mandatory service added successfully using UUID foreign key');
     return true;
   } catch (error) {
     console.error('❌ Failed to add mandatory service:', error);
@@ -119,7 +117,6 @@ export const removeClinicalServiceFromVisitForeignKey = async (visitId: string) 
       throw error;
     }
 
-    console.log('✅ Clinical service removed successfully');
     return true;
   } catch (error) {
     console.error('❌ Failed to remove clinical service:', error);
@@ -147,7 +144,6 @@ export const updateClinicalServiceInVisitForeignKey = async (
       throw error;
     }
 
-    console.log('✅ Clinical service updated successfully');
     return true;
   } catch (error) {
     console.error('❌ Failed to update clinical service:', error);
@@ -168,7 +164,6 @@ const handleAddClinicalService = async (serviceId: string) => {
   if (success) {
     // Refresh the visit data - all rate details will be fetched via join
     const visitData = await getVisitWithServices('IH25I22001');
-    console.log('Updated visit with service details:', visitData);
 
     // visitData.clinical_service will contain:
     // - service_name, tpa_rate, private_rate, nabh_rate, non_nabh_rate

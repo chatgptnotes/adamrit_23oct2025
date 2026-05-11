@@ -121,7 +121,6 @@ export async function saveTestWithNestedSubTests(
     const currentTestId = savedTest.id;
     savedIds.push(currentTestId);
 
-    console.log(`✅ Saved test "${params.testName}" with ID:`, currentTestId);
 
     // Recursively save nested sub-tests
     if (subTests && subTests.length > 0) {

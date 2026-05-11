@@ -41,7 +41,6 @@ Discharge Condition: ${data.condition.length > 0 ? data.condition.join(', ') : '
 
   const handlePrint = () => {
     try {
-      console.log('Print button clicked');
 
       // Check if print is supported
       if (!window.print) {
@@ -50,7 +49,6 @@ Discharge Condition: ${data.condition.length > 0 ? data.condition.join(', ') : '
         return;
       }
 
-      console.log('Print function is available');
 
       // Hide any tooltips or dropdowns that might interfere
       const tooltips = document.querySelectorAll('[role="tooltip"], .tooltip, .dropdown-menu');
@@ -62,11 +60,9 @@ Discharge Condition: ${data.condition.length > 0 ? data.condition.join(', ') : '
 
       // Add print event listeners for debugging
       const beforePrint = () => {
-        console.log('Before print event fired');
       };
 
       const afterPrint = () => {
-        console.log('After print event fired');
       };
 
       window.addEventListener('beforeprint', beforePrint);
@@ -74,15 +70,12 @@ Discharge Condition: ${data.condition.length > 0 ? data.condition.join(', ') : '
 
       // Ensure the page is fully loaded before printing
       if (document.readyState !== 'complete') {
-        console.log('Document not ready, waiting for load');
         window.addEventListener('load', () => {
           setTimeout(() => {
-            console.log('Calling window.print() after load');
             window.print();
           }, 300);
         });
       } else {
-        console.log('Document ready, calling window.print()');
         // Small delay to ensure all styles are applied
         setTimeout(() => {
           window.print();

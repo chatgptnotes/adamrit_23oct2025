@@ -183,15 +183,11 @@ export const PatientDetailsModal: React.FC<PatientDetailsModalProps> = ({
                     <div className="flex flex-wrap gap-2">
                       {(() => {
                         // Debug: Log the data structure
-                        console.log('Patient Details:', patientDetails);
-                        console.log('Visits:', patientDetails?.visits);
-                        console.log('Visit Diagnoses:', patientDetails?.visits?.[0]?.visit_diagnoses);
 
                         const primaryDiagnosis = patientDetails?.visits?.flatMap(visit =>
                           visit.visit_diagnoses?.filter(vd => vd.is_primary)
                         ).find(Boolean);
 
-                        console.log('Primary Diagnosis Found:', primaryDiagnosis);
 
                         return primaryDiagnosis ? (
                           <Badge className="bg-blue-600 text-white">

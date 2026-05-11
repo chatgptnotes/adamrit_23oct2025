@@ -126,7 +126,6 @@ const Corporate: React.FC = () => {
       }
 
       // Log that we're proceeding with HMIS auth instead of Supabase auth
-      console.log('✅ Proceeding with HMIS authentication instead of Supabase auth');
       console.log('📝 Note: RLS should be disabled on corporate table for this to work');
 
       if (editingCorporate) {
@@ -142,7 +141,6 @@ const Corporate: React.FC = () => {
           .select();
 
         console.log('📊 Update response data:', data);
-        console.log('❌ Update error:', error);
 
         if (error) {
           console.error('❌ Supabase update error details:', {
@@ -156,7 +154,6 @@ const Corporate: React.FC = () => {
         toast.success('Corporate updated successfully');
       } else {
         // Create new corporate
-        console.log('➕ Creating new corporate...');
         const insertData = {
           name: formData.name.trim()
         };
@@ -168,7 +165,6 @@ const Corporate: React.FC = () => {
           .select();
 
         console.log('📊 Insert response data:', data);
-        console.log('❌ Insert error:', error);
 
         if (error) {
           console.error('❌ Supabase insert error details:', {
@@ -179,7 +175,6 @@ const Corporate: React.FC = () => {
           });
           throw error;
         }
-        console.log('✅ Corporate added successfully!');
         toast.success('Corporate added successfully');
       }
 

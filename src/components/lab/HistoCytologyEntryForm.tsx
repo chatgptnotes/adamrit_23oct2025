@@ -88,7 +88,6 @@ const HistoCytologyEntryForm: React.FC<HistoCytologyEntryFormProps> = ({
       }
 
       try {
-        console.log('Fetching sub-test config for:', selectedTests[0].test_name);
 
         const { data, error } = await supabase
           .from('lab_test_config')
@@ -101,7 +100,6 @@ const HistoCytologyEntryForm: React.FC<HistoCytologyEntryFormProps> = ({
           return;
         }
 
-        console.log('Lab test config data:', data);
 
         // Check if any row has nested_sub_tests
         let allNestedSubTests: any[] = [];
@@ -124,7 +122,6 @@ const HistoCytologyEntryForm: React.FC<HistoCytologyEntryFormProps> = ({
 
           // Sort tabs according to preferred order
           const sortedTabs = sortTabs(tabs);
-          console.log('Dynamic tabs created (sorted):', sortedTabs);
           setDynamicTabs(sortedTabs);
           setActiveTab(sortedTabs[0]?.id || '');
 
@@ -144,7 +141,6 @@ const HistoCytologyEntryForm: React.FC<HistoCytologyEntryFormProps> = ({
 
           // Sort tabs according to preferred order
           const sortedTabs = sortTabs(tabs);
-          console.log('Dynamic tabs from sub_test_name (sorted):', sortedTabs);
           setDynamicTabs(sortedTabs);
           setActiveTab(sortedTabs[0]?.id || '');
 
@@ -154,7 +150,6 @@ const HistoCytologyEntryForm: React.FC<HistoCytologyEntryFormProps> = ({
           });
           setFormData(initialData);
         } else {
-          console.log('No sub-test config found, using default tabs');
           // Fallback to default tabs if no config found
           const defaultTabs = [
             { id: 'specimen', label: 'Specimen', field: 'specimen' },
@@ -197,7 +192,6 @@ const HistoCytologyEntryForm: React.FC<HistoCytologyEntryFormProps> = ({
 
         if (!error && data?.collected_date) {
           setSampleCollectedDate(data.collected_date);
-          console.log('✅ Got sample collected date:', data.collected_date);
         }
       } catch (err) {
         console.error('Error fetching collected_date:', err);
@@ -241,7 +235,6 @@ const HistoCytologyEntryForm: React.FC<HistoCytologyEntryFormProps> = ({
               setAuthenticatedResult(true);
             }
           } catch (e) {
-            console.log('Not JSON format, using as plain text');
           }
         }
       } catch (error) {
@@ -286,7 +279,6 @@ const HistoCytologyEntryForm: React.FC<HistoCytologyEntryFormProps> = ({
       const uploadedFileUrls: string[] = [];
 
       if (uploadedFiles.length > 0) {
-        console.log('Uploading files to storage...');
 
         for (const file of uploadedFiles) {
           const fileName = `${Date.now()}_${file.name}`;
@@ -314,7 +306,6 @@ const HistoCytologyEntryForm: React.FC<HistoCytologyEntryFormProps> = ({
 
             if (urlData?.publicUrl) {
               uploadedFileUrls.push(urlData.publicUrl);
-              console.log('File uploaded:', urlData.publicUrl);
             }
           }
         }
@@ -408,7 +399,6 @@ const HistoCytologyEntryForm: React.FC<HistoCytologyEntryFormProps> = ({
 
     if (pdfUrl) {
       // Open PDF in new window for printing
-      console.log('Opening PDF for print:', pdfUrl);
       const printWindow = window.open(pdfUrl, '_blank');
       if (printWindow) {
         // Wait for PDF to load then print

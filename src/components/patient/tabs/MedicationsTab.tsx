@@ -83,12 +83,10 @@ const MedicationsTab = ({ patient, visitId }: MedicationsTabProps) => {
   };
 
   const handlePrescription = () => {
-    console.log('Opening prescription for patient:', patient.id);
     navigate('/prescriptions');
   };
 
   const handleTreatmentSheet = () => {
-    console.log('Opening treatment sheet for patient:', patient.id);
     const patientId = searchParams.get('patient');
     navigate(`/treatment-sheet?patient=${patientId}`);
   };

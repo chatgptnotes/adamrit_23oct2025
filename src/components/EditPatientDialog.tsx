@@ -88,7 +88,6 @@ export const EditPatientDialog: React.FC<EditPatientDialogProps> = ({
         return [];
       }
       
-      console.log('✅ EditPatientDialog found visits:', data?.length || 0);
       return data || [];
     },
     enabled: isOpen && !!(patient.patientUuid || patient.id)
@@ -97,9 +96,6 @@ export const EditPatientDialog: React.FC<EditPatientDialogProps> = ({
   // Update form data when dialog opens or patient changes
   useEffect(() => {
     if (isOpen) {
-      console.log('Dialog opened, patient data:', patient);
-      console.log('Patient sstTreatment:', patient.sstTreatment);
-      console.log('Patient surgery:', patient.surgery);
       
       // Start with core patient fields
       const validPatientFields: any = {
@@ -165,7 +161,6 @@ export const EditPatientDialog: React.FC<EditPatientDialogProps> = ({
         }
       }
       
-      console.log('Setting formData with surgery:', validPatientFields.surgery);
       setFormData(validPatientFields);
     }
   }, [isOpen, patient.id, patient.sstTreatment, patient.surgery, visits]);
@@ -201,7 +196,6 @@ export const EditPatientDialog: React.FC<EditPatientDialogProps> = ({
         throw new Error('Cannot update patient: No valid patient UUID found. Please refresh and try again.');
       }
       
-      console.log('✅ Extracted patient UUID for update:', patientUuidForSave);
       
       // 1. Update patient basic information
       const patientUpdateData = {

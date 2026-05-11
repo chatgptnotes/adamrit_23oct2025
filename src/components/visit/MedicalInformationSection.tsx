@@ -66,32 +66,24 @@ export const MedicalInformationSection: React.FC<MedicalInformationSectionProps>
       try {
         setIsLoadingReferees(true);
         setRefereesError(null);
-        console.log('Fetching referees from referees table...');
         
         // First, let's check if we can connect to the database at all
         const { data: testData, error: testError } = await supabase
           .from('referees')
           .select('count', { count: 'exact', head: true });
         
-        console.log('Table count check:', { testData, testError });
         
         const { data, error } = await supabase
           .from('referees')
           .select('id, name, specialty, institution')
           .order('name');
         
-        console.log('Raw query response:', { data, error });
-        console.log('Data type:', typeof data);
-        console.log('Data length:', data?.length);
-        console.log('Individual records:', data);
         
         if (error) {
           console.error('Error fetching referees:', error);
           setRefereesError(`Failed to load referring doctors: ${error.message}`);
           setReferees([]);
         } else {
-          console.log('Referees fetched successfully:', data);
-          console.log('Setting referees state with:', data || []);
           setReferees(data || []);
         }
       } catch (error) {

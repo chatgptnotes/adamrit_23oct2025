@@ -397,6 +397,10 @@ const DailyPaymentAllocation = () => {
   const [extractedStaff, setExtractedStaff] = useState<{ name: string; amount: number; selected: boolean }[]>([]);
   const [isImporting, setIsImporting] = useState(false);
   const [isSyncingRMOs, setIsSyncingRMOs] = useState(false);
+
+  // Expected IPD Collections
+  const [expectedAyushman, setExpectedAyushman] = useState<number>(100000);
+  const [expectedHope, setExpectedHope] = useState<number>(50000);
   const [defPayeeSearchTerm, setDefPayeeSearchTerm] = useState('');
   const { data: defPayeeResults = [] } = useMultiPayeeSearch(defPayeeSearchTerm, selectedHospital);
 
@@ -472,7 +476,14 @@ const DailyPaymentAllocation = () => {
   const activeSchedule = schedule.filter(e => e.status !== 'skipped');
   const totalDue = activeSchedule.reduce((s, e) => s + (e.daily_amount + e.carryforward_amount), 0);
   const totalPaid = activeSchedule.reduce((s, e) => s + e.paid_amount, 0);
-  const totalAvailable = effectiveCash + funds.totalActual;
+
+  // Sum ALL entered actual balances from ALL hospitals (cash + banks) + expected IPD collections
+  const totalBankAndCash = funds.accounts
+    .filter(a => a.actual_balance !== null)
+    .reduce((s, a) => s + a.actual_balance, 0)
+    + expectedAyushman
+    + expectedHope;
+  const totalAvailable = totalBankAndCash;
   const surplus = totalAvailable - totalDue;
   const coveragePercent = totalDue > 0 ? Math.min(Math.round((totalAvailable / totalDue) * 100), 100) : 100;
 
@@ -484,7 +495,7 @@ const DailyPaymentAllocation = () => {
       formatINR(a.ledger_balance),
       a.actual_balance !== null ? formatINR(a.actual_balance) : '—',
     ]);
-    rows.push(['TOTAL', '', '', formatINR(funds.totalLedger), formatINR(funds.totalActual)]);
+    rows.push(['TOTAL (All Hospitals - All Cash + Banks)', '', '', formatINR(funds.totalLedger), formatINR(totalBankAndCash)]);
     printTable('Available Funds', headers, rows, selectedDate);
   };
 
@@ -1199,11 +1210,46 @@ table{width:100%;border-collapse:collapse;margin-top:12px}
                   );
                 })
               )}
+              {/* Expected IPD Collections */}
+              <TableRow className="bg-blue-50">
+                <TableCell colSpan={3} className="font-medium text-blue-800">
+                  Expected Collection IPD Ayushman
+                </TableCell>
+                <TableCell className="text-right text-gray-400">—</TableCell>
+                <TableCell className="text-right">
+                  <input
+                    type="number"
+                    value={expectedAyushman}
+                    onChange={e => setExpectedAyushman(Number(e.target.value) || 0)}
+                    className="w-28 text-right border rounded px-1 py-0.5 text-sm font-mono text-blue-800 bg-white"
+                  />
+                </TableCell>
+                <TableCell colSpan={2} />
+              </TableRow>
+              <TableRow className="bg-blue-50">
+                <TableCell colSpan={3} className="font-medium text-blue-800">
+                  Expected Collection IPD Hope
+                </TableCell>
+                <TableCell className="text-right text-gray-400">—</TableCell>
+                <TableCell className="text-right">
+                  <input
+                    type="number"
+                    value={expectedHope}
+                    onChange={e => setExpectedHope(Number(e.target.value) || 0)}
+                    className="w-28 text-right border rounded px-1 py-0.5 text-sm font-mono text-blue-800 bg-white"
+                  />
+                </TableCell>
+                <TableCell colSpan={2} />
+              </TableRow>
               {/* Totals */}
-              <TableRow className="bg-gray-50 font-bold">
-                <TableCell colSpan={3}>TOTAL (All Accounts)</TableCell>
-                <TableCell className="text-right font-mono">{formatINR(funds.totalLedger)}</TableCell>
-                <TableCell className="text-right font-mono text-blue-700">{formatINR(funds.totalActual)}</TableCell>
+              <TableRow className="bg-green-50 font-bold border-t-2 border-green-200">
+                <TableCell colSpan={3} className="text-green-800">
+                  TOTAL (All Hospitals - All Cash + Banks)
+                </TableCell>
+                <TableCell className="text-right font-mono text-gray-600">
+                  {formatINR(funds.accounts.reduce((s, a) => s + a.ledger_balance, 0))}
+                </TableCell>
+                <TableCell className="text-right font-mono text-green-800 text-base">{formatINR(totalBankAndCash)}</TableCell>
                 <TableCell colSpan={2}></TableCell>
               </TableRow>
             </TableBody>
@@ -1215,8 +1261,13 @@ table{width:100%;border-collapse:collapse;margin-top:12px}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card>
           <CardContent className="p-4">
-            <div className="text-sm text-muted-foreground mb-1">Total Available (Cash + Banks)</div>
+            <div className="text-sm text-muted-foreground mb-1">Total Available (Actual + Expected IPD)</div>
             <p className="text-2xl font-bold text-green-700">{formatINR(totalAvailable)}</p>
+            <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
+              <div>Actual (All Accounts): <span className="font-medium">{formatINR(funds.accounts.filter(a => a.actual_balance !== null).reduce((s,a)=>s+a.actual_balance,0))}</span></div>
+              <div>Expected IPD Ayushman: <span className="font-medium">{formatINR(expectedAyushman)}</span></div>
+              <div>Expected IPD Hope: <span className="font-medium">{formatINR(expectedHope)}</span></div>
+            </div>
           </CardContent>
         </Card>
         <Card>

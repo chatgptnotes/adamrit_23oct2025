@@ -1221,7 +1221,6 @@ const DetailedInvoice = () => {
         throw visitError;
       }
 
-      console.log('✅ Visit data fetched:', visit);
       console.log('📋 Visit ID from URL:', visitId);
       console.log('📋 Visit ID field (visit_id):', visit?.visit_id);
 
@@ -1248,7 +1247,6 @@ const DetailedInvoice = () => {
 
       // Use the actual visit ID (UUID) for related queries
       const actualVisitId = visit?.id;
-      console.log('✅ Using actual visit ID (UUID) for queries:', actualVisitId);
 
       // Fetch lab orders for this visit
       let labOrders = [];
@@ -1382,7 +1380,6 @@ const DetailedInvoice = () => {
           console.error('❌ Error fetching clinical services:', clinicalError);
         } else {
           clinicalServices = clinicalData || [];
-          console.log('✅ Clinical services fetched:', clinicalServices.length, 'records');
           console.log('📋 Clinical services data:', JSON.stringify(clinicalData, null, 2));
         }
       }
@@ -1413,7 +1410,6 @@ const DetailedInvoice = () => {
           console.error('❌ Error fetching accommodations:', accommodationError);
         } else {
           accommodationOrders = accommodationData || [];
-          console.log('✅ Accommodations fetched:', accommodationOrders.length, 'records');
           console.log('📋 Accommodation data:', JSON.stringify(accommodationData, null, 2));
         }
       }
@@ -1441,7 +1437,6 @@ const DetailedInvoice = () => {
           console.error('❌ Error fetching surgery orders:', surgeryError);
         } else {
           surgeryOrders = surgeryData || [];
-          console.log('✅ Surgeries fetched:', surgeryOrders.length, 'records');
         }
       }
 
@@ -1460,7 +1455,6 @@ const DetailedInvoice = () => {
           console.error('❌ Error fetching anesthetists:', anesthetistError);
         } else {
           anesthetistOrders = anesthetistData || [];
-          console.log('✅ Anesthetists fetched:', anesthetistOrders.length, 'records');
         }
       }
 
@@ -1480,7 +1474,6 @@ const DetailedInvoice = () => {
           console.error('❌ Error fetching implants:', implantError);
         } else {
           implantOrders = implantData || [];
-          console.log('✅ Implants fetched:', implantOrders.length, 'records');
         }
       }
 
@@ -1516,7 +1509,6 @@ const DetailedInvoice = () => {
           console.error('❌ Error fetching mandatory services:', mandatoryError);
         } else {
           mandatoryServices = mandatoryData || [];
-          console.log('✅ Mandatory services fetched:', mandatoryServices.length, 'records');
         }
       }
 

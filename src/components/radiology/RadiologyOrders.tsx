@@ -176,22 +176,18 @@ const RadiologyOrders: React.FC = () => {
   });
 
   const handleExportExcel = () => {
-    console.log('Exporting to Excel...');
     // Export functionality will be implemented
   };
 
   const handlePACS = () => {
-    console.log('Opening PACS...');
     // PACS functionality will be implemented
   };
 
   const handleEnterResult = (orderId: number) => {
-    console.log('Enter result for order:', orderId);
     // Result entry functionality will be implemented
   };
 
   const handleViewDICOM = (orderId: number) => {
-    console.log('View DICOM for order:', orderId);
     // DICOM viewer functionality will be implemented
   };
 

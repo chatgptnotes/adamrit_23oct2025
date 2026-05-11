@@ -71,7 +71,6 @@ export const VisitDetailsSection: React.FC<VisitDetailsSectionProps> = ({
           ? 'ayushman_consultants'
           : 'hope_consultants';
 
-        console.log(`Fetching doctors from ${tableName} table...`);
 
         const { data, error } = await supabase
           .from(tableName)
@@ -83,7 +82,6 @@ export const VisitDetailsSection: React.FC<VisitDetailsSectionProps> = ({
           setError('Failed to load doctors');
           setDoctors([]);
         } else {
-          console.log(`Doctors fetched from ${tableName}:`, data?.length);
           setDoctors(data || []);
         }
       } catch (error) {
@@ -103,7 +101,6 @@ export const VisitDetailsSection: React.FC<VisitDetailsSectionProps> = ({
     const fetchReferees = async () => {
       try {
         setIsLoadingReferees(true);
-        console.log('Fetching referees from referees table...');
 
         const { data, error } = await supabase
           .from('referees')
@@ -114,7 +111,6 @@ export const VisitDetailsSection: React.FC<VisitDetailsSectionProps> = ({
           console.error('Error fetching referees:', error);
           setReferees([]);
         } else {
-          console.log('Referees fetched successfully:', data);
           setReferees(data || []);
         }
       } catch (error) {
@@ -133,7 +129,6 @@ export const VisitDetailsSection: React.FC<VisitDetailsSectionProps> = ({
     const fetchRelationshipManagers = async () => {
       try {
         setIsLoadingRelationshipManagers(true);
-        console.log('Fetching relationship managers...');
 
         const { data, error } = await supabase
           .from('relationship_managers')
@@ -144,7 +139,6 @@ export const VisitDetailsSection: React.FC<VisitDetailsSectionProps> = ({
           console.error('Error fetching relationship managers:', error);
           setRelationshipManagers([]);
         } else {
-          console.log('Relationship managers fetched successfully:', data);
           setRelationshipManagers(data || []);
         }
       } catch (error) {
@@ -163,7 +157,6 @@ export const VisitDetailsSection: React.FC<VisitDetailsSectionProps> = ({
     const fetchWards = async () => {
       try {
         setIsLoadingWards(true);
-        console.log('Fetching wards from room_management table...');
 
         const { data, error } = await supabase
           .from('room_management')
@@ -174,7 +167,6 @@ export const VisitDetailsSection: React.FC<VisitDetailsSectionProps> = ({
           console.error('Error fetching wards:', error);
           setWards([]);
         } else {
-          console.log('Wards fetched successfully:', data);
           setWards(data || []);
         }
       } catch (error) {
@@ -223,14 +215,11 @@ export const VisitDetailsSection: React.FC<VisitDetailsSectionProps> = ({
               ? occupiedRooms.filter(room => room !== currentRoomNumber)
               : occupiedRooms;
 
-            console.log('Occupied rooms:', filteredOccupiedRooms);
-            console.log('Current room (edit mode):', currentRoomNumber);
 
             // Generate all room numbers and filter out occupied ones
             const allRooms = Array.from({ length: ward.maximum_rooms }, (_, i) => i + 1);
             const availableRoomsList = allRooms.filter(room => !filteredOccupiedRooms.includes(room));
 
-            console.log('Available rooms:', availableRoomsList);
             setAvailableRooms(availableRoomsList);
           } catch (error) {
             console.error('Exception while fetching occupied rooms:', error);

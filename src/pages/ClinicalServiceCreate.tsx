@@ -52,7 +52,6 @@ const ClinicalServiceCreate = () => {
         created_by: null // Explicitly set to null to bypass RLS
       };
 
-      console.log('Inserting data:', serviceData);
 
       // Try using service role to bypass RLS temporarily
       const { data, error } = await supabase
@@ -71,7 +70,6 @@ const ClinicalServiceCreate = () => {
         throw error;
       }
 
-      console.log('SUCCESS! Insert completed:', data);
       toast.success('Clinical service created successfully!');
       navigate('/clinical-services');
     } catch (error: any) {

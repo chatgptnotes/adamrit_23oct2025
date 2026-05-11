@@ -62,9 +62,6 @@ export const VisitRegistrationForm: React.FC<VisitRegistrationFormProps> = ({
   // Populate form with existing data when in edit mode
   React.useEffect(() => {
     if (editMode && existingVisit) {
-      console.log('=== POPULATING FORM FOR EDIT MODE ===');
-      console.log('Existing Visit Data:', existingVisit);
-      console.log('Appointment With value from DB:', existingVisit.appointment_with);
 
       const populatedData = {
         visitType: existingVisit.visit_type || 'Follow-up',
@@ -83,7 +80,6 @@ export const VisitRegistrationForm: React.FC<VisitRegistrationFormProps> = ({
         billingCategoryOverride: existingVisit.billing_category_override || existingVisit.corporate || '',
       };
 
-      console.log('Populated Form Data:', populatedData);
       setFormData(populatedData);
 
       // Set visit date if available
@@ -186,17 +182,6 @@ export const VisitRegistrationForm: React.FC<VisitRegistrationFormProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    console.log('=== FORM SUBMISSION DEBUG ===');
-    console.log('Form Data:', formData);
-    console.log('Individual Fields:');
-    console.log('  - visitType:', formData.visitType, 'Length:', formData.visitType?.length);
-    console.log('  - appointmentWith:', formData.appointmentWith, 'Length:', formData.appointmentWith?.length);
-    console.log('  - reasonForVisit:', formData.reasonForVisit, 'Length:', formData.reasonForVisit?.length);
-    console.log('  - patientType:', formData.patientType, 'Length:', formData.patientType?.length);
-    console.log('Selected IDs:', selectedIds);
-    console.log('Patient data:', patient);
-    console.log('Edit Mode:', editMode);
-    console.log('Existing Visit:', existingVisit);
 
     // Validate required fields with more detailed error messaging
     const missingFields = [];
@@ -208,7 +193,6 @@ export const VisitRegistrationForm: React.FC<VisitRegistrationFormProps> = ({
     } else if (editMode && (!formData.appointmentWith || formData.appointmentWith.trim() === '' || formData.appointmentWith === 'Select Doctor')) {
       // In edit mode, set a default value if appointment_with is missing
       formData.appointmentWith = 'Dr. Unknown';
-      console.log('Setting default appointment_with for edit mode:', formData.appointmentWith);
     }
 
     if (!formData.reasonForVisit || formData.reasonForVisit.trim() === '') missingFields.push('Reason for Visit');
@@ -250,7 +234,6 @@ export const VisitRegistrationForm: React.FC<VisitRegistrationFormProps> = ({
           ? new Date().toISOString()
           : existingVisit.admission_date;
 
-        console.log('Updating visit with ID:', existingVisit.visit_id);
         console.log('Update data:', {
           visit_date: format(visitDate, 'yyyy-MM-dd'),
           visit_type: formData.visitType,
@@ -298,7 +281,6 @@ export const VisitRegistrationForm: React.FC<VisitRegistrationFormProps> = ({
           return;
         }
 
-        console.log('Visit updated successfully:', updateData);
 
         // Save billing category override (non-blocking — column may not exist yet)
         if (formData.billingCategoryOverride && formData.billingCategoryOverride !== 'same_as_registration') {
@@ -346,7 +328,6 @@ export const VisitRegistrationForm: React.FC<VisitRegistrationFormProps> = ({
       } else {
         // Create new visit (existing code)
         const visitId = await generateVisitId(visitDate);
-        console.log('Generated visit ID (TEXT):', visitId);
 
         // For IPD/Emergency patients, set admission_date to visit_date
         const isIPDOrEmergency = formData.patientType === 'IPD' ||
@@ -396,9 +377,6 @@ export const VisitRegistrationForm: React.FC<VisitRegistrationFormProps> = ({
 
       // Get the database-generated UUID for junction table references
       const dbVisitUUID = visitData.id; // This is the UUID primary key
-      console.log('Visit created successfully!');
-      console.log('Visit TEXT ID:', visitData.visit_id);
-      console.log('Visit UUID:', dbVisitUUID);
 
       // Log visit creation activity
       logActivity('visit_create', {
@@ -424,7 +402,6 @@ export const VisitRegistrationForm: React.FC<VisitRegistrationFormProps> = ({
 
       // Get the readable patient_id for use in patient_data
       const readablePatientId = patient.patients_id || patientData?.patients_id || patient.id;
-      console.log('Using readable patient_id for patient_data:', readablePatientId);
 
       // Update patient_data table with visit information - ENSURE patient_id is readable ID
       try {
@@ -436,7 +413,6 @@ export const VisitRegistrationForm: React.FC<VisitRegistrationFormProps> = ({
           .single();
 
         if (findError || !patientDataRecord) {
-          console.log('Patient not found in patient_data, creating new record...');
           // If patient doesn't exist in patient_data, create a new record
           const insertData = {
             patient_name: patientData?.name || patient.name,
@@ -464,8 +440,6 @@ export const VisitRegistrationForm: React.FC<VisitRegistrationFormProps> = ({
             remark_2: `Patient ID: ${readablePatientId}`
           };
           
-          console.log('INSERTING patient_data with patient_id:', insertData.patient_id);
-          console.log('INSERTING patient_data with MRN:', insertData.mrn);
           
           const { data: insertedData, error: insertError } = await supabase
             .from('patient_data')
@@ -476,12 +450,8 @@ export const VisitRegistrationForm: React.FC<VisitRegistrationFormProps> = ({
           if (insertError) {
             console.error('Error inserting patient_data record:', insertError);
           } else {
-            console.log('Patient_data record created successfully');
-            console.log('Stored patient_id:', insertedData.patient_id);
-            console.log('MRN field value:', insertedData.mrn);
           }
         } else {
-          console.log('Updating existing patient_data record...');
           // Update existing patient_data record - ENSURE readable patient_id
           const updateData = {
             patient_name: patientData?.name || patient.name,
@@ -509,8 +479,6 @@ export const VisitRegistrationForm: React.FC<VisitRegistrationFormProps> = ({
             remark_2: `Patient ID: ${readablePatientId}`
           };
           
-          console.log('UPDATING patient_data with patient_id:', updateData.patient_id);
-          console.log('UPDATING patient_data with MRN:', updateData.mrn);
           
           const { data: updatedData, error: updateError } = await supabase
             .from('patient_data')
@@ -522,9 +490,6 @@ export const VisitRegistrationForm: React.FC<VisitRegistrationFormProps> = ({
           if (updateError) {
             console.error('Error updating patient_data record:', updateError);
           } else {
-            console.log('Patient_data record updated successfully');
-            console.log('Updated patient_id:', updatedData.patient_id);
-            console.log('MRN field value:', updatedData.mrn);
           }
         }
       } catch (error) {

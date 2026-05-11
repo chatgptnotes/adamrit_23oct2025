@@ -90,17 +90,14 @@ const LabSampleProcessing: React.FC = () => {
   };
 
   const handleSaveResults = () => {
-    console.log('Saving results:', { currentSample, investigations });
     // Here you would save to your database
   };
 
   const handlePreviewAndPrint = () => {
-    console.log('Preview and print:', { currentSample, investigations });
     // Here you would generate and preview the report
   };
 
   const handleDownloadFiles = () => {
-    console.log('Download files');
     // Here you would handle file downloads
   };
 

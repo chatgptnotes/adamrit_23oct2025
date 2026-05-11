@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
@@ -28,6 +28,7 @@ export default function QueueDisplay() {
   const filterDept = searchParams.get('dept');
   const [tokens, setTokens] = useState<Token[]>([]);
   const [time, setTime] = useState(new Date());
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fetchTokens = async () => {
     const today = new Date();
@@ -48,11 +49,12 @@ export default function QueueDisplay() {
   useEffect(() => {
     fetchTokens();
 
-    // Real-time subscription
+    // Real-time subscription — debounced to avoid cascade during rapid token calls
     const channel = supabase
       .channel('queue-display-live')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'queue_tokens' }, () => {
-        fetchTokens();
+        if (debounceRef.current) clearTimeout(debounceRef.current);
+        debounceRef.current = setTimeout(() => fetchTokens(), 500);
       })
       .subscribe();
 
@@ -60,6 +62,7 @@ export default function QueueDisplay() {
     const clockTimer = setInterval(() => setTime(new Date()), 1000);
 
     return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
       supabase.removeChannel(channel);
       clearInterval(clockTimer);
     };

@@ -47,8 +47,8 @@ export default function QueueManagement() {
       if (error) throw error;
       return data || [];
     },
-    refetchInterval: 10000,
-    staleTime: 5000,
+    refetchInterval: 60000,
+    staleTime: 30000,
   });
 
   const issueToken = useMutation({

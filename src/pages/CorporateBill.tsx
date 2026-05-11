@@ -54,7 +54,7 @@ const CorporateBill = () => {
         dateOfDischarge: visit.discharge_date ? format(new Date(visit.discharge_date), 'dd-MM-yyyy') : '',
         dateOfInvoice: format(new Date(), 'dd-MM-yyyy'),
         invoiceNo: billNo,
-        registrationNo: actualVisitId || '',
+        registrationNo: patient?.patients_id || '',
         category: patient?.corporate || 'Private',
         primaryConsultant: visit.appointment_with || '',
       });

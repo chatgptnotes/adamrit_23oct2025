@@ -76,7 +76,6 @@ const ViewBill = () => {
         bill_line_items: lineItems || []
       };
 
-      console.log('✅ Fetched real bill data:', billWithRelations);
       console.log('📊 Bill sections:', sections?.length || 0);
       console.log('📋 Bill line items:', lineItems?.length || 0);
       console.log('💰 Total amount:', bill.total_amount);

@@ -1,5 +1,6 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import * as XLSX from 'xlsx';
+import { ExtensionDaysCell } from '@/components/ipd/ExtensionDaysCell';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -8,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useDebounce } from 'use-debounce';
 import { Badge } from '@/components/ui/badge';
-import { Eye, FileText, Search, Calendar, DollarSign, Trash2, FolderOpen, FolderX, CheckCircle, XCircle, Clock, MinusCircle, RotateCcw, Printer, Filter, MessageSquare, ClipboardList, ArrowUpDown, Circle, ChevronLeft, ChevronRight, Upload, Bell, Download, Loader2 } from 'lucide-react';
+import { Eye, FileText, Search, Calendar, DollarSign, Trash2, FolderOpen, FolderX, CheckCircle, XCircle, Clock, MinusCircle, RotateCcw, Printer, Filter, MessageSquare, ClipboardList, ArrowUpDown, Circle, ChevronLeft, ChevronRight, Upload, Bell, Download, Loader2, Brain } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -48,6 +49,7 @@ import { DateRangePicker } from '@/components/ui/date-range-picker';
 import { DateRange } from 'react-day-picker';
 import '@/styles/print.css';
 import { RefereeDoaPaymentModal } from '@/components/ipd/RefereeDoaPaymentModal';
+import { MriOrderModal } from '@/components/ipd/MriOrderModal';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { calculateReferralAmount, formatIndianCurrency } from '@/utils/referralCalculator';
 
@@ -329,11 +331,16 @@ const TodaysIpdDashboard = () => {
   const [billingStatusInputs, setBillingStatusInputs] = useState({});
   const [bunchNumberInputs, setBunchNumberInputs] = useState({});
   const [referralLetterStatus, setReferralLetterStatus] = useState<Record<string, boolean>>({});
+  const referralDebounceMap = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const [commentDialogs, setCommentDialogs] = useState<Record<string, boolean>>({});
   const [commentTexts, setCommentTexts] = useState<Record<string, string>>({});
   const [originalComments, setOriginalComments] = useState<Record<string, string>>({});
   const [savingComments, setSavingComments] = useState<Record<string, boolean>>({});
   const [savedComments, setSavedComments] = useState<Record<string, boolean>>({});
+
+  // MRI Order Modal State
+  const [mriModalOpen, setMriModalOpen] = useState(false);
+  const [selectedVisitForMri, setSelectedVisitForMri] = useState<any>(null);
 
   // Getpass Notification Modal State
   const [isNotificationModalOpen, setIsNotificationModalOpen] = useState(false);
@@ -633,7 +640,6 @@ const TodaysIpdDashboard = () => {
           return;
         }
 
-        console.log('File status updated successfully for visit:', visit.visit_id);
         refetch(); // Refresh the data
       } catch (error) {
         console.error('Error updating file status:', error);
@@ -689,7 +695,6 @@ const TodaysIpdDashboard = () => {
           return;
         }
 
-        console.log('Condonation delay claim updated successfully for visit:', visit.visit_id);
         refetch(); // Refresh the data
       } catch (error) {
         console.error('Error updating condonation delay claim:', error);
@@ -745,7 +750,6 @@ const TodaysIpdDashboard = () => {
           return;
         }
 
-        console.log('Condonation delay intimation updated successfully for visit:', visit.visit_id);
         refetch(); // Refresh the data
       } catch (error) {
         console.error('Error updating condonation delay intimation:', error);
@@ -808,7 +812,6 @@ const TodaysIpdDashboard = () => {
           return;
         }
 
-        console.log('Extension of stay updated successfully for visit:', visit.visit_id);
         refetch();
       } catch (error) {
         console.error('Error updating extension of stay:', error);
@@ -883,7 +886,6 @@ const TodaysIpdDashboard = () => {
           return;
         }
 
-        console.log('Additional approvals updated successfully for visit:', visit.visit_id);
         refetch();
       } catch (error) {
         console.error('Error updating additional approvals:', error);
@@ -966,7 +968,6 @@ const TodaysIpdDashboard = () => {
           return;
         }
 
-        console.log('Photos updated successfully for visit:', visit.visit_id);
         refetch();
       } catch (error) {
         console.error('Error updating photos:', error);
@@ -1046,7 +1047,6 @@ const TodaysIpdDashboard = () => {
           return;
         }
 
-        console.log('Signs updated successfully for visit:', visit.visit_id);
         refetch();
       } catch (error) {
         console.error('Error updating signs:', error);
@@ -1126,7 +1126,6 @@ const TodaysIpdDashboard = () => {
           return;
         }
 
-        console.log('Hospital stamps updated successfully for visit:', visit.visit_id);
         refetch();
       } catch (error) {
         console.error('Error updating hospital stamps:', error);
@@ -1206,7 +1205,6 @@ const TodaysIpdDashboard = () => {
           return;
         }
 
-        console.log('Dr surgeon stamps updated successfully for visit:', visit.visit_id);
         refetch();
       } catch (error) {
         console.error('Error updating dr surgeon stamps:', error);
@@ -1424,7 +1422,6 @@ const TodaysIpdDashboard = () => {
           return;
         }
 
-        console.log(`${docType} updated successfully for visit:`, visit.visit_id);
         refetch();
       } catch (error) {
         console.error(`Error updating ${docType}:`, error);
@@ -1552,7 +1549,6 @@ const TodaysIpdDashboard = () => {
         throw error;
       }
 
-      console.log(`✅ TodaysIpdDashboard: Found ${data?.length || 0} visits for ${hospitalConfig?.name}`);
 
       // Debug: Check comments and discharge_date in fetched data
       console.log('📊 Sample visit data (first visit):', data?.[0]);
@@ -1836,23 +1832,25 @@ const TodaysIpdDashboard = () => {
           table: 'patient_documents',
           filter: 'document_type_id=eq.1' // Only referral letters
         },
-        async (payload: any) => {
-          console.log('📄 Referral letter change detected:', payload);
+        (payload: any) => {
           const visitId = payload.new?.visit_id || payload.old?.visit_id;
           const patientName = payload.new?.patient_name || payload.old?.patient_name;
-          if (visitId) {
-            // Re-check referral status for this visit
+          if (!visitId) return;
+          // Debounce per visitId to absorb rapid successive uploads for the same visit
+          const existing = referralDebounceMap.current.get(visitId);
+          if (existing) clearTimeout(existing);
+          referralDebounceMap.current.set(visitId, setTimeout(async () => {
+            referralDebounceMap.current.delete(visitId);
             const isUploaded = await checkReferralLetterUploaded(visitId, patientName);
-            setReferralLetterStatus(prev => ({
-              ...prev,
-              [visitId]: isUploaded
-            }));
-          }
+            setReferralLetterStatus(prev => ({ ...prev, [visitId]: isUploaded }));
+          }, 1000));
         }
       )
       .subscribe();
 
     return () => {
+      referralDebounceMap.current.forEach(t => clearTimeout(t));
+      referralDebounceMap.current.clear();
       supabase.removeChannel(channel);
     };
   }, []);
@@ -2113,7 +2111,6 @@ const TodaysIpdDashboard = () => {
             alert(`Failed to save comment: ${error.message}`);
             setSavingComments(prev => ({ ...prev, [visitId]: false }));
           } else {
-            console.log('✅ Comment saved successfully for visit:', visitId, 'Response:', data);
             // Update the original comment after successful save
             setOriginalComments(prev => ({ ...prev, [visitId]: text }));
             // Show saved indicator
@@ -2152,7 +2149,6 @@ const TodaysIpdDashboard = () => {
         return;
       }
 
-      console.log('Sr No updated successfully for visit:', visitId);
       refetch(); // Refresh the data
     } catch (error) {
       console.error('Error updating sr_no:', error);
@@ -2171,7 +2167,6 @@ const TodaysIpdDashboard = () => {
         return;
       }
 
-      console.log('Billing Executive updated successfully for visit:', visitId);
       refetch(); // Refresh the data
     } catch (error) {
       console.error('Error updating billing_executive:', error);
@@ -2191,7 +2186,6 @@ const TodaysIpdDashboard = () => {
         return;
       }
 
-      console.log('✅ Billing Status updated successfully for visit:', visitId, 'with value:', value);
       refetch(); // Refresh the data
     } catch (error) {
       console.error('❌ Exception during billing_status update:', error);
@@ -2211,7 +2205,6 @@ const TodaysIpdDashboard = () => {
         return;
       }
 
-      console.log('✅ Billing Sub Status updated successfully for visit:', visitId, 'with value:', value);
       refetch(); // Refresh the data
     } catch (error) {
       console.error('❌ Exception during billing_sub_status update:', error);
@@ -2230,7 +2223,6 @@ const TodaysIpdDashboard = () => {
         return;
       }
 
-      console.log('Claim ID updated successfully for visit:', visitId);
       refetch();
     } catch (error) {
       console.error('Error updating claim_id:', error);
@@ -2249,7 +2241,6 @@ const TodaysIpdDashboard = () => {
         return;
       }
 
-      console.log('ESIC UHID updated successfully for visit:', visitId);
       refetch();
     } catch (error) {
       console.error('Error updating esic_uh_id:', error);
@@ -2268,7 +2259,6 @@ const TodaysIpdDashboard = () => {
         return;
       }
 
-      console.log('Bunch Number updated successfully for visit:', visitId);
       refetch(); // Refresh the data
     } catch (error) {
       console.error('Error updating bunch_no:', error);
@@ -2290,7 +2280,6 @@ const TodaysIpdDashboard = () => {
         return;
       }
 
-      console.log('Discharge revoked successfully for visit:', visitId);
       refetch(); // Refresh the data
       alert(`Discharge revoked for ${patientName}. Patient moved back to currently admitted.`);
     } catch (error) {
@@ -2500,7 +2489,6 @@ const TodaysIpdDashboard = () => {
   const handleDeleteVisit = async (visitId: string) => {
     if (window.confirm('Are you sure you want to mark this visit as inactive? The record will be preserved for audit purposes.')) {
       try {
-        console.log('Deactivating visit for visit ID:', visitId);
 
         const { error } = await supabase
           .from('visits')
@@ -2513,7 +2501,6 @@ const TodaysIpdDashboard = () => {
           return;
         }
 
-        console.log('Visit marked as inactive:', visitId);
         refetch();
         alert('Visit marked as inactive successfully.');
       } catch (error) {
@@ -2786,6 +2773,7 @@ const TodaysIpdDashboard = () => {
                 {!hideColumns && <TableHead className="font-semibold">Condonation Delay -submission</TableHead>}
                 {!hideColumns && <TableHead className="font-semibold">Condonation Delay -intimation</TableHead>}
                 {!hideColumns && <TableHead className="font-semibold">Extension of Stay</TableHead>}
+                {!hideColumns && <TableHead className="font-semibold">Extension Days</TableHead>}
                 {!hideColumns && <TableHead className="font-semibold">Additional Approvals</TableHead>}
                 {!hideColumns && <TableHead className="font-semibold">Visit Type</TableHead>}
                 <TableHead className="font-semibold">Admission Date</TableHead>
@@ -2800,6 +2788,7 @@ const TodaysIpdDashboard = () => {
                 <TableHead className="font-semibold">Discharge Intimation</TableHead>
                 <TableHead className="font-semibold">Summaries and Certificates</TableHead>
                 <TableHead className="font-semibold">Getpass Notification</TableHead>
+                <TableHead className="font-semibold">Radiology</TableHead>
                 {(isAdmin || isMarketingManager) && <TableHead className="font-semibold">Actions</TableHead>}
               </TableRow>
               <TableRow className="bg-muted/30">
@@ -2887,7 +2876,7 @@ const TodaysIpdDashboard = () => {
                   )}
                   <TableCell className="font-mono text-sm">
                     <button
-                      onClick={() => handleVisitIdClick(visit.patient_id, visit.visit_id)}
+                      onClick={() => handleVisitIdClick(visit.patients?.id, visit.visit_id)}
                       className="text-blue-600 hover:text-blue-800 hover:underline font-medium transition-colors"
                     >
                       {visit.visit_id}
@@ -3088,6 +3077,14 @@ const TodaysIpdDashboard = () => {
                   )}
                   {!hideColumns && (
                     <TableCell>
+                      <ExtensionDaysCell
+                        visitUuid={visit.id}
+                        currentCount={(visit as any).extension_days_count ?? 0}
+                      />
+                    </TableCell>
+                  )}
+                  {!hideColumns && (
+                    <TableCell>
                       {isAdmin ? <AdditionalApprovalsToggle visit={visit} /> : (
                         <Badge variant="outline" className="capitalize">{visit.additional_approvals || '—'}</Badge>
                       )}
@@ -3221,6 +3218,20 @@ const TodaysIpdDashboard = () => {
                     >
                       <Bell className="h-4 w-4 mr-1" />
                       Add Notification
+                    </Button>
+                  </TableCell>
+                  <TableCell>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 w-8 p-0 hover:bg-violet-50"
+                      onClick={() => {
+                        setSelectedVisitForMri(visit);
+                        setMriModalOpen(true);
+                      }}
+                      title="Add Scan / Radiology Order"
+                    >
+                      <Brain className="h-4 w-4 text-violet-600" />
                     </Button>
                   </TableCell>
                   {(isAdmin || isMarketingManager) && (
@@ -3454,6 +3465,18 @@ const TodaysIpdDashboard = () => {
             }}
             patientName={selectedVisitForDocument.patients?.name || 'Unknown'}
             visitId={selectedVisitForDocument.visit_id}
+          />
+        )}
+
+        {/* Radiology Order Modal */}
+        {selectedVisitForMri && (
+          <MriOrderModal
+            isOpen={mriModalOpen}
+            onClose={() => {
+              setMriModalOpen(false);
+              setSelectedVisitForMri(null);
+            }}
+            visit={selectedVisitForMri}
           />
         )}
 
@@ -3724,15 +3747,6 @@ const TodaysIpdDashboard = () => {
         {/* Print Preview */}
         {showPrintPreview && (() => {
           const finalSettings = { ...printSettings, selectedColumnIds: printSelectedIds };
-          console.log('=== IPD DASHBOARD PRINT DEBUG ===');
-          console.log('printSelectedIds:', printSelectedIds);
-          console.log('printSettings:', printSettings);
-          console.log('finalSettings:', finalSettings);
-          console.log('finalSettings.selectedColumnIds:', finalSettings.selectedColumnIds);
-          console.log('Number of columns to print:', finalSettings.selectedColumnIds.length);
-          console.log('Column IDs:', finalSettings.selectedColumnIds);
-          console.log('Total available columns:', IPD_PRINT_COLUMNS.length);
-          console.log('=================================');
 
           return (
             <PrintPreview

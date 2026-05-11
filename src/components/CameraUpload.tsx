@@ -35,6 +35,7 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { logActivity } from '@/lib/activity-logger';
 import { useAuth } from '@/contexts/AuthContext';
+import { geminiGenerateContentUrl, geminiFetch } from '@/lib/gemini';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -468,21 +469,14 @@ Category mapping hints:
 
 Extract patient name if mentioned. Extract any ID/UHID if mentioned. Put the document type description in "notes".`;
 
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: systemPrompt + '\n\n' + instruction }] }],
-          generationConfig: { temperature: 0, maxOutputTokens: 200 },
-        }),
-      }
-    );
-
-    if (!response.ok) {
-      throw new Error(`Gemini API error: ${response.status}`);
-    }
+    const response = await geminiFetch(geminiGenerateContentUrl(geminiApiKey), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: systemPrompt + '\n\n' + instruction }] }],
+        generationConfig: { temperature: 0, maxOutputTokens: 200 },
+      }),
+    });
 
     const data = await response.json();
     const content = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
@@ -735,26 +729,19 @@ Rules:
 - If any field is not clearly visible, write "as directed"
 - Use standard medical abbreviations`;
 
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiApiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{
-            parts: [
-              { text: systemPrompt },
-              { inline_data: { mime_type: mimeType, data: base64 } }
-            ]
-          }],
-          generationConfig: { temperature: 0.2, maxOutputTokens: 2000 },
-        }),
-      }
-    );
-
-    if (!response.ok) {
-      throw new Error(`Gemini API error: ${response.status}`);
-    }
+    const response = await geminiFetch(geminiGenerateContentUrl(geminiApiKey), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{
+          parts: [
+            { text: systemPrompt },
+            { inline_data: { mime_type: mimeType, data: base64 } }
+          ]
+        }],
+        generationConfig: { temperature: 0.2, maxOutputTokens: 2000 },
+      }),
+    });
 
     const data = await response.json();
     return data.candidates?.[0]?.content?.parts?.[0]?.text || null;
@@ -852,24 +839,19 @@ Rules:
 - The JSON block must be valid JSON
 - IMPORTANT: For each medicine, identify the generic/molecule name (e.g. PARACETAMOL, AMOXICILLIN+CLAVULANATE) and the brand name (e.g. Dolo 650, Augmentin). Put molecule in "generic_name" in UPPERCASE and brand in "brand_name". For combination drugs, list all molecules separated by + (e.g. "AMOXICILLIN+CLAVULANATE"). If only brand is visible, still try to identify the generic molecule. If only generic is visible, leave brand_name empty.`;
 
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiApiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{
-            parts: [
-              { text: systemPrompt },
-              { inline_data: { mime_type: mimeType, data: base64 } }
-            ]
-          }],
-          generationConfig: { temperature: 0.2, maxOutputTokens: 4000 },
-        }),
-      }
-    );
-
-    if (!response.ok) throw new Error(`Gemini API error: ${response.status}`);
+    const response = await geminiFetch(geminiGenerateContentUrl(geminiApiKey), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{
+          parts: [
+            { text: systemPrompt },
+            { inline_data: { mime_type: mimeType, data: base64 } }
+          ]
+        }],
+        generationConfig: { temperature: 0.2, maxOutputTokens: 4000 },
+      }),
+    });
 
     const data = await response.json();
     return data.candidates?.[0]?.content?.parts?.[0]?.text || null;
@@ -1022,24 +1004,19 @@ Rules:
 - For medicines, include dose and frequency if visible
 - Return ONLY the JSON object, nothing else`;
 
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiApiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{
-            parts: [
-              { text: systemPrompt },
-              { inline_data: { mime_type: mimeType, data: base64 } }
-            ]
-          }],
-          generationConfig: { temperature: 0.1, maxOutputTokens: 3000 },
-        }),
-      }
-    );
-
-    if (!response.ok) throw new Error(`Gemini API error: ${response.status}`);
+    const response = await geminiFetch(geminiGenerateContentUrl(geminiApiKey), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{
+          parts: [
+            { text: systemPrompt },
+            { inline_data: { mime_type: mimeType, data: base64 } }
+          ]
+        }],
+        generationConfig: { temperature: 0.1, maxOutputTokens: 3000 },
+      }),
+    });
 
     const data = await response.json();
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
@@ -1090,6 +1067,7 @@ Rules:
               age: parseInt(opdExtracted.age) || null,
               gender: opdExtracted.gender || null,
               phone: opdExtracted.phone || null,
+              hospital_name: (hospitalConfig as any)?.name || null,
             })
             .select('id, patients_id')
             .single();
@@ -1108,7 +1086,8 @@ Rules:
       if (patientId) {
         const visitPayload: Record<string, unknown> = {
           patient_id: patientId,
-          visit_type: 'OPD',
+          patient_type: 'OPD',
+          visit_type: 'Consultation',
           visit_date: today,
           appointment_with: opdExtracted.doctorName || 'Doctor',
           status: 'active',
@@ -1134,10 +1113,15 @@ Rules:
 
         if (visitError) {
           console.error('Error creating visit:', visitError);
-          // Non-fatal — patient was still created/found
-        } else {
-          visitId = visitData.visit_id || visitData.id;
+          toast({
+            title: 'Visit Save Failed',
+            description: visitError.message || 'Could not create OPD visit row.',
+            variant: 'destructive',
+          });
+          setSavingOpd(false);
+          return;
         }
+        visitId = visitData.visit_id || visitData.id;
       }
 
       toast({

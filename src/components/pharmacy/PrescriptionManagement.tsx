@@ -587,7 +587,6 @@ const NewPrescriptionForm: React.FC<{ onSuccess: () => void }> = ({ onSuccess })
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    console.log('Creating prescription:', formData);
     alert('Prescription created successfully! (Demo mode)');
     onSuccess();
   };

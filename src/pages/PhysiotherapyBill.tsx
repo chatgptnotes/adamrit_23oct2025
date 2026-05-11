@@ -123,7 +123,6 @@ const PhysiotherapyBill = () => {
         .select('*')
         .eq('visit_id', visitId);
 
-      console.log('Fetched items from database:', existingItems);
 
       if (!itemsError && existingItems && existingItems.length > 0) {
         setItems(existingItems.map(item => ({
@@ -396,7 +395,6 @@ const PhysiotherapyBill = () => {
         console.error('Error saving to visits table:', visitError);
         throw visitError;
       }
-      console.log('Bill summary saved to visits table successfully');
 
       // Delete existing items for this visit
       const { error: deleteError } = await supabase
@@ -408,11 +406,9 @@ const PhysiotherapyBill = () => {
         console.error('Error deleting old items:', deleteError);
         throw deleteError;
       }
-      console.log('Old items deleted successfully');
 
       // Insert all current items
       if (items.length > 0) {
-        console.log('Inserting items:', items);
         const { error: itemsError } = await supabase
           .from('physiotherapy_bill_items')
           .insert(
@@ -430,7 +426,6 @@ const PhysiotherapyBill = () => {
           console.error('Error inserting items:', itemsError);
           throw itemsError;
         }
-        console.log('Items saved successfully');
       }
 
       toast.success('Bill saved successfully!');

@@ -45,6 +45,7 @@ export const useVisitsData = () => {
           condonation_delay_claim,
           condonation_delay_intimation,
           extension_of_stay,
+          extension_days_count,
           additional_approvals,
           discharge_summary_signed,
           nurse_clearance,
@@ -121,7 +122,6 @@ export const useVisitsData = () => {
         throw error;
       }
       
-      console.log('✅ Successfully fetched visits data:', data?.length, 'records');
       return data || [];
     },
   });
@@ -199,7 +199,6 @@ export const useVisitData = (visitId: string | undefined) => {
         throw error;
       }
       
-      console.log('✅ Successfully fetched visit data:', data);
       return data;
     },
   });
@@ -233,7 +232,6 @@ export const usePatientVisits = (patientId: string | undefined) => {
         throw error;
       }
       
-      console.log('✅ Successfully fetched patient visits:', data?.length, 'records');
       return data || [];
     },
   });

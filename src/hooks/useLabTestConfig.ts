@@ -71,7 +71,6 @@ export const useLabTestConfig = () => {
         .order('display_order', { ascending: true })
         .order('sub_test_name');
 
-      console.log('✅ Fetched sub-tests data:', data);
       if (error) {
         console.error('❌ Sub-tests fetch error:', error);
         throw error;
@@ -83,7 +82,6 @@ export const useLabTestConfig = () => {
         .select('*')
         .eq('test_name', testName);
 
-      console.log('✅ Fetched formulas data:', formulasData);
       if (formulaError) {
         console.error('❌ Formula fetch error:', formulaError);
       }
@@ -121,7 +119,6 @@ export const useLabTestConfig = () => {
       });
 
       setSubTests(subTestsWithFormulas);
-      console.log('✅ Sub-tests set to state with formulas');
     } catch (error) {
       console.error('❌ Error fetching sub tests:', error);
     } finally {
@@ -151,7 +148,6 @@ export const useLabTestConfig = () => {
         .select('*')
         .eq('test_name', testName);
 
-      console.log(`Debug data for test "${testName}":`, data);
       if (error) console.error('Debug error:', error);
     } catch (err) {
       console.error('Debug fetch error:', err);

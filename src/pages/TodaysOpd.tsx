@@ -98,9 +98,6 @@ const TodaysOpd = () => {
   const { data: opdPatients = [], isLoading, refetch } = useQuery({
     queryKey: ['opd-patients', hospitalConfig?.name, startDate, endDate],
     queryFn: async () => {
-      console.log('Fetching OPD patients...');
-      console.log('Hospital config:', hospitalConfig);
-      console.log('Date range:', startDate, endDate);
 
       // Build query with date filtering at database level
       let query = supabase
@@ -148,7 +145,6 @@ const TodaysOpd = () => {
 
       // Only apply hospital filter if hospitalConfig exists
       if (hospitalConfig?.name) {
-        console.log('Applying hospital filter:', hospitalConfig.name);
         query = query.eq('patients.hospital_name', hospitalConfig.name);
       }
 
@@ -159,8 +155,6 @@ const TodaysOpd = () => {
         throw error;
       }
 
-      console.log('OPD Patients fetched:', data);
-      console.log('Total OPD patients found:', data?.length || 0);
 
       // Debug: Check comments in fetched data
       console.log('📊 Sample OPD patient data (first patient):', data?.[0]);
@@ -190,7 +184,8 @@ const TodaysOpd = () => {
 
       return data || [];
     },
-    refetchInterval: 30000 // Refresh every 30 seconds
+    refetchInterval: 60000,
+    staleTime: 30000,
   });
 
   // Filter patients based on search term and corporate (date filtering is done at DB level)
@@ -448,7 +443,6 @@ const TodaysOpd = () => {
         .select('id, visit_id, patient_type, created_at')
         .limit(10);
 
-      console.log('Sample visits from database:', allVisits);
 
       const { data: opdVisits, error: opdError } = await supabase
         .from('visits')
@@ -456,7 +450,6 @@ const TodaysOpd = () => {
         .eq('patient_type', 'OPD')
         .limit(5);
 
-      console.log('OPD visits in database:', opdVisits);
     };
 
     checkVisits();

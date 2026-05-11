@@ -13,7 +13,6 @@ export const SpreadsheetGrid: React.FC = () => {
       try {
         setLoading(true);
         const spreadsheetData = await fetchSpreadsheetData();
-        console.log('Loaded spreadsheet data:', spreadsheetData);
         setData(spreadsheetData);
         setError(null);
       } catch (err) {

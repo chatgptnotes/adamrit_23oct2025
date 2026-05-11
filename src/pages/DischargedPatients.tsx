@@ -1402,7 +1402,6 @@ const DischargedPatients = () => {
                   discharged_sr_no: token,
                   visit_id: visitId
                 });
-                console.log(`✅ Matched: Sr.No=${token}, Visit ID=${visitId}`);
                 break;
               }
             }

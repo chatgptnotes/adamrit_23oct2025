@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { FileText, AlertCircle, CheckCircle, Plus, Edit, Eye, Trash2, X } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
-import { ExternalRequisition as ExternalRequisitionType } from '@/types/externalRequisition';
+import { ExternalRequisition as ExternalRequisitionType, SCAN_CENTERS } from '@/types/externalRequisition';
 import { toast } from 'sonner';
 
 const ExternalRequisition = () => {
@@ -19,7 +19,8 @@ const ExternalRequisition = () => {
   const [deletingService, setDeletingService] = useState<ExternalRequisitionType | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [editFormData, setEditFormData] = useState({
-    serviceName: ''
+    serviceName: '',
+    scanCenter: ''
   });
 
   // Fetch external requisition services from database
@@ -47,7 +48,8 @@ const ExternalRequisition = () => {
   const handleEdit = (service: ExternalRequisitionType) => {
     setEditingService(service);
     setEditFormData({
-      serviceName: service.service_name
+      serviceName: service.service_name,
+      scanCenter: (service.scan_center as string) || ''
     });
   };
 
@@ -87,6 +89,7 @@ const ExternalRequisition = () => {
         .from('external_requisitions')
         .update({
           service_name: editFormData.serviceName,
+          scan_center: editFormData.scanCenter || null,
           updated_at: new Date().toISOString()
         })
         .eq('id', editingService.id);
@@ -154,6 +157,7 @@ const ExternalRequisition = () => {
                 <thead>
                   <tr className="border-b">
                     <th className="text-left p-3 font-semibold text-gray-700">Service Name</th>
+                    <th className="text-left p-3 font-semibold text-gray-700">Scan Center</th>
                     <th className="text-left p-3 font-semibold text-gray-700">Created</th>
                     <th className="text-left p-3 font-semibold text-gray-700">Actions</th>
                   </tr>
@@ -162,6 +166,7 @@ const ExternalRequisition = () => {
                   {externalRequisitions.map((service) => (
                     <tr key={service.id} className="border-b hover:bg-gray-50">
                       <td className="p-3 font-medium text-gray-900">{service.service_name}</td>
+                      <td className="p-3 text-gray-700 text-sm">{service.scan_center || '-'}</td>
                       <td className="p-3 text-gray-600 text-sm">
                         {new Date(service.created_at).toLocaleDateString()}
                       </td>
@@ -231,6 +236,10 @@ const ExternalRequisition = () => {
                 <label className="block text-sm font-medium text-gray-700">Service Name</label>
                 <p className="mt-1 text-sm text-gray-900">{viewingService.service_name}</p>
               </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Scan Center</label>
+                <p className="mt-1 text-sm text-gray-900">{viewingService.scan_center || '-'}</p>
+              </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Created</label>
@@ -283,6 +292,21 @@ const ExternalRequisition = () => {
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
                   required
                 />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Scan Center
+                </label>
+                <select
+                  value={editFormData.scanCenter}
+                  onChange={(e) => setEditFormData(prev => ({ ...prev, scanCenter: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+                >
+                  <option value="">Select Scan Center</option>
+                  {SCAN_CENTERS.map((center) => (
+                    <option key={center} value={center}>{center}</option>
+                  ))}
+                </select>
               </div>
               <div className="flex justify-end gap-3 mt-6">
                 <button

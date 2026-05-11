@@ -9,7 +9,6 @@ export const ExcelMenuBar: React.FC<ExcelMenuBarProps> = ({ onMenuAction }) => {
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
 
   const handleMenuClick = (action: string, data?: any) => {
-    console.log('Menu action:', action, data);
     onMenuAction?.(action, data);
     setActiveMenu(null);
   };

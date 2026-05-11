@@ -94,11 +94,8 @@ export async function getVisitMedicalData(visitId: string): Promise<MedicalJunct
 // Save medical data to junction tables
 export async function saveVisitMedicalData(visitId: string, data: MedicalJunctionData) {
   try {
-    console.log('Starting saveVisitMedicalData for visit:', visitId);
-    console.log('Data to save:', data);
     
     // Clear existing data first
-    console.log('Clearing existing junction data...');
     const clearResults = await Promise.all([
       supabase.from('visit_complications').delete().eq('visit_id', visitId),
       supabase.from('visit_esic_surgeons').delete().eq('visit_id', visitId),
@@ -113,12 +110,10 @@ export async function saveVisitMedicalData(visitId: string, data: MedicalJunctio
       if (result.error) {
         console.error(`Error clearing ${tableNames[index]}:`, result.error);
       } else {
-        console.log(`Cleared ${tableNames[index]} successfully`);
       }
     });
 
     // Get IDs for the selected items
-    console.log('Getting IDs for selected items...');
     const [
       complicationIds,
       esicSurgeonIds,
@@ -184,7 +179,6 @@ export async function saveVisitMedicalData(visitId: string, data: MedicalJunctio
       );
     }
 
-    console.log('Executing insert promises...', insertPromises.length);
     const insertResults = await Promise.all(insertPromises);
     
     // Check for insert errors
@@ -192,11 +186,9 @@ export async function saveVisitMedicalData(visitId: string, data: MedicalJunctio
       if (result.error) {
         console.error(`Insert error at index ${index}:`, result.error);
       } else {
-        console.log(`Insert successful at index ${index}:`, result.data?.length || 0, 'records');
       }
     });
     
-    console.log('saveVisitMedicalData completed successfully');
     return { success: true };
   } catch (error) {
     console.error('Error saving visit medical data:', error);
@@ -214,12 +206,10 @@ export async function saveVisitMedicalData(visitId: string, data: MedicalJunctio
 // Helper function to get IDs by names
 async function getIdsByNames(tableName: string, names: string[]): Promise<string[]> {
   if (names.length === 0) {
-    console.log(`No names provided for ${tableName}, returning empty array`);
     return [];
   }
   
   try {
-    console.log(`Getting IDs from ${tableName} for names:`, names);
     const { data, error } = await supabase
       .from(tableName)
       .select('id, name')
@@ -231,7 +221,6 @@ async function getIdsByNames(tableName: string, names: string[]): Promise<string
     }
     
     const ids = data?.map(item => item.id) || [];
-    console.log(`Found ${ids.length} IDs for ${tableName}:`, ids);
     
     // Check for missing names
     const foundNames = data?.map(item => item.name) || [];

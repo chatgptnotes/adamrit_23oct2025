@@ -149,12 +149,10 @@ export default function NoDeductionLetterPage() {
       }
 
       if (!data || data.length === 0) {
-        console.log('⚠️ No visits found in database');
         return null;
       }
 
       const latestVisit = data[0];
-      console.log('✅ Latest visit data:', latestVisit);
       return latestVisit;
     },
   });
@@ -186,7 +184,6 @@ export default function NoDeductionLetterPage() {
         console.error('❌ Error fetching basic visits:', basicError);
         console.error('Error details:', basicError.message, basicError.details, basicError.hint);
       } else {
-        console.log('✅ Basic visits data:', basicVisits);
         console.log('📊 Number of basic visits found:', basicVisits?.length || 0);
       }
 
@@ -201,7 +198,6 @@ export default function NoDeductionLetterPage() {
       if (patientsError) {
         console.error('❌ Error fetching patients:', patientsError);
       } else {
-        console.log('✅ Patients data:', patients);
         console.log('📊 Number of patients found:', patients?.length || 0);
       }
 
@@ -242,13 +238,11 @@ export default function NoDeductionLetterPage() {
         return basicVisits; // Return basic visits if join fails
       }
 
-      console.log('✅ Visits with patient data:', data);
       console.log('📊 Number of visits with patients found:', data?.length || 0);
 
       if (data && data.length > 0) {
         console.log('📋 First visit with patient details:', data[0]);
       } else {
-        console.log('⚠️ No visits found in database');
       }
 
       return data;
@@ -272,11 +266,9 @@ export default function NoDeductionLetterPage() {
         return false;
       }
 
-      console.log('✅ Database connected successfully');
       console.log('📊 Total visits count:', count);
 
       if (count === 0) {
-        console.log('⚠️ No visits found in database. You may need to add some sample data.');
         console.log('💡 Try creating a visit through the application first.');
       }
 
@@ -330,7 +322,6 @@ export default function NoDeductionLetterPage() {
             return false;
           }
 
-          console.log('✅ Using existing patient:', existingPatient);
           // Use the existing patient for visit creation
           const patientId = existingPatient.patients_id;
 
@@ -361,13 +352,11 @@ export default function NoDeductionLetterPage() {
             return false;
           }
 
-          console.log('✅ Sample visit created with existing patient:', visit);
           return true;
         }
         return false;
       }
 
-      console.log('✅ Sample patient created:', patient);
 
       // Now create a sample visit
       const { data: visit, error: visitError } = await supabase
@@ -397,7 +386,6 @@ export default function NoDeductionLetterPage() {
         return false;
       }
 
-      console.log('✅ Sample visit created:', visit);
       return true;
     } catch (err) {
       console.error('💥 Error creating sample data:', err);
@@ -411,11 +399,6 @@ export default function NoDeductionLetterPage() {
 
     // Debug logging
     console.log('🔍 Data sources:');
-    console.log('  - visitId from URL:', visitId);
-    console.log('  - visitData from query:', visitData);
-    console.log('  - latestVisitData from latest query:', latestVisitData);
-    console.log('  - incoming from location state:', incoming);
-    console.log('  - final src being used:', src);
 
     // Create data structure using exact visits table schema
     const allSurgeryNames = Array.isArray(src?.visit_surgeries)
@@ -703,7 +686,6 @@ export default function NoDeductionLetterPage() {
           console.error('❌ Error fetching specific visit:', error);
         } else {
           freshData = data;
-          console.log('✅ Fresh visit data:', freshData);
         }
       } else {
         console.log('🔄 Fetching latest visit from database...');
@@ -720,7 +702,6 @@ export default function NoDeductionLetterPage() {
           console.error('❌ Error fetching latest visit:', error);
         } else if (data && data.length > 0) {
           freshData = data[0];
-          console.log('✅ Fresh latest visit data:', freshData);
         }
       }
 
@@ -782,7 +763,6 @@ export default function NoDeductionLetterPage() {
 
         toast.success('Data refreshed successfully with real database data!');
       } else {
-        console.log('⚠️ No data found in database');
         toast.error('No visit data found in database');
       }
 
@@ -1581,7 +1561,6 @@ Hope Hospital, Nagpur`;
                     console.log('🏗️ Creating sample data...');
                     const success = await createSampleData();
                     if (success) {
-                      console.log('✅ Sample data created successfully!');
                       // Refresh the data
                       const data = await fetchMockData();
                       console.log('📊 Updated visits data:', data);

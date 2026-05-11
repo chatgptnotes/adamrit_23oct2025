@@ -166,7 +166,6 @@ export const usePrintColumns = (
  */
 export const getNestedValue = (obj: any, path: string): any => {
   if (!obj || !path) {
-    console.log('getNestedValue - Invalid input:', { obj: !!obj, path });
     return undefined;
   }
   
@@ -175,7 +174,6 @@ export const getNestedValue = (obj: any, path: string): any => {
   
   for (const key of keys) {
     if (current == null) {
-      console.log(`getNestedValue - Null at key '${key}' in path '${path}'`);
       return undefined;
     }
     current = current[key];

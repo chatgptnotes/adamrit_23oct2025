@@ -54,7 +54,6 @@ const FinalBillJunctionExample = ({ visitId }: { visitId: string }) => {
       });
 
       if (result) {
-        console.log('✅ Clinical service added successfully:', result);
         // Reload the services list
         await loadClinicalServices();
       }
@@ -69,7 +68,6 @@ const FinalBillJunctionExample = ({ visitId }: { visitId: string }) => {
       const removed = await removeClinicalServiceFromVisit(visitId, serviceId);
 
       if (removed) {
-        console.log('✅ Clinical service removed successfully');
         // Reload the services list
         await loadClinicalServices();
       }
@@ -94,7 +92,6 @@ const FinalBillJunctionExample = ({ visitId }: { visitId: string }) => {
       });
 
       if (updated) {
-        console.log('✅ Clinical service updated successfully');
         // Reload the services list
         await loadClinicalServices();
       }

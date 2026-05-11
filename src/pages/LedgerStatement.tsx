@@ -199,7 +199,6 @@ const LedgerStatement: React.FC = () => {
 
   const handleSearch = () => {
     // TODO: Implement search functionality
-    console.log('Search clicked');
   };
 
   const handlePrint = () => {

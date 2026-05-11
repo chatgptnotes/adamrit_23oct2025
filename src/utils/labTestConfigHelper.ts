@@ -74,7 +74,6 @@ export async function saveTestConfigWithNested(
     const currentConfigId = savedConfig.id;
     savedIds.push(currentConfigId);
 
-    console.log(`✅ Saved config "${config.sub_test_name}" with ID:`, currentConfigId);
 
     // Recursively save nested configs
     if (config.nested_configs && config.nested_configs.length > 0) {

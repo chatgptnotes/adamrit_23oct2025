@@ -216,7 +216,6 @@ export const transformPatientsData = (patients: Patient[]) => {
         remark2: visit.remark2
       };
 
-      console.log('Transformed patient visit:', transformedPatient.name, 'visit:', visit.visit_id, 'surgery:', surgeryName, 'sanction:', sanctionStatus);
       console.log('Junction table data for visit:', visit.visit_id, {
         complications: complications,
         esicSurgeons: esicSurgeons,

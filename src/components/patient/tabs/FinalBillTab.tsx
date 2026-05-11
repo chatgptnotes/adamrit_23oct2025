@@ -1,29 +1,121 @@
 
-import React from 'react';
+import React, { useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
+import { useFinalBillData } from '@/hooks/useFinalBillData';
 
 interface FinalBillTabProps {
   patient: any;
   visits?: any[];
   billItems?: any[];
+  visitId?: string;
   onEditItem?: (item: any) => void;
   onDeleteItem?: (item: any) => void;
   onAddItem?: () => void;
   isEditing?: boolean;
 }
 
-const FinalBillTab: React.FC<FinalBillTabProps> = ({ 
-  patient, 
-  visits, 
-  billItems, 
-  onEditItem, 
-  onDeleteItem, 
+const isRadiologyItem = (description: string): boolean => {
+  if (!description) return false;
+  const radiologyKeywords = ['mri', 'ct', 'usg', 'x-ray', 'scan', 'ultrasound', 'radiology'];
+  return radiologyKeywords.some(keyword => description.toLowerCase().includes(keyword));
+};
+
+const FinalBillTab: React.FC<FinalBillTabProps> = ({
+  patient,
+  visits,
+  billItems: propBillItems,
+  visitId = '',
+  onEditItem,
+  onDeleteItem,
   onAddItem,
-  isEditing = false 
+  isEditing = false
 }) => {
-  const admissionDate = visits && visits.length > 0
-    ? format(new Date(visits[0].visit_date), 'dd/MM/yyyy')
+  const { billData } = useFinalBillData(visitId);
+
+  // Fetch visit data for admission date
+  const { data: visitData } = useQuery({
+    queryKey: ['visit-data', visitId],
+    queryFn: async () => {
+      if (!visitId) return null;
+
+      const { data, error } = await supabase
+        .from('visits')
+        .select('*')
+        .eq('visit_id', visitId)
+        .maybeSingle();
+
+      if (error) return null;
+      return data;
+    },
+    enabled: !!visitId,
+  });
+
+  // Fetch radiology orders for this patient
+  const { data: radiologyOrders = [] } = useQuery({
+    queryKey: ['radiology-orders', patient?.id],
+    queryFn: async () => {
+      if (!patient?.id) return [];
+
+      const { data, error } = await supabase
+        .from('radiology_orders')
+        .select('*')
+        .eq('patient_id', patient.id);
+
+      if (error) throw error;
+
+      return (data || []).filter(o => o.ordering_department === 'IPD');
+    },
+    enabled: !!patient?.id,
+  });
+
+  // Compute bill items reactively from both data sources
+  const billItems = useMemo(() => {
+    // 1. Start with saved DB items
+    const dbItems = (billData?.line_items || []).map(item => ({
+      id: item.id,
+      srNo: item.sr_no,
+      description: item.item_description,
+      code: item.cghs_nabh_code || '',
+      rate: item.cghs_nabh_rate || 0,
+      qty: item.qty || 1,
+      amount: item.amount || 0,
+      type: item.item_type || 'standard',
+    }));
+
+    // 2. Convert radiology orders to bill items
+    const radiologyItems = (radiologyOrders || [])
+      .map(order => {
+        const notes = order.notes || '';
+        const typeMatch = notes.match(/Type:\s*([^.]+)/);
+        const procMatch = notes.match(/Procedure:\s*([^.]+)/);
+        const scanType = typeMatch ? typeMatch[1].trim() : '';
+        const procedure = procMatch ? procMatch[1].trim() : 'Scan';
+        const description = scanType ? `${scanType} – ${procedure}` : procedure;
+
+        return {
+          id: `radiology-${order.id}`,
+          srNo: '',
+          description,
+          code: '',
+          rate: order.estimated_cost || 0,
+          qty: 1,
+          amount: order.estimated_cost || 0,
+          type: 'standard',
+        };
+      })
+      .filter(item => !dbItems.some(db =>
+        db.description.toLowerCase().includes(item.description.toLowerCase())
+      ));
+
+    return [...dbItems, ...radiologyItems];
+  }, [billData, radiologyOrders]);
+
+  const admissionDate = visitData?.date_of_admission
+    ? format(new Date(visitData.date_of_admission), 'dd/MM/yyyy')
     : 'Not available';
+
 
   return (
     <div className="w-full bg-white p-6 border border-gray-300">
@@ -72,7 +164,9 @@ const FinalBillTab: React.FC<FinalBillTabProps> = ({
                 <td className="border border-gray-300 p-2 text-center"></td>
                 <td className="border border-gray-300 p-2 text-center">11276</td>
                 <td className="border border-gray-300 p-2 text-center">6565</td>
-                <td className="border border-gray-300 p-2 text-center">28000</td>
+                <td className="border border-gray-300 p-2 text-center font-semibold text-blue-700">
+                  {billItems?.filter(item => isRadiologyItem(item.description || item.item_description || '')).reduce((sum, item) => sum + (item.amount || 0), 0).toLocaleString('en-IN') || '0'}
+                </td>
                 <td className="border border-gray-300 p-2 text-center"></td>
                 <td className="border border-gray-300 p-2 text-center"></td>
                 <td className="border border-gray-300 p-2 text-center"></td>
@@ -250,67 +344,57 @@ const FinalBillTab: React.FC<FinalBillTabProps> = ({
             </tr>
           </thead>
           <tbody>
-            {/* Row 1 */}
-            <tr>
-              <td className="border border-gray-300 p-2 text-center">1)</td>
-              <td className="border border-gray-300 p-2">
-                <div className="font-medium">Pre-Surgical Consultation for Inpatients</div>
-                <div className="text-xs text-gray-600">Dt.(04/03/2024 TO 09/03/2024)</div>
-              </td>
-              <td className="border border-gray-300 p-2 text-center">350</td>
-              <td className="border border-gray-300 p-2 text-center">8</td>
-              <td className="border border-gray-300 p-2 text-center">1</td>
-              <td className="border border-gray-300 p-2 text-center">2800</td>
-              <td className="border border-gray-300 p-2 text-center">
-                <button className="text-red-500 hover:text-red-700">
-                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
-                  </svg>
-                </button>
-              </td>
-            </tr>
-            {/* Row 2 */}
-            <tr>
-              <td className="border border-gray-300 p-2 text-center">2)</td>
-              <td className="border border-gray-300 p-2">
-                <div className="font-medium">Surgical Package (7 Days)</div>
-                <div className="text-xs text-gray-600">Dt.(10/03/2024 TO 16/03/2024)</div>
-              </td>
-              <td className="border border-gray-300 p-2 text-center">5000</td>
-              <td className="border border-gray-300 p-2 text-center">1</td>
-              <td className="border border-gray-300 p-2 text-center">1</td>
-              <td className="border border-gray-300 p-2 text-center">5000</td>
-              <td className="border border-gray-300 p-2 text-center">
-                <button className="text-red-500 hover:text-red-700">
-                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
-                  </svg>
-                </button>
-              </td>
-            </tr>
+            {billItems && billItems.length > 0 ? (
+              billItems.map((item, idx) => (
+                <tr key={item.id || idx}>
+                  <td className="border border-gray-300 p-2 text-center">{idx + 1})</td>
+                  <td className="border border-gray-300 p-2">
+                    <div className="font-medium">{item.description || item.item_description || 'Item'}</div>
+                  </td>
+                  <td className="border border-gray-300 p-2 text-center">{item.code || item.cghs_nabh_code || '—'}</td>
+                  <td className="border border-gray-300 p-2 text-center">₹{(item.rate || item.cghs_nabh_rate || 0).toLocaleString('en-IN')}</td>
+                  <td className="border border-gray-300 p-2 text-center">{item.qty || 1}</td>
+                  <td className="border border-gray-300 p-2 text-center">₹{(item.amount || 0).toLocaleString('en-IN')}</td>
+                  <td className="border border-gray-300 p-2 text-center"></td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colSpan={7} className="border border-gray-300 p-4 text-center text-gray-500">
+                  No bill items. Create or edit the bill to add items.
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
 
       {/* Total Section */}
-      <div className="flex justify-end mb-6">
-        <div className="w-64">
-          <div className="border border-gray-300 p-4">
-            <div className="flex justify-between mb-2">
-              <span className="font-medium">Total Amount:</span>
-              <span>₹7,800</span>
-            </div>
-            <div className="flex justify-between mb-2">
-              <span className="font-medium">Discount:</span>
-              <span>₹0</span>
-            </div>
-            <div className="flex justify-between font-bold text-lg border-t pt-2">
-              <span>Net Amount:</span>
-              <span>₹7,800</span>
+      {(() => {
+        const totalAmount = billItems?.reduce((sum, item) => sum + (item.amount || 0), 0) || 0;
+        const discount = 0;
+        const netAmount = totalAmount - discount;
+        return (
+          <div className="flex justify-end mb-6">
+            <div className="w-64">
+              <div className="border border-gray-300 p-4">
+                <div className="flex justify-between mb-2">
+                  <span className="font-medium">Total Amount:</span>
+                  <span>₹{totalAmount.toLocaleString('en-IN')}</span>
+                </div>
+                <div className="flex justify-between mb-2">
+                  <span className="font-medium">Discount:</span>
+                  <span>₹{discount.toLocaleString('en-IN')}</span>
+                </div>
+                <div className="flex justify-between font-bold text-lg border-t pt-2">
+                  <span>Net Amount:</span>
+                  <span>₹{netAmount.toLocaleString('en-IN')}</span>
+                </div>
+              </div>
             </div>
           </div>
-        </div>
-      </div>
+        );
+      })()}
 
       {/* Signature Section */}
       <div className="grid grid-cols-5 gap-4 text-center text-sm">

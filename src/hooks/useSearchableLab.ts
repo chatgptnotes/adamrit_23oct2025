@@ -19,7 +19,6 @@ export const useSearchableLab = () => {
 
       const { data, error } = await query;
       
-      console.log('Lab search query result:', { data, error, searchTerm });
       
       if (error) {
         console.error('Error fetching lab tests:', error);

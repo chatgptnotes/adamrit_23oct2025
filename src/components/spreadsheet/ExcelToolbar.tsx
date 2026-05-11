@@ -21,61 +21,50 @@ export const ExcelToolbar: React.FC<ExcelToolbarProps> = ({
   const [textColor, setTextColor] = useState('#000000');
 
   const handleSave = () => {
-    console.log('Save action triggered');
     if (window.confirm('Save current spreadsheet?')) {
-      console.log('Spreadsheet saved');
     }
   };
 
   const handlePrint = () => {
-    console.log('Print action triggered');
     window.print();
   };
 
   const handleUndo = () => {
-    console.log('Undo action triggered');
   };
 
   const handleRedo = () => {
-    console.log('Redo action triggered');
   };
 
   const handleBold = () => {
     const newBold = !isBold;
     setIsBold(newBold);
-    console.log('Bold toggle:', newBold);
     onFormatChange?.({ bold: newBold });
   };
 
   const handleItalic = () => {
     const newItalic = !isItalic;
     setIsItalic(newItalic);
-    console.log('Italic toggle:', newItalic);
     onFormatChange?.({ italic: newItalic });
   };
 
   const handleUnderline = () => {
     const newUnderline = !isUnderline;
     setIsUnderline(newUnderline);
-    console.log('Underline toggle:', newUnderline);
     onFormatChange?.({ underline: newUnderline });
   };
 
   const handleFontSizeChange = (newSize: string) => {
     setFontSize(newSize);
-    console.log('Font size changed to:', newSize);
     onFormatChange?.({ fontSize: newSize });
   };
 
   const handleFontFamilyChange = (newFamily: string) => {
     setFontFamily(newFamily);
-    console.log('Font family changed to:', newFamily);
     onFormatChange?.({ fontFamily: newFamily });
   };
 
   const handleTextAlign = (alignment: string) => {
     setTextAlign(alignment);
-    console.log('Text alignment changed to:', alignment);
     onFormatChange?.({ textAlign: alignment });
   };
 
@@ -86,7 +75,6 @@ export const ExcelToolbar: React.FC<ExcelToolbarProps> = ({
     input.onchange = (e) => {
       const newColor = (e.target as HTMLInputElement).value;
       setFillColor(newColor);
-      console.log('Fill color changed to:', newColor);
       onFormatChange?.({ backgroundColor: newColor });
     };
     input.click();
@@ -99,19 +87,16 @@ export const ExcelToolbar: React.FC<ExcelToolbarProps> = ({
     input.onchange = (e) => {
       const newColor = (e.target as HTMLInputElement).value;
       setTextColor(newColor);
-      console.log('Text color changed to:', newColor);
       onFormatChange?.({ textColor: newColor });
     };
     input.click();
   };
 
   const handleBorders = () => {
-    console.log('Borders action triggered');
     onFormatChange?.({ borders: true });
   };
 
   const handleMergeCells = () => {
-    console.log('Merge cells action triggered');
     if (selectedCells.length > 1) {
       onFormatChange?.({ merge: true });
     } else {

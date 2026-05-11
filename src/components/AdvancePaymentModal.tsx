@@ -179,13 +179,10 @@ export const AdvancePaymentModal: React.FC<AdvancePaymentModalProps> = ({
             { id: '2', account_name: 'SARASWAT BANK', account_code: '1122' },
             { id: '3', account_name: 'STATE BANK OF INDIA (DRM)', account_code: '1121' }
           ];
-          console.log('⚠️ Using fallback hardcoded banks');
           setBankAccounts(fallbackBanks);
           return;
         }
 
-        console.log('✅ Fetched bank accounts from database:', data);
-        console.log('✅ Number of banks fetched:', data?.length || 0);
 
         // If no banks found in database, use fallback
         if (!data || data.length === 0) {
@@ -194,7 +191,6 @@ export const AdvancePaymentModal: React.FC<AdvancePaymentModalProps> = ({
             { id: '2', account_name: 'SARASWAT BANK', account_code: '1122' },
             { id: '3', account_name: 'STATE BANK OF INDIA (DRM)', account_code: '1121' }
           ];
-          console.log('⚠️ No banks in database, using fallback hardcoded banks');
           setBankAccounts(fallbackBanks);
         } else {
           setBankAccounts(data);
@@ -207,7 +203,6 @@ export const AdvancePaymentModal: React.FC<AdvancePaymentModalProps> = ({
           { id: '2', account_name: 'SARASWAT BANK', account_code: '1122' },
           { id: '3', account_name: 'STATE BANK OF INDIA (DRM)', account_code: '1121' }
         ];
-        console.log('⚠️ Exception occurred, using fallback hardcoded banks');
         setBankAccounts(fallbackBanks);
       }
     };
@@ -222,7 +217,6 @@ export const AdvancePaymentModal: React.FC<AdvancePaymentModalProps> = ({
     try {
       if (patientData) {
         // Use provided patient data
-        console.log('✅ Using provided patient data:', patientData);
         console.log('🔍 PatientData details:', {
           name: patientData.name,
           billNo: patientData.billNo,
@@ -252,7 +246,6 @@ export const AdvancePaymentModal: React.FC<AdvancePaymentModalProps> = ({
         if (visitId) {
           fetchPaymentHistory(visitId);
         } else {
-          console.log('⚠️ No visit ID available, skipping payment history fetch');
           setPaymentHistory([]);
           setReturnedAmount(0);
         }
@@ -261,7 +254,6 @@ export const AdvancePaymentModal: React.FC<AdvancePaymentModalProps> = ({
         console.log('🔍 No patient data provided, fetching from database');
         fetchPatientInfo();
       } else {
-        console.log('⚠️ No visitId or patientData provided');
       }
     } catch (error) {
       console.error('❌ Error in useEffect:', error);
@@ -279,7 +271,6 @@ export const AdvancePaymentModal: React.FC<AdvancePaymentModalProps> = ({
   const fetchRegistrationNumber = async (patientId: string) => {
     try {
       if (!patientId || !isValidUUID(patientId)) {
-        console.log('⚠️ Invalid patient ID provided for registration lookup:', patientId);
         return;
       }
 
@@ -299,7 +290,6 @@ export const AdvancePaymentModal: React.FC<AdvancePaymentModalProps> = ({
       }
 
       if (patientData?.patients_id) {
-        console.log('✅ Found registration number:', patientData.patients_id);
         setPatientInfo(prev => ({
           ...prev,
           registrationNo: patientData.patients_id
@@ -317,7 +307,6 @@ export const AdvancePaymentModal: React.FC<AdvancePaymentModalProps> = ({
       // Use passed visitId or the one from props
       const currentVisitId = fetchedVisitId || visitId;
       if (!currentVisitId) {
-        console.log('⚠️ No visit ID available for payment history');
         setPaymentHistory([]);
         setReturnedAmount(0);
         return;
@@ -395,7 +384,6 @@ export const AdvancePaymentModal: React.FC<AdvancePaymentModalProps> = ({
 
   const fetchPatientInfo = async () => {
     if (!visitId) {
-      console.log('Missing visitId:', { visitId });
       return;
     }
 
@@ -465,7 +453,6 @@ export const AdvancePaymentModal: React.FC<AdvancePaymentModalProps> = ({
         patientType: (visitData as any).patient_type || 'IPD'
       };
 
-      console.log('✅ Setting patient info:', patientInfo);
       setPatientInfo(patientInfo);
 
       // Also fetch payment history for this visit
@@ -572,7 +559,6 @@ export const AdvancePaymentModal: React.FC<AdvancePaymentModalProps> = ({
         return;
       }
 
-      console.log('✅ Advance payment saved successfully:', data);
 
       // Fire-and-forget: push payment to Tally
       pushPaymentToTally({

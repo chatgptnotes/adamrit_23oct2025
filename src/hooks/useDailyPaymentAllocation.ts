@@ -198,6 +198,10 @@ export const useFundAccounts = (date: string) => {
               // Skip hidden/inactive ledgers
               if (l.is_hidden) continue;
 
+              // Prevent duplicate accounts if multiple tally_config rows map to same company
+              const alreadyExists = accounts.some(a => a.name.toLowerCase() === l.name.toLowerCase());
+              if (alreadyExists) continue;
+
               const pg = (l.parent_group || '').toLowerCase();
               const type = pg.includes('cash') ? 'cash' as const : 'bank' as const;
 
@@ -228,19 +232,27 @@ export const useFundAccounts = (date: string) => {
 
       if (overrides) {
         for (const ov of overrides) {
-          const existing = accounts.find(a => a.id === ov.account_ref_id);
+          // PostgREST returns numeric columns as strings. Coerce to Number
+          // so arithmetic (e.g. totalActual reduce) doesn't string-concat.
+          const actual = ov.actual_balance !== null && ov.actual_balance !== undefined
+            ? Number(ov.actual_balance)
+            : null;
+          // Try ID match first (direct Tally account), then name match (Tally re-synced with new ID)
+          const existing =
+            accounts.find(a => a.id === ov.account_ref_id) ||
+            accounts.find(a => a.name.toLowerCase() === (ov.account_name || '').toLowerCase());
           if (existing) {
-            existing.actual_balance = ov.actual_balance;
+            existing.actual_balance = actual;
             existing.notes = ov.notes || '';
           } else {
-            // Manual-only account (not from Tally)
+            // Truly manual account (not from Tally)
             accounts.push({
               id: ov.id,
               name: ov.account_name,
               type: ov.account_type || 'bank',
-              hospital: ov.hospital_name || 'hope',
+              hospital: (ov.hospital_name || 'hope').toLowerCase(),
               ledger_balance: 0,
-              actual_balance: ov.actual_balance,
+              actual_balance: actual,
               notes: ov.notes || '',
               last_synced: null,
             });
@@ -249,11 +261,12 @@ export const useFundAccounts = (date: string) => {
       }
 
       const totalLedger = accounts.reduce((s, a) => s + a.ledger_balance, 0);
-      const totalActual = accounts.reduce((s, a) => s + (a.actual_balance ?? a.ledger_balance), 0);
+      const totalActual = accounts.reduce((s, a) => s + (a.actual_balance !== null ? a.actual_balance : 0), 0);
 
       return { accounts, totalLedger, totalActual, lastSyncAt };
     },
     refetchInterval: 60000,
+    staleTime: 30000,
   });
 
   // Save actual balance for an account

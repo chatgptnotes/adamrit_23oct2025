@@ -5,6 +5,7 @@ import MedicationsTab from './tabs/MedicationsTab';
 import FinalBillTab from './tabs/FinalBillTab';
 import { EditableFinalBillTab } from './tabs/EditableFinalBillTab';
 import LabTrendChart from '@/components/lab/LabTrendChart';
+import RadiologyOrdersTab from './tabs/RadiologyOrdersTab';
 
 interface PatientTabsProps {
   patient: any;
@@ -14,10 +15,11 @@ interface PatientTabsProps {
 const PatientTabs = ({ patient, visitId }: PatientTabsProps) => {
   return (
     <Tabs defaultValue="investigations" className="space-y-4 no-print">
-      <TabsList className="grid w-full grid-cols-5">
+      <TabsList className="grid w-full grid-cols-6">
         <TabsTrigger value="investigations">Investigations</TabsTrigger>
         <TabsTrigger value="trends">Lab Trends</TabsTrigger>
         <TabsTrigger value="medications">Medications</TabsTrigger>
+        <TabsTrigger value="radiology">Radiology</TabsTrigger>
         <TabsTrigger value="billing">View Bill</TabsTrigger>
         <TabsTrigger value="edit-billing">Edit Bill</TabsTrigger>
       </TabsList>
@@ -37,8 +39,12 @@ const PatientTabs = ({ patient, visitId }: PatientTabsProps) => {
         <MedicationsTab patient={patient} visitId={visitId} />
       </TabsContent>
 
+      <TabsContent value="radiology" className="space-y-4">
+        <RadiologyOrdersTab patient={patient} />
+      </TabsContent>
+
       <TabsContent value="billing" className="space-y-4">
-        <FinalBillTab patient={patient} />
+        <FinalBillTab patient={patient} visitId={visitId} />
       </TabsContent>
 
       <TabsContent value="edit-billing" className="space-y-4">

@@ -49,8 +49,8 @@ export default function QueueTV() {
       if (error) throw error;
       return data || [];
     },
-    refetchInterval: 8000,
-    staleTime: 4000,
+    refetchInterval: 60000,
+    staleTime: 30000,
   });
 
   // Build per-department stats

@@ -139,7 +139,6 @@ const HopeAnaesthetists = () => {
   );
 
   const handleAdd = (formData: Record<string, string>) => {
-    console.log('Submitting form data:', formData);
 
     // Create the data object with simplified fields
     const anaesthetistData: any = {
@@ -156,7 +155,6 @@ const HopeAnaesthetists = () => {
       anaesthetistData.spinal_rate = parseFloat(formData.spinal_rate);
     }
 
-    console.log('Final anaesthetist data:', anaesthetistData);
     addMutation.mutate(anaesthetistData);
   };
 
