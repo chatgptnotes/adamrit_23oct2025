@@ -1,5 +1,7 @@
 import { Routes, Route } from "react-router-dom";
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useEffect } from "react";
+import { useAuth } from "@/contexts/AuthContext";
+import { useNavigate } from "react-router-dom";
 
 // Import critical pages synchronously
 import LandingPage from "../pages/LandingPage";
@@ -142,10 +144,6 @@ const PageLoader = () => (
 );
 
 // Director Dashboard route guard
-import { useAuth } from "@/contexts/AuthContext";
-import { useNavigate } from "react-router-dom";
-import { useEffect } from "react";
-
 const DirectorRoute = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
