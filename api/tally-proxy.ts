@@ -93,7 +93,7 @@ async function handleTestConnection(body: any) {
   <HEADER><VERSION>1</VERSION><TALLYREQUEST>Export</TALLYREQUEST><TYPE>Data</TYPE><ID>List of Companies</ID></HEADER>
   <BODY><DESC><STATICVARIABLES>
     <SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT>
-    ${companyName ? `<SVCURRENTCOMPANY>${companyName}</SVCURRENTCOMPANY>` : ''}
+    ${companyName ? `<SVCURRENTCOMPANY>${escapeXml(companyName)}</SVCURRENTCOMPANY>` : ''}
   </STATICVARIABLES></DESC></BODY>
 </ENVELOPE>`
 
@@ -250,6 +250,10 @@ async function handleSync(body: any) {
   const { action, serverUrl, companyName, companyId, dateRange } = body
   if (!serverUrl || !companyName || !action) return { error: 'Missing required fields' }
 
+  // Tally company names can contain &, <, > which must be escaped before
+  // being embedded inside <SVCURRENTCOMPANY> — otherwise Tally rejects the XML.
+  const safeCompany = escapeXml(companyName)
+
   const supabase = getSupabase()
   const startTime = Date.now()
 
@@ -271,7 +275,7 @@ async function handleSync(body: any) {
         const xml = `<ENVELOPE>
   <HEADER><VERSION>1</VERSION><TALLYREQUEST>Export</TALLYREQUEST><TYPE>Collection</TYPE><ID>Ledger Collection</ID></HEADER>
   <BODY><DESC>
-    <STATICVARIABLES><SVCURRENTCOMPANY>${companyName}</SVCURRENTCOMPANY></STATICVARIABLES>
+    <STATICVARIABLES><SVCURRENTCOMPANY>${safeCompany}</SVCURRENTCOMPANY></STATICVARIABLES>
     <TDL><TDLMESSAGE>
       <COLLECTION NAME="Ledger Collection" ISMODIFY="No">
         <TYPE>Ledger</TYPE>
@@ -319,7 +323,7 @@ async function handleSync(body: any) {
         const xml = `<ENVELOPE>
   <HEADER><VERSION>1</VERSION><TALLYREQUEST>Export</TALLYREQUEST><TYPE>Collection</TYPE><ID>Group Collection</ID></HEADER>
   <BODY><DESC>
-    <STATICVARIABLES><SVCURRENTCOMPANY>${companyName}</SVCURRENTCOMPANY></STATICVARIABLES>
+    <STATICVARIABLES><SVCURRENTCOMPANY>${safeCompany}</SVCURRENTCOMPANY></STATICVARIABLES>
     <TDL><TDLMESSAGE>
       <COLLECTION NAME="Group Collection" ISMODIFY="No">
         <TYPE>Group</TYPE>
@@ -360,7 +364,7 @@ async function handleSync(body: any) {
         const xml = `<ENVELOPE>
   <HEADER><VERSION>1</VERSION><TALLYREQUEST>Export</TALLYREQUEST><TYPE>Collection</TYPE><ID>StockItem Collection</ID></HEADER>
   <BODY><DESC>
-    <STATICVARIABLES><SVCURRENTCOMPANY>${companyName}</SVCURRENTCOMPANY></STATICVARIABLES>
+    <STATICVARIABLES><SVCURRENTCOMPANY>${safeCompany}</SVCURRENTCOMPANY></STATICVARIABLES>
     <TDL><TDLMESSAGE>
       <COLLECTION NAME="StockItem Collection" ISMODIFY="No">
         <TYPE>StockItem</TYPE>
@@ -414,7 +418,7 @@ async function handleSync(body: any) {
         const from = dateRange?.from || defaultFrom
         const to = dateRange?.to || new Date().toISOString().split('T')[0]
         // Use Day Book export (reliable with date range) as primary
-        const dayBookXml = buildExportXml('Day Book', companyName,
+        const dayBookXml = buildExportXml('Day Book', safeCompany,
           `<SVFROMDATE>${from.replace(/-/g, '')}</SVFROMDATE><SVTODATE>${to.replace(/-/g, '')}</SVTODATE>`)
         let response: string
         try {
@@ -425,7 +429,7 @@ async function handleSync(body: any) {
   <HEADER><VERSION>1</VERSION><TALLYREQUEST>Export</TALLYREQUEST><TYPE>Collection</TYPE><ID>Voucher Collection</ID></HEADER>
   <BODY><DESC>
     <STATICVARIABLES>
-      <SVCURRENTCOMPANY>${companyName}</SVCURRENTCOMPANY>
+      <SVCURRENTCOMPANY>${safeCompany}</SVCURRENTCOMPANY>
     </STATICVARIABLES>
     <TDL><TDLMESSAGE>
       <COLLECTION NAME="Voucher Collection" ISMODIFY="No">
@@ -504,7 +508,7 @@ async function handleSync(body: any) {
         ]
         for (const report of reportIds) {
           try {
-            const xml = buildExportXml(report.id, companyName, report.extra)
+            const xml = buildExportXml(report.id, safeCompany, report.extra)
             const response = await fetchFromTally(serverUrl, xml, 120000)
             await supabase.from('tally_reports').insert({
               company_id: companyId,
@@ -524,7 +528,7 @@ async function handleSync(body: any) {
         else if (action === 'gst-r3b') { gstReportId = 'GSTR-3B'; gstType = 'gstr3b' }
         else { gstReportId = 'Day Book'; gstType = 'gst_ledger' }
         try {
-          const xml = buildExportXml(gstReportId, companyName,
+          const xml = buildExportXml(gstReportId, safeCompany,
             `<SVFROMDATE>${gstFrom.replace(/-/g, '')}</SVFROMDATE><SVTODATE>${gstTo.replace(/-/g, '')}</SVTODATE>`)
           const response = await fetchFromTally(serverUrl, xml, 120000)
           await supabase.from('tally_gst_data').insert({
