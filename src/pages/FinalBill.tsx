@@ -24423,11 +24423,11 @@ Dr. Murali B K
           patientId={visitData?.patients?.id}
           patientData={advancePaymentPatientData}
           onPaymentAdded={() => {
-            // RE-ENABLED: Auto-populate now has enhanced discount preservation
-            console.log('💰 [PAYMENT ADDED] Refreshing financial calculations with discount preservation');
             if (autoPopulateFinancialData) {
               autoPopulateFinancialData();
             }
+            queryClient.invalidateQueries({ queryKey: ['todays-visits'] });
+            queryClient.invalidateQueries({ queryKey: ['advance-payment-total'] });
             toast.success('Payment added successfully');
           }}
         />
