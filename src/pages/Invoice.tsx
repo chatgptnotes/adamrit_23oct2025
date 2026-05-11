@@ -231,10 +231,10 @@ const Invoice = () => {
         if (exactMatch && exactMatch.length > 0) {
           exactMatch.forEach(record => {
             const amount = parseFloat(record.advance_amount) || 0;
-            const refunded = parseFloat(record.returned_amount) || 0;
 
             if (record.is_refund) {
-              totalRefunded += refunded;
+              // Refund amount is stored in `advance_amount` for refund rows
+              totalRefunded += amount;
             } else {
               totalPaid += amount;
             }
@@ -1583,10 +1583,11 @@ const Invoice = () => {
     if (advancePaymentData && advancePaymentData.length > 0) {
       advancePaymentData.forEach(payment => {
         const amount = parseFloat(payment.advance_amount) || 0;
-        const returnedAmount = parseFloat(payment.returned_amount) || 0;
 
         if (payment.is_refund) {
-          advancePaymentRefunded += returnedAmount;
+          // For refund rows, the actual refund amount is stored in `advance_amount`
+          // (`returned_amount` is a cumulative snapshot at save time, not the per-row refund)
+          advancePaymentRefunded += amount;
         } else {
           advancePaymentTotal += amount;
         }
@@ -1596,12 +1597,11 @@ const Invoice = () => {
     const netAdvancePayment = advancePaymentTotal - advancePaymentRefunded;
 
     console.log('💵 Advance Payment Data:', advancePaymentData);
-    console.log('💵 Advance Payment Total:', advancePaymentTotal);
+    console.log('💵 Advance Payment Total (gross):', advancePaymentTotal);
     console.log('💵 Advance Payment Refunded:', advancePaymentRefunded);
     console.log('💵 Net Advance Payment:', netAdvancePayment);
 
     // Fallback: Calculate total payments from accounting_transactions (if no advance_payment data)
-
     const totalPayments = (paymentData || []).reduce((sum, payment) => sum + (payment.amount || 0), 0);
     const totalAdvances = (advanceData || []).reduce((sum, advance) => sum + (advance.amount || 0), 0);
     const accountingTransactionsTotal = totalPayments + totalAdvances;
@@ -1610,29 +1610,31 @@ const Invoice = () => {
     console.log('💵 Total Advances (accounting_transactions):', totalAdvances);
     console.log('💵 Total from accounting_transactions:', accountingTransactionsTotal);
 
-    // Use advance_payment data if available, otherwise fall back to accounting_transactions
-    const advanceAmount = netAdvancePayment > 0 ? netAdvancePayment : accountingTransactionsTotal;
+    // Use advance_payment data when present. Show GROSS Amount Paid + separate Refund line
+    // so the invoice is transparent about money in vs money out.
+    const grossAdvancePaid = advancePaymentTotal > 0 ? advancePaymentTotal : accountingTransactionsTotal;
+    const refundedAmount = advancePaymentTotal > 0 ? advancePaymentRefunded : 0;
 
     // Add final payment amount
     const finalPaymentAmount = finalPaymentData?.amount || 0;
     console.log('💵 Final Payment Amount:', finalPaymentAmount);
 
-    // Total Amount Paid = Advance Payment + Final Payment
-    const totalAmountPaid = advanceAmount + finalPaymentAmount;
-
-    console.log('💵 FINAL Total Amount Paid (Advance + Final):', totalAmountPaid);
+    // Gross Amount Paid (before refunds)
+    const totalAmountPaid = grossAdvancePaid + finalPaymentAmount;
+    console.log('💵 FINAL Total Amount Paid (gross, Advance + Final):', totalAmountPaid);
 
     // Get discount from visit_discounts table (same as Final Bill)
     const discountAmount = discountData || 0;
     console.log('💰 Using discount from visit_discounts table:', discountAmount);
 
-    // Calculate balance
-    const balance = totalBillAmount - totalAmountPaid - discountAmount;
+    // Balance = Bill − (gross paid − refunded) − discount = Bill − net paid − discount
+    const balance = totalBillAmount - (totalAmountPaid - refundedAmount) - discountAmount;
     console.log('💳 Balance:', balance);
 
     return {
       total: totalBillAmount,
       amountPaid: totalAmountPaid,
+      refunded: refundedAmount,
       discount: discountAmount,
       balance: balance
     };
@@ -1666,6 +1668,7 @@ const Invoice = () => {
     services: createServicesFromBillData(),
     total: actualAmounts.total,
     amountPaid: actualAmounts.amountPaid,
+    refunded: actualAmounts.refunded,
     discount: actualAmounts.discount,
     balance: actualAmounts.balance,
     amountInWords: convertAmountToWords(actualAmounts.total)
@@ -1697,7 +1700,8 @@ const Invoice = () => {
 
   // Calculate current discount and balance using actual data
   const currentDiscount = discountRemoved ? 0 : actualAmounts.discount;
-  const currentBalance = visibleTotal - actualAmounts.amountPaid - currentDiscount;
+  // Balance = visibleTotal − (gross paid − refund) − discount
+  const currentBalance = visibleTotal - (actualAmounts.amountPaid - (actualAmounts.refunded || 0)) - currentDiscount;
 
   // Print functionality - matches exact screenshot format
   const handlePrint = () => {
@@ -1957,6 +1961,11 @@ const Invoice = () => {
                     <td class="label-cell">Amount Paid</td>
                     <td style="text-align: right;">Rs ${invoiceData.amountPaid.toLocaleString()}.00</td>
                   </tr>
+                  ${(invoiceData.refunded || 0) > 0 ? `
+                  <tr>
+                    <td class="label-cell">Refund Given</td>
+                    <td style="text-align: right;">Rs ${invoiceData.refunded.toLocaleString()}.00</td>
+                  </tr>` : ''}
                   <tr>
                     <td class="label-cell">Discount Given</td>
                     <td style="text-align: right;">Rs ${currentDiscount.toLocaleString()}.00</td>
@@ -2220,6 +2229,12 @@ const Invoice = () => {
                       <td className="border border-gray-400 p-2 bg-gray-100 font-medium">Amount Paid</td>
                       <td className="border border-gray-400 p-2 text-right">Rs {invoiceData.amountPaid.toLocaleString()}.00</td>
                     </tr>
+                    {(invoiceData.refunded || 0) > 0 && (
+                      <tr>
+                        <td className="border border-gray-400 p-2 bg-gray-100 font-medium">Refund Given</td>
+                        <td className="border border-gray-400 p-2 text-right">Rs {invoiceData.refunded.toLocaleString()}.00</td>
+                      </tr>
+                    )}
                     <tr>
                       <td className="border border-gray-400 p-2 bg-gray-100 font-medium">Discount Given</td>
                       <td className="border border-gray-400 p-2 text-right">Rs {currentDiscount.toLocaleString()}.00</td>

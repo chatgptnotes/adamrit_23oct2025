@@ -195,13 +195,13 @@ const FinancialSummary = () => {
         if (exactMatch && exactMatch.length > 0) {
           let totalPaid = 0;
           let totalRefunded = 0;
-          
+
           exactMatch.forEach(record => {
             const amount = parseFloat(record.advance_amount) || 0;
-            const refunded = parseFloat(record.returned_amount) || 0;
-            
+
             if (record.is_refund) {
-              totalRefunded += refunded;
+              // Refund amount is stored in `advance_amount` for refund rows
+              totalRefunded += amount;
             } else {
               totalPaid += amount;
             }
@@ -242,10 +242,10 @@ const FinancialSummary = () => {
   if (advancePaymentData && advancePaymentData.length > 0) {
     advancePaymentData.forEach(payment => {
       const amount = parseFloat(payment.advance_amount) || 0;
-      const returnedAmount = parseFloat(payment.returned_amount) || 0;
-      
+
       if (payment.is_refund) {
-        advancePaymentTotals.refunded += returnedAmount;
+        // Refund amount is stored in `advance_amount` for refund rows
+        advancePaymentTotals.refunded += amount;
       } else {
         advancePaymentTotals.paid += amount;
       }
