@@ -85,6 +85,22 @@ export default function DirectorDashboard() {
     return [...active, ...paid].slice(0, 3);
   }, [deadlines]);
 
+  // Summary for the alert banner: overdue + due within 7 days
+  const alertSummary = useMemo(() => {
+    const now = new Date();
+    const in7Days = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+    const overdue = deadlines.filter(d =>
+      d.status !== 'paid' && new Date(d.due_date) < now
+    );
+    const dueSoon = deadlines.filter(d => {
+      if (d.status === 'paid') return false;
+      const due = new Date(d.due_date);
+      return due >= now && due <= in7Days;
+    });
+    const total = [...overdue, ...dueSoon].reduce((sum, d) => sum + Number(d.amount), 0);
+    return { overdueCount: overdue.length, dueSoonCount: dueSoon.length, total };
+  }, [deadlines]);
+
   const addMutation = useMutation({
     mutationFn: async (data: DeadlineFormData) => {
       if (!user?.hospitalType) throw new Error('Hospital type not available');
@@ -236,8 +252,62 @@ export default function DirectorDashboard() {
         <p className="text-sm text-gray-600">{user?.email}</p>
       </div>
 
+      {(alertSummary.overdueCount > 0 || alertSummary.dueSoonCount > 0) && (
+        <div
+          role="alert"
+          className={`relative rounded-lg border-2 p-5 shadow-lg ${
+            alertSummary.overdueCount > 0
+              ? 'border-red-600 bg-gradient-to-r from-red-50 to-red-100 animate-pulse'
+              : 'border-amber-500 bg-gradient-to-r from-amber-50 to-amber-100'
+          }`}
+        >
+          <div className="flex items-start gap-4">
+            <AlertTriangle
+              className={`h-10 w-10 flex-shrink-0 ${
+                alertSummary.overdueCount > 0 ? 'text-red-600' : 'text-amber-600'
+              }`}
+            />
+            <div className="flex-1">
+              <h2
+                className={`text-xl font-bold tracking-tight ${
+                  alertSummary.overdueCount > 0 ? 'text-red-800' : 'text-amber-800'
+                }`}
+              >
+                {alertSummary.overdueCount + alertSummary.dueSoonCount} PAYMENT
+                {alertSummary.overdueCount + alertSummary.dueSoonCount === 1 ? '' : 'S'} NEED YOUR ATTENTION
+              </h2>
+              <div className="mt-2 flex flex-wrap items-center gap-x-6 gap-y-1 text-base">
+                {alertSummary.overdueCount > 0 && (
+                  <span className="font-semibold text-red-700">
+                    ⚠️ {alertSummary.overdueCount} OVERDUE
+                  </span>
+                )}
+                {alertSummary.dueSoonCount > 0 && (
+                  <span className="font-semibold text-amber-700">
+                    ⏰ {alertSummary.dueSoonCount} due in next 7 days
+                  </span>
+                )}
+                <span className="font-bold text-gray-900">
+                  Total: ₹{alertSummary.total.toLocaleString('en-IN')}
+                </span>
+              </div>
+            </div>
+            <Button
+              variant={alertSummary.overdueCount > 0 ? 'destructive' : 'default'}
+              className="gap-1 self-center"
+              onClick={() => {
+                const el = document.getElementById('payment-deadlines-table');
+                if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              }}
+            >
+              View all <ArrowRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Payment Deadlines Section */}
-      <Card className="border-l-4 border-l-blue-500">
+      <Card id="payment-deadlines-table" className="border-l-4 border-l-blue-500">
         <CardHeader className="flex flex-row items-center justify-between space-y-0">
           <div className="flex items-center gap-2">
             <Wallet className="h-5 w-5 text-blue-600" />
