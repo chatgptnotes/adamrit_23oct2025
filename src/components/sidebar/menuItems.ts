@@ -142,7 +142,7 @@ export const menuItems: MenuItemDef[] = [
     icon: Receipt,
   },
   {
-    title: "Bill Submission",
+    title: "Intimation + Bill Submissions",
     url: "/bill-submission",
     icon: Receipt,
   },

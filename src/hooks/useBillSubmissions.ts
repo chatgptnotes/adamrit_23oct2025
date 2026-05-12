@@ -8,6 +8,7 @@ export interface BillSubmissionInput {
   bill_amount?: number;
   executive_who_submitted?: string;
   date_of_submission?: string;
+  intimation_date?: string;
   expected_payment_date?: string;
   received_amount?: number;
   deduction_amount?: number;
@@ -92,6 +93,7 @@ export const useBillSubmissions = (hospitalName?: string) => {
           bill_amount,
           executive_who_submitted,
           date_of_submission,
+          intimation_date,
           expected_payment_date,
           received_amount,
           deduction_amount,
@@ -141,6 +143,7 @@ export const useBillSubmissions = (hospitalName?: string) => {
         patient_corporate: item.visits?.patients?.corporate || '',
         admission_date: item.visits?.admission_date || '',
         discharge_date: item.visits?.discharge_date || '',
+        intimation_date: item.intimation_date || '',
       }));
     },
   });
@@ -165,6 +168,7 @@ export const useCreateBillSubmission = () => {
         bill_amount: data.bill_amount || existing?.bill_amount || 0,
         executive_who_submitted: data.executive_who_submitted || existing?.executive_who_submitted || null,
         date_of_submission: data.date_of_submission || existing?.date_of_submission || null,
+        intimation_date: data.intimation_date || existing?.intimation_date || null,
         expected_payment_date: data.expected_payment_date || existing?.expected_payment_date || null,
         received_amount: data.received_amount ?? existing?.received_amount ?? null,
         deduction_amount: data.deduction_amount ?? existing?.deduction_amount ?? null,
@@ -205,6 +209,7 @@ export const useUpdateBillSubmission = () => {
           bill_amount: data.bill_amount || 0,
           executive_who_submitted: data.executive_who_submitted || null,
           date_of_submission: data.date_of_submission || null,
+          intimation_date: data.intimation_date || null,
           expected_payment_date: data.expected_payment_date || null,
           received_amount: data.received_amount || null,
           deduction_amount: data.deduction_amount || null,
