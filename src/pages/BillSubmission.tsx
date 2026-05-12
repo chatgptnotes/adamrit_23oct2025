@@ -21,8 +21,10 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
+import { EnhancedDatePicker } from '@/components/ui/enhanced-date-picker';
 import BillSubmissionForm, { BillSubmission, PatientData } from '@/components/BillSubmissionForm';
 import {
   useBillSubmissions,
@@ -35,6 +37,7 @@ import * as XLSX from 'xlsx';
 const BillSubmissionPage: React.FC = () => {
   const { hospitalConfig } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
+  const queryClient = useQueryClient();
 
   // URL-persisted state
   const searchTerm = searchParams.get('search') || '';
@@ -164,7 +167,7 @@ const BillSubmissionPage: React.FC = () => {
 
     const ws = XLSX.utils.json_to_sheet(exportData);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Bill Submissions');
+    XLSX.utils.book_append_sheet(wb, ws, 'Intimation + Bill Submissions');
     XLSX.writeFile(wb, `Bill_Submissions_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
@@ -407,6 +410,20 @@ const BillSubmissionPage: React.FC = () => {
     return new Date(dateString).toLocaleDateString('en-IN');
   };
 
+  const handleIntimationDateChange = async (id: string, d: Date | undefined) => {
+    const iso = d ? d.toISOString().slice(0, 10) : null;
+    const { error } = await (supabase as any)
+      .from('bill_preparation')
+      .update({ intimation_date: iso })
+      .eq('id', id);
+    if (error) {
+      toast.error(`Failed to save intimation date: ${error.message}`);
+      return;
+    }
+    queryClient.invalidateQueries({ queryKey: ['bill-submissions'] });
+    toast.success('Intimation date updated.');
+  };
+
   const formatAmount = (amount: number) => {
     return new Intl.NumberFormat('en-IN', {
       style: 'currency',
@@ -419,12 +436,12 @@ const BillSubmissionPage: React.FC = () => {
     <div className="p-6">
       <div className="flex items-center gap-3 mb-6">
         <Receipt className="h-8 w-8 text-primary" />
-        <h1 className="text-2xl font-bold">Bill Submission</h1>
+        <h1 className="text-2xl font-bold">Intimation + Bill Submissions</h1>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Bill Submissions</CardTitle>
+          <CardTitle>Intimation + Bill Submissions</CardTitle>
         </CardHeader>
         <CardContent>
           {/* Patient Search */}
@@ -676,6 +693,7 @@ const BillSubmissionPage: React.FC = () => {
                   <TableHead>Patient Name</TableHead>
                   <TableHead>Corporate</TableHead>
                   <TableHead>Date of Admission</TableHead>
+                  <TableHead>Intimation Date</TableHead>
                   <TableHead>Date of Discharge</TableHead>
                   <TableHead className="text-right">Bill Amount</TableHead>
                   <TableHead>Submitted By</TableHead>
@@ -691,13 +709,13 @@ const BillSubmissionPage: React.FC = () => {
               <TableBody>
                 {isLoading ? (
                   <TableRow>
-                    <TableCell colSpan={15} className="text-center py-8">
+                    <TableCell colSpan={16} className="text-center py-8">
                       <Loader2 className="h-6 w-6 animate-spin mx-auto" />
                     </TableCell>
                   </TableRow>
                 ) : filteredSubmissions.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={15} className="text-center py-8 text-gray-500">
+                    <TableCell colSpan={16} className="text-center py-8 text-gray-500">
                       {submissions.length === 0
                         ? 'No bill submissions yet. Search for a patient above to create one.'
                         : 'No records match the selected filters.'}
@@ -711,6 +729,14 @@ const BillSubmissionPage: React.FC = () => {
                       <TableCell>{submission.patient_name}</TableCell>
                       <TableCell>{submission.patient_corporate || '-'}</TableCell>
                       <TableCell>{formatDate(submission.admission_date)}</TableCell>
+                      <TableCell>
+                        <EnhancedDatePicker
+                          value={submission.intimation_date ? new Date(submission.intimation_date) : undefined}
+                          onChange={(d) => handleIntimationDateChange(submission.id, d)}
+                          placeholder="Pick date"
+                          isDOB={false}
+                        />
+                      </TableCell>
                       <TableCell>{formatDate(submission.discharge_date)}</TableCell>
                       <TableCell className="text-right">{formatAmount(submission.bill_amount)}</TableCell>
                       <TableCell>{submission.executive_who_submitted || '-'}</TableCell>

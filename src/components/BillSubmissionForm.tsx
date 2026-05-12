@@ -122,9 +122,9 @@ const BillSubmissionForm: React.FC<BillSubmissionFormProps> = ({
   };
 
   const getDialogTitle = () => {
-    if (editData) return 'Edit Bill Submission';
-    if (prefilledPatient) return `Bill Submission - ${prefilledPatient.patientName}`;
-    return 'Add Bill Submission';
+    if (editData) return 'Edit Intimation + Bill Submission';
+    if (prefilledPatient) return `Intimation + Bill Submission - ${prefilledPatient.patientName}`;
+    return 'Add Intimation + Bill Submission';
   };
 
   return (
