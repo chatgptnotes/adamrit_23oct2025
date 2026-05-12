@@ -44,6 +44,8 @@ export const VisitRegistrationForm: React.FC<VisitRegistrationFormProps> = ({
     relationshipManager: '',
     claimId: '',
     cardNo: '',
+    thumbRegistrationNo: '',
+    treatmentType: '',
     patientType: '',
     wardAllotted: '',
     roomAllotted: '',
@@ -73,6 +75,8 @@ export const VisitRegistrationForm: React.FC<VisitRegistrationFormProps> = ({
         relationshipManager: existingVisit.relationship_manager || '',
         claimId: existingVisit.claim_id || '',
         cardNo: existingVisit.card_no || '',
+        thumbRegistrationNo: existingVisit.thumb_registration_no || '',
+        treatmentType: existingVisit.treatment_type || '',
         patientType: existingVisit.patient_type || 'OPD',
         wardAllotted: existingVisit.ward_allotted || '',
         roomAllotted: existingVisit.room_allotted || '',
@@ -198,6 +202,8 @@ export const VisitRegistrationForm: React.FC<VisitRegistrationFormProps> = ({
     if (!formData.reasonForVisit || formData.reasonForVisit.trim() === '') missingFields.push('Reason for Visit');
     if (!formData.patientType || formData.patientType.trim() === '') missingFields.push('Patient Type');
     if (!formData.claimId || formData.claimId.trim() === '') missingFields.push('Claim Id');
+    if (!formData.thumbRegistrationNo || formData.thumbRegistrationNo.trim() === '') missingFields.push('Thumb Registration No.');
+    if (!formData.treatmentType || formData.treatmentType.trim() === '') missingFields.push('Treatment Type');
 
     // Validate ward and room only for IPD/Emergency patients
     const requiresWardRoom = formData.patientType === 'IPD' ||
@@ -263,6 +269,8 @@ export const VisitRegistrationForm: React.FC<VisitRegistrationFormProps> = ({
             relationship_manager_id: selectedIds.relationshipManagerId || null,
             claim_id: formData.claimId || null,
             card_no: formData.cardNo || null,
+            thumb_registration_no: formData.thumbRegistrationNo,
+            treatment_type: formData.treatmentType,
             ward_allotted: formData.wardAllotted || null,
             room_allotted: formData.roomAllotted || null,
             admission_date: admissionDate,
@@ -351,6 +359,8 @@ export const VisitRegistrationForm: React.FC<VisitRegistrationFormProps> = ({
             relationship_manager_id: selectedIds.relationshipManagerId || null,
             claim_id: formData.claimId,
           card_no: formData.cardNo || null,
+            thumb_registration_no: formData.thumbRegistrationNo,
+            treatment_type: formData.treatmentType,
             ward_allotted: formData.wardAllotted || null,
             room_allotted: formData.roomAllotted || null,
             admission_date: isIPDOrEmergency ? new Date().toISOString() : null,

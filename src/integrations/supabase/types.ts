@@ -6707,6 +6707,8 @@ export type Database = {
           bunch_no: string | null
           cghs_code: string | null
           claim_id: string | null
+          thumb_registration_no: string | null
+          treatment_type: string | null
           esic_uh_id: string | null
           condonation_delay_claim: string | null
           condonation_delay_intimation: string | null
@@ -6759,6 +6761,8 @@ export type Database = {
           bunch_no?: string | null
           cghs_code?: string | null
           claim_id?: string | null
+          thumb_registration_no?: string | null
+          treatment_type?: string | null
           esic_uh_id?: string | null
           condonation_delay_claim?: string | null
           condonation_delay_intimation?: string | null
@@ -6811,6 +6815,8 @@ export type Database = {
           bunch_no?: string | null
           cghs_code?: string | null
           claim_id?: string | null
+          thumb_registration_no?: string | null
+          treatment_type?: string | null
           esic_uh_id?: string | null
           condonation_delay_claim?: string | null
           condonation_delay_intimation?: string | null

@@ -24,6 +24,8 @@ interface VisitDetailsSectionProps {
     relationshipManager?: string;
     claimId?: string;
     cardNo?: string;
+    thumbRegistrationNo?: string;
+    treatmentType?: string;
     diagnosisId?: string;
     billingCategoryOverride?: string;
   };
@@ -554,6 +556,38 @@ export const VisitDetailsSection: React.FC<VisitDetailsSectionProps> = ({
             value={formData.cardNo || ''}
             onChange={(e) => handleInputChange('cardNo', e.target.value)}
           />
+        </div>
+
+        {/* Thumb Registration No. */}
+        <div className="space-y-2">
+          <Label htmlFor="thumbRegistrationNo" className="text-sm font-medium">
+            Thumb Registration No. <span className="text-red-500">*</span>
+          </Label>
+          <Input
+            id="thumbRegistrationNo"
+            placeholder="Enter Thumb Registration No."
+            value={formData.thumbRegistrationNo || ''}
+            onChange={(e) => handleInputChange('thumbRegistrationNo', e.target.value)}
+          />
+        </div>
+
+        {/* Treatment Type */}
+        <div className="space-y-2">
+          <Label htmlFor="treatmentType" className="text-sm font-medium">
+            Treatment Type <span className="text-red-500">*</span>
+          </Label>
+          <Select
+            value={formData.treatmentType || ''}
+            onValueChange={(value) => handleInputChange('treatmentType', value)}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Select Treatment Type" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="Conservative">Conservative</SelectItem>
+              <SelectItem value="Surgical">Surgical</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
 
         {/* Row 4 - Ward and Room Allocation (Only for IPD/Emergency) */}
