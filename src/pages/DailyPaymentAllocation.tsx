@@ -996,12 +996,11 @@ ${sectionsHtml}
     else toast.error('Popup blocked — allow popups for this site to print.');
   };
 
-  const persistLedgerLinks = (obligationId: string) => {
-    const links = Object.entries(ledgerLinks).map(([company_id, info]) => ({
-      company_id,
-      ledger_id: info.ledgerId,
-    }));
-    saveLedgerLinks.mutate({ obligationId, links });
+  const persistLedgerLinks = (
+    obligationId: string,
+    linksSnapshot: { company_id: string; ledger_id: string }[],
+  ) => {
+    saveLedgerLinks.mutate({ obligationId, links: linksSnapshot });
   };
 
   const handleAddObligation = () => {
@@ -1026,13 +1025,19 @@ ${sectionsHtml}
         ? null
         : parseFloat(newObligation.approximate_balance),
     };
+    // Snapshot the ledger links BEFORE we reset state, so the async create
+    // callback (which fires after setLedgerLinks({})) still has the picks.
+    const linksSnapshot = Object.entries(ledgerLinks).map(([company_id, info]) => ({
+      company_id,
+      ledger_id: info.ledgerId,
+    }));
     if (editingObligationId) {
       updateObligation.mutate({ id: editingObligationId, ...payload });
-      persistLedgerLinks(editingObligationId);
+      persistLedgerLinks(editingObligationId, linksSnapshot);
     } else {
       createObligation.mutate(payload, {
         onSuccess: (created: any) => {
-          if (created?.id) persistLedgerLinks(created.id);
+          if (created?.id) persistLedgerLinks(created.id, linksSnapshot);
         },
       });
     }
@@ -1690,7 +1695,7 @@ ${sectionsHtml}
                 <RefreshCw className={`h-4 w-4 mr-1 ${isSyncingRMOs ? 'animate-spin' : ''}`} />
                 {isSyncingRMOs ? 'Syncing...' : 'Sync RMOs from Master'}
               </Button>
-              <Button onClick={() => { setEditingObligationId(null); setNewObligation({ party_name: '', category: 'variable', sub_category: 'other', default_daily_amount: '', priority: '10', notes: '', payee_name: '', payee_search_table: '', attachment_url: '', google_sheet_link: '', company_id: null, tally_ledger_id: null, tally_ledger_name: '', tally_ledger_closing: null, approximate_balance: '' }); setAddDialogOpen(true); }}>
+              <Button onClick={() => { setEditingObligationId(null); setNewObligation({ party_name: '', category: 'variable', sub_category: 'other', default_daily_amount: '', priority: '10', notes: '', payee_name: '', payee_search_table: '', attachment_url: '', google_sheet_link: '', company_id: null, tally_ledger_id: null, tally_ledger_name: '', tally_ledger_closing: null, approximate_balance: '' }); setLedgerLinks({}); setLedgerSearchTerm(''); setOpenPickerCompanyId(null); setAddDialogOpen(true); }}>
                 <Plus className="h-4 w-4 mr-1" /> Add Obligation
               </Button>
             </div>
@@ -2216,7 +2221,7 @@ ${sectionsHtml}
       </Dialog>
 
       {/* Add/Edit Obligation Dialog */}
-      <Dialog open={addDialogOpen} onOpenChange={(open) => { setAddDialogOpen(open); if (!open) setEditingObligationId(null); }}>
+      <Dialog open={addDialogOpen} onOpenChange={(open) => { setAddDialogOpen(open); if (!open) { setEditingObligationId(null); setLedgerLinks({}); setLedgerSearchTerm(''); setOpenPickerCompanyId(null); } }}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>{editingObligationId ? 'Edit' : 'Add'} Payment Obligation</DialogTitle>
