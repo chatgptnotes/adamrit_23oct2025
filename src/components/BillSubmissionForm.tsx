@@ -17,6 +17,7 @@ export interface BillSubmission {
   billAmount: number;
   submittedBy: string;
   submissionDate: string;
+  intimationDate: string;
   expectedPaymentDate: string;
   receivedAmount: number;
   deductionAmount: number;
@@ -52,6 +53,7 @@ const BillSubmissionForm: React.FC<BillSubmissionFormProps> = ({
     billAmount: 0,
     submittedBy: '',
     submissionDate: new Date().toISOString().split('T')[0],
+    intimationDate: '',
     expectedPaymentDate: '',
     receivedAmount: 0,
     deductionAmount: 0,
@@ -70,6 +72,7 @@ const BillSubmissionForm: React.FC<BillSubmissionFormProps> = ({
         billAmount: editData.billAmount,
         submittedBy: editData.submittedBy,
         submissionDate: editData.submissionDate,
+        intimationDate: editData.intimationDate || '',
         expectedPaymentDate: editData.expectedPaymentDate,
         receivedAmount: editData.receivedAmount || 0,
         deductionAmount: editData.deductionAmount || 0,
@@ -84,6 +87,7 @@ const BillSubmissionForm: React.FC<BillSubmissionFormProps> = ({
         billAmount: 0,
         submittedBy: '',
         submissionDate: new Date().toISOString().split('T')[0],
+        intimationDate: '',
         expectedPaymentDate: '',
         receivedAmount: 0,
         deductionAmount: 0,
@@ -98,6 +102,7 @@ const BillSubmissionForm: React.FC<BillSubmissionFormProps> = ({
         billAmount: 0,
         submittedBy: '',
         submissionDate: new Date().toISOString().split('T')[0],
+        intimationDate: '',
         expectedPaymentDate: '',
         receivedAmount: 0,
         deductionAmount: 0,
@@ -192,7 +197,16 @@ const BillSubmissionForm: React.FC<BillSubmissionFormProps> = ({
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-3 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="intimationDate">Intimation Date</Label>
+              <Input
+                id="intimationDate"
+                type="date"
+                value={formData.intimationDate}
+                onChange={(e) => handleChange('intimationDate', e.target.value)}
+              />
+            </div>
             <div className="space-y-2">
               <Label htmlFor="submissionDate">Date of Bill Submission</Label>
               <Input

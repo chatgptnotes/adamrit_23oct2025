@@ -54,6 +54,31 @@ export const IPD_PRINT_COLUMNS: ReportColumn[] = [
     align: 'left'
   },
   {
+    id: 'thumb_registration_no',
+    label: 'Thumb Reg. No.',
+    accessorKey: 'thumb_registration_no',
+    printable: true,
+    widthPx: 120,
+    align: 'left'
+  },
+  {
+    id: 'treatment_type',
+    label: 'Treatment Type',
+    accessorKey: 'treatment_type',
+    printable: true,
+    widthPx: 110,
+    align: 'center'
+  },
+  {
+    id: 'intimation_date',
+    label: 'Intimation Date',
+    accessorKey: 'intimation_date',
+    printable: true,
+    widthPx: 120,
+    align: 'center',
+    format: (value) => value ? format(new Date(value), 'MMM dd, yyyy') : '—'
+  },
+  {
     id: 'esic_uhid',
     label: 'ESIC UHID',
     accessorKey: 'esic_uh_id',
@@ -321,6 +346,9 @@ export const IPD_PRINT_PRESETS: PrintPreset[] = [
       'visit_id',
       'patient_name',
       'claim_id',
+      'thumb_registration_no',
+      'treatment_type',
+      'intimation_date',
       'esic_uhid',
       'billing_executive',
       'corporate',
