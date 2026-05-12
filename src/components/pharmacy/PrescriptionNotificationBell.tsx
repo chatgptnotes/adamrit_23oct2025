@@ -9,9 +9,11 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { usePendingPrescriptions } from '@/hooks/usePendingPrescriptions';
+import type { PendingPrescription } from '@/hooks/usePendingPrescriptions';
 
 interface Props {
+  count: number;
+  recent: PendingPrescription[];
   onViewAll: () => void;
 }
 
@@ -24,8 +26,7 @@ const formatTimeAgo = (iso: string | null) => {
   }
 };
 
-const PrescriptionNotificationBell: React.FC<Props> = ({ onViewAll }) => {
-  const { count, recent } = usePendingPrescriptions();
+const PrescriptionNotificationBell: React.FC<Props> = ({ count, recent, onViewAll }) => {
   const displayCount = count > 99 ? '99+' : String(count);
 
   return (

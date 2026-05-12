@@ -57,8 +57,11 @@ const PharmacyDashboard: React.FC = () => {
     }
   }, [searchParams]);
 
-  // Live pending-prescription count (replaces hardcoded mock below)
-  const { count: pendingPrescriptionsCount } = usePendingPrescriptions();
+  // Live pending-prescription data (replaces hardcoded mock below).
+  // Called ONCE here and threaded into the bell as props so we don't open
+  // two realtime channels with the same name.
+  const { count: pendingPrescriptionsCount, recent: pendingPrescriptionsRecent } =
+    usePendingPrescriptions();
 
   // Mock data for dashboard - will be replaced with real data from hooks
   const dashboardData = {
@@ -108,7 +111,11 @@ const PharmacyDashboard: React.FC = () => {
           </div>
         </div>
         <div className="flex items-center gap-3">
-          <PrescriptionNotificationBell onViewAll={() => setSelectedTab('prescriptions')} />
+          <PrescriptionNotificationBell
+            count={pendingPrescriptionsCount}
+            recent={pendingPrescriptionsRecent}
+            onViewAll={() => setSelectedTab('prescriptions')}
+          />
           <div className="flex items-center gap-2">
             <Calendar className="h-4 w-4" />
             <span className="text-sm text-muted-foreground">
