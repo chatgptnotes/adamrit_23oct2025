@@ -51,7 +51,7 @@ import {
   type SubAllocation,
   type SavedAllocation,
 } from '@/hooks/useDailyPaymentAllocation';
-import { usePaymentObligations, usePayeeSearch, useMultiPayeeSearch, useObligationDefaultPayees, useTallyLedgerSearch, type PaymentObligation, type DefaultPayee } from '@/hooks/usePaymentObligations';
+import { usePaymentObligations, usePayeeSearch, useMultiPayeeSearch, useObligationDefaultPayees, useTallyLedgerSearch, useTallyCompanies, useSaveObligationLedgerLinks, type PaymentObligation, type DefaultPayee, type TallyCompany } from '@/hooks/usePaymentObligations';
 import { useCompanies } from '@/hooks/useCompanies';
 
 const formatINR = (n: number) =>
@@ -286,14 +286,22 @@ const SortableObligationRow = ({
       </TableCell>
       <TableCell className="text-right font-mono">{formatINR(ob.default_daily_amount)}</TableCell>
       <TableCell className="text-xs">
-        {ob.tally_ledgers ? (
-          <span className="text-blue-700">{ob.tally_ledgers.name}</span>
+        {ob.payment_obligation_ledgers && ob.payment_obligation_ledgers.length > 0 ? (
+          <div className="space-y-0.5">
+            {ob.payment_obligation_ledgers.map(link => (
+              <div key={link.company_id} className="flex items-center justify-between gap-2">
+                <span className="text-blue-700 truncate max-w-[120px]" title={link.tally_config?.company_name || ''}>
+                  {link.tally_config?.company_name || 'Unknown'}:
+                </span>
+                <span className="font-mono text-right whitespace-nowrap">
+                  {formatINR(Number(link.tally_ledgers?.closing_balance) || 0)}
+                </span>
+              </div>
+            ))}
+          </div>
         ) : (
           <span className="text-muted-foreground italic">Not linked</span>
         )}
-      </TableCell>
-      <TableCell className="text-right font-mono text-sm">
-        {ob.tally_ledgers ? formatINR(Number(ob.tally_ledgers.closing_balance) || 0) : <span className="text-muted-foreground">—</span>}
       </TableCell>
       <TableCell className="text-right font-mono text-sm">
         {ob.approximate_balance != null ? formatINR(Number(ob.approximate_balance)) : <span className="text-muted-foreground">—</span>}
@@ -380,14 +388,19 @@ const DailyPaymentAllocation = () => {
     sub_category: 'other', default_daily_amount: '',
     priority: '10', notes: '', payee_name: '', payee_search_table: '',
     attachment_url: '', google_sheet_link: '', company_id: null as string | null,
-    tally_ledger_id: null as string | null,
-    tally_ledger_name: '', // display-only; not persisted
-    tally_ledger_closing: null as number | null, // display-only; not persisted
+    tally_ledger_id: null as string | null, // legacy
+    tally_ledger_name: '',
+    tally_ledger_closing: null as number | null,
     approximate_balance: '',
   });
+  // Per-Tally-company ledger links for the obligation being edited.
+  type LedgerLinkInfo = { ledgerId: string; ledgerName: string; closingBalance: number };
+  const [ledgerLinks, setLedgerLinks] = useState<Record<string, LedgerLinkInfo>>({});
+  const [openPickerCompanyId, setOpenPickerCompanyId] = useState<string | null>(null);
   const [ledgerSearchTerm, setLedgerSearchTerm] = useState('');
-  const [ledgerDropdownOpen, setLedgerDropdownOpen] = useState(false);
-  const { data: ledgerSearchResults = [] } = useTallyLedgerSearch(ledgerSearchTerm);
+  const { data: ledgerSearchResults = [] } = useTallyLedgerSearch(ledgerSearchTerm, openPickerCompanyId);
+  const { data: tallyCompanies = [] } = useTallyCompanies();
+  const saveLedgerLinks = useSaveObligationLedgerLinks();
 
   // Payee search for sub-payments (consultant, RMO, staff)
   const [payeeSearchTerm, setPayeeSearchTerm] = useState('');
@@ -846,6 +859,14 @@ table{width:100%;border-collapse:collapse;margin-top:12px}
     setPayDialogOpen(false);
   };
 
+  const persistLedgerLinks = (obligationId: string) => {
+    const links = Object.entries(ledgerLinks).map(([company_id, info]) => ({
+      company_id,
+      ledger_id: info.ledgerId,
+    }));
+    saveLedgerLinks.mutate({ obligationId, links });
+  };
+
   const handleAddObligation = () => {
     if (!newObligation.party_name || !newObligation.default_daily_amount) {
       toast.error('Party name and daily amount are required');
@@ -870,13 +891,19 @@ table{width:100%;border-collapse:collapse;margin-top:12px}
     };
     if (editingObligationId) {
       updateObligation.mutate({ id: editingObligationId, ...payload });
+      persistLedgerLinks(editingObligationId);
     } else {
-      createObligation.mutate(payload);
+      createObligation.mutate(payload, {
+        onSuccess: (created: any) => {
+          if (created?.id) persistLedgerLinks(created.id);
+        },
+      });
     }
     setAddDialogOpen(false);
     setEditingObligationId(null);
+    setLedgerLinks({});
     setLedgerSearchTerm('');
-    setLedgerDropdownOpen(false);
+    setOpenPickerCompanyId(null);
     setNewObligation({ party_name: '', category: 'variable', sub_category: 'other', default_daily_amount: '', priority: '10', notes: '', payee_name: '', payee_search_table: '', attachment_url: '', google_sheet_link: '', company_id: null, tally_ledger_id: null, tally_ledger_name: '', tally_ledger_closing: null, approximate_balance: '' });
   };
 
@@ -899,8 +926,20 @@ table{width:100%;border-collapse:collapse;margin-top:12px}
       tally_ledger_closing: ob.tally_ledgers?.closing_balance ?? null,
       approximate_balance: ob.approximate_balance != null ? String(ob.approximate_balance) : '',
     });
+    // Hydrate per-company links from the junction table
+    const hydrated: Record<string, LedgerLinkInfo> = {};
+    (ob.payment_obligation_ledgers || []).forEach(link => {
+      if (link.tally_ledgers) {
+        hydrated[link.company_id] = {
+          ledgerId: link.tally_ledgers.id,
+          ledgerName: link.tally_ledgers.name,
+          closingBalance: Number(link.tally_ledgers.closing_balance) || 0,
+        };
+      }
+    });
+    setLedgerLinks(hydrated);
     setLedgerSearchTerm('');
-    setLedgerDropdownOpen(false);
+    setOpenPickerCompanyId(null);
     setAddDialogOpen(true);
   };
 
@@ -1526,8 +1565,7 @@ table{width:100%;border-collapse:collapse;margin-top:12px}
                     <TableHead>Payee</TableHead>
                     <TableHead>Category</TableHead>
                     <TableHead className="text-right">Daily Amount</TableHead>
-                    <TableHead>Ledger</TableHead>
-                    <TableHead className="text-right">Outstanding (Ledger)</TableHead>
+                    <TableHead>Outstanding (per Tally company)</TableHead>
                     <TableHead className="text-right">Approx Balance</TableHead>
                     <TableHead className="text-center">Priority</TableHead>
                     <TableHead className="text-center">Active</TableHead>
@@ -1539,7 +1577,7 @@ table{width:100%;border-collapse:collapse;margin-top:12px}
                   <TableBody>
                     {sortedObligations.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={13} className="text-center py-8 text-muted-foreground">
+                        <TableCell colSpan={12} className="text-center py-8 text-muted-foreground">
                           No obligations configured. Click "Add Obligation" to get started.
                         </TableCell>
                       </TableRow>
@@ -2361,91 +2399,103 @@ table{width:100%;border-collapse:collapse;margin-top:12px}
                 </div>
               )}
 
-              {/* Tally Ledger Link + Outstanding + Approx Balance */}
+              {/* Tally Ledger Links — one picker per Tally company */}
               <div className="border rounded-md p-3 bg-slate-50 space-y-3">
                 <Label className="text-xs font-semibold text-slate-700 flex items-center gap-1">
-                  <LinkIcon className="h-3 w-3" /> Linked Tally Ledger
+                  <LinkIcon className="h-3 w-3" /> Linked Tally Ledgers (per company)
                 </Label>
 
-                {/* Ledger picker — search */}
-                <div className="relative">
-                  <div className="flex items-center gap-2">
-                    <div className="relative flex-1">
-                      <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-                      <Input
-                        value={ledgerDropdownOpen ? ledgerSearchTerm : (newObligation.tally_ledger_name || '')}
-                        onChange={(e) => { setLedgerSearchTerm(e.target.value); setLedgerDropdownOpen(true); }}
-                        onFocus={() => setLedgerDropdownOpen(true)}
-                        placeholder="Search ledger by name (min 2 chars)..."
-                        className="h-8 text-sm pl-7"
-                      />
-                    </div>
-                    {newObligation.tally_ledger_id && (
-                      <Button
-                        size="sm" variant="ghost"
-                        className="h-8 px-2 text-red-400 hover:text-red-600"
-                        type="button"
-                        onClick={() => {
-                          setNewObligation({
-                            ...newObligation,
-                            tally_ledger_id: null,
-                            tally_ledger_name: '',
-                            tally_ledger_closing: null,
-                          });
-                          setLedgerSearchTerm('');
-                          setLedgerDropdownOpen(false);
-                        }}
-                        title="Unlink ledger"
-                      >
-                        <X className="h-3.5 w-3.5" />
-                      </Button>
-                    )}
-                  </div>
-                  {ledgerDropdownOpen && ledgerSearchTerm.length >= 2 && (
-                    <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-white border rounded-md shadow-lg max-h-56 overflow-y-auto">
-                      {ledgerSearchResults.length === 0 ? (
-                        <div className="px-3 py-2 text-xs text-muted-foreground">No matching ledgers</div>
-                      ) : (
-                        ledgerSearchResults.map((lg) => (
-                          <button
-                            key={lg.id}
-                            type="button"
-                            className="w-full text-left px-3 py-2 hover:bg-blue-50 border-b last:border-b-0"
-                            onClick={() => {
-                              setNewObligation({
-                                ...newObligation,
-                                tally_ledger_id: lg.id,
-                                tally_ledger_name: lg.name,
-                                tally_ledger_closing: Number(lg.closing_balance) || 0,
-                              });
-                              setLedgerSearchTerm('');
-                              setLedgerDropdownOpen(false);
-                            }}
-                          >
-                            <div className="text-sm font-medium">{lg.name}</div>
-                            <div className="flex justify-between text-xs text-muted-foreground">
-                              <span>{lg.parent_group || '—'}</span>
-                              <span className="font-mono">{formatINR(Number(lg.closing_balance) || 0)}</span>
+                {tallyCompanies.length === 0 ? (
+                  <p className="text-xs text-muted-foreground italic">
+                    No Tally companies configured. Add one in Tally settings first.
+                  </p>
+                ) : (
+                  tallyCompanies.map((co: TallyCompany) => {
+                    const link = ledgerLinks[co.id];
+                    const isPickerOpen = openPickerCompanyId === co.id;
+                    return (
+                      <div key={co.id} className="bg-white border rounded p-2 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-xs font-semibold text-blue-700">{co.company_name}</Label>
+                          {link && (
+                            <span className="text-xs font-mono text-green-700">
+                              Outstanding: {formatINR(link.closingBalance)}
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="relative">
+                          <div className="flex items-center gap-2">
+                            <div className="relative flex-1">
+                              <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                              <Input
+                                value={isPickerOpen ? ledgerSearchTerm : (link?.ledgerName || '')}
+                                onChange={(e) => { setLedgerSearchTerm(e.target.value); setOpenPickerCompanyId(co.id); }}
+                                onFocus={() => { setOpenPickerCompanyId(co.id); setLedgerSearchTerm(''); }}
+                                placeholder={`Search ledger in ${co.company_name}...`}
+                                className="h-8 text-sm pl-7"
+                              />
                             </div>
-                          </button>
-                        ))
-                      )}
-                    </div>
-                  )}
-                </div>
+                            {link && (
+                              <Button
+                                size="sm" variant="ghost"
+                                className="h-8 px-2 text-red-400 hover:text-red-600"
+                                type="button"
+                                onClick={() => {
+                                  setLedgerLinks(prev => {
+                                    const next = { ...prev };
+                                    delete next[co.id];
+                                    return next;
+                                  });
+                                  setLedgerSearchTerm('');
+                                  setOpenPickerCompanyId(null);
+                                }}
+                                title={`Unlink from ${co.company_name}`}
+                              >
+                                <X className="h-3.5 w-3.5" />
+                              </Button>
+                            )}
+                          </div>
+                          {isPickerOpen && ledgerSearchTerm.length >= 2 && (
+                            <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-white border rounded-md shadow-lg max-h-56 overflow-y-auto">
+                              {ledgerSearchResults.length === 0 ? (
+                                <div className="px-3 py-2 text-xs text-muted-foreground">No matching ledgers in {co.company_name}</div>
+                              ) : (
+                                ledgerSearchResults.map((lg) => (
+                                  <button
+                                    key={lg.id}
+                                    type="button"
+                                    className="w-full text-left px-3 py-2 hover:bg-blue-50 border-b last:border-b-0"
+                                    onClick={() => {
+                                      setLedgerLinks(prev => ({
+                                        ...prev,
+                                        [co.id]: {
+                                          ledgerId: lg.id,
+                                          ledgerName: lg.name,
+                                          closingBalance: Number(lg.closing_balance) || 0,
+                                        },
+                                      }));
+                                      setLedgerSearchTerm('');
+                                      setOpenPickerCompanyId(null);
+                                    }}
+                                  >
+                                    <div className="text-sm font-medium">{lg.name}</div>
+                                    <div className="flex justify-between text-xs text-muted-foreground">
+                                      <span>{lg.parent_group || '—'}</span>
+                                      <span className="font-mono">{formatINR(Number(lg.closing_balance) || 0)}</span>
+                                    </div>
+                                  </button>
+                                ))
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
 
-                {/* Outstanding from ledger — read-only */}
-                <div>
-                  <Label className="text-xs">Outstanding (from ledger)</Label>
-                  <Input
-                    value={newObligation.tally_ledger_closing != null ? formatINR(newObligation.tally_ledger_closing) : ''}
-                    placeholder="Auto-populated when a ledger is linked"
-                    readOnly
-                    className="h-8 text-sm font-mono bg-white"
-                  />
-                </div>
-
-                {/* Approximate balance — manual */}
+                {/* Approximate balance — manual, single field */}
                 <div>
                   <Label className="text-xs">Approximate Balance (manual estimate)</Label>
                   <Input
@@ -2453,7 +2503,7 @@ table{width:100%;border-collapse:collapse;margin-top:12px}
                     inputMode="decimal"
                     value={newObligation.approximate_balance}
                     onChange={(e) => setNewObligation({ ...newObligation, approximate_balance: e.target.value })}
-                    placeholder="e.g. 50000 — used when ledger value is stale"
+                    placeholder="e.g. 50000 — used when ledger values are stale"
                     className="h-8 text-sm font-mono"
                   />
                 </div>

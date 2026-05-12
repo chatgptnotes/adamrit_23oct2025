@@ -18,11 +18,25 @@ export interface PaymentObligation {
   attachment_url: string | null; // uploaded Excel/Doc file URL
   google_sheet_link: string | null; // Google Sheets link for outstanding payments
   company_id: string | null;
-  tally_ledger_id: string | null; // FK to tally_ledgers
+  tally_ledger_id: string | null; // legacy single FK; kept for back-compat
   approximate_balance: number | null; // director's manual estimate when ledger is stale
-  tally_ledgers?: { id: string; name: string; closing_balance: number } | null; // embedded join
+  tally_ledgers?: { id: string; name: string; closing_balance: number } | null; // legacy embed
+  payment_obligation_ledgers?: ObligationLedgerLink[]; // per-company ledger links (current)
   created_at: string;
   updated_at: string;
+}
+
+export interface ObligationLedgerLink {
+  obligation_id: string;
+  company_id: string;
+  ledger_id: string;
+  tally_ledgers: { id: string; name: string; closing_balance: number };
+  tally_config?: { id: string; company_name: string } | null;
+}
+
+export interface TallyCompany {
+  id: string;
+  company_name: string;
 }
 
 export type NewObligation = Omit<PaymentObligation, 'id' | 'created_at' | 'updated_at'>;
@@ -35,7 +49,15 @@ export const usePaymentObligations = (hospital: string = 'hope') => {
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from('payment_obligations')
-        .select('*, tally_ledgers(id, name, closing_balance)')
+        .select(`
+          *,
+          tally_ledgers(id, name, closing_balance),
+          payment_obligation_ledgers(
+            obligation_id, company_id, ledger_id,
+            tally_ledgers(id, name, closing_balance),
+            tally_config(id, company_name)
+          )
+        `)
         .eq('hospital_name', hospital)
         .order('priority', { ascending: true });
       if (error) throw error;
@@ -167,25 +189,82 @@ export const usePayeeSearch = (searchTable: string, searchTerm: string) => {
   });
 };
 
-// Search Tally ledgers by name for linking to a payment obligation
-export const useTallyLedgerSearch = (searchTerm: string) => {
+// Search Tally ledgers by name, optionally scoped to a single Tally company
+export const useTallyLedgerSearch = (searchTerm: string, companyId?: string | null) => {
   return useQuery({
-    queryKey: ['tally-ledger-search', searchTerm],
+    queryKey: ['tally-ledger-search', searchTerm, companyId || 'any'],
     queryFn: async () => {
       if (!searchTerm || searchTerm.length < 2) return [];
-      const { data, error } = await (supabase as any)
+      let query = (supabase as any)
         .from('tally_ledgers')
-        .select('id, name, parent_group, closing_balance')
+        .select('id, name, parent_group, closing_balance, company_id')
         .ilike('name', `%${searchTerm}%`)
         .order('name')
         .limit(20);
+      if (companyId) query = query.eq('company_id', companyId);
+      const { data, error } = await query;
       if (error) {
         console.error('Ledger search error:', error);
         return [];
       }
-      return (data || []) as { id: string; name: string; parent_group: string | null; closing_balance: number }[];
+      return (data || []) as { id: string; name: string; parent_group: string | null; closing_balance: number; company_id: string | null }[];
     },
     enabled: searchTerm.length >= 2,
+  });
+};
+
+// List active Tally companies (Hope, Ayushman, etc.) — used to render one
+// ledger picker per company on the obligation edit dialog.
+export const useTallyCompanies = () => {
+  return useQuery({
+    queryKey: ['tally-companies'],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from('tally_config')
+        .select('id, company_name')
+        .order('company_name', { ascending: true });
+      if (error) throw error;
+      return (data || []) as TallyCompany[];
+    },
+  });
+};
+
+// Replace all ledger links for one obligation atomically (delete-all + insert-many).
+export const useSaveObligationLedgerLinks = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      obligationId,
+      links,
+    }: {
+      obligationId: string;
+      links: { company_id: string; ledger_id: string }[];
+    }) => {
+      // Remove all existing links for this obligation, then insert the new set.
+      const { error: delErr } = await (supabase as any)
+        .from('payment_obligation_ledgers')
+        .delete()
+        .eq('obligation_id', obligationId);
+      if (delErr) throw delErr;
+
+      if (links.length === 0) return;
+
+      const rows = links.map(l => ({
+        obligation_id: obligationId,
+        company_id: l.company_id,
+        ledger_id: l.ledger_id,
+      }));
+      const { error: insErr } = await (supabase as any)
+        .from('payment_obligation_ledgers')
+        .insert(rows);
+      if (insErr) throw insErr;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['payment-obligations'] });
+    },
+    onError: (err: any) => {
+      toast.error('Failed to save ledger links: ' + err.message);
+    },
   });
 };
 
