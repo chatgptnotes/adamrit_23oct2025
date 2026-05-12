@@ -29,9 +29,9 @@ GRANT USAGE ON SCHEMA cron TO postgres;
 
 DO $$
 BEGIN
-    PERFORM cron.unschedule('send-payment-deadline-digest-daily');
-EXCEPTION
-    WHEN undefined_object THEN NULL;
+    IF EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'send-payment-deadline-digest-daily') THEN
+        PERFORM cron.unschedule('send-payment-deadline-digest-daily');
+    END IF;
 END
 $$;
 
