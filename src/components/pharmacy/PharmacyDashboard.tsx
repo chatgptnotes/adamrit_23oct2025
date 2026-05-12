@@ -38,6 +38,8 @@ import EditPurchaseOrder from './EditPurchaseOrder';
 import CreditPayments from './CreditPayments';
 import LowStockMedicines from './LowStockMedicines';
 import PrescriptionQueue from './PrescriptionQueue';
+import PrescriptionNotificationBell from './PrescriptionNotificationBell';
+import { usePendingPrescriptions } from '@/hooks/usePendingPrescriptions';
 
 const PharmacyDashboard: React.FC = () => {
   const [searchParams] = useSearchParams();
@@ -55,11 +57,13 @@ const PharmacyDashboard: React.FC = () => {
     }
   }, [searchParams]);
 
+  // Live pending-prescription count (replaces hardcoded mock below)
+  const { count: pendingPrescriptionsCount } = usePendingPrescriptions();
+
   // Mock data for dashboard - will be replaced with real data from hooks
   const dashboardData = {
     todaySales: 45,
     todayRevenue: 125750,
-    pendingPrescriptions: 12,
     lowStockItems: 8,
     nearExpiryItems: 15,
     totalMedicines: 1247,
@@ -103,11 +107,14 @@ const PharmacyDashboard: React.FC = () => {
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Calendar className="h-4 w-4" />
-          <span className="text-sm text-muted-foreground">
-            {new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
-          </span>
+        <div className="flex items-center gap-3">
+          <PrescriptionNotificationBell onViewAll={() => setSelectedTab('prescriptions')} />
+          <div className="flex items-center gap-2">
+            <Calendar className="h-4 w-4" />
+            <span className="text-sm text-muted-foreground">
+              {new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+            </span>
+          </div>
         </div>
       </div>
 
@@ -153,7 +160,7 @@ const PharmacyDashboard: React.FC = () => {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm font-medium text-muted-foreground">Pending Prescriptions</p>
-                    <p className="text-2xl font-bold text-orange-600">{dashboardData.pendingPrescriptions}</p>
+                    <p className="text-2xl font-bold text-orange-600">{pendingPrescriptionsCount}</p>
                     <p className="text-xs text-muted-foreground mt-1">
                       Awaiting processing
                     </p>
