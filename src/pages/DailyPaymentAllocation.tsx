@@ -887,6 +887,115 @@ table{width:100%;border-collapse:collapse;margin-top:12px}
     setPayDialogOpen(false);
   };
 
+  // Open a printable HTML window showing obligations grouped by section.
+  // Each section starts on a new page when printed. Pass a section key to
+  // print only that section; pass null/undefined for the full report.
+  const printObligationsReport = (onlySection: ObligationSection | null = null) => {
+    const hospitalLabel = selectedHospital.charAt(0).toUpperCase() + selectedHospital.slice(1);
+    const generatedAt = new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' });
+    const sectionsToRender = OBLIGATION_SECTIONS.filter(s => onlySection ? s.key === onlySection : true);
+
+    const esc = (v: any) => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+    let sectionsHtml = '';
+    sectionsToRender.forEach((section, idx) => {
+      const rows = sortedObligations.filter(o => getSectionForSubCategory(o.sub_category) === section.key);
+      const sectionDailyTotal = rows.reduce((sum, o) => sum + Number(o.default_daily_amount || 0), 0);
+      const sectionApproxTotal = rows.reduce((sum, o) => sum + Number(o.approximate_balance || 0), 0);
+
+      sectionsHtml += `<section class="ob-section${idx > 0 ? ' page-break' : ''}">
+        <header class="ob-section-header">
+          <h2>${esc(section.title)}</h2>
+          <div class="ob-meta">
+            <span><strong>${rows.length}</strong> obligation${rows.length === 1 ? '' : 's'}</span>
+            <span>Daily Total: <strong>${formatINR(sectionDailyTotal)}</strong></span>
+            <span>Approx Balance Total: <strong>${formatINR(sectionApproxTotal)}</strong></span>
+          </div>
+        </header>`;
+
+      if (rows.length === 0) {
+        sectionsHtml += `<p class="ob-empty">No obligations in this section.</p>`;
+      } else {
+        sectionsHtml += `<table>
+          <thead><tr>
+            <th>#</th>
+            <th>Party Name</th>
+            <th>Payee</th>
+            <th>Category</th>
+            <th class="num">Daily Amount</th>
+            <th>Outstanding (per Tally company)</th>
+            <th class="num">Approx Balance</th>
+            <th class="num">Priority</th>
+            <th>Notes</th>
+          </tr></thead>
+          <tbody>`;
+        rows.forEach((ob, i) => {
+          const ledgerLines = (ob.payment_obligation_ledgers || [])
+            .map(l => `${esc(l.tally_config?.company_name || '—')}: ${formatINR(Number(l.tally_ledgers?.closing_balance) || 0)}`)
+            .join('<br/>') || '<span class="muted">Not linked</span>';
+          sectionsHtml += `<tr>
+            <td>${i + 1}</td>
+            <td><strong>${esc(ob.party_name)}</strong>${ob.sub_category ? `<div class="muted">${esc(ob.sub_category)}</div>` : ''}</td>
+            <td>${esc(ob.payee_name || (ob.payee_search_table ? 'From master' : '—'))}</td>
+            <td>${esc(ob.category)}</td>
+            <td class="num">${formatINR(Number(ob.default_daily_amount) || 0)}</td>
+            <td>${ledgerLines}</td>
+            <td class="num">${ob.approximate_balance != null ? formatINR(Number(ob.approximate_balance)) : '—'}</td>
+            <td class="num">${ob.priority}</td>
+            <td class="notes">${esc(ob.notes || '')}</td>
+          </tr>`;
+        });
+        sectionsHtml += `</tbody></table>`;
+      }
+      sectionsHtml += `</section>`;
+    });
+
+    const titleSuffix = onlySection
+      ? ` — ${OBLIGATION_SECTIONS.find(s => s.key === onlySection)?.title}`
+      : '';
+
+    const html = `<!DOCTYPE html><html><head>
+<title>Payment Obligations — ${esc(hospitalLabel)}${esc(titleSuffix)}</title>
+<style>
+  *{box-sizing:border-box}
+  body{font-family:Arial,Helvetica,sans-serif;margin:0;padding:20px;color:#222}
+  h1{margin:0 0 4px;font-size:20px}
+  h2{margin:0 0 6px;font-size:16px;color:#1e40af}
+  .doc-header{border-bottom:2px solid #1e40af;padding-bottom:8px;margin-bottom:14px}
+  .doc-meta{color:#666;font-size:12px}
+  .ob-section{margin-bottom:18px}
+  .ob-section-header{background:#eff6ff;padding:8px 12px;border-left:4px solid #1e40af;margin-bottom:8px}
+  .ob-meta{display:flex;gap:18px;font-size:12px;color:#444;margin-top:4px}
+  table{width:100%;border-collapse:collapse;font-size:11px}
+  th,td{border:1px solid #ccc;padding:5px 7px;text-align:left;vertical-align:top}
+  th{background:#f5f5f5;font-weight:600}
+  .num{text-align:right;font-family:Menlo,Consolas,monospace;white-space:nowrap}
+  .muted{color:#888;font-size:10px}
+  .notes{max-width:160px;font-size:10px;color:#555}
+  .ob-empty{padding:10px;color:#888;font-style:italic;font-size:12px}
+  .page-break{page-break-before:always;break-before:page}
+  @media print{
+    body{padding:8px}
+    .ob-section{break-inside:auto}
+    .doc-header{break-after:auto}
+    table{font-size:10px}
+    @page{size:A4 landscape;margin:10mm}
+  }
+</style>
+</head><body>
+<div class="doc-header">
+  <h1>Payment Obligations — ${esc(hospitalLabel)}${esc(titleSuffix)}</h1>
+  <div class="doc-meta">Generated: ${esc(generatedAt)} &nbsp;·&nbsp; ${onlySection ? '1 section' : `${OBLIGATION_SECTIONS.length} sections, page break between each`}</div>
+</div>
+${sectionsHtml}
+<script>window.onload=function(){setTimeout(function(){window.print()},150)}</script>
+</body></html>`;
+
+    const w = window.open('', '_blank');
+    if (w) { w.document.write(html); w.document.close(); }
+    else toast.error('Popup blocked — allow popups for this site to print.');
+  };
+
   const persistLedgerLinks = (obligationId: string) => {
     const links = Object.entries(ledgerLinks).map(([company_id, info]) => ({
       company_id,
@@ -1567,6 +1676,13 @@ table{width:100%;border-collapse:collapse;margin-top:12px}
             <div className="flex items-center gap-2">
               <Button
                 variant="outline"
+                onClick={() => printObligationsReport(null)}
+                title="Print all sections — each on a new page"
+              >
+                <Printer className="h-4 w-4 mr-1" /> Print / PDF
+              </Button>
+              <Button
+                variant="outline"
                 onClick={syncRMOsFromMaster}
                 disabled={isSyncingRMOs}
                 className="bg-orange-50 hover:bg-orange-100 border-orange-200 text-orange-700"
@@ -1587,9 +1703,20 @@ table{width:100%;border-collapse:collapse;margin-top:12px}
               const rows = sortedObligations.filter(o => getSectionForSubCategory(o.sub_category) === section.key);
               return (
                 <Card key={section.key} className="overflow-hidden">
-                  <div className="px-4 py-2 border-b bg-blue-50 flex items-center justify-between">
+                  <div className="px-4 py-2 border-b bg-blue-50 flex items-center justify-between gap-2">
                     <h4 className="text-sm font-semibold text-blue-900">{section.title}</h4>
-                    <span className="text-xs text-blue-700">{rows.length} {rows.length === 1 ? 'obligation' : 'obligations'}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-blue-700">{rows.length} {rows.length === 1 ? 'obligation' : 'obligations'}</span>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 px-2 text-blue-700 hover:bg-blue-100"
+                        onClick={() => printObligationsReport(section.key)}
+                        title={`Print only ${section.title}`}
+                      >
+                        <Printer className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
                   </div>
                   <Table>
                     <TableHeader>
