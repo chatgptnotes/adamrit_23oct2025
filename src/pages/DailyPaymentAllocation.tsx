@@ -17,7 +17,7 @@ import {
   Wallet, Building2, IndianRupee, TrendingUp, TrendingDown,
   Clock, CheckCircle, AlertTriangle, Plus, Edit2, ToggleLeft,
   ToggleRight, Banknote, Calendar, RefreshCw, Save, PenLine,
-  GripVertical, X, SkipForward, Users, Upload, ExternalLink, FileSpreadsheet, Printer, Eye
+  GripVertical, X, SkipForward, Users, Upload, ExternalLink, FileSpreadsheet, Printer, Eye, Search, Link as LinkIcon
 } from 'lucide-react';
 import {
   DndContext,
@@ -51,7 +51,7 @@ import {
   type SubAllocation,
   type SavedAllocation,
 } from '@/hooks/useDailyPaymentAllocation';
-import { usePaymentObligations, usePayeeSearch, useMultiPayeeSearch, useObligationDefaultPayees, type PaymentObligation, type DefaultPayee } from '@/hooks/usePaymentObligations';
+import { usePaymentObligations, usePayeeSearch, useMultiPayeeSearch, useObligationDefaultPayees, useTallyLedgerSearch, type PaymentObligation, type DefaultPayee } from '@/hooks/usePaymentObligations';
 import { useCompanies } from '@/hooks/useCompanies';
 
 const formatINR = (n: number) =>
@@ -285,6 +285,19 @@ const SortableObligationRow = ({
         </Badge>
       </TableCell>
       <TableCell className="text-right font-mono">{formatINR(ob.default_daily_amount)}</TableCell>
+      <TableCell className="text-xs">
+        {ob.tally_ledgers ? (
+          <span className="text-blue-700">{ob.tally_ledgers.name}</span>
+        ) : (
+          <span className="text-muted-foreground italic">Not linked</span>
+        )}
+      </TableCell>
+      <TableCell className="text-right font-mono text-sm">
+        {ob.tally_ledgers ? formatINR(Number(ob.tally_ledgers.closing_balance) || 0) : <span className="text-muted-foreground">—</span>}
+      </TableCell>
+      <TableCell className="text-right font-mono text-sm">
+        {ob.approximate_balance != null ? formatINR(Number(ob.approximate_balance)) : <span className="text-muted-foreground">—</span>}
+      </TableCell>
       <TableCell className="text-center">{ob.priority}</TableCell>
       <TableCell className="text-center">
         <Button variant="ghost" size="sm" onClick={onToggleActive}>
@@ -367,7 +380,14 @@ const DailyPaymentAllocation = () => {
     sub_category: 'other', default_daily_amount: '',
     priority: '10', notes: '', payee_name: '', payee_search_table: '',
     attachment_url: '', google_sheet_link: '', company_id: null as string | null,
+    tally_ledger_id: null as string | null,
+    tally_ledger_name: '', // display-only; not persisted
+    tally_ledger_closing: null as number | null, // display-only; not persisted
+    approximate_balance: '',
   });
+  const [ledgerSearchTerm, setLedgerSearchTerm] = useState('');
+  const [ledgerDropdownOpen, setLedgerDropdownOpen] = useState(false);
+  const { data: ledgerSearchResults = [] } = useTallyLedgerSearch(ledgerSearchTerm);
 
   // Payee search for sub-payments (consultant, RMO, staff)
   const [payeeSearchTerm, setPayeeSearchTerm] = useState('');
@@ -843,6 +863,10 @@ table{width:100%;border-collapse:collapse;margin-top:12px}
       payee_search_table: newObligation.payee_search_table || null,
       attachment_url: newObligation.attachment_url || null,
       google_sheet_link: newObligation.google_sheet_link || null,
+      tally_ledger_id: newObligation.tally_ledger_id || null,
+      approximate_balance: newObligation.approximate_balance === ''
+        ? null
+        : parseFloat(newObligation.approximate_balance),
     };
     if (editingObligationId) {
       updateObligation.mutate({ id: editingObligationId, ...payload });
@@ -851,7 +875,9 @@ table{width:100%;border-collapse:collapse;margin-top:12px}
     }
     setAddDialogOpen(false);
     setEditingObligationId(null);
-    setNewObligation({ party_name: '', category: 'variable', sub_category: 'other', default_daily_amount: '', priority: '10', notes: '', payee_name: '', payee_search_table: '', attachment_url: '', google_sheet_link: '', company_id: null });
+    setLedgerSearchTerm('');
+    setLedgerDropdownOpen(false);
+    setNewObligation({ party_name: '', category: 'variable', sub_category: 'other', default_daily_amount: '', priority: '10', notes: '', payee_name: '', payee_search_table: '', attachment_url: '', google_sheet_link: '', company_id: null, tally_ledger_id: null, tally_ledger_name: '', tally_ledger_closing: null, approximate_balance: '' });
   };
 
   const handleEditObligation = (ob: PaymentObligation) => {
@@ -867,7 +893,14 @@ table{width:100%;border-collapse:collapse;margin-top:12px}
       payee_search_table: ob.payee_search_table || '',
       attachment_url: ob.attachment_url || '',
       google_sheet_link: ob.google_sheet_link || '',
+      company_id: ob.company_id || null,
+      tally_ledger_id: ob.tally_ledger_id || null,
+      tally_ledger_name: ob.tally_ledgers?.name || '',
+      tally_ledger_closing: ob.tally_ledgers?.closing_balance ?? null,
+      approximate_balance: ob.approximate_balance != null ? String(ob.approximate_balance) : '',
     });
+    setLedgerSearchTerm('');
+    setLedgerDropdownOpen(false);
     setAddDialogOpen(true);
   };
 
@@ -1474,7 +1507,7 @@ table{width:100%;border-collapse:collapse;margin-top:12px}
                 <RefreshCw className={`h-4 w-4 mr-1 ${isSyncingRMOs ? 'animate-spin' : ''}`} />
                 {isSyncingRMOs ? 'Syncing...' : 'Sync RMOs from Master'}
               </Button>
-              <Button onClick={() => { setEditingObligationId(null); setNewObligation({ party_name: '', category: 'variable', sub_category: 'other', default_daily_amount: '', priority: '10', notes: '', payee_name: '', payee_search_table: '', attachment_url: '', google_sheet_link: '', company_id: null }); setAddDialogOpen(true); }}>
+              <Button onClick={() => { setEditingObligationId(null); setNewObligation({ party_name: '', category: 'variable', sub_category: 'other', default_daily_amount: '', priority: '10', notes: '', payee_name: '', payee_search_table: '', attachment_url: '', google_sheet_link: '', company_id: null, tally_ledger_id: null, tally_ledger_name: '', tally_ledger_closing: null, approximate_balance: '' }); setAddDialogOpen(true); }}>
                 <Plus className="h-4 w-4 mr-1" /> Add Obligation
               </Button>
             </div>
@@ -1493,6 +1526,9 @@ table{width:100%;border-collapse:collapse;margin-top:12px}
                     <TableHead>Payee</TableHead>
                     <TableHead>Category</TableHead>
                     <TableHead className="text-right">Daily Amount</TableHead>
+                    <TableHead>Ledger</TableHead>
+                    <TableHead className="text-right">Outstanding (Ledger)</TableHead>
+                    <TableHead className="text-right">Approx Balance</TableHead>
                     <TableHead className="text-center">Priority</TableHead>
                     <TableHead className="text-center">Active</TableHead>
                     <TableHead>Notes</TableHead>
@@ -1503,7 +1539,7 @@ table{width:100%;border-collapse:collapse;margin-top:12px}
                   <TableBody>
                     {sortedObligations.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
+                        <TableCell colSpan={13} className="text-center py-8 text-muted-foreground">
                           No obligations configured. Click "Add Obligation" to get started.
                         </TableCell>
                       </TableRow>
@@ -2324,6 +2360,104 @@ table{width:100%;border-collapse:collapse;margin-top:12px}
                   </Button>
                 </div>
               )}
+
+              {/* Tally Ledger Link + Outstanding + Approx Balance */}
+              <div className="border rounded-md p-3 bg-slate-50 space-y-3">
+                <Label className="text-xs font-semibold text-slate-700 flex items-center gap-1">
+                  <LinkIcon className="h-3 w-3" /> Linked Tally Ledger
+                </Label>
+
+                {/* Ledger picker — search */}
+                <div className="relative">
+                  <div className="flex items-center gap-2">
+                    <div className="relative flex-1">
+                      <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                      <Input
+                        value={ledgerDropdownOpen ? ledgerSearchTerm : (newObligation.tally_ledger_name || '')}
+                        onChange={(e) => { setLedgerSearchTerm(e.target.value); setLedgerDropdownOpen(true); }}
+                        onFocus={() => setLedgerDropdownOpen(true)}
+                        placeholder="Search ledger by name (min 2 chars)..."
+                        className="h-8 text-sm pl-7"
+                      />
+                    </div>
+                    {newObligation.tally_ledger_id && (
+                      <Button
+                        size="sm" variant="ghost"
+                        className="h-8 px-2 text-red-400 hover:text-red-600"
+                        type="button"
+                        onClick={() => {
+                          setNewObligation({
+                            ...newObligation,
+                            tally_ledger_id: null,
+                            tally_ledger_name: '',
+                            tally_ledger_closing: null,
+                          });
+                          setLedgerSearchTerm('');
+                          setLedgerDropdownOpen(false);
+                        }}
+                        title="Unlink ledger"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </Button>
+                    )}
+                  </div>
+                  {ledgerDropdownOpen && ledgerSearchTerm.length >= 2 && (
+                    <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-white border rounded-md shadow-lg max-h-56 overflow-y-auto">
+                      {ledgerSearchResults.length === 0 ? (
+                        <div className="px-3 py-2 text-xs text-muted-foreground">No matching ledgers</div>
+                      ) : (
+                        ledgerSearchResults.map((lg) => (
+                          <button
+                            key={lg.id}
+                            type="button"
+                            className="w-full text-left px-3 py-2 hover:bg-blue-50 border-b last:border-b-0"
+                            onClick={() => {
+                              setNewObligation({
+                                ...newObligation,
+                                tally_ledger_id: lg.id,
+                                tally_ledger_name: lg.name,
+                                tally_ledger_closing: Number(lg.closing_balance) || 0,
+                              });
+                              setLedgerSearchTerm('');
+                              setLedgerDropdownOpen(false);
+                            }}
+                          >
+                            <div className="text-sm font-medium">{lg.name}</div>
+                            <div className="flex justify-between text-xs text-muted-foreground">
+                              <span>{lg.parent_group || '—'}</span>
+                              <span className="font-mono">{formatINR(Number(lg.closing_balance) || 0)}</span>
+                            </div>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Outstanding from ledger — read-only */}
+                <div>
+                  <Label className="text-xs">Outstanding (from ledger)</Label>
+                  <Input
+                    value={newObligation.tally_ledger_closing != null ? formatINR(newObligation.tally_ledger_closing) : ''}
+                    placeholder="Auto-populated when a ledger is linked"
+                    readOnly
+                    className="h-8 text-sm font-mono bg-white"
+                  />
+                </div>
+
+                {/* Approximate balance — manual */}
+                <div>
+                  <Label className="text-xs">Approximate Balance (manual estimate)</Label>
+                  <Input
+                    type="number"
+                    inputMode="decimal"
+                    value={newObligation.approximate_balance}
+                    onChange={(e) => setNewObligation({ ...newObligation, approximate_balance: e.target.value })}
+                    placeholder="e.g. 50000 — used when ledger value is stale"
+                    className="h-8 text-sm font-mono"
+                  />
+                </div>
+              </div>
 
               {/* Google Sheet / Drive Link */}
               <div>

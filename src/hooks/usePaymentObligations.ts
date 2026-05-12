@@ -18,6 +18,9 @@ export interface PaymentObligation {
   attachment_url: string | null; // uploaded Excel/Doc file URL
   google_sheet_link: string | null; // Google Sheets link for outstanding payments
   company_id: string | null;
+  tally_ledger_id: string | null; // FK to tally_ledgers
+  approximate_balance: number | null; // director's manual estimate when ledger is stale
+  tally_ledgers?: { id: string; name: string; closing_balance: number } | null; // embedded join
   created_at: string;
   updated_at: string;
 }
@@ -32,7 +35,7 @@ export const usePaymentObligations = (hospital: string = 'hope') => {
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from('payment_obligations')
-        .select('*')
+        .select('*, tally_ledgers(id, name, closing_balance)')
         .eq('hospital_name', hospital)
         .order('priority', { ascending: true });
       if (error) throw error;
@@ -58,6 +61,8 @@ export const usePaymentObligations = (hospital: string = 'hope') => {
           payee_search_table: obligation.payee_search_table || null,
           attachment_url: obligation.attachment_url || null,
           google_sheet_link: obligation.google_sheet_link || null,
+          tally_ledger_id: obligation.tally_ledger_id || null,
+          approximate_balance: obligation.approximate_balance ?? null,
         })
         .select()
         .single();
@@ -159,6 +164,28 @@ export const usePayeeSearch = (searchTable: string, searchTerm: string) => {
       return (data || []) as { id: string; name: string; specialty?: string; department?: string }[];
     },
     enabled: !!searchTable && searchTerm.length >= 2,
+  });
+};
+
+// Search Tally ledgers by name for linking to a payment obligation
+export const useTallyLedgerSearch = (searchTerm: string) => {
+  return useQuery({
+    queryKey: ['tally-ledger-search', searchTerm],
+    queryFn: async () => {
+      if (!searchTerm || searchTerm.length < 2) return [];
+      const { data, error } = await (supabase as any)
+        .from('tally_ledgers')
+        .select('id, name, parent_group, closing_balance')
+        .ilike('name', `%${searchTerm}%`)
+        .order('name')
+        .limit(20);
+      if (error) {
+        console.error('Ledger search error:', error);
+        return [];
+      }
+      return (data || []) as { id: string; name: string; parent_group: string | null; closing_balance: number }[];
+    },
+    enabled: searchTerm.length >= 2,
   });
 };
 
