@@ -20,6 +20,7 @@ export interface PaymentObligation {
   company_id: string | null;
   tally_ledger_id: string | null; // legacy single FK; kept for back-compat
   approximate_balance: number | null; // director's manual estimate when ledger is stale
+  section: string | null; // explicit Obligations Master section; null → derive from sub_category
   tally_ledgers?: { id: string; name: string; closing_balance: number } | null; // legacy embed
   payment_obligation_ledgers?: ObligationLedgerLink[]; // per-company ledger links (current)
   created_at: string;
@@ -85,6 +86,7 @@ export const usePaymentObligations = (hospital: string = 'hope') => {
           google_sheet_link: obligation.google_sheet_link || null,
           tally_ledger_id: obligation.tally_ledger_id || null,
           approximate_balance: obligation.approximate_balance ?? null,
+          section: obligation.section || null,
         })
         .select()
         .single();
@@ -211,6 +213,85 @@ export const useTallyLedgerSearch = (searchTerm: string, companyId?: string | nu
     },
     enabled: searchTerm.length >= 2,
   });
+};
+
+// Sub-categories master (editable). Each row declares which Obligations
+// Master section it rolls up into.
+export interface SubCategoryRow {
+  id: string;
+  value: string;
+  label: string;
+  section: 'pharmacy_implant' | 'consultants' | 'overheads' | 'other_vendors';
+  sort_order: number;
+  is_active: boolean;
+}
+
+export const useObligationSubCategories = () => {
+  const queryClient = useQueryClient();
+
+  const list = useQuery({
+    queryKey: ['obligation-sub-categories'],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from('payment_obligation_sub_categories')
+        .select('*')
+        .order('sort_order', { ascending: true });
+      if (error) throw error;
+      return (data || []) as SubCategoryRow[];
+    },
+  });
+
+  const upsert = useMutation({
+    mutationFn: async (row: Partial<SubCategoryRow> & { value: string; label: string; section: SubCategoryRow['section'] }) => {
+      const payload: any = {
+        value: row.value.trim().toLowerCase(),
+        label: row.label.trim(),
+        section: row.section,
+        sort_order: row.sort_order ?? 100,
+        is_active: row.is_active ?? true,
+        updated_at: new Date().toISOString(),
+      };
+      if (row.id) {
+        const { error } = await (supabase as any)
+          .from('payment_obligation_sub_categories')
+          .update(payload)
+          .eq('id', row.id);
+        if (error) throw error;
+      } else {
+        const { error } = await (supabase as any)
+          .from('payment_obligation_sub_categories')
+          .insert(payload);
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['obligation-sub-categories'] });
+      toast.success('Sub-category saved');
+    },
+    onError: (err: any) => toast.error('Failed to save: ' + err.message),
+  });
+
+  const remove = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await (supabase as any)
+        .from('payment_obligation_sub_categories')
+        .delete()
+        .eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['obligation-sub-categories'] });
+      toast.success('Sub-category deleted');
+    },
+    onError: (err: any) => toast.error('Failed to delete: ' + err.message),
+  });
+
+  return {
+    subCategories: list.data || [],
+    isLoading: list.isLoading,
+    upsert,
+    remove,
+  };
 };
 
 // List active Tally companies (Hope, Ayushman, etc.) — used to render one

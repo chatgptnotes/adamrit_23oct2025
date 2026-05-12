@@ -51,7 +51,7 @@ import {
   type SubAllocation,
   type SavedAllocation,
 } from '@/hooks/useDailyPaymentAllocation';
-import { usePaymentObligations, usePayeeSearch, useMultiPayeeSearch, useObligationDefaultPayees, useTallyLedgerSearch, useTallyCompanies, useSaveObligationLedgerLinks, type PaymentObligation, type DefaultPayee, type TallyCompany } from '@/hooks/usePaymentObligations';
+import { usePaymentObligations, usePayeeSearch, useMultiPayeeSearch, useObligationDefaultPayees, useTallyLedgerSearch, useTallyCompanies, useSaveObligationLedgerLinks, useObligationSubCategories, type PaymentObligation, type DefaultPayee, type TallyCompany, type SubCategoryRow } from '@/hooks/usePaymentObligations';
 import { useCompanies } from '@/hooks/useCompanies';
 
 const formatINR = (n: number) =>
@@ -83,6 +83,14 @@ const getSectionForSubCategory = (subCategory: string | null | undefined): Oblig
     default:
       return 'other_vendors';
   }
+};
+
+// Prefer the explicit section column when set; otherwise derive from sub_category
+// so existing rows keep working without manual backfill.
+const getSectionForObligation = (ob: { section?: string | null; sub_category?: string | null }): ObligationSection => {
+  const valid: ObligationSection[] = ['pharmacy_implant', 'consultants', 'overheads', 'other_vendors'];
+  if (ob.section && (valid as string[]).includes(ob.section)) return ob.section as ObligationSection;
+  return getSectionForSubCategory(ob.sub_category);
 };
 
 const getAgingColor = (days: number) => {
@@ -420,6 +428,7 @@ const DailyPaymentAllocation = () => {
     tally_ledger_name: '',
     tally_ledger_closing: null as number | null,
     approximate_balance: '',
+    section: '' as '' | ObligationSection,
   });
   // Per-Tally-company ledger links for the obligation being edited.
   type LedgerLinkInfo = { ledgerId: string; ledgerName: string; closingBalance: number };
@@ -429,6 +438,11 @@ const DailyPaymentAllocation = () => {
   const { data: ledgerSearchResults = [] } = useTallyLedgerSearch(ledgerSearchTerm, openPickerCompanyId);
   const { data: tallyCompanies = [] } = useTallyCompanies();
   const saveLedgerLinks = useSaveObligationLedgerLinks();
+  const { subCategories, upsert: upsertSubCategory, remove: removeSubCategory } = useObligationSubCategories();
+
+  // Manage Sub-Categories dialog state
+  const [manageSubCatsOpen, setManageSubCatsOpen] = useState(false);
+  const [editingSubCat, setEditingSubCat] = useState<Partial<SubCategoryRow> | null>(null);
 
   // Payee search for sub-payments (consultant, RMO, staff)
   const [payeeSearchTerm, setPayeeSearchTerm] = useState('');
@@ -899,7 +913,7 @@ table{width:100%;border-collapse:collapse;margin-top:12px}
 
     let sectionsHtml = '';
     sectionsToRender.forEach((section, idx) => {
-      const rows = sortedObligations.filter(o => getSectionForSubCategory(o.sub_category) === section.key);
+      const rows = sortedObligations.filter(o => getSectionForObligation(o) === section.key);
       const sectionDailyTotal = rows.reduce((sum, o) => sum + Number(o.default_daily_amount || 0), 0);
       const sectionApproxTotal = rows.reduce((sum, o) => sum + Number(o.approximate_balance || 0), 0);
 
@@ -1024,6 +1038,7 @@ ${sectionsHtml}
       approximate_balance: newObligation.approximate_balance === ''
         ? null
         : parseFloat(newObligation.approximate_balance),
+      section: newObligation.section || null,
     };
     // Snapshot the ledger links BEFORE we reset state, so the async create
     // callback (which fires after setLedgerLinks({})) still has the picks.
@@ -1046,7 +1061,7 @@ ${sectionsHtml}
     setLedgerLinks({});
     setLedgerSearchTerm('');
     setOpenPickerCompanyId(null);
-    setNewObligation({ party_name: '', category: 'variable', sub_category: 'other', default_daily_amount: '', priority: '10', notes: '', payee_name: '', payee_search_table: '', attachment_url: '', google_sheet_link: '', company_id: null, tally_ledger_id: null, tally_ledger_name: '', tally_ledger_closing: null, approximate_balance: '' });
+    setNewObligation({ party_name: '', category: 'variable', sub_category: 'other', default_daily_amount: '', priority: '10', notes: '', payee_name: '', payee_search_table: '', attachment_url: '', google_sheet_link: '', company_id: null, tally_ledger_id: null, tally_ledger_name: '', tally_ledger_closing: null, approximate_balance: '', section: '' });
   };
 
   const handleEditObligation = (ob: PaymentObligation) => {
@@ -1067,6 +1082,7 @@ ${sectionsHtml}
       tally_ledger_name: ob.tally_ledgers?.name || '',
       tally_ledger_closing: ob.tally_ledgers?.closing_balance ?? null,
       approximate_balance: ob.approximate_balance != null ? String(ob.approximate_balance) : '',
+      section: (ob.section as ObligationSection) || '',
     });
     // Hydrate per-company links from the junction table
     const hydrated: Record<string, LedgerLinkInfo> = {};
@@ -1695,7 +1711,7 @@ ${sectionsHtml}
                 <RefreshCw className={`h-4 w-4 mr-1 ${isSyncingRMOs ? 'animate-spin' : ''}`} />
                 {isSyncingRMOs ? 'Syncing...' : 'Sync RMOs from Master'}
               </Button>
-              <Button onClick={() => { setEditingObligationId(null); setNewObligation({ party_name: '', category: 'variable', sub_category: 'other', default_daily_amount: '', priority: '10', notes: '', payee_name: '', payee_search_table: '', attachment_url: '', google_sheet_link: '', company_id: null, tally_ledger_id: null, tally_ledger_name: '', tally_ledger_closing: null, approximate_balance: '' }); setLedgerLinks({}); setLedgerSearchTerm(''); setOpenPickerCompanyId(null); setAddDialogOpen(true); }}>
+              <Button onClick={() => { setEditingObligationId(null); setNewObligation({ party_name: '', category: 'variable', sub_category: 'other', default_daily_amount: '', priority: '10', notes: '', payee_name: '', payee_search_table: '', attachment_url: '', google_sheet_link: '', company_id: null, tally_ledger_id: null, tally_ledger_name: '', tally_ledger_closing: null, approximate_balance: '', section: '' }); setLedgerLinks({}); setLedgerSearchTerm(''); setOpenPickerCompanyId(null); setAddDialogOpen(true); }}>
                 <Plus className="h-4 w-4 mr-1" /> Add Obligation
               </Button>
             </div>
@@ -1705,7 +1721,7 @@ ${sectionsHtml}
           </p>
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleObligationDragEnd}>
             {OBLIGATION_SECTIONS.map(section => {
-              const rows = sortedObligations.filter(o => getSectionForSubCategory(o.sub_category) === section.key);
+              const rows = sortedObligations.filter(o => getSectionForObligation(o) === section.key);
               return (
                 <Card key={section.key} className="overflow-hidden">
                   <div className="px-4 py-2 border-b bg-blue-50 flex items-center justify-between gap-2">
@@ -2257,6 +2273,23 @@ ${sectionsHtml}
                 For fixed payees like rent. Leave blank if payee is selected at payment time.
               </p>
             </div>
+            <div>
+              <Label>Section <span className="text-xs text-muted-foreground">(determines which group this appears under)</span></Label>
+              <Select
+                value={newObligation.section || ''}
+                onValueChange={(v) => setNewObligation({ ...newObligation, section: v as ObligationSection })}
+              >
+                <SelectTrigger><SelectValue placeholder="Pick a section..." /></SelectTrigger>
+                <SelectContent>
+                  {OBLIGATION_SECTIONS.map(s => (
+                    <SelectItem key={s.key} value={s.key}>{s.title}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground mt-1">
+                Leave unset to auto-derive from Sub-Category.
+              </p>
+            </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label>Category</Label>
@@ -2269,21 +2302,26 @@ ${sectionsHtml}
                 </Select>
               </div>
               <div>
-                <Label>Sub-Category</Label>
+                <div className="flex items-center justify-between">
+                  <Label>Sub-Category</Label>
+                  <Button
+                    type="button"
+                    size="sm" variant="ghost"
+                    className="h-6 px-2 text-xs text-blue-700 hover:bg-blue-50"
+                    onClick={() => { setEditingSubCat(null); setManageSubCatsOpen(true); }}
+                  >
+                    Manage
+                  </Button>
+                </div>
                 <Select value={newObligation.sub_category} onValueChange={(v) => setNewObligation({ ...newObligation, sub_category: v })}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="pharmacy">Pharmacy</SelectItem>
-                    <SelectItem value="implant">Implant</SelectItem>
-                    <SelectItem value="consultant">Consultant</SelectItem>
-                    <SelectItem value="rmo">RMO</SelectItem>
-                    <SelectItem value="rent">Rent</SelectItem>
-                    <SelectItem value="electricity">Electricity</SelectItem>
-                    <SelectItem value="salary">Salary</SelectItem>
-                    <SelectItem value="dialysis">Dialysis</SelectItem>
-                    <SelectItem value="referral">Referral</SelectItem>
-                    <SelectItem value="vendor">Vendor</SelectItem>
-                    <SelectItem value="other">Other</SelectItem>
+                    {subCategories.filter(c => c.is_active).map(c => (
+                      <SelectItem key={c.id} value={c.value}>{c.label}</SelectItem>
+                    ))}
+                    {subCategories.length === 0 && (
+                      <SelectItem value="other" disabled>(no sub-categories — click Manage)</SelectItem>
+                    )}
                   </SelectContent>
                 </Select>
               </div>
@@ -2709,6 +2747,148 @@ ${sectionsHtml}
             <Button onClick={handleAddObligation} disabled={createObligation.isPending || updateObligation.isPending}>
               {editingObligationId ? 'Save Changes' : 'Add Obligation'}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Manage Sub-Categories Dialog */}
+      <Dialog open={manageSubCatsOpen} onOpenChange={(open) => { setManageSubCatsOpen(open); if (!open) setEditingSubCat(null); }}>
+        <DialogContent className="w-[95vw] max-w-2xl max-h-[85vh] flex flex-col p-0">
+          <DialogHeader className="px-6 pt-6 pb-3 border-b shrink-0">
+            <DialogTitle>Manage Sub-Categories</DialogTitle>
+          </DialogHeader>
+          <div className="overflow-y-auto flex-1 px-6 py-4 space-y-4">
+            <p className="text-xs text-muted-foreground">
+              These appear in the Sub-Category dropdown. Each must belong to one of the 4 sections.
+            </p>
+
+            {/* Add / edit form */}
+            <div className="border rounded p-3 bg-slate-50 grid grid-cols-12 gap-2 items-end">
+              <div className="col-span-3">
+                <Label className="text-xs">Value (slug)</Label>
+                <Input
+                  className="h-8 text-sm"
+                  value={editingSubCat?.value || ''}
+                  onChange={(e) => setEditingSubCat({ ...(editingSubCat || {}), value: e.target.value })}
+                  placeholder="rent"
+                  disabled={!!editingSubCat?.id}
+                />
+              </div>
+              <div className="col-span-3">
+                <Label className="text-xs">Label</Label>
+                <Input
+                  className="h-8 text-sm"
+                  value={editingSubCat?.label || ''}
+                  onChange={(e) => setEditingSubCat({ ...(editingSubCat || {}), label: e.target.value })}
+                  placeholder="Rent"
+                />
+              </div>
+              <div className="col-span-3">
+                <Label className="text-xs">Section</Label>
+                <Select
+                  value={editingSubCat?.section || ''}
+                  onValueChange={(v) => setEditingSubCat({ ...(editingSubCat || {}), section: v as ObligationSection })}
+                >
+                  <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Pick..." /></SelectTrigger>
+                  <SelectContent>
+                    {OBLIGATION_SECTIONS.map(s => (
+                      <SelectItem key={s.key} value={s.key}>{s.title}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="col-span-1">
+                <Label className="text-xs">Sort</Label>
+                <Input
+                  className="h-8 text-sm"
+                  type="number"
+                  value={editingSubCat?.sort_order ?? ''}
+                  onChange={(e) => setEditingSubCat({ ...(editingSubCat || {}), sort_order: e.target.value === '' ? undefined : parseInt(e.target.value) })}
+                  placeholder="100"
+                />
+              </div>
+              <div className="col-span-2 flex gap-1">
+                <Button
+                  size="sm"
+                  className="h-8 text-xs px-2 flex-1"
+                  onClick={() => {
+                    if (!editingSubCat?.value || !editingSubCat?.label || !editingSubCat?.section) {
+                      toast.error('Value, label and section are required');
+                      return;
+                    }
+                    upsertSubCategory.mutate(editingSubCat as any, {
+                      onSuccess: () => setEditingSubCat(null),
+                    });
+                  }}
+                >
+                  {editingSubCat?.id ? 'Save' : 'Add'}
+                </Button>
+                {editingSubCat?.id && (
+                  <Button
+                    size="sm" variant="outline"
+                    className="h-8 text-xs px-2"
+                    onClick={() => setEditingSubCat(null)}
+                  >Cancel</Button>
+                )}
+              </div>
+            </div>
+
+            {/* Existing list */}
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Value</TableHead>
+                  <TableHead>Label</TableHead>
+                  <TableHead>Section</TableHead>
+                  <TableHead className="text-right">Sort</TableHead>
+                  <TableHead className="text-center">Active</TableHead>
+                  <TableHead className="text-center">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {subCategories.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center text-muted-foreground py-4">No sub-categories yet.</TableCell>
+                  </TableRow>
+                ) : subCategories.map(c => (
+                  <TableRow key={c.id} className={c.is_active ? '' : 'opacity-50'}>
+                    <TableCell className="font-mono text-xs">{c.value}</TableCell>
+                    <TableCell>{c.label}</TableCell>
+                    <TableCell className="text-xs">{OBLIGATION_SECTIONS.find(s => s.key === c.section)?.title || c.section}</TableCell>
+                    <TableCell className="text-right text-xs">{c.sort_order}</TableCell>
+                    <TableCell className="text-center">
+                      <Button
+                        size="sm" variant="ghost"
+                        onClick={() => upsertSubCategory.mutate({ ...c, is_active: !c.is_active })}
+                      >
+                        {c.is_active
+                          ? <ToggleRight className="h-4 w-4 text-green-600" />
+                          : <ToggleLeft className="h-4 w-4 text-gray-400" />}
+                      </Button>
+                    </TableCell>
+                    <TableCell className="text-center space-x-1">
+                      <Button size="sm" variant="ghost" onClick={() => setEditingSubCat(c)} title="Edit">
+                        <Edit2 className="h-3.5 w-3.5 text-blue-600" />
+                      </Button>
+                      <Button
+                        size="sm" variant="ghost"
+                        onClick={() => {
+                          if (confirm(`Delete sub-category "${c.label}"? Obligations already using "${c.value}" will keep that value but it will no longer appear in the dropdown.`)) {
+                            removeSubCategory.mutate(c.id);
+                          }
+                        }}
+                        title="Delete"
+                      >
+                        <span className="text-red-500 text-sm">×</span>
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+          <DialogFooter className="px-6 py-3 border-t shrink-0">
+            <Button variant="outline" onClick={() => setManageSubCatsOpen(false)}>Close</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
