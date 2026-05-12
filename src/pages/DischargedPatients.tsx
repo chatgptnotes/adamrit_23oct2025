@@ -652,6 +652,14 @@ const DischargedPatients = () => {
                     <span class="info-value">${visit.patient_type || ''}</span>
                   </div>
                   <div class="info-item">
+                    <span class="info-label">Treatment Type:</span>
+                    <span class="info-value">${visit.treatment_type || ''}</span>
+                  </div>
+                  <div class="info-item">
+                    <span class="info-label">Thumb Reg. No:</span>
+                    <span class="info-value">${visit.thumb_registration_no || ''}</span>
+                  </div>
+                  <div class="info-item">
                     <span class="info-label">Corporate:</span>
                     <span class="info-value">${visit.patients?.corporate || 'N/A'}</span>
                   </div>
@@ -1847,6 +1855,16 @@ const DischargedPatients = () => {
                           {visit.patient_type && (
                             <Badge variant="outline" className="text-xs">
                               {visit.patient_type}
+                            </Badge>
+                          )}
+                          {visit.treatment_type && (
+                            <Badge variant="outline" className="text-xs">
+                              {visit.treatment_type}
+                            </Badge>
+                          )}
+                          {visit.thumb_registration_no && (
+                            <Badge variant="outline" className="text-xs">
+                              Thumb: {visit.thumb_registration_no}
                             </Badge>
                           )}
                         </div>

@@ -3620,6 +3620,12 @@ const TodaysIpdDashboard = () => {
                       <span className="font-medium text-gray-600">Claim ID:</span> {selectedPatientForView.claim_id || 'N/A'}
                     </div>
                     <div>
+                      <span className="font-medium text-gray-600">Treatment Type:</span> {selectedPatientForView.treatment_type || 'N/A'}
+                    </div>
+                    <div>
+                      <span className="font-medium text-gray-600">Thumb Reg. No:</span> {selectedPatientForView.thumb_registration_no || 'N/A'}
+                    </div>
+                    <div>
                       <span className="font-medium text-gray-600">Referring Doctor:</span> {selectedPatientForView.referring_doctor || 'N/A'}
                     </div>
                   </div>
