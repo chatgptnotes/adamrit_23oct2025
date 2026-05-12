@@ -395,6 +395,25 @@ export const useCounts = () => {
     staleTime: 5 * 60 * 1000,
   });
 
+  const { data: pendingPrescriptionsCount = 0 } = useQuery({
+    queryKey: ['pending-prescriptions', 'count'],
+    queryFn: async () => {
+      try {
+        const { count, error } = await (supabase as any)
+          .from('prescriptions')
+          .select('id', { count: 'exact', head: true })
+          .eq('status', 'PENDING');
+        if (error) return 0;
+        return count ?? 0;
+      } catch {
+        return 0;
+      }
+    },
+    retry: 1,
+    refetchInterval: 60_000,
+    staleTime: 30_000,
+  });
+
   return {
     diagnosesCount,
     patientsCount,
@@ -412,5 +431,6 @@ export const useCounts = () => {
     ayushmanSurgeonsCount,
     ayushmanConsultantsCount,
     ayushmanAnaesthetistsCount,
+    pendingPrescriptionsCount,
   };
 };

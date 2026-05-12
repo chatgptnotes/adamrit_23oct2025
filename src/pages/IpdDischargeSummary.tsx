@@ -185,7 +185,8 @@ const IpdDischargeSummary = () => {
     doa: '',
     dateOfDischarge: '',
     reasonOfDischarge: 'Please select',
-    corporateType: ''
+    corporateType: '',
+    treatmentType: ''
   });
 
   // Track whether a saved discharge summary was loaded (to lock dates after save)
@@ -1034,7 +1035,8 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
             : format(new Date(), 'yyyy-MM-dd'),
         reasonOfDischarge: summary?.reason_of_discharge || 'Please select',
         // Fetch corporate type from patients table
-        corporateType: patient?.corporate || patient?.corporate_type || patient?.insurance_company || ''
+        corporateType: patient?.corporate || patient?.corporate_type || patient?.insurance_company || '',
+        treatmentType: patientData.treatment_type || ''
       });
 
       // Load existing discharge summary data if available
@@ -2463,6 +2465,10 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
       <span class="info-label">Discharge Reason</span>
       <span class="info-value">: ${summaryData.reason_of_discharge || 'Recovered'}</span>
     </div>
+    ${patientInfo.treatmentType ? `<div class="info-row">
+      <span class="info-label">Treatment Type</span>
+      <span class="info-value">: ${patientInfo.treatmentType}</span>
+    </div>` : ''}
   </div>
 
   ${(() => {
@@ -3710,6 +3716,15 @@ DD/MM/YYYY:-Test Category: Test1:Value1 unit, Test2:Value2 unit`);
                 value={patientInfo.corporateType}
                 onChange={(e) => setPatientInfo({...patientInfo, corporateType: e.target.value})}
                 placeholder="Corporate Type"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Treatment Type:</Label>
+              <Input
+                value={patientInfo.treatmentType}
+                readOnly
+                className="bg-gray-50"
+                placeholder="—"
               />
             </div>
           </div>

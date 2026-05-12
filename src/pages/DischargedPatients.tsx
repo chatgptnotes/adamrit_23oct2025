@@ -417,6 +417,7 @@ const DischargedPatients = () => {
   const patientTypeFilter = searchParams.get('patientType') || 'all';
   const billingStatusFilter = searchParams.get('billingStatus') || 'all';
   const corporateFilter = searchParams.get('corporate') || 'all';
+  const treatmentTypeFilter = searchParams.get('treatmentType') || 'all';
   const sortBy = searchParams.get('sortBy') || 'discharged_sr_no';
   // For discharged_sr_no, always use desc unless explicitly set to asc in URL
   const urlSortOrder = searchParams.get('sortOrder');
@@ -445,6 +446,7 @@ const DischargedPatients = () => {
   const setPatientTypeFilter = (value: string) => updateParams({ patientType: value, page: '1' });
   const setBillingStatusFilter = (value: string) => updateParams({ billingStatus: value, page: '1' });
   const setCorporateFilter = (value: string) => updateParams({ corporate: value, page: '1' });
+  const setTreatmentTypeFilter = (value: string) => updateParams({ treatmentType: value, page: '1' });
   const setSortBy = (value: string) => updateParams({ sortBy: value });
   const setSortOrder = (value: 'asc' | 'desc') => updateParams({ sortOrder: value });
   const setCurrentPage = (value: number) => updateParams({ page: value.toString() });
@@ -760,7 +762,7 @@ const DischargedPatients = () => {
 
   // Fetch discharged patients
   const { data: visits, isLoading, error, refetch } = useQuery({
-    queryKey: ['discharged-patients', statusFilter, patientTypeFilter, billingStatusFilter, corporateFilter, sortBy, sortOrder, hospitalConfig?.name, availableCorporates?.length],
+    queryKey: ['discharged-patients', statusFilter, patientTypeFilter, billingStatusFilter, corporateFilter, treatmentTypeFilter, sortBy, sortOrder, hospitalConfig?.name, availableCorporates?.length],
     queryFn: async () => {
       console.log('🏥 Fetching discharged patients for hospital:', hospitalConfig?.name, '(IPD, IPD (Inpatient) & Emergency only)');
 
@@ -822,6 +824,11 @@ const DischargedPatients = () => {
       if (corporateFilter && corporateFilter !== 'all') {
         query = query.eq('patients.corporate', corporateFilter);
         console.log('🏥 DischargedPatients: Applied corporate filter for:', corporateFilter);
+      }
+
+      // Treatment type filter
+      if (treatmentTypeFilter && treatmentTypeFilter !== 'all') {
+        query = query.eq('treatment_type', treatmentTypeFilter);
       }
 
       // Date range filter moved to client-side to preserve original Sr. No
@@ -1704,6 +1711,18 @@ const DischargedPatients = () => {
                 ) : (
                   <SelectItem value="none" disabled>No corporates found</SelectItem>
                 )}
+              </SelectContent>
+            </Select>
+
+            {/* Treatment Type Filter */}
+            <Select value={treatmentTypeFilter} onValueChange={setTreatmentTypeFilter}>
+              <SelectTrigger>
+                <SelectValue placeholder="All Treatment Types" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Treatment Types</SelectItem>
+                <SelectItem value="Conservative">Conservative</SelectItem>
+                <SelectItem value="Surgical">Surgical</SelectItem>
               </SelectContent>
             </Select>
           </div>

@@ -244,6 +244,7 @@ const TodaysIpdDashboard = () => {
   const billingStatusFilter = searchParams.get('billingStatus') || '';
   const bunchFilter = searchParams.get('bunch') || '';
   const corporateFilter = searchParams.get('corporate') || '';
+  const treatmentTypeFilter = searchParams.get('treatmentType') || '';
   const currentPage = parseInt(searchParams.get('page') || '1');
   const itemsPerPage = parseInt(searchParams.get('perPage') || '10');
   const hideColumns = searchParams.get('hideColumns') === 'true';
@@ -290,6 +291,7 @@ const TodaysIpdDashboard = () => {
   const setBillingStatusFilter = (value: string) => updateParams({ billingStatus: value, page: '1' });
   const setBunchFilter = (value: string) => updateParams({ bunch: value, page: '1' });
   const setCorporateFilter = (value: string) => updateParams({ corporate: value, page: '1' });
+  const setTreatmentTypeFilter = (value: string) => updateParams({ treatmentType: value || null, page: '1' });
   const setCurrentPage = (value: number) => updateParams({ page: value.toString() });
   const setItemsPerPage = (value: number) => updateParams({ perPage: value.toString(), page: '1' });
   const setHideColumns = (value: boolean) => updateParams({ hideColumns: value ? 'true' : null });
@@ -1901,7 +1903,9 @@ const TodaysIpdDashboard = () => {
       const matchesExtStay = includeBy(extensionOfStayFilter, visit.extension_of_stay);
       const matchesAddAppr = includeBy(additionalApprovalsFilter, visit.additional_approvals);
 
-      return matchesSearch && matchesBillingExecutive && matchesBillingStatus && matchesBunch && matchesCorporate && matchesFile && matchesCondSub && matchesCondInt && matchesExtStay && matchesAddAppr;
+      const matchesTreatmentType = !treatmentTypeFilter || visit.treatment_type === treatmentTypeFilter;
+
+      return matchesSearch && matchesBillingExecutive && matchesBillingStatus && matchesBunch && matchesCorporate && matchesFile && matchesCondSub && matchesCondInt && matchesExtStay && matchesAddAppr && matchesTreatmentType;
     });
 
     // Then, sort the filtered results
@@ -1953,7 +1957,7 @@ const TodaysIpdDashboard = () => {
     });
 
     return sorted;
-  }, [todaysVisits, searchTerm, billingExecutiveFilter, billingStatusFilter, bunchFilter, corporateFilter, fileStatusFilter, condonationSubmissionFilter, condonationIntimationFilter, extensionOfStayFilter, additionalApprovalsFilter, sortBy]);
+  }, [todaysVisits, searchTerm, billingExecutiveFilter, billingStatusFilter, bunchFilter, corporateFilter, treatmentTypeFilter, fileStatusFilter, condonationSubmissionFilter, condonationIntimationFilter, extensionOfStayFilter, additionalApprovalsFilter, sortBy]);
 
   // Pagination calculations
   const totalPages = Math.ceil((filteredVisits?.length || 0) / itemsPerPage) || 1;
@@ -2679,6 +2683,21 @@ const TodaysIpdDashboard = () => {
                     {corporates.map((corporate) => (
                       <DropdownMenuItem key={corporate.id} onSelect={() => setCorporateFilter(corporate.name)} className={corporateFilter === corporate.name ? 'bg-accent' : ''}>
                         {corporate.name} {corporateFilter === corporate.name && '✓'}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+
+                {/* Treatment Type Submenu */}
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger>Treatment Type</DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent>
+                    <DropdownMenuItem onSelect={() => setTreatmentTypeFilter('')} className={treatmentTypeFilter === '' ? 'bg-accent' : ''}>
+                      All {treatmentTypeFilter === '' && '✓'}
+                    </DropdownMenuItem>
+                    {['Conservative', 'Surgical'].map((type) => (
+                      <DropdownMenuItem key={type} onSelect={() => setTreatmentTypeFilter(type)} className={treatmentTypeFilter === type ? 'bg-accent' : ''}>
+                        {type} {treatmentTypeFilter === type && '✓'}
                       </DropdownMenuItem>
                     ))}
                   </DropdownMenuSubContent>

@@ -291,7 +291,8 @@ const DispenseModal: React.FC<DispenseModalProps> = ({ prescription, onClose, ho
       // Step 4: Create pharmacy_sales record
       const totalAmount = itemsToDispense.reduce((sum, item) => {
         const qty = quantities[item.id] || 0;
-        return sum + qty; // Price per unit not available from prescription, just track quantity
+        const unitPrice = item.unit_price ?? item.medicine_mrp ?? 0;
+        return sum + qty * unitPrice;
       }, 0);
 
       const billNumber = `BILL${Date.now()}`;
@@ -305,10 +306,10 @@ const DispenseModal: React.FC<DispenseModalProps> = ({ prescription, onClose, ho
           doctor_name: prescription.doctor_name,
           hospital_name: hospitalName || 'hope',
           bill_number: billNumber,
-          subtotal: 0,
+          subtotal: totalAmount,
           discount: 0,
           tax_gst: 0,
-          total_amount: 0,
+          total_amount: totalAmount,
           payment_method: 'CASH',
           payment_status: 'PENDING',
           sale_date: new Date().toISOString(),
@@ -331,11 +332,11 @@ const DispenseModal: React.FC<DispenseModalProps> = ({ prescription, onClose, ho
           medication_name: item.medicine_name || 'Unknown',
           medication_id: item.medicine_id || null,
           quantity: quantities[item.id] || 0,
-          unit_price: 0,
-          mrp: 0,
+          unit_price: item.unit_price ?? item.medicine_mrp ?? 0,
+          mrp: item.medicine_mrp ?? 0,
           discount: 0,
           tax: 0,
-          total: 0,
+          total: (quantities[item.id] || 0) * (item.unit_price ?? item.medicine_mrp ?? 0),
           created_at: new Date().toISOString()
         }));
 

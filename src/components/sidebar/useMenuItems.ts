@@ -24,7 +24,8 @@ export const useMenuItems = (props: AppSidebarProps): { mainItems: MenuItem[]; m
     hopeAnaesthetistsCount = 0,
     ayushmanSurgeonsCount = 0,
     ayushmanConsultantsCount = 0,
-    ayushmanAnaesthetistsCount = 0
+    ayushmanAnaesthetistsCount = 0,
+    pendingPrescriptionsCount = 0,
   } = props;
 
   return useMemo(() => {
@@ -119,7 +120,8 @@ export const useMenuItems = (props: AppSidebarProps): { mainItems: MenuItem[]; m
                item.title === "Hope Anaesthetists" ? hopeAnaesthetistsCount :
                item.title === "Ayushman Surgeons" ? ayushmanSurgeonsCount :
                item.title === "Ayushman Consultants" ? ayushmanConsultantsCount :
-               item.title === "Ayushman Anaesthetists" ? ayushmanAnaesthetistsCount : 0
+               item.title === "Ayushman Anaesthetists" ? ayushmanAnaesthetistsCount :
+               item.title === "Pharmacy" ? pendingPrescriptionsCount : 0
       }));
 
     return {
@@ -130,6 +132,7 @@ export const useMenuItems = (props: AppSidebarProps): { mainItems: MenuItem[]; m
     hospitalType, user, canManageUsers, diagnosesCount, patientsCount, usersCount, complicationsCount,
     cghsSurgeryCount, labCount, radiologyCount, medicationCount,
     refereesCount, hopeSurgeonsCount, hopeConsultantsCount, hopeAnaesthetistsCount,
-    ayushmanSurgeonsCount, ayushmanConsultantsCount, ayushmanAnaesthetistsCount
+    ayushmanSurgeonsCount, ayushmanConsultantsCount, ayushmanAnaesthetistsCount,
+    pendingPrescriptionsCount
   ]);
 };

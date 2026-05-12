@@ -122,6 +122,7 @@ const CurrentlyAdmittedPatients = () => {
   const searchTerm = searchParams.get('search') || '';
   const statusFilter = searchParams.get('status') || 'all';
   const corporateFilter = searchParams.get('corporate') || 'all';
+  const treatmentTypeFilter = searchParams.get('treatmentType') || 'all';
 
   // Pagination - URL persisted
   const currentPage = parseInt(searchParams.get('page') || '1');
@@ -144,6 +145,7 @@ const CurrentlyAdmittedPatients = () => {
   const setSearchTerm = (value: string) => updateParams({ search: value });
   const setStatusFilter = (value: string) => updateParams({ status: value });
   const setCorporateFilter = (value: string) => updateParams({ corporate: value });
+  const setTreatmentTypeFilter = (value: string) => updateParams({ treatmentType: value });
   const setCurrentPage = (value: number) => updateParams({ page: value.toString() });
 
 
@@ -282,7 +284,9 @@ const CurrentlyAdmittedPatients = () => {
 
     const matchesCorporate = corporateFilter === 'all' || visit.patients?.corporate === corporateFilter;
 
-    return matchesSearch && matchesStatus && matchesCorporate;
+    const matchesTreatmentType = treatmentTypeFilter === 'all' || visit.treatment_type === treatmentTypeFilter;
+
+    return matchesSearch && matchesStatus && matchesCorporate && matchesTreatmentType;
   });
 
   // Pagination calculations
@@ -315,7 +319,7 @@ const CurrentlyAdmittedPatients = () => {
   // Reset page to 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, statusFilter, corporateFilter]);
+  }, [searchTerm, statusFilter, corporateFilter, treatmentTypeFilter]);
 
   const stats = (() => {
     const total = filteredVisits.length;
@@ -455,6 +459,16 @@ const CurrentlyAdmittedPatients = () => {
                 {corporate.name}
               </SelectItem>
             ))}
+          </SelectContent>
+        </Select>
+        <Select value={treatmentTypeFilter} onValueChange={setTreatmentTypeFilter}>
+          <SelectTrigger className="w-full sm:w-[180px]">
+            <SelectValue placeholder="All Treatment Types" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Treatment Types</SelectItem>
+            <SelectItem value="Conservative">Conservative</SelectItem>
+            <SelectItem value="Surgical">Surgical</SelectItem>
           </SelectContent>
         </Select>
       </div>
