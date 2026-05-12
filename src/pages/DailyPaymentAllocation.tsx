@@ -57,6 +57,34 @@ import { useCompanies } from '@/hooks/useCompanies';
 const formatINR = (n: number) =>
   new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(n);
 
+// Maps an obligation's sub_category to one of the four Obligations Master sections.
+type ObligationSection = 'pharmacy_implant' | 'consultants' | 'overheads' | 'other_vendors';
+
+const OBLIGATION_SECTIONS: { key: ObligationSection; title: string }[] = [
+  { key: 'pharmacy_implant', title: 'Pharmacy & Implant Vendors' },
+  { key: 'consultants',      title: 'Consultants' },
+  { key: 'overheads',        title: 'Overheads (Rent, Salary, Electricity, etc.)' },
+  { key: 'other_vendors',    title: 'Other Vendors' },
+];
+
+const getSectionForSubCategory = (subCategory: string | null | undefined): ObligationSection => {
+  switch (subCategory) {
+    case 'pharmacy':
+    case 'implant':
+      return 'pharmacy_implant';
+    case 'consultant':
+    case 'rmo':
+      return 'consultants';
+    case 'rent':
+    case 'electricity':
+    case 'salary':
+    case 'dialysis':
+      return 'overheads';
+    default:
+      return 'other_vendors';
+  }
+};
+
 const getAgingColor = (days: number) => {
   if (days === 0) return 'bg-green-100 text-green-800';
   if (days <= 3) return 'bg-yellow-100 text-yellow-800';
@@ -1551,56 +1579,65 @@ table{width:100%;border-collapse:collapse;margin-top:12px}
               </Button>
             </div>
           </div>
-          <Card>
-            <div className="px-4 py-2 border-b bg-gray-50">
-              <p className="text-xs text-muted-foreground">Drag rows to reorder priority. Lower position = lower priority number = paid first.</p>
-            </div>
-            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleObligationDragEnd}>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-8"></TableHead>
-                    <TableHead>Party Name</TableHead>
-                    <TableHead>Company</TableHead>
-                    <TableHead>Payee</TableHead>
-                    <TableHead>Category</TableHead>
-                    <TableHead className="text-right">Daily Amount</TableHead>
-                    <TableHead>Outstanding (per Tally company)</TableHead>
-                    <TableHead className="text-right">Approx Balance</TableHead>
-                    <TableHead className="text-center">Priority</TableHead>
-                    <TableHead className="text-center">Active</TableHead>
-                    <TableHead>Notes</TableHead>
-                    <TableHead className="text-center">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <SortableContext items={sortedObligations.map(o => o.id)} strategy={verticalListSortingStrategy}>
-                  <TableBody>
-                    {sortedObligations.length === 0 ? (
+          <p className="text-xs text-muted-foreground px-1">
+            Drag rows within a section to reorder priority. Lower position = paid first.
+          </p>
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleObligationDragEnd}>
+            {OBLIGATION_SECTIONS.map(section => {
+              const rows = sortedObligations.filter(o => getSectionForSubCategory(o.sub_category) === section.key);
+              return (
+                <Card key={section.key} className="overflow-hidden">
+                  <div className="px-4 py-2 border-b bg-blue-50 flex items-center justify-between">
+                    <h4 className="text-sm font-semibold text-blue-900">{section.title}</h4>
+                    <span className="text-xs text-blue-700">{rows.length} {rows.length === 1 ? 'obligation' : 'obligations'}</span>
+                  </div>
+                  <Table>
+                    <TableHeader>
                       <TableRow>
-                        <TableCell colSpan={12} className="text-center py-8 text-muted-foreground">
-                          No obligations configured. Click "Add Obligation" to get started.
-                        </TableCell>
+                        <TableHead className="w-8"></TableHead>
+                        <TableHead>Party Name</TableHead>
+                        <TableHead>Company</TableHead>
+                        <TableHead>Payee</TableHead>
+                        <TableHead>Category</TableHead>
+                        <TableHead className="text-right">Daily Amount</TableHead>
+                        <TableHead>Outstanding (per Tally company)</TableHead>
+                        <TableHead className="text-right">Approx Balance</TableHead>
+                        <TableHead className="text-center">Priority</TableHead>
+                        <TableHead className="text-center">Active</TableHead>
+                        <TableHead>Notes</TableHead>
+                        <TableHead className="text-center">Actions</TableHead>
                       </TableRow>
-                    ) : (
-                      sortedObligations.map((ob: PaymentObligation) => (
-                        <SortableObligationRow
-                          key={ob.id}
-                          ob={ob}
-                          deleteConfirmId={deleteConfirmId}
-                          companyName={ob.company_id ? (companyNameMap[ob.company_id] || '') : ''}
-                          onEdit={() => handleEditObligation(ob)}
-                          onDeleteConfirm={() => setDeleteConfirmId(ob.id)}
-                          onDeleteCancel={() => setDeleteConfirmId(null)}
-                          onDelete={() => handleDeleteObligation(ob.id)}
-                          onToggleActive={() => toggleActive.mutate({ id: ob.id, is_active: !ob.is_active })}
-                        />
-                      ))
-                    )}
-                  </TableBody>
-                </SortableContext>
-              </Table>
-            </DndContext>
-          </Card>
+                    </TableHeader>
+                    <SortableContext items={rows.map(o => o.id)} strategy={verticalListSortingStrategy}>
+                      <TableBody>
+                        {rows.length === 0 ? (
+                          <TableRow>
+                            <TableCell colSpan={12} className="text-center py-4 text-muted-foreground text-xs italic">
+                              No obligations in this section yet.
+                            </TableCell>
+                          </TableRow>
+                        ) : (
+                          rows.map((ob: PaymentObligation) => (
+                            <SortableObligationRow
+                              key={ob.id}
+                              ob={ob}
+                              deleteConfirmId={deleteConfirmId}
+                              companyName={ob.company_id ? (companyNameMap[ob.company_id] || '') : ''}
+                              onEdit={() => handleEditObligation(ob)}
+                              onDeleteConfirm={() => setDeleteConfirmId(ob.id)}
+                              onDeleteCancel={() => setDeleteConfirmId(null)}
+                              onDelete={() => handleDeleteObligation(ob.id)}
+                              onToggleActive={() => toggleActive.mutate({ id: ob.id, is_active: !ob.is_active })}
+                            />
+                          ))
+                        )}
+                      </TableBody>
+                    </SortableContext>
+                  </Table>
+                </Card>
+              );
+            })}
+          </DndContext>
         </TabsContent>
 
         {/* TAB 3: Payment History */}
@@ -2104,12 +2141,14 @@ table{width:100%;border-collapse:collapse;margin-top:12px}
                 <Select value={newObligation.sub_category} onValueChange={(v) => setNewObligation({ ...newObligation, sub_category: v })}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="rent">Rent</SelectItem>
-                    <SelectItem value="dialysis">Dialysis</SelectItem>
-                    <SelectItem value="electricity">Electricity</SelectItem>
-                    <SelectItem value="salary">Salary</SelectItem>
+                    <SelectItem value="pharmacy">Pharmacy</SelectItem>
+                    <SelectItem value="implant">Implant</SelectItem>
                     <SelectItem value="consultant">Consultant</SelectItem>
                     <SelectItem value="rmo">RMO</SelectItem>
+                    <SelectItem value="rent">Rent</SelectItem>
+                    <SelectItem value="electricity">Electricity</SelectItem>
+                    <SelectItem value="salary">Salary</SelectItem>
+                    <SelectItem value="dialysis">Dialysis</SelectItem>
                     <SelectItem value="referral">Referral</SelectItem>
                     <SelectItem value="vendor">Vendor</SelectItem>
                     <SelectItem value="other">Other</SelectItem>
