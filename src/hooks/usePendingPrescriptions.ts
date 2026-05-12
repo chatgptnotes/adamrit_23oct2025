@@ -66,16 +66,20 @@ export const usePendingPrescriptions = (): UsePendingPrescriptionsResult => {
 
   useEffect(() => {
     const channel = (supabase as any)
-      .channel('prescription-inserts')
+      .channel('prescription-changes')
       .on(
         'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'prescriptions' },
+        { event: '*', schema: 'public', table: 'prescriptions' },
         (payload: any) => {
           if (debounceRef.current) clearTimeout(debounceRef.current);
           debounceRef.current = setTimeout(() => {
             queryClient.invalidateQueries({ queryKey: ['pending-prescriptions'] });
-            const num = payload?.new?.prescription_number;
-            toast.success(num ? `New prescription #${num}` : 'New prescription received');
+            // Only fire a toast for brand-new prescriptions, not for
+            // updates (e.g. dispense) or deletes.
+            if (payload?.eventType === 'INSERT') {
+              const num = payload?.new?.prescription_number;
+              toast.success(num ? `New prescription #${num}` : 'New prescription received');
+            }
           }, 500);
         }
       )

@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
@@ -81,13 +82,12 @@ const PrescriptionNotificationBell: React.FC<Props> = ({ count, recent, onViewAl
         )}
 
         <DropdownMenuSeparator />
-        <button
-          type="button"
-          onClick={onViewAll}
-          className="w-full text-center text-sm font-medium text-primary py-2 hover:bg-accent rounded-sm"
+        <DropdownMenuItem
+          onSelect={onViewAll}
+          className="justify-center text-sm font-medium text-primary cursor-pointer"
         >
           View all →
-        </button>
+        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );
