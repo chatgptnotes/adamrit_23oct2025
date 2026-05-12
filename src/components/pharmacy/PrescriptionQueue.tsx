@@ -153,11 +153,11 @@ async function fetchPrescriptions(): Promise<Prescription[]> {
   if (medicineIds.length > 0) {
     const { data: medicines } = await (supabase as any)
       .from('medicines')
-      .select('id, name, mrp')
+      .select('id, medicine_name, mrp')
       .in('id', medicineIds);
     if (medicines) {
       medicineMap = Object.fromEntries(
-        medicines.map((m: any) => [m.id, { name: m.name, mrp: m.mrp ?? null }])
+        medicines.map((m: any) => [m.id, { name: m.medicine_name, mrp: m.mrp ?? null }])
       );
     }
   }
