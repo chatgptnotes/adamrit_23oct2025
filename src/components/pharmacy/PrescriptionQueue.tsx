@@ -147,18 +147,37 @@ async function fetchPrescriptions(): Promise<Prescription[]> {
     }
   }
 
-  // Fetch medicine name + MRP (for price column fallback)
+  // Fetch medicine MRP — two strategies:
+  // 1. By medicine_id (for items that have it)
+  // 2. By medicine_name text match (camera-upload prescriptions have medicine_id=null)
   const medicineIds = [...new Set((items || []).map((i: any) => i.medicine_id).filter(Boolean))];
-  let medicineMap: Record<string, { name: string; mrp: number | null }> = {};
+  // key → { name, mrp }
+  let medicineById: Record<string, { name: string; mrp: number | null }> = {};
   if (medicineIds.length > 0) {
     const { data: medicines } = await (supabase as any)
       .from('medicines')
       .select('id, medicine_name, mrp')
       .in('id', medicineIds);
     if (medicines) {
-      medicineMap = Object.fromEntries(
+      medicineById = Object.fromEntries(
         medicines.map((m: any) => [m.id, { name: m.medicine_name, mrp: m.mrp ?? null }])
       );
+    }
+  }
+
+  // For items without medicine_id, look up by name
+  const itemsWithoutId = (items || []).filter((i: any) => !i.medicine_id && i.medicine_name);
+  const freeTextNames = [...new Set(itemsWithoutId.map((i: any) => (i.medicine_name as string).trim()))];
+  let medicineByName: Record<string, number | null> = {}; // lowercase name → mrp
+  if (freeTextNames.length > 0) {
+    const { data: namedMeds } = await (supabase as any)
+      .from('medicines')
+      .select('medicine_name, mrp')
+      .in('medicine_name', freeTextNames);
+    if (namedMeds) {
+      for (const m of namedMeds) {
+        medicineByName[m.medicine_name.toLowerCase()] = m.mrp ?? null;
+      }
     }
   }
 
@@ -191,8 +210,10 @@ async function fetchPrescriptions(): Promise<Prescription[]> {
   for (const item of items || []) {
     const key = item.prescription_id;
     if (!itemsByPrescription[key]) itemsByPrescription[key] = [];
-    const medMeta = item.medicine_id ? medicineMap[item.medicine_id] : null;
+    const medMeta = item.medicine_id ? medicineById[item.medicine_id] : null;
     const resolvedName = item.medicine_name || medMeta?.name || 'Unknown Medicine';
+    // MRP: from id-lookup → name-lookup → null
+    const resolvedMrp = medMeta?.mrp ?? medicineByName[(item.medicine_name || '').toLowerCase()] ?? null;
     const earliestExpiry = (item.batch_numbers || []).reduce(
       (min: string | null, bn: string) => {
         const e = batchExpiry[bn];
@@ -205,7 +226,7 @@ async function fetchPrescriptions(): Promise<Prescription[]> {
     itemsByPrescription[key].push({
       ...item,
       medicine_name: resolvedName.toUpperCase(),
-      medicine_mrp: medMeta?.mrp ?? null,
+      medicine_mrp: resolvedMrp,
       earliest_expiry: earliestExpiry,
     });
   }
