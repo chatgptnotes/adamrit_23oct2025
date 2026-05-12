@@ -490,6 +490,8 @@ const CurrentlyAdmittedPatients = () => {
                     <TableHead className="font-semibold">Admission Date</TableHead>
                     <TableHead className="font-semibold">Days Admitted</TableHead>
                     <TableHead className="font-semibold">Visit Type</TableHead>
+                    <TableHead className="font-semibold">Treatment Type</TableHead>
+                    <TableHead className="font-semibold">Thumb Reg. No.</TableHead>
                     <TableHead className="font-semibold">Doctor</TableHead>
                     <TableHead className="font-semibold">Diagnosis</TableHead>
                   </TableRow>
@@ -542,6 +544,16 @@ const CurrentlyAdmittedPatients = () => {
                         <Badge variant="outline" className="capitalize">
                           {visit.visit_type}
                         </Badge>
+                      </TableCell>
+                      <TableCell>
+                        {visit.treatment_type ? (
+                          <Badge variant="outline" className="capitalize">{visit.treatment_type}</Badge>
+                        ) : (
+                          <span className="text-gray-400">-</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {visit.thumb_registration_no || <span className="text-gray-400">-</span>}
                       </TableCell>
                       <TableCell>
                         {visit.visit_hope_surgeons?.map(vs => vs.hope_surgeons?.name).join(', ') || '-'}

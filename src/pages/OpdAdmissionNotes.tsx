@@ -352,6 +352,14 @@ const OpdAdmissionNotes = () => {
               <p className="text-sm font-medium mt-1">{formatDate(patientData.created_at)}</p>
             </div>
             <div>
+              <Label className="text-xs font-semibold text-gray-600">Treatment Type</Label>
+              <p className="text-sm font-medium mt-1">{patientData.treatment_type || 'N/A'}</p>
+            </div>
+            <div>
+              <Label className="text-xs font-semibold text-gray-600">Thumb Reg. No</Label>
+              <p className="text-sm font-medium mt-1">{patientData.thumb_registration_no || 'N/A'}</p>
+            </div>
+            <div>
               <Label className="text-xs font-semibold text-gray-600">Address</Label>
               <p className="text-sm font-medium mt-1">{patientData.patients?.address || 'nagpur'}</p>
             </div>
