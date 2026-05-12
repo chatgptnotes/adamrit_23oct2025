@@ -16,6 +16,7 @@ interface Props {
   count: number;
   recent: PendingPrescription[];
   onViewAll: () => void;
+  onRowClick: (id: string) => void;
 }
 
 const formatTimeAgo = (iso: string | null) => {
@@ -27,7 +28,7 @@ const formatTimeAgo = (iso: string | null) => {
   }
 };
 
-const PrescriptionNotificationBell: React.FC<Props> = ({ count, recent, onViewAll }) => {
+const PrescriptionNotificationBell: React.FC<Props> = ({ count, recent, onViewAll, onRowClick }) => {
   const displayCount = count > 99 ? '99+' : String(count);
 
   return (
@@ -62,9 +63,10 @@ const PrescriptionNotificationBell: React.FC<Props> = ({ count, recent, onViewAl
         ) : (
           <div className="max-h-[320px] overflow-y-auto">
             {recent.map((p) => (
-              <div
+              <DropdownMenuItem
                 key={p.id}
-                className="flex items-start gap-2 px-3 py-2 text-sm hover:bg-accent cursor-default"
+                onSelect={() => onRowClick(p.id)}
+                className="flex items-start gap-2 px-3 py-2 text-sm cursor-pointer"
               >
                 <FileText className="h-4 w-4 mt-0.5 text-orange-600 shrink-0" />
                 <div className="flex-1 min-w-0">
@@ -76,7 +78,7 @@ const PrescriptionNotificationBell: React.FC<Props> = ({ count, recent, onViewAl
                     {p.doctor_name || 'Unknown doctor'} · {formatTimeAgo(p.created_at)}
                   </div>
                 </div>
-              </div>
+              </DropdownMenuItem>
             ))}
           </div>
         )}

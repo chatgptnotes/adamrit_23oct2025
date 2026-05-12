@@ -48,6 +48,7 @@ const PharmacyDashboard: React.FC = () => {
   const [directSaleSubTab, setDirectSaleSubTab] = useState('bill'); // 'bill' or 'view'
   const [purchaseOrderView, setPurchaseOrderView] = useState<'list' | 'add' | 'edit'>('list');
   const [selectedPurchaseOrderId, setSelectedPurchaseOrderId] = useState<string | null>(null);
+  const [autoOpenPrescriptionId, setAutoOpenPrescriptionId] = useState<string | null>(null);
 
   // Update tab when URL changes (e.g., returning from Edit Sale Bill)
   useEffect(() => {
@@ -115,6 +116,10 @@ const PharmacyDashboard: React.FC = () => {
             count={pendingPrescriptionsCount}
             recent={pendingPrescriptionsRecent}
             onViewAll={() => setSelectedTab('prescriptions')}
+            onRowClick={(id) => {
+              setSelectedTab('prescriptions');
+              setAutoOpenPrescriptionId(id);
+            }}
           />
           <div className="flex items-center gap-2">
             <Calendar className="h-4 w-4" />
@@ -508,7 +513,10 @@ const PharmacyDashboard: React.FC = () => {
         </TabsContent>
 
         <TabsContent value="prescriptions">
-          <PrescriptionQueue />
+          <PrescriptionQueue
+            autoOpenPrescriptionId={autoOpenPrescriptionId}
+            onAutoOpenHandled={() => setAutoOpenPrescriptionId(null)}
+          />
         </TabsContent>
       </Tabs>
     </div>

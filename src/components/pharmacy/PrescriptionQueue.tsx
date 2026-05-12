@@ -1,5 +1,5 @@
 // Prescription Queue - Pharmacist view for dispensing prescriptions
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -673,7 +673,12 @@ const DetailModal: React.FC<DetailModalProps> = ({ prescription, onClose }) => {
 
 // ─── Main Component ────────────────────────────────────────────────────────────
 
-const PrescriptionQueue: React.FC = () => {
+interface PrescriptionQueueProps {
+  autoOpenPrescriptionId?: string | null;
+  onAutoOpenHandled?: () => void;
+}
+
+const PrescriptionQueue: React.FC<PrescriptionQueueProps> = ({ autoOpenPrescriptionId, onAutoOpenHandled }) => {
   const { hospitalType } = useAuth();
   const [activeStatusTab, setActiveStatusTab] = useState<StatusTab>('ALL');
   const [searchTerm, setSearchTerm] = useState('');
@@ -691,6 +696,16 @@ const PrescriptionQueue: React.FC = () => {
     refetchInterval: 60000,
     staleTime: 30000,
   });
+
+  // Auto-open detail dialog when triggered from the bell dropdown
+  useEffect(() => {
+    if (!autoOpenPrescriptionId || !prescriptions.length) return;
+    const found = prescriptions.find((p) => p.id === autoOpenPrescriptionId);
+    if (found) {
+      setViewPrescription(found);
+      onAutoOpenHandled?.();
+    }
+  }, [autoOpenPrescriptionId, prescriptions]);
 
   // Filter by status tab
   const statusFiltered =
