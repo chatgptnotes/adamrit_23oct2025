@@ -656,10 +656,6 @@ const DischargedPatients = () => {
                     <span class="info-value">${visit.treatment_type || ''}</span>
                   </div>
                   <div class="info-item">
-                    <span class="info-label">Thumb Reg. No:</span>
-                    <span class="info-value">${visit.thumb_registration_no || ''}</span>
-                  </div>
-                  <div class="info-item">
                     <span class="info-label">Corporate:</span>
                     <span class="info-value">${visit.patients?.corporate || 'N/A'}</span>
                   </div>
