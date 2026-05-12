@@ -34,6 +34,7 @@ import {
   Stethoscope,
   User,
   Calendar,
+  Printer,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
@@ -44,12 +45,19 @@ interface PrescriptionItem {
   id: string;
   medicine_id: string | null;
   medicine_name?: string; // joined from medicines table
+  medicine_mrp?: number | null; // joined from medicines.mrp — fallback for unit price
   quantity_prescribed: number;
   quantity_dispensed: number;
   dosage_frequency: string | null;
   dosage_timing: string | null;
   duration_days: number | null;
   special_instructions: string | null;
+  unit_price?: number | null;
+  total_price?: number | null;
+  batch_numbers?: string[] | null;
+  earliest_expiry?: string | null; // computed from medicine_batch_inventory join
+  is_substituted?: boolean | null;
+  substitute_reason?: string | null;
 }
 
 interface Prescription {
@@ -139,16 +147,42 @@ async function fetchPrescriptions(): Promise<Prescription[]> {
     }
   }
 
-  // Fetch medicine names
+  // Fetch medicine name + MRP (for price column fallback)
   const medicineIds = [...new Set((items || []).map((i: any) => i.medicine_id).filter(Boolean))];
-  let medicineMap: Record<string, string> = {};
+  let medicineMap: Record<string, { name: string; mrp: number | null }> = {};
   if (medicineIds.length > 0) {
     const { data: medicines } = await (supabase as any)
       .from('medicines')
-      .select('id, name')
+      .select('id, name, mrp')
       .in('id', medicineIds);
     if (medicines) {
-      medicineMap = Object.fromEntries(medicines.map((m: any) => [m.id, m.name]));
+      medicineMap = Object.fromEntries(
+        medicines.map((m: any) => [m.id, { name: m.name, mrp: m.mrp ?? null }])
+      );
+    }
+  }
+
+  // Fetch earliest expiry per batch_number (data populated at dispense time)
+  const allBatchNumbers = [
+    ...new Set(
+      (items || []).flatMap((i: any) =>
+        Array.isArray(i.batch_numbers) ? i.batch_numbers : []
+      )
+    ),
+  ].filter(Boolean) as string[];
+  let batchExpiry: Record<string, string> = {};
+  if (allBatchNumbers.length > 0) {
+    const { data: batches } = await (supabase as any)
+      .from('medicine_batch_inventory')
+      .select('batch_number, expiry_date')
+      .in('batch_number', allBatchNumbers);
+    if (batches) {
+      for (const b of batches) {
+        const cur = batchExpiry[b.batch_number];
+        if (!cur || (b.expiry_date && b.expiry_date < cur)) {
+          batchExpiry[b.batch_number] = b.expiry_date;
+        }
+      }
     }
   }
 
@@ -157,13 +191,22 @@ async function fetchPrescriptions(): Promise<Prescription[]> {
   for (const item of items || []) {
     const key = item.prescription_id;
     if (!itemsByPrescription[key]) itemsByPrescription[key] = [];
-    const resolvedName =
-      item.medicine_name ||
-      (item.medicine_id ? medicineMap[item.medicine_id] : null) ||
-      'Unknown Medicine';
+    const medMeta = item.medicine_id ? medicineMap[item.medicine_id] : null;
+    const resolvedName = item.medicine_name || medMeta?.name || 'Unknown Medicine';
+    const earliestExpiry = (item.batch_numbers || []).reduce(
+      (min: string | null, bn: string) => {
+        const e = batchExpiry[bn];
+        if (!e) return min;
+        if (!min || e < min) return e;
+        return min;
+      },
+      null as string | null
+    );
     itemsByPrescription[key].push({
       ...item,
       medicine_name: resolvedName.toUpperCase(),
+      medicine_mrp: medMeta?.mrp ?? null,
+      earliest_expiry: earliestExpiry,
     });
   }
 
@@ -435,7 +478,35 @@ interface DetailModalProps {
   onClose: () => void;
 }
 
+const formatINR = (amount: number) =>
+  new Intl.NumberFormat('en-IN', {
+    style: 'currency',
+    currency: 'INR',
+    minimumFractionDigits: 2,
+  }).format(amount || 0);
+
+const formatExpiry = (iso: string | null | undefined) => {
+  if (!iso) return '—';
+  try {
+    const d = new Date(iso);
+    return `${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+  } catch {
+    return '—';
+  }
+};
+
 const DetailModal: React.FC<DetailModalProps> = ({ prescription, onClose }) => {
+  // Compute per-row price/amount with a sensible fallback chain:
+  //   unit_price (saved at dispense) ?? medicine_mrp (current catalog)
+  //   amount     = total_price (saved)        ?? unit * dispensed
+  const itemsWithMoney = prescription.prescription_items.map((item) => {
+    const unitPrice = item.unit_price ?? item.medicine_mrp ?? 0;
+    const amount =
+      item.total_price ?? unitPrice * (item.quantity_dispensed || 0);
+    return { ...item, _unitPrice: unitPrice, _amount: amount };
+  });
+  const grandTotal = itemsWithMoney.reduce((s, it) => s + (it._amount || 0), 0);
+
   return (
     <div className="space-y-4">
       {/* Summary */}
@@ -463,7 +534,10 @@ const DetailModal: React.FC<DetailModalProps> = ({ prescription, onClose }) => {
             {formatStatusLabel(prescription.status)}
           </Badge>
         </div>
-        {/* Notes (raw AI extraction) intentionally hidden */}
+        <div>
+          <p className="text-xs text-muted-foreground">Total Amount</p>
+          <p className="font-semibold text-base">{formatINR(grandTotal)}</p>
+        </div>
       </div>
 
       {/* Items */}
@@ -483,19 +557,37 @@ const DetailModal: React.FC<DetailModalProps> = ({ prescription, onClose }) => {
                 <TableHead>Duration</TableHead>
                 <TableHead className="text-center">Prescribed</TableHead>
                 <TableHead className="text-center">Dispensed</TableHead>
+                <TableHead className="text-right">Unit Price</TableHead>
+                <TableHead className="text-right">Amount</TableHead>
+                <TableHead>Batch / Expiry</TableHead>
                 <TableHead>Status</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {prescription.prescription_items.map((item) => {
+              {itemsWithMoney.map((item) => {
                 const isComplete = item.quantity_dispensed >= item.quantity_prescribed;
+                const batches = Array.isArray(item.batch_numbers) ? item.batch_numbers.filter(Boolean) : [];
                 return (
                   <TableRow key={item.id}>
                     <TableCell>
-                      <p className="font-medium text-sm">{item.medicine_name}</p>
-                      {item.special_instructions && (
-                        <p className="text-xs text-muted-foreground">{item.special_instructions}</p>
-                      )}
+                      <div className="flex items-start gap-1.5">
+                        <div className="min-w-0">
+                          <p className="font-medium text-sm">{item.medicine_name}</p>
+                          {item.special_instructions && (
+                            <p className="text-xs text-muted-foreground">{item.special_instructions}</p>
+                          )}
+                          {item.is_substituted && (
+                            <p className="text-xs text-amber-700 mt-0.5">
+                              Substituted{item.substitute_reason ? `: ${item.substitute_reason}` : ''}
+                            </p>
+                          )}
+                        </div>
+                        {item.is_substituted && (
+                          <Badge variant="outline" className="text-[10px] border-amber-300 bg-amber-50 text-amber-700 shrink-0">
+                            SUB
+                          </Badge>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell className="text-sm">
                       {item.dosage_frequency || '—'}
@@ -508,6 +600,22 @@ const DetailModal: React.FC<DetailModalProps> = ({ prescription, onClose }) => {
                     </TableCell>
                     <TableCell className="text-center">{item.quantity_prescribed}</TableCell>
                     <TableCell className="text-center">{item.quantity_dispensed}</TableCell>
+                    <TableCell className="text-right text-sm tabular-nums">
+                      {item._unitPrice > 0 ? formatINR(item._unitPrice) : '—'}
+                    </TableCell>
+                    <TableCell className="text-right text-sm font-medium tabular-nums">
+                      {item._amount > 0 ? formatINR(item._amount) : '—'}
+                    </TableCell>
+                    <TableCell className="text-xs">
+                      {batches.length > 0 ? (
+                        <div>
+                          <div className="font-mono">{batches.join(', ')}</div>
+                          <div className="text-muted-foreground">Exp: {formatExpiry(item.earliest_expiry)}</div>
+                        </div>
+                      ) : (
+                        '—'
+                      )}
+                    </TableCell>
                     <TableCell>
                       <Badge variant={isComplete ? 'default' : 'secondary'} className="text-xs">
                         {isComplete ? 'Complete' : 'Pending'}
@@ -516,12 +624,23 @@ const DetailModal: React.FC<DetailModalProps> = ({ prescription, onClose }) => {
                   </TableRow>
                 );
               })}
+              {grandTotal > 0 && (
+                <TableRow className="bg-gray-50 font-semibold">
+                  <TableCell colSpan={6} className="text-right">Grand Total</TableCell>
+                  <TableCell className="text-right tabular-nums">{formatINR(grandTotal)}</TableCell>
+                  <TableCell colSpan={2} />
+                </TableRow>
+              )}
             </TableBody>
           </Table>
         )}
       </div>
 
-      <div className="flex justify-end border-t pt-2">
+      <div className="flex justify-end gap-2 border-t pt-2 print:hidden">
+        <Button variant="outline" onClick={() => window.print()}>
+          <Printer className="h-4 w-4 mr-1" />
+          Print
+        </Button>
         <Button variant="outline" onClick={onClose}>
           Close
         </Button>
