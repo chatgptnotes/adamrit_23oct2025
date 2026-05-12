@@ -2222,11 +2222,11 @@ ${sectionsHtml}
 
       {/* Add/Edit Obligation Dialog */}
       <Dialog open={addDialogOpen} onOpenChange={(open) => { setAddDialogOpen(open); if (!open) { setEditingObligationId(null); setLedgerLinks({}); setLedgerSearchTerm(''); setOpenPickerCompanyId(null); } }}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
+        <DialogContent className="w-[95vw] max-w-2xl sm:max-w-2xl max-h-[90vh] flex flex-col p-0">
+          <DialogHeader className="px-6 pt-6 pb-3 border-b shrink-0">
             <DialogTitle>{editingObligationId ? 'Edit' : 'Add'} Payment Obligation</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4">
+          <div className="space-y-4 px-6 py-4 overflow-y-auto flex-1">
             <div>
               <Label>Company</Label>
               <Select value={newObligation.company_id || ''} onValueChange={(v) => setNewObligation({ ...newObligation, company_id: v || null })}>
@@ -2704,7 +2704,7 @@ ${sectionsHtml}
               </div>
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="px-6 py-3 border-t shrink-0">
             <Button variant="outline" onClick={() => { setAddDialogOpen(false); setEditingObligationId(null); }}>Cancel</Button>
             <Button onClick={handleAddObligation} disabled={createObligation.isPending || updateObligation.isPending}>
               {editingObligationId ? 'Save Changes' : 'Add Obligation'}
