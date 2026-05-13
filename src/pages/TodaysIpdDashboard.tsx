@@ -406,6 +406,7 @@ const TodaysIpdDashboard = () => {
   // Advance payment status tracking
   const [advancePayments, setAdvancePayments] = useState<Record<string, number>>({});
   const [billTotals, setBillTotals] = useState<Record<string, number>>({});
+  const [intimationDates, setIntimationDates] = useState<Record<string, string | null>>({});
   const [doaPayments, setDoaPayments] = useState<Record<string, Array<{
     amount: number;
     payment_date: string;
@@ -1663,6 +1664,22 @@ const TodaysIpdDashboard = () => {
           setBillTotals(billByVisit);
         }
 
+        // Fetch intimation dates from bill_preparation
+        const { data: intimationData, error: intimationError } = await supabase
+          .from('bill_preparation')
+          .select('visit_id, intimation_date')
+          .in('visit_id', visitIds);
+
+        if (!intimationError && intimationData) {
+          const intimationMap: Record<string, string | null> = {};
+          (intimationData as { visit_id: string; intimation_date: string | null }[]).forEach(item => {
+            if (item.visit_id) {
+              intimationMap[item.visit_id] = item.intimation_date || null;
+            }
+          });
+          setIntimationDates(intimationMap);
+        }
+
         // Fetch DOA payments for referral report (with dates for detailed display)
         const visitUuids = todaysVisits.map(v => v.id).filter(Boolean) as string[];
         if (visitUuids.length > 0) {
@@ -1797,6 +1814,23 @@ const TodaysIpdDashboard = () => {
         </div>
       );
     }
+  };
+
+  const renderIntimationStatus = (visit: any) => {
+    const visitId = visit.visit_id || '';
+    const intimationDate = intimationDates[visitId];
+    if (intimationDate) {
+      return (
+        <div className="flex justify-center" title="Intimation date added">
+          <Circle className="h-4 w-4 text-green-600 fill-green-600" />
+        </div>
+      );
+    }
+    return (
+      <div className="flex justify-center" title="Intimation date not added">
+        <Circle className="h-4 w-4 text-red-600 fill-red-600" />
+      </div>
+    );
   };
 
   // Load referral letter status for all visits
@@ -2778,6 +2812,7 @@ const TodaysIpdDashboard = () => {
                 <TableHead className="font-semibold">Diagnosis</TableHead>
                 <TableHead className="font-semibold">Gender/Age</TableHead>
                 <TableHead className="font-semibold">Claim ID</TableHead>
+                <TableHead className="text-center font-semibold">Intimation</TableHead>
                 <TableHead className="text-center font-semibold">Payment Received</TableHead>
                 <TableHead className="font-semibold">Bill</TableHead>
                 <TableHead className="font-semibold">Admission Notes</TableHead>
@@ -2813,6 +2848,7 @@ const TodaysIpdDashboard = () => {
               <TableRow className="bg-muted/30">
                 {!hideColumns && <TableHead></TableHead>}
                 {!hideColumns && <TableHead></TableHead>}
+                <TableHead></TableHead>
                 <TableHead></TableHead>
                 <TableHead></TableHead>
                 <TableHead></TableHead>
@@ -2920,6 +2956,9 @@ const TodaysIpdDashboard = () => {
                   </TableCell>
                   <TableCell>
                     <ClaimIdInput visit={visit} />
+                  </TableCell>
+                  <TableCell className="text-center">
+                    {renderIntimationStatus(visit)}
                   </TableCell>
                   <TableCell className="text-center">
                     {renderAdvancePaymentStatus(visit)}
