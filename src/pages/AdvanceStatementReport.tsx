@@ -106,6 +106,7 @@ const AdvanceStatementReport = () => {
           package_days,
           package_amount,
           extension_days_count,
+          package_name,
           ipd_admission_notes,
           patients!inner (
             id,
@@ -349,7 +350,7 @@ const AdvanceStatementReport = () => {
         lab_total: labTotalMapping[visit.id] || 0,
         pharmacy_total: visit.visit_id ? (pharmacyTotalMapping[visit.visit_id] || 0) : 0,
         pharmacy_paid: visit.visit_id ? (pharmacyPaidMapping[visit.visit_id] || 0) : 0,
-        package_details: packageNameMapping[visit.visit_id || ''] || ''
+        package_details: (visit as any).package_name || packageNameMapping[visit.visit_id || ''] || ''
       })) || [];
 
       return visitsWithRoomInfo;
@@ -1322,7 +1323,7 @@ const AdvanceStatementReport = () => {
                         <TableCell>
                           <SearchableSelect
                             options={packages.map(pkg => ({ value: pkg.name, label: pkg.name }))}
-                            value={(item as any).package_details || ''}
+                            value={(item as any).package_name || ''}
                             onValueChange={(value) => handlePackageNameUpdate(item.id, value)}
                             placeholder="Select package..."
                             searchPlaceholder="Type to search..."
