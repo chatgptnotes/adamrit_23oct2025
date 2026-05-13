@@ -15,6 +15,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 import '@/styles/print.css';
 
 const AdvanceStatementReport = () => {
@@ -51,6 +52,7 @@ const AdvanceStatementReport = () => {
   const [billsData, setBillsData] = useState<Record<string, number>>({});
   const [advancePaymentsData, setAdvancePaymentsData] = useState<Record<string, { totalAdvance: number; lastPayment: { amount: number; date: string | null } }>>({});
   const [packageNames, setPackageNames] = useState<Record<string, string>>({});
+  const [packages, setPackages] = useState<Array<{ id: string; name: string }>>([]);
 
   // Debounce search term
   useEffect(() => {
@@ -61,6 +63,23 @@ const AdvanceStatementReport = () => {
 
     return () => clearTimeout(timer);
   }, [searchTerm]);
+
+  // Fetch packages from cghs_surgery for the searchable dropdown
+  useEffect(() => {
+    const fetchPackages = async () => {
+      const { data, error } = await supabase
+        .from('cghs_surgery')
+        .select('id, name')
+        .eq('is_active', true)
+        .order('name');
+
+      if (!error && data) {
+        setPackages(data);
+      }
+    };
+
+    fetchPackages();
+  }, []);
 
   // Fetch advance statement data
   const { data: allData = [], isLoading } = useQuery({
@@ -330,7 +349,7 @@ const AdvanceStatementReport = () => {
         lab_total: labTotalMapping[visit.id] || 0,
         pharmacy_total: visit.visit_id ? (pharmacyTotalMapping[visit.visit_id] || 0) : 0,
         pharmacy_paid: visit.visit_id ? (pharmacyPaidMapping[visit.visit_id] || 0) : 0,
-        package_details: visit.visit_id ? (packageNameMapping[visit.visit_id] || '') : ''
+        package_details: packageNameMapping[visit.visit_id || ''] || ''
       })) || [];
 
       return visitsWithRoomInfo;
@@ -570,6 +589,19 @@ const AdvanceStatementReport = () => {
 
     if (error) {
       console.error('Error updating package amount:', error);
+    } else {
+      queryClient.invalidateQueries({ queryKey: ['advance-statement-report-currently-admitted'] });
+    }
+  };
+
+  const handlePackageNameUpdate = async (visitId: string, name: string) => {
+    const { error } = await supabase
+      .from('visits')
+      .update({ package_name: name || null })
+      .eq('id', visitId);
+
+    if (error) {
+      console.error('Error updating package name:', error);
     } else {
       queryClient.invalidateQueries({ queryKey: ['advance-statement-report-currently-admitted'] });
     }
@@ -1287,7 +1319,16 @@ const AdvanceStatementReport = () => {
                         <TableCell>{roomBedDisplay}</TableCell>
                         <TableCell>{admissionDateDisplay}</TableCell>
                         <TableCell>{diagnosisDisplay}</TableCell>
-                        <TableCell>{(item as any).package_details || ''}</TableCell>
+                        <TableCell>
+                          <SearchableSelect
+                            options={packages.map(pkg => ({ value: pkg.name, label: pkg.name }))}
+                            value={(item as any).package_details || ''}
+                            onValueChange={(value) => handlePackageNameUpdate(item.id, value)}
+                            placeholder="Select package..."
+                            searchPlaceholder="Type to search..."
+                            className="w-full"
+                          />
+                        </TableCell>
                         <TableCell className="text-center">
                           <Input
                             type="number"
