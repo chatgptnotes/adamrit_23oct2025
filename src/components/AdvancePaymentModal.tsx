@@ -122,7 +122,9 @@ export const AdvancePaymentModal: React.FC<AdvancePaymentModalProps> = ({
     billingExecutive: '',
     remarks: '',
     referenceNumber: '',
-    selectedBank: ''
+    selectedBank: '',
+    packageName: '',
+    packageDays: ''
   });
 
   const [paymentHistory, setPaymentHistory] = useState<PaymentTransaction[]>([]);
@@ -137,6 +139,7 @@ export const AdvancePaymentModal: React.FC<AdvancePaymentModalProps> = ({
     patientType: 'IPD'
   });
   const [bankAccounts, setBankAccounts] = useState<Array<{ id: string; account_name: string }>>([]);
+  const [packages, setPackages] = useState<Array<{ id: string; name: string }>>([]);
 
   // Generate default narration when modal opens or payment mode changes
   useEffect(() => {
@@ -208,6 +211,32 @@ export const AdvancePaymentModal: React.FC<AdvancePaymentModalProps> = ({
     };
 
     fetchBankAccounts();
+  }, [isOpen]);
+
+  // Fetch packages from cghs_surgery when modal opens
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const fetchPackages = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('cghs_surgery')
+          .select('id, name')
+          .eq('is_active', true)
+          .order('name');
+
+        if (error) {
+          console.error('❌ Error fetching packages:', error);
+          return;
+        }
+
+        setPackages(data || []);
+      } catch (error) {
+        console.error('❌ Exception fetching packages:', error);
+      }
+    };
+
+    fetchPackages();
   }, [isOpen]);
 
   // Set patient info and fetch payment history when modal opens
@@ -534,7 +563,9 @@ export const AdvancePaymentModal: React.FC<AdvancePaymentModalProps> = ({
         remarks: formData.remarks && formData.remarks.trim() ? formData.remarks.trim() : null,
         bank_account_id: (formData.selectedBank && isValidUUID(formData.selectedBank)) ? formData.selectedBank : null,
         bank_account_name: bankAccounts.find(b => b.id === formData.selectedBank)?.account_name || null,
-        created_by: null
+        created_by: null,
+        package_name: formData.packageName?.trim() || null,
+        package_days: formData.packageDays ? parseInt(formData.packageDays) : null,
       };
 
       console.log('💾 Saving advance payment:', advancePaymentData);
@@ -595,7 +626,9 @@ export const AdvancePaymentModal: React.FC<AdvancePaymentModalProps> = ({
         billingExecutive: '',
         remarks: '',
         referenceNumber: '',
-        selectedBank: ''
+        selectedBank: '',
+        packageName: '',
+        packageDays: ''
       });
 
       // Refresh payment history
@@ -1053,6 +1086,39 @@ export const AdvancePaymentModal: React.FC<AdvancePaymentModalProps> = ({
                 />
               </div>
             )}
+
+            {/* Package Detail + Package Days */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 items-center gap-4">
+                <Label className="text-sm font-medium">Package Detail</Label>
+                <Select
+                  value={formData.packageName}
+                  onValueChange={(value) => setFormData({ ...formData, packageName: value })}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Select package" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {packages.map((pkg) => (
+                      <SelectItem key={pkg.id} value={pkg.name}>
+                        {pkg.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid grid-cols-2 items-center gap-4">
+                <Label className="text-sm font-medium">Package Days</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  value={formData.packageDays}
+                  onChange={(e) => setFormData({ ...formData, packageDays: e.target.value })}
+                  placeholder="Enter days"
+                  className="w-full"
+                />
+              </div>
+            </div>
 
             {/* Remarks */}
             <div className="grid grid-cols-2 items-start gap-4">
