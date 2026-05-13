@@ -92,23 +92,8 @@ export const useFinalBillData = (visitId: string) => {
           .limit(1)
           .maybeSingle() as { data: any };
 
-        // Use bill found by visit_id, or fallback to patient_id lookup
-        let billsData = billByVisit;
-        if (!billsData) {
-          const { data: billByPatient, error: billsError } = await supabase
-            .from('bills')
-            .select('*')
-            .eq('patient_id', visitData.patient_id)
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .maybeSingle() as { data: any; error: any };
-
-          if (billsError) {
-            console.error('❌ Error fetching bill:', billsError);
-            return null;
-          }
-          billsData = billByPatient;
-        }
+        // Use bill found by visit_id only — no patient_id fallback (would load previous visit's bill)
+        const billsData = billByVisit;
 
         if (!billsData) {
           return null;
@@ -188,20 +173,6 @@ export const useFinalBillData = (visitId: string) => {
         if (existingBill) {
           existingBillId = existingBill.id;
           console.log('📌 Found existing bill by visit_id:', existingBillId);
-        }
-      }
-
-      if (!existingBillId) {
-        const { data: existingBill } = await supabase
-          .from('bills')
-          .select('id')
-          .eq('patient_id', billData.patient_id)
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle() as { data: any };
-        if (existingBill) {
-          existingBillId = existingBill.id;
-          console.log('📌 Found existing bill by patient_id:', existingBillId);
         }
       }
 
