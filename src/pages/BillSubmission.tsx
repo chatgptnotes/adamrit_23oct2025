@@ -637,50 +637,70 @@ const BillSubmissionPage: React.FC = () => {
                 ) : patientBillDetails.length === 0 ? (
                   <p className="text-sm text-gray-500">No billing records found for this patient.</p>
                 ) : (
-                  <div className="bg-white rounded border overflow-hidden">
-                    <table className="w-full text-sm">
-                      <thead className="bg-gray-100">
-                        <tr>
-                          <th className="px-3 py-2 text-left">Bill Amount</th>
-                          <th className="px-3 py-2 text-left">Submitted By</th>
-                          <th className="px-3 py-2 text-left">Submission Date</th>
-                          <th className="px-3 py-2 text-left">Expected Payment</th>
-                          <th className="px-3 py-2 text-left">Received Amount</th>
-                          <th className="px-3 py-2 text-left">Deduction</th>
-                          <th className="px-3 py-2 text-left">TDS</th>
-                          <th className="px-3 py-2 text-left">Received On</th>
-                          <th className="px-3 py-2 text-center">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {patientBillDetails.map((bill: any) => (
-                          <tr key={bill.id} className="border-t">
-                            <td className="px-3 py-2">{formatAmount(bill.bill_amount)}</td>
-                            <td className="px-3 py-2">{bill.executive_who_submitted || '-'}</td>
-                            <td className="px-3 py-2">{formatDate(bill.date_of_submission)}</td>
-                            <td className="px-3 py-2">{formatDate(bill.expected_payment_date)}</td>
-                            <td className="px-3 py-2">{formatAmount(bill.received_amount)}</td>
-                            <td className="px-3 py-2">{formatAmount(bill.deduction_amount)}</td>
-                            <td className="px-3 py-2">{formatAmount(bill.tds_amount)}</td>
-                            <td className="px-3 py-2">{formatDate(bill.received_date)}</td>
-                            <td className="px-3 py-2 text-center">
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => handleEdit({
-                                  ...bill,
-                                  patient_name: selectedPatientForLookup.patient_name,
-                                  corporate: selectedPatientForLookup.corporate,
-                                })}
-                                title="Edit"
-                              >
-                                <Pencil className="h-4 w-4" />
-                              </Button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                  <div className="space-y-3">
+                    {patientBillDetails.map((bill: any) => (
+                      <div key={bill.id} className="bg-white rounded border p-3">
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                          <div>
+                            <span className="text-gray-500 text-xs">Bill Amount</span>
+                            <p className="font-medium">{formatAmount(bill.bill_amount)}</p>
+                          </div>
+                          <div>
+                            <span className="text-gray-500 text-xs">Intimation Date</span>
+                            <p>
+                              <EnhancedDatePicker
+                                value={bill.intimation_date ? new Date(bill.intimation_date) : undefined}
+                                onChange={(d) => handleIntimationDateChange(bill.id, d)}
+                                placeholder="Pick date"
+                                isDOB={false}
+                              />
+                            </p>
+                          </div>
+                          <div>
+                            <span className="text-gray-500 text-xs">Submitted By</span>
+                            <p className="font-medium">{bill.executive_who_submitted || '-'}</p>
+                          </div>
+                          <div>
+                            <span className="text-gray-500 text-xs">Submission Date</span>
+                            <p className="font-medium">{formatDate(bill.date_of_submission)}</p>
+                          </div>
+                          <div>
+                            <span className="text-gray-500 text-xs">Expected Payment</span>
+                            <p className="font-medium">{formatDate(bill.expected_payment_date)}</p>
+                          </div>
+                          <div>
+                            <span className="text-gray-500 text-xs">Received Amount</span>
+                            <p className="font-medium">{formatAmount(bill.received_amount)}</p>
+                          </div>
+                          <div>
+                            <span className="text-gray-500 text-xs">Deduction</span>
+                            <p className="font-medium">{formatAmount(bill.deduction_amount)}</p>
+                          </div>
+                          <div>
+                            <span className="text-gray-500 text-xs">TDS</span>
+                            <p className="font-medium">{formatAmount(bill.tds_amount)}</p>
+                          </div>
+                          <div>
+                            <span className="text-gray-500 text-xs">Received On</span>
+                            <p className="font-medium">{formatDate(bill.received_date)}</p>
+                          </div>
+                          <div className="flex items-end">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleEdit({
+                                ...bill,
+                                patient_name: selectedPatientForLookup.patient_name,
+                                corporate: selectedPatientForLookup.corporate,
+                              })}
+                              title="Edit"
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>
