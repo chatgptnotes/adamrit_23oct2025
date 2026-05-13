@@ -50,6 +50,7 @@ const AdvanceStatementReport = () => {
   // Financial data for print report
   const [billsData, setBillsData] = useState<Record<string, number>>({});
   const [advancePaymentsData, setAdvancePaymentsData] = useState<Record<string, { totalAdvance: number; lastPayment: { amount: number; date: string | null } }>>({});
+  const [packageNames, setPackageNames] = useState<Record<string, string>>({});
 
   // Debounce search term
   useEffect(() => {
@@ -298,6 +299,25 @@ const AdvanceStatementReport = () => {
         }
       }
 
+      // Fetch package names from advance_payment
+      let packageNameMapping: Record<string, string> = {};
+      if (uniqueVisitIds.length > 0) {
+        const { data: pkgData, error: pkgError } = await supabase
+          .from('advance_payment')
+          .select('visit_id, package_name')
+          .in('visit_id', uniqueVisitIds)
+          .not('package_name', 'is', null)
+          .order('created_at', { ascending: false });
+
+        if (!pkgError && pkgData) {
+          pkgData.forEach((p: { visit_id: string; package_name: string | null }) => {
+            if (p.visit_id && p.package_name && !packageNameMapping[p.visit_id]) {
+              packageNameMapping[p.visit_id] = p.package_name;
+            }
+          });
+        }
+      }
+
       // Merge ward data, financial data, lab totals, and pharmacy totals with visits
       const visitsWithRoomInfo = data?.map(visit => ({
         ...visit,
@@ -309,7 +329,8 @@ const AdvanceStatementReport = () => {
           : null,
         lab_total: labTotalMapping[visit.id] || 0,
         pharmacy_total: visit.visit_id ? (pharmacyTotalMapping[visit.visit_id] || 0) : 0,
-        pharmacy_paid: visit.visit_id ? (pharmacyPaidMapping[visit.visit_id] || 0) : 0
+        pharmacy_paid: visit.visit_id ? (pharmacyPaidMapping[visit.visit_id] || 0) : 0,
+        package_details: visit.visit_id ? (packageNameMapping[visit.visit_id] || '') : ''
       })) || [];
 
       return visitsWithRoomInfo;
@@ -759,6 +780,7 @@ const AdvanceStatementReport = () => {
                 <th style="width: 6%;">Room/Bed</th>
                 <th style="width: 6%;">Admission</th>
                 <th style="width: 8%;">Diagnosis</th>
+                <th style="width: 6%;">Pkg Details</th>
                 <th style="width: 4%;">Pkg Days</th>
                 <th style="width: 5%;">Pkg Amt</th>
                 <th style="width: 5%;">Lab Amt</th>
@@ -858,6 +880,7 @@ const AdvanceStatementReport = () => {
                     <td>${roomBedText}</td>
                     <td style="text-align: center;">${admissionDateText}</td>
                     <td>${diagnosisText}</td>
+                    <td style="text-align: center;">${item.package_details || '-'}</td>
                     <td style="text-align: center;">${item.package_days || 0}</td>
                     <td style="text-align: right;">₹${(parseFloat(item.package_amount || '0') || 0).toLocaleString('en-IN')}</td>
                     <td style="text-align: right;">₹${(item.lab_total || 0).toLocaleString('en-IN')}</td>
@@ -897,7 +920,7 @@ const AdvanceStatementReport = () => {
 
   const handleExport = () => {
     // Create CSV content
-    const headers = ['Sr. No.', 'Patient Details', 'Corporate Type', 'Room/Bed', 'Admission Date', 'Diagnosis', 'Package Days', 'Package Amount', 'Lab Amount', 'Pharmacy', 'Pharmacy Paid', 'Referral Letter', 'Planned Surgery or Procedure and Cost'];
+    const headers = ['Sr. No.', 'Patient Details', 'Corporate Type', 'Room/Bed', 'Admission Date', 'Diagnosis', 'Package Details', 'Package Days', 'Package Amount', 'Lab Amount', 'Pharmacy', 'Pharmacy Paid', 'Referral Letter', 'Planned Surgery or Procedure and Cost'];
     const csvContent = [
       headers.join(','),
       ...advanceData.map((item, index) => {
@@ -944,6 +967,7 @@ const AdvanceStatementReport = () => {
 
         const packageDays = item.package_days || 0;
         const packageAmount = item.package_amount || '0';
+        const packageDetails = (item as any).package_details || '';
         const labAmount = item.lab_total || 0;
         const pharmacyAmount = item.pharmacy_total || 0;
         const pharmacyPaidAmount = item.pharmacy_paid || 0;
@@ -955,6 +979,7 @@ const AdvanceStatementReport = () => {
           `"${roomBed}"`,
           `"${admissionDate}"`,
           `"${diagnoses}"`,
+          `"${packageDetails}"`,
           `"${packageDays}"`,
           packageAmount,
           labAmount,
@@ -1136,6 +1161,7 @@ const AdvanceStatementReport = () => {
                   <TableHead className="min-w-[150px]">Room/Bed</TableHead>
                   <TableHead className="min-w-[120px]">Admission Date</TableHead>
                   <TableHead className="min-w-[200px]">Diagnosis</TableHead>
+                  <TableHead className="min-w-[150px]">Package Details</TableHead>
                   <TableHead className="min-w-[100px]">Package Days</TableHead>
                   <TableHead className="min-w-[100px]">Extension Days</TableHead>
                   <TableHead className="min-w-[120px]">Package Amount</TableHead>
@@ -1148,13 +1174,13 @@ const AdvanceStatementReport = () => {
               <TableBody>
                 {isLoading ? (
                   <TableRow>
-                    <TableCell colSpan={hospitalType === 'hope' ? 12 : 11} className="text-center py-8">
+                    <TableCell colSpan={hospitalType === 'hope' ? 13 : 12} className="text-center py-8">
                       Loading...
                     </TableCell>
                   </TableRow>
                 ) : advanceData.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={hospitalType === 'hope' ? 12 : 11} className="text-center py-8 text-gray-500">
+                    <TableCell colSpan={hospitalType === 'hope' ? 13 : 12} className="text-center py-8 text-gray-500">
                       No data found
                     </TableCell>
                   </TableRow>
@@ -1261,6 +1287,7 @@ const AdvanceStatementReport = () => {
                         <TableCell>{roomBedDisplay}</TableCell>
                         <TableCell>{admissionDateDisplay}</TableCell>
                         <TableCell>{diagnosisDisplay}</TableCell>
+                        <TableCell>{(item as any).package_details || ''}</TableCell>
                         <TableCell className="text-center">
                           <Input
                             type="number"
