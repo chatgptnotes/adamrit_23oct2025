@@ -33,6 +33,9 @@ import {
   useDeleteBillSubmission,
 } from '@/hooks/useBillSubmissions';
 import * as XLSX from 'xlsx';
+import { BillWorkflowBoard } from '@/components/bill-workflow/BillWorkflowBoard';
+import type { BillStatus } from '@/components/bill-workflow/types';
+import { KanbanSquare } from 'lucide-react';
 
 const BillSubmissionPage: React.FC = () => {
   const { hospitalConfig } = useAuth();
@@ -69,6 +72,8 @@ const BillSubmissionPage: React.FC = () => {
 
   // Non-persisted state
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const [quickAddStatus, setQuickAddStatus] = useState<BillStatus | null>(null);
+  const [viewMode, setViewMode] = useState<'table' | 'board'>('board');
   const [editData, setEditData] = useState<BillSubmission | null>(null);
   const [selectedPatient, setSelectedPatient] = useState<PatientData | null>(null);
   const [showDropdown, setShowDropdown] = useState(false);
@@ -292,6 +297,24 @@ const BillSubmissionPage: React.FC = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  const handleQuickAdd = (status: BillStatus) => {
+    setQuickAddStatus(status);
+    const searchInput = document.querySelector<HTMLInputElement>('input[placeholder="Search patient by name to add bill submission..."]');
+    if (searchInput) {
+      searchInput.focus();
+      searchInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  };
+
+  const getPrefillDates = (status: BillStatus) => {
+    const today = new Date().toISOString().slice(0, 10);
+    switch (status) {
+      case 'submitted': return { date_of_submission: today };
+      case 'payment_expected': return { expected_payment_date: today };
+      default: return {};
+    }
+  };
+
   const handlePatientSelect = async (visit: any) => {
     setShowDropdown(false);
     setSearchTerm('');
@@ -321,14 +344,24 @@ const BillSubmissionPage: React.FC = () => {
         receivedDate: existing.received_date ? String(existing.received_date).split('T')[0] : '',
       });
     } else {
-      // No existing record — open fresh form
-      setEditData(null);
-      setSelectedPatient({
+      // No existing record — open fresh form, with dates pre-filled if quick-add was used
+      const prefill = quickAddStatus ? getPrefillDates(quickAddStatus) : {};
+      setEditData({
         visitId: visit.visit_id || '',
         patientName: visit.patients?.name || '',
         corporate: visit.patients?.corporate || '',
+        billAmount: 0,
+        submittedBy: '',
+        submissionDate: (prefill as any).date_of_submission || '',
+        expectedPaymentDate: (prefill as any).expected_payment_date || '',
+        receivedAmount: 0,
+        deductionAmount: 0,
+        tdsAmount: 0,
+        receivedDate: '',
       });
+      setSelectedPatient(null);
     }
+    setQuickAddStatus(null);
     setIsFormOpen(true);
   };
 
@@ -394,7 +427,7 @@ const BillSubmissionPage: React.FC = () => {
       received_date: data.receivedDate,
     };
 
-    if (editData) {
+    if (editData && data.id) {
       updateMutation.mutate({ id: data.id, ...dbData });
     } else {
       createMutation.mutate(dbData);
@@ -406,6 +439,7 @@ const BillSubmissionPage: React.FC = () => {
     setIsFormOpen(false);
     setSelectedPatient(null);
     setEditData(null);
+    setQuickAddStatus(null);
   };
 
   const formatDate = (dateString: string) => {
@@ -436,17 +470,19 @@ const BillSubmissionPage: React.FC = () => {
   };
 
   return (
-    <div className="p-6">
-      <div className="flex items-center gap-3 mb-6">
+    <div className={viewMode === 'board' ? 'h-full flex flex-col' : 'p-6'}>
+      <div className={`flex items-center gap-3 ${viewMode === 'board' ? 'mb-2 flex-shrink-0 px-2' : 'mb-6'}`}>
         <Receipt className="h-8 w-8 text-primary" />
         <h1 className="text-2xl font-bold">Intimation + Bill Submissions</h1>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Intimation + Bill Submissions</CardTitle>
-        </CardHeader>
-        <CardContent>
+      <Card className={viewMode === 'board' ? 'flex-1 min-h-0 flex flex-col border-0 shadow-none' : ''}>
+        {viewMode === 'table' && (
+          <CardHeader>
+            <CardTitle>Intimation + Bill Submissions</CardTitle>
+          </CardHeader>
+        )}
+        <CardContent className={viewMode === 'board' ? 'pt-2 flex-1 min-h-0 flex flex-col' : ''}>
           {/* Patient Search */}
           <div className="relative mb-4" ref={searchRef}>
             <div className="flex items-center gap-2">
@@ -595,6 +631,14 @@ const BillSubmissionPage: React.FC = () => {
             </div>
 
             <div className="ml-auto flex gap-2">
+              <Button
+                variant={viewMode === 'board' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setViewMode(viewMode === 'board' ? 'table' : 'board')}
+              >
+                <KanbanSquare className="h-4 w-4 mr-1" />
+                {viewMode === 'board' ? 'Table' : 'Board'}
+              </Button>
               <Button onClick={handleExportReceivedAmount} className="bg-blue-600 hover:bg-blue-700">
                 <Download className="h-4 w-4 mr-2" />
                 Received Amount
@@ -707,121 +751,132 @@ const BillSubmissionPage: React.FC = () => {
             </div>
           )}
 
-          <div className="rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Bill No.</TableHead>
-                  <TableHead>Visit ID</TableHead>
-                  <TableHead>Patient Name</TableHead>
-                  <TableHead>Corporate</TableHead>
-                  <TableHead>Date of Admission</TableHead>
-                  <TableHead>Intimation Date</TableHead>
-                  <TableHead>Date of Discharge</TableHead>
-                  <TableHead className="text-right">Bill Amount</TableHead>
-                  <TableHead>Submitted By</TableHead>
-                  <TableHead>Submission Date</TableHead>
-                  <TableHead>Expect to Receive Payment</TableHead>
-                  <TableHead className="text-right">Received Amount</TableHead>
-                  <TableHead className="text-right">Deduction Amount</TableHead>
-                  <TableHead className="text-right">TDS</TableHead>
-                  <TableHead>Amount Received On</TableHead>
-                  <TableHead className="text-center">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {isLoading ? (
-                  <TableRow>
-                    <TableCell colSpan={16} className="text-center py-8">
-                      <Loader2 className="h-6 w-6 animate-spin mx-auto" />
-                    </TableCell>
-                  </TableRow>
-                ) : filteredSubmissions.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={16} className="text-center py-8 text-gray-500">
-                      {submissions.length === 0
-                        ? 'No bill submissions yet. Search for a patient above to create one.'
-                        : 'No records match the selected filters.'}
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  paginatedSubmissions.map((submission: any) => (
-                    <TableRow key={submission.id}>
-                      <TableCell className="font-medium text-blue-600">{submission.bill_no || '-'}</TableCell>
-                      <TableCell className="font-medium">{submission.visit_id}</TableCell>
-                      <TableCell>{submission.patient_name}</TableCell>
-                      <TableCell>{submission.patient_corporate || '-'}</TableCell>
-                      <TableCell>{formatDate(submission.admission_date)}</TableCell>
-                      <TableCell>
-                        <EnhancedDatePicker
-                          value={submission.intimation_date ? new Date(submission.intimation_date) : undefined}
-                          onChange={(d) => handleIntimationDateChange(submission.id, d)}
-                          placeholder="Pick date"
-                          isDOB={false}
-                        />
-                      </TableCell>
-                      <TableCell>{formatDate(submission.discharge_date)}</TableCell>
-                      <TableCell className="text-right">{formatAmount(submission.bill_amount)}</TableCell>
-                      <TableCell>{submission.executive_who_submitted || '-'}</TableCell>
-                      <TableCell>{formatDate(submission.date_of_submission)}</TableCell>
-                      <TableCell>{formatDate(submission.expected_payment_date)}</TableCell>
-                      <TableCell className="text-right">{formatAmount(submission.received_amount)}</TableCell>
-                      <TableCell className="text-right">{formatAmount(submission.deduction_amount)}</TableCell>
-                      <TableCell className="text-right">{formatAmount(submission.tds_amount)}</TableCell>
-                      <TableCell>{formatDate(submission.received_date)}</TableCell>
-                      <TableCell>
-                        <div className="flex justify-center gap-2">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleEdit(submission)}
-                            title="Edit"
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
+          {viewMode === 'table' ? (
+            <>
+              <div className="rounded-md border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Bill No.</TableHead>
+                      <TableHead>Visit ID</TableHead>
+                      <TableHead>Patient Name</TableHead>
+                      <TableHead>Corporate</TableHead>
+                      <TableHead>Date of Admission</TableHead>
+                      <TableHead>Intimation Date</TableHead>
+                      <TableHead>Date of Discharge</TableHead>
+                      <TableHead className="text-right">Bill Amount</TableHead>
+                      <TableHead>Submitted By</TableHead>
+                      <TableHead>Submission Date</TableHead>
+                      <TableHead>Expect to Receive Payment</TableHead>
+                      <TableHead className="text-right">Received Amount</TableHead>
+                      <TableHead className="text-right">Deduction Amount</TableHead>
+                      <TableHead className="text-right">TDS</TableHead>
+                      <TableHead>Amount Received On</TableHead>
+                      <TableHead className="text-center">Actions</TableHead>
                     </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </div>
-
-          {filteredSubmissions.length > 0 && (
-            <div className="flex items-center justify-between mt-4">
-              <div className="text-sm text-gray-600">
-                Showing {startIndex + 1} to {Math.min(endIndex, filteredSubmissions.length)} of {filteredSubmissions.length} records
-                {totalPages > 1 && <span className="ml-2">| Page {currentPage} of {totalPages}</span>}
+                  </TableHeader>
+                  <TableBody>
+                    {isLoading ? (
+                      <TableRow>
+                        <TableCell colSpan={16} className="text-center py-8">
+                          <Loader2 className="h-6 w-6 animate-spin mx-auto" />
+                        </TableCell>
+                      </TableRow>
+                    ) : filteredSubmissions.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={16} className="text-center py-8 text-gray-500">
+                          {submissions.length === 0
+                            ? 'No bill submissions yet. Search for a patient above to create one.'
+                            : 'No records match the selected filters.'}
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      paginatedSubmissions.map((submission: any) => (
+                        <TableRow key={submission.id}>
+                          <TableCell className="font-medium text-blue-600">{submission.bill_no || '-'}</TableCell>
+                          <TableCell className="font-medium">{submission.visit_id}</TableCell>
+                          <TableCell>{submission.patient_name}</TableCell>
+                          <TableCell>{submission.patient_corporate || '-'}</TableCell>
+                          <TableCell>{formatDate(submission.admission_date)}</TableCell>
+                          <TableCell>
+                            <EnhancedDatePicker
+                              value={submission.intimation_date ? new Date(submission.intimation_date) : undefined}
+                              onChange={(d) => handleIntimationDateChange(submission.id, d)}
+                              placeholder="Pick date"
+                              isDOB={false}
+                            />
+                          </TableCell>
+                          <TableCell>{formatDate(submission.discharge_date)}</TableCell>
+                          <TableCell className="text-right">{formatAmount(submission.bill_amount)}</TableCell>
+                          <TableCell>{submission.executive_who_submitted || '-'}</TableCell>
+                          <TableCell>{formatDate(submission.date_of_submission)}</TableCell>
+                          <TableCell>{formatDate(submission.expected_payment_date)}</TableCell>
+                          <TableCell className="text-right">{formatAmount(submission.received_amount)}</TableCell>
+                          <TableCell className="text-right">{formatAmount(submission.deduction_amount)}</TableCell>
+                          <TableCell className="text-right">{formatAmount(submission.tds_amount)}</TableCell>
+                          <TableCell>{formatDate(submission.received_date)}</TableCell>
+                          <TableCell>
+                            <div className="flex justify-center gap-2">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleEdit(submission)}
+                                title="Edit"
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
               </div>
 
-              {totalPages > 1 && (
-                <div className="flex items-center gap-1">
-                  <Button variant="outline" size="sm" onClick={goToFirstPage} disabled={currentPage === 1}>
-                    <ChevronsLeft className="h-4 w-4" />
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={goToPreviousPage} disabled={currentPage === 1}>
-                    <ChevronLeft className="h-4 w-4" />
-                  </Button>
-                  {getPageNumbers().map((pageNum) => (
-                    <Button
-                      key={pageNum}
-                      variant={currentPage === pageNum ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => setCurrentPage(pageNum)}
-                    >
-                      {pageNum}
-                    </Button>
-                  ))}
-                  <Button variant="outline" size="sm" onClick={goToNextPage} disabled={currentPage === totalPages}>
-                    <ChevronRight className="h-4 w-4" />
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={goToLastPage} disabled={currentPage === totalPages}>
-                    <ChevronsRight className="h-4 w-4" />
-                  </Button>
+              {filteredSubmissions.length > 0 && (
+                <div className="flex items-center justify-between mt-4">
+                  <div className="text-sm text-gray-600">
+                    Showing {startIndex + 1} to {Math.min(endIndex, filteredSubmissions.length)} of {filteredSubmissions.length} records
+                    {totalPages > 1 && <span className="ml-2">| Page {currentPage} of {totalPages}</span>}
+                  </div>
+
+                  {totalPages > 1 && (
+                    <div className="flex items-center gap-1">
+                      <Button variant="outline" size="sm" onClick={goToFirstPage} disabled={currentPage === 1}>
+                        <ChevronsLeft className="h-4 w-4" />
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={goToPreviousPage} disabled={currentPage === 1}>
+                        <ChevronLeft className="h-4 w-4" />
+                      </Button>
+                      {getPageNumbers().map((pageNum) => (
+                        <Button
+                          key={pageNum}
+                          variant={currentPage === pageNum ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => setCurrentPage(pageNum)}
+                        >
+                          {pageNum}
+                        </Button>
+                      ))}
+                      <Button variant="outline" size="sm" onClick={goToNextPage} disabled={currentPage === totalPages}>
+                        <ChevronRight className="h-4 w-4" />
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={goToLastPage} disabled={currentPage === totalPages}>
+                        <ChevronsRight className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  )}
                 </div>
               )}
-            </div>
+            </>
+          ) : (
+            <BillWorkflowBoard
+              submissions={filteredSubmissions}
+              isLoading={isLoading}
+              onEdit={handleEdit}
+              onQuickAdd={handleQuickAdd}
+            />
           )}
         </CardContent>
       </Card>

@@ -281,11 +281,13 @@ const AppContent = () => {
           {user && <RoleRedirect user={user} />}
           <div className="min-h-screen flex w-full">
             <AppSidebar {...counts} />
-            <main className="flex-1">
-              <div className="p-2 ml-4">
+            <main className="flex-1 flex flex-col h-screen overflow-hidden">
+              <div className="p-2 ml-4 flex-shrink-0">
                 <SidebarTrigger />
               </div>
-              <AppRoutes />
+              <div className="flex-1 min-h-0 overflow-hidden">
+                <AppRoutes />
+              </div>
               <FloatingCameraFAB />
               <ChatWidget />
             </main>
