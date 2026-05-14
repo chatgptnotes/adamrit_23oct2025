@@ -378,6 +378,11 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     const updatedUser = { ...user, hospitalType: newHospitalType };
     setUser(updatedUser);
     localStorage.setItem('hmis_user', JSON.stringify(updatedUser));
+    // Force a full reload so every cached React Query (visits, patients,
+    // modals, etc.) re-fetches under the new hospital context. Without this,
+    // queries whose key omits hospitalConfig.name keep serving stale data
+    // from the previous hospital.
+    window.location.reload();
   }, [user]);
 
   const hospitalConfig = useMemo(() => getHospitalConfig(user?.hospitalType), [user?.hospitalType]);
@@ -390,8 +395,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     logout,
     isAuthenticated: !!user,
     isAuthLoading,
-    isSuperAdmin: user?.role === 'superadmin',
-    isAdmin: user?.role === 'admin' || user?.role === 'superadmin',
+    isSuperAdmin: user?.role === 'superadmin' || user?.role === 'super_admin',
+    isAdmin: user?.role === 'admin' || user?.role === 'superadmin' || user?.role === 'super_admin',
     hospitalType: user?.hospitalType || null,
     hospitalConfig,
     showLanding,
