@@ -201,21 +201,24 @@ export const useUpdateBillSubmission = () => {
 
   return useMutation({
     mutationFn: async ({ id, ...data }: BillSubmissionInput & { id: string }) => {
+      // Only send fields that were explicitly provided — never overwrite existing
+      // values with null/0 for fields the caller didn't touch (e.g. kanban partial updates)
+      const patch: Record<string, any> = {};
+      if (data.visit_id !== undefined) patch.visit_id = data.visit_id;
+      if (data.corporate !== undefined) patch.corporate = data.corporate || null;
+      if (data.bill_amount !== undefined) patch.bill_amount = data.bill_amount;
+      if (data.executive_who_submitted !== undefined) patch.executive_who_submitted = data.executive_who_submitted || null;
+      if (data.date_of_submission !== undefined) patch.date_of_submission = data.date_of_submission || null;
+      if (data.intimation_date !== undefined) patch.intimation_date = data.intimation_date || null;
+      if (data.expected_payment_date !== undefined) patch.expected_payment_date = data.expected_payment_date || null;
+      if (data.received_amount !== undefined) patch.received_amount = data.received_amount;
+      if (data.deduction_amount !== undefined) patch.deduction_amount = data.deduction_amount;
+      if (data.tds_amount !== undefined) patch.tds_amount = data.tds_amount;
+      if (data.received_date !== undefined) patch.received_date = data.received_date || null;
+
       const { data: result, error } = await supabase
         .from('bill_preparation' as any)
-        .update({
-          visit_id: data.visit_id,
-          corporate: data.corporate || null,
-          bill_amount: data.bill_amount || 0,
-          executive_who_submitted: data.executive_who_submitted || null,
-          date_of_submission: data.date_of_submission || null,
-          intimation_date: data.intimation_date || null,
-          expected_payment_date: data.expected_payment_date || null,
-          received_amount: data.received_amount || null,
-          deduction_amount: data.deduction_amount || null,
-          tds_amount: data.tds_amount || null,
-          received_date: data.received_date || null,
-        })
+        .update(patch)
         .eq('id', id)
         .select()
         .single();

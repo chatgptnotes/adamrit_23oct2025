@@ -72,7 +72,6 @@ const BillSubmissionPage: React.FC = () => {
 
   // Non-persisted state
   const [isFormOpen, setIsFormOpen] = useState(false);
-  const [quickAddStatus, setQuickAddStatus] = useState<BillStatus | null>(null);
   const [viewMode, setViewMode] = useState<'table' | 'board'>('board');
   const [editData, setEditData] = useState<BillSubmission | null>(null);
   const [selectedPatient, setSelectedPatient] = useState<PatientData | null>(null);
@@ -298,20 +297,10 @@ const BillSubmissionPage: React.FC = () => {
   }, []);
 
   const handleQuickAdd = (status: BillStatus) => {
-    setQuickAddStatus(status);
     const searchInput = document.querySelector<HTMLInputElement>('input[placeholder="Search patient by name to add bill submission..."]');
     if (searchInput) {
       searchInput.focus();
       searchInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
-  };
-
-  const getPrefillDates = (status: BillStatus) => {
-    const today = new Date().toISOString().slice(0, 10);
-    switch (status) {
-      case 'submitted': return { date_of_submission: today };
-      case 'payment_expected': return { expected_payment_date: today };
-      default: return {};
     }
   };
 
@@ -352,7 +341,6 @@ const BillSubmissionPage: React.FC = () => {
         corporate: visit.patients?.corporate || '',
       });
     }
-    setQuickAddStatus(null);
     setIsFormOpen(true);
   };
 
@@ -430,7 +418,6 @@ const BillSubmissionPage: React.FC = () => {
     setIsFormOpen(false);
     setSelectedPatient(null);
     setEditData(null);
-    setQuickAddStatus(null);
   };
 
   const formatDate = (dateString: string) => {

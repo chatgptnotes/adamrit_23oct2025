@@ -21756,10 +21756,6 @@ Dr. Murali B K
             <div className="max-w-full mx-auto bg-white shadow-lg p-6 printable-area avoid-break">
               {/* Complete Financial Summary UI - Above FINAL BILL */}
               <div className="mb-8 bg-white border border-gray-300 rounded-lg p-6 w-full no-print">
-                {/* Debug Message */}
-                <div className="bg-green-100 border border-green-400 text-green-800 px-4 py-2 rounded mb-4">
-                  ✅ Financial Summary UI is loaded above FINAL BILL!
-                </div>
                 {/* Date Input and Action Buttons */}
                 <div className="flex items-center gap-4 mb-4">
                   <div className="flex items-center gap-2">
