@@ -9,8 +9,10 @@
   },
   "scripts": {
     "dev": "vite",
+    "prebuild": "node scripts/check-finalbill-locked.cjs",
     "build": "vite build",
     "build:dev": "vite build --mode development",
+    "check:finalbill": "node scripts/check-finalbill-locked.cjs",
     "lint": "eslint .",
     "preview": "vite preview",
     "generate-types": "ts-node scripts/generate-types.ts",
