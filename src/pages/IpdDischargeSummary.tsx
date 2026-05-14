@@ -4564,8 +4564,33 @@ INSTRUCTIONS: Write exactly 3-4 lines. Include procedure name, surgeon name, typ
                             description: "Sending request to Gemini AI...",
                           });
 
-                          // Always ensure medications are included in content sent to AI
+                          // Auto-inject clinical fields from page state when not already in textarea
                           let contentToSend = newTemplateContent;
+
+                          if (diagnosis.trim() && !contentToSend.includes('DIAGNOSIS:')) {
+                            contentToSend += `\n\nDIAGNOSIS:\n${diagnosis.trim()}`;
+                          }
+
+                          if (caseSummaryPresentingComplaints.trim() && !contentToSend.includes('CLINICAL HISTORY:')) {
+                            contentToSend += `\n\nCLINICAL HISTORY:\n${caseSummaryPresentingComplaints.trim()}`;
+                          }
+
+                          const examHasData = examination.temp || examination.pr || examination.rr || examination.bp || examination.spo2 || examination.details;
+                          if (examHasData && !contentToSend.includes('EXAMINATION:')) {
+                            const vitals = [
+                              examination.temp && `Temp: ${examination.temp}`,
+                              examination.pr && `PR: ${examination.pr}`,
+                              examination.rr && `RR: ${examination.rr}`,
+                              examination.bp && `BP: ${examination.bp}`,
+                              examination.spo2 && `SpO2: ${examination.spo2}`,
+                            ].filter(Boolean).join(' | ');
+                            contentToSend += `\n\nEXAMINATION:\n${vitals}${examination.details ? '\n' + examination.details : ''}`;
+                          }
+
+                          if (hospitalStayNotes.trim() && !contentToSend.includes('HOSPITAL STAY NOTES:')) {
+                            contentToSend += `\n\nHOSPITAL STAY NOTES:\n${hospitalStayNotes.trim()}`;
+                          }
+
                           const validMeds = medicationRows.filter(m => m.name && m.name.trim());
                           if (validMeds.length > 0 && !contentToSend.includes('MEDICATIONS ON DISCHARGE')) {
                             contentToSend += '\n\nMEDICATIONS ON DISCHARGE:\n';
@@ -4579,6 +4604,10 @@ INSTRUCTIONS: Write exactly 3-4 lines. Include procedure name, surgeon name, typ
                               ].filter(Boolean);
                               contentToSend += `* ${parts.join(' | ')}\n`;
                             });
+                          }
+
+                          if (advice.trim() && !contentToSend.includes('ADVICE:')) {
+                            contentToSend += `\n\nADVICE:\n${advice.trim()}`;
                           }
 
                           console.log('🤖 Sending to Gemini:', contentToSend);
@@ -4601,10 +4630,13 @@ IMPORTANT INSTRUCTIONS:
 1. ALWAYS follow this EXACT section order: DIAGNOSIS → CLINICAL HISTORY → EXAMINATION → HOSPITAL STAY NOTES → MEDICATIONS ON DISCHARGE → ADVICE. Do NOT include empty sections.
 2. Do NOT include SURGERY DETAILS or OPERATION NOTES - they are displayed separately in a table.
 3. Do NOT include INVESTIGATIONS section - it is displayed separately from the database.
-4. If MEDICATIONS ON DISCHARGE data is provided in the input, include ALL medications under "MEDICATIONS ON DISCHARGE:" formatted as a pipe table with these exact columns:
-| Medicine | Route | Dose/Frequency | Days |
-|----------|-------|----------------|------|
-Do NOT omit any medication. Each medication = one row. Use the data exactly as provided.
+4. MEDICATIONS ON DISCHARGE:
+   - If NO MEDICATIONS data is provided in the input, OMIT this section entirely. Do NOT generate an empty table header.
+   - If medications ARE provided, format as a pipe table with EXACTLY these columns and no others:
+     | Medicine | Route | Dose/Frequency | Days |
+     |----------|-------|----------------|------|
+   - Do NOT add columns like "Indian Brand", "Strength", "Hindi", or any translation column.
+   - Each medication = one row. Do NOT omit any medication. Use the data exactly as provided.
 5. Do NOT include the emergency contact line in the ADVICE section.
 6. For DIAGNOSIS: Keep as is in simple format. Do NOT expand into detailed sentences.
 7. For CLINICAL HISTORY: Write a comprehensive 4-5 sentence medical paragraph. Include: presenting complaints with severity, associated symptoms, time of onset, duration, aggravating/relieving factors, relevant past medical history, and any risk factors. Use professional medical terminology.
@@ -4637,7 +4669,19 @@ Do NOT omit any medication. Each medication = one row. Use the data exactly as p
                           }
 
                           const data = await response.json();
-                          const generatedSummary = data.candidates?.[0]?.content?.parts?.[0]?.text;
+                          const candidate = data.candidates?.[0];
+                          const finishReason = candidate?.finishReason;
+                          if (finishReason && finishReason !== 'STOP') {
+                            console.warn('Gemini finishReason:', finishReason, data);
+                            if (finishReason === 'MAX_TOKENS') {
+                              toast({
+                                title: 'Output truncated',
+                                description: 'Response hit max tokens. Increase maxOutputTokens or reduce input.',
+                                variant: 'destructive',
+                              });
+                            }
+                          }
+                          const generatedSummary = candidate?.content?.parts?.[0]?.text;
 
                           if (generatedSummary) {
                             // Display generated summary in Stay Notes box
