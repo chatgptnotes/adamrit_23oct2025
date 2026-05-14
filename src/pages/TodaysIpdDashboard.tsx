@@ -252,6 +252,7 @@ const TodaysIpdDashboard = () => {
   const fileStatusFilter = searchParams.get('fileStatus')?.split(',').filter(Boolean) || [];
   const condonationSubmissionFilter = searchParams.get('condSub')?.split(',').filter(Boolean) || [];
   const condonationIntimationFilter = searchParams.get('condInt')?.split(',').filter(Boolean) || [];
+  const paymentStatusFilter = searchParams.get('payStatus')?.split(',').filter(Boolean) || [];
   const extensionOfStayFilter = searchParams.get('extStay')?.split(',').filter(Boolean) || [];
   const additionalApprovalsFilter = searchParams.get('addApproval')?.split(',').filter(Boolean) || [];
   const startDate = searchParams.get('startDate') || '';
@@ -299,6 +300,7 @@ const TodaysIpdDashboard = () => {
   const setFileStatusFilter = (value: string[]) => updateParams({ fileStatus: value.length ? value.join(',') : null });
   const setCondonationSubmissionFilter = (value: string[]) => updateParams({ condSub: value.length ? value.join(',') : null });
   const setCondonationIntimationFilter = (value: string[]) => updateParams({ condInt: value.length ? value.join(',') : null });
+  const setPaymentStatusFilter = (value: string[]) => updateParams({ payStatus: value.length ? value.join(',') : null });
   const setExtensionOfStayFilter = (value: string[]) => updateParams({ extStay: value.length ? value.join(',') : null });
   const setAdditionalApprovalsFilter = (value: string[]) => updateParams({ addApproval: value.length ? value.join(',') : null });
 
@@ -404,7 +406,6 @@ const TodaysIpdDashboard = () => {
   const { diagnoses, updatePatient } = usePatients();
 
   // Advance payment status tracking
-  const [advancePayments, setAdvancePayments] = useState<Record<string, number>>({});
   const [billTotals, setBillTotals] = useState<Record<string, number>>({});
   const [intimationDates, setIntimationDates] = useState<Record<string, string | null>>({});
   const [doaPayments, setDoaPayments] = useState<Record<string, Array<{
@@ -1609,7 +1610,38 @@ const TodaysIpdDashboard = () => {
     }
   });
 
-  // Fetch advance payments and bill totals for payment status column
+  // Advance payments — own query so it refetches when invalidated by FinalBill /
+  // AdvancePaymentModal flows. Prefix-matches the ['advance-payment-total'] key
+  // already invalidated after a payment is saved.
+  const dashboardVisitIds = useMemo(
+    () => (todaysVisits || []).map(v => v.visit_id).filter(Boolean).sort() as string[],
+    [todaysVisits]
+  );
+
+  const { data: advancePayments = {} } = useQuery<Record<string, number>>({
+    queryKey: ['advance-payment-total', 'dashboard', dashboardVisitIds],
+    queryFn: async () => {
+      if (dashboardVisitIds.length === 0) return {};
+      const { data, error } = await supabase
+        .from('advance_payment')
+        .select('visit_id, advance_amount')
+        .in('visit_id', dashboardVisitIds);
+      if (error) {
+        console.error('Error fetching advance payments:', error);
+        return {};
+      }
+      const sums: Record<string, number> = {};
+      (data || []).forEach((payment: { visit_id: string; advance_amount: number }) => {
+        if (payment.visit_id) {
+          sums[payment.visit_id] = (sums[payment.visit_id] || 0) + (payment.advance_amount || 0);
+        }
+      });
+      return sums;
+    },
+    enabled: dashboardVisitIds.length > 0,
+  });
+
+  // Fetch bill totals, intimation dates, and DOA payments for status columns
   useEffect(() => {
     const fetchPaymentData = async () => {
       if (!todaysVisits || todaysVisits.length === 0) return;
@@ -1620,24 +1652,6 @@ const TodaysIpdDashboard = () => {
       if (visitIds.length === 0) return;
 
       try {
-        // Fetch advance payments
-        const { data: advanceData, error: advanceError } = await supabase
-          .from('advance_payment')
-          .select('visit_id, advance_amount')
-          .in('visit_id', visitIds);
-
-        if (advanceError) {
-          console.error('Error fetching advance payments:', advanceError);
-        } else if (advanceData) {
-          const advanceSums: Record<string, number> = {};
-          advanceData.forEach((payment: { visit_id: string; advance_amount: number }) => {
-            if (payment.visit_id) {
-              advanceSums[payment.visit_id] = (advanceSums[payment.visit_id] || 0) + (payment.advance_amount || 0);
-            }
-          });
-          setAdvancePayments(advanceSums);
-        }
-
         // Fetch bill totals
         const { data: billData, error: billError } = await supabase
           .from('bills')
@@ -1785,6 +1799,16 @@ const TodaysIpdDashboard = () => {
     return `${hours}h ${minutes}m remaining`;
   };
 
+  // Pure status string used by both the renderer and the column filter.
+  const getPaymentStatus = (visit: any): 'Full' | 'Partial' | 'None' => {
+    const vid = visit.visit_id || '';
+    const totalAdvance = advancePayments[vid] || 0;
+    const totalBill = billTotals[vid] || 0;
+    if (totalAdvance === 0) return 'None';
+    if (totalBill > 0 && totalAdvance < totalBill) return 'Partial';
+    return 'Full';
+  };
+
   // Render advance payment status with color coding
   // Red: No payment, Orange: Partial/Advance payment, Green: Full payment
   const renderAdvancePaymentStatus = (visit: any) => {
@@ -1895,6 +1919,7 @@ const TodaysIpdDashboard = () => {
   const fileStatusOptions = useMemo(() => Array.from(new Set((todaysVisits || []).map((v) => v.file_status).filter(Boolean))) as string[], [todaysVisits]);
   const condonationSubmissionOptions = useMemo(() => Array.from(new Set((todaysVisits || []).map((v) => v.condonation_delay_claim).filter(Boolean))) as string[], [todaysVisits]);
   const condonationIntimationOptions = useMemo(() => Array.from(new Set((todaysVisits || []).map((v) => v.condonation_delay_intimation).filter(Boolean))) as string[], [todaysVisits]);
+  const paymentStatusOptions = ['Full', 'Partial', 'None'];
   const extensionOfStayOptions = useMemo(() => Array.from(new Set((todaysVisits || []).map((v) => v.extension_of_stay).filter(Boolean))) as string[], [todaysVisits]);
   const additionalApprovalsOptions = useMemo(() => Array.from(new Set((todaysVisits || []).map((v) => v.additional_approvals).filter(Boolean))) as string[], [todaysVisits]);
 
@@ -1934,12 +1959,13 @@ const TodaysIpdDashboard = () => {
       const matchesFile = includeBy(fileStatusFilter, visit.file_status);
       const matchesCondSub = includeBy(condonationSubmissionFilter, visit.condonation_delay_claim);
       const matchesCondInt = includeBy(condonationIntimationFilter, visit.condonation_delay_intimation);
+      const matchesPaymentStatus = includeBy(paymentStatusFilter, getPaymentStatus(visit));
       const matchesExtStay = includeBy(extensionOfStayFilter, visit.extension_of_stay);
       const matchesAddAppr = includeBy(additionalApprovalsFilter, visit.additional_approvals);
 
       const matchesTreatmentType = !treatmentTypeFilter || visit.treatment_type === treatmentTypeFilter;
 
-      return matchesSearch && matchesBillingExecutive && matchesBillingStatus && matchesBunch && matchesCorporate && matchesFile && matchesCondSub && matchesCondInt && matchesExtStay && matchesAddAppr && matchesTreatmentType;
+      return matchesSearch && matchesBillingExecutive && matchesBillingStatus && matchesBunch && matchesCorporate && matchesFile && matchesCondSub && matchesCondInt && matchesPaymentStatus && matchesExtStay && matchesAddAppr && matchesTreatmentType;
     });
 
     // Then, sort the filtered results
@@ -1991,7 +2017,7 @@ const TodaysIpdDashboard = () => {
     });
 
     return sorted;
-  }, [todaysVisits, searchTerm, billingExecutiveFilter, billingStatusFilter, bunchFilter, corporateFilter, treatmentTypeFilter, fileStatusFilter, condonationSubmissionFilter, condonationIntimationFilter, extensionOfStayFilter, additionalApprovalsFilter, sortBy]);
+  }, [todaysVisits, searchTerm, billingExecutiveFilter, billingStatusFilter, bunchFilter, corporateFilter, treatmentTypeFilter, fileStatusFilter, condonationSubmissionFilter, condonationIntimationFilter, paymentStatusFilter, advancePayments, billTotals, extensionOfStayFilter, additionalApprovalsFilter, sortBy]);
 
   // Pagination calculations
   const totalPages = Math.ceil((filteredVisits?.length || 0) / itemsPerPage) || 1;
@@ -2855,7 +2881,9 @@ const TodaysIpdDashboard = () => {
                 <TableHead></TableHead>
                 <TableHead></TableHead>
                 <TableHead></TableHead>
-                <TableHead></TableHead>
+                <TableHead className="text-center">
+                  <ColumnFilter options={paymentStatusOptions} selected={paymentStatusFilter} onChange={setPaymentStatusFilter} />
+                </TableHead>
                 <TableHead></TableHead>
                 {!hideColumns && <TableHead></TableHead>}
                 {!hideColumns && <TableHead></TableHead>}
