@@ -4283,7 +4283,7 @@ INSTRUCTIONS: Write exactly 3-4 lines. Include procedure name, surgeon name, typ
                         }],
                         generationConfig: {
                           temperature: 0.5,
-                          maxOutputTokens: 800
+                          maxOutputTokens: 2000
                         }
                       })
                     });
