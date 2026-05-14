@@ -344,22 +344,13 @@ const BillSubmissionPage: React.FC = () => {
         receivedDate: existing.received_date ? String(existing.received_date).split('T')[0] : '',
       });
     } else {
-      // No existing record — open fresh form, with dates pre-filled if quick-add was used
-      const prefill = quickAddStatus ? getPrefillDates(quickAddStatus) : {};
-      setEditData({
+      // No existing record — open fresh form
+      setEditData(null);
+      setSelectedPatient({
         visitId: visit.visit_id || '',
         patientName: visit.patients?.name || '',
         corporate: visit.patients?.corporate || '',
-        billAmount: 0,
-        submittedBy: '',
-        submissionDate: (prefill as any).date_of_submission || '',
-        expectedPaymentDate: (prefill as any).expected_payment_date || '',
-        receivedAmount: 0,
-        deductionAmount: 0,
-        tdsAmount: 0,
-        receivedDate: '',
       });
-      setSelectedPatient(null);
     }
     setQuickAddStatus(null);
     setIsFormOpen(true);
@@ -427,7 +418,7 @@ const BillSubmissionPage: React.FC = () => {
       received_date: data.receivedDate,
     };
 
-    if (editData && data.id) {
+    if (editData) {
       updateMutation.mutate({ id: data.id, ...dbData });
     } else {
       createMutation.mutate(dbData);
