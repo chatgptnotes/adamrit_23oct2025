@@ -16432,9 +16432,9 @@ Dr. Murali B K
         </div>
       )}
 
-      <div className="flex h-screen bg-gray-50">
+      <div className="flex h-screen bg-gray-50 min-w-[2400px]">
         {/* Left Sidebar */}
-        <div className={`${isLeftSidebarCollapsed ? 'w-12' : 'flex-1'} bg-white border-r border-gray-200 flex flex-col transition-all duration-300`}>
+        <div className={`${isLeftSidebarCollapsed ? 'w-12' : 'w-[500px] flex-shrink-0'} bg-white border-r border-gray-200 flex flex-col transition-all duration-300`}>
           <div className="p-4 border-b border-gray-200">
             <div className="flex items-center justify-between mb-2">
               {!isLeftSidebarCollapsed && (
@@ -17848,7 +17848,7 @@ Dr. Murali B K
         </div>
 
         {/* Middle Section - Service Selection */}
-        <div className={`${isMiddleSectionCollapsed ? 'w-12' : 'flex-1'} bg-white border-r border-gray-200 flex flex-col transition-all duration-300`}>
+        <div className={`${isMiddleSectionCollapsed ? 'w-12' : 'w-[700px] flex-shrink-0'} bg-white border-r border-gray-200 flex flex-col transition-all duration-300`}>
           {/* Service Selection Header */}
           <div className="p-4 border-b border-gray-200">
             <div className="flex items-center justify-between">
