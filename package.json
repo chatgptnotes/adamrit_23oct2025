@@ -13,6 +13,7 @@
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "check:finalbill": "node scripts/check-finalbill-locked.cjs",
+    "verify:finalbill-lock": "node scripts/verify-finalbill-lock.cjs",
     "lint": "eslint .",
     "preview": "vite preview",
     "generate-types": "ts-node scripts/generate-types.ts",
