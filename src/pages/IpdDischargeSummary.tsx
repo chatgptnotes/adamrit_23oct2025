@@ -2253,8 +2253,8 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
 
     body {
       font-family: Arial, sans-serif;
-      font-size: 10pt;
-      line-height: 1.3;
+      font-size: 11.5pt;
+      line-height: 1.5;
       color: #000;
       background: white;
       padding: 0;
@@ -2302,32 +2302,42 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
     }
 
     .section {
-      margin-bottom: 8px;
+      margin-bottom: 14px;
       background: white;
-      page-break-inside: avoid;
+      break-inside: auto;
+      page-break-inside: auto;
     }
 
     .section-title {
       font-weight: bold;
-      font-size: 11pt;
+      font-size: 13pt;
       text-align: center;
-      margin-bottom: 8px;
+      margin-bottom: 12px;
       text-decoration: underline;
+      break-after: avoid;
+      page-break-after: avoid;
     }
 
     .section-subtitle {
       font-weight: bold;
-      font-size: 10pt;
-      margin-top: 8px;
-      margin-bottom: 4px;
+      font-size: 11.5pt;
+      margin-top: 12px;
+      margin-bottom: 6px;
       text-decoration: underline;
+      break-after: avoid;
+      page-break-after: avoid;
     }
 
     .section-content {
       text-align: justify;
-      line-height: 1.4;
+      line-height: 1.6;
       white-space: pre-wrap;
-      font-size: 9pt;
+      font-size: 11pt;
+    }
+
+    .no-break {
+      break-inside: avoid;
+      page-break-inside: avoid;
     }
 
     .diagnosis-list {
@@ -2343,8 +2353,8 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
     table {
       width: 100%;
       border-collapse: collapse;
-      margin: 8px 0;
-      font-size: 9pt;
+      margin: 10px 0;
+      font-size: 10.5pt;
     }
 
     table, th, td {
@@ -2354,9 +2364,9 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
     th {
       background-color: #d0d0d0;
       font-weight: bold;
-      padding: 5px 4px;
+      padding: 6px 5px;
       text-align: center;
-      font-size: 9pt;
+      font-size: 10.5pt;
     }
 
     td {
@@ -2410,7 +2420,7 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
       }
 
       @page {
-        margin: 15mm 10mm;
+        margin: 18mm 14mm;
       }
     }
   </style>
@@ -2581,7 +2591,7 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
       let html = '<div class="section" style="page-break-inside: auto;"><div class="section-subtitle">Operation Notes</div>';
 
       // Surgery details table
-      html += '<table style="width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 11px;">';
+      html += '<table style="width: 100%; border-collapse: collapse; margin-top: 10px;">';
       html += '<thead><tr style="background-color: #f0f0f0;">';
       html += '<th style="border: 1px solid #ddd; padding: 6px; text-align: left;">S.No</th>';
       html += '<th style="border: 1px solid #ddd; padding: 6px; text-align: left;">Procedure</th>';
