@@ -37,6 +37,7 @@ import {
   Edit,
   Printer,
   CheckCircle,
+  XCircle,
   AlertTriangle,
   Clock,
   Package,
@@ -47,6 +48,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useDebounce } from 'use-debounce';
 import { useAuth } from '@/contexts/AuthContext';
 import { savePharmacySale, SaleData } from '@/lib/pharmacy-billing-service';
+import { toast } from 'sonner';
 
 interface CartItem {
   id: string;
@@ -117,6 +119,7 @@ const PharmacyBilling: React.FC = () => {
   const [orderDiscount, setOrderDiscount] = useState(0); // Order-level discount amount
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
   const [completedSale, setCompletedSale] = useState<Sale | null>(null);
+  const [pendingApprovalDbSaleId, setPendingApprovalDbSaleId] = useState<number | null>(null);
   const [saleDate, setSaleDate] = useState(new Date().toISOString().split('T')[0]); // YYYY-MM-DD
   
   const [patientSearchResults, setPatientSearchResults] = useState<any[]>([]);
@@ -298,6 +301,29 @@ const PharmacyBilling: React.FC = () => {
 
     searchPatientsById();
   }, [debouncedPatientId]);
+
+  // Poll for approval status when a pending discount sale has been submitted
+  useEffect(() => {
+    if (!pendingApprovalDbSaleId) return;
+    const interval = setInterval(async () => {
+      const { data } = await supabase
+        .from('pharmacy_sales')
+        .select('payment_status')
+        .eq('sale_id', pendingApprovalDbSaleId)
+        .single();
+      if (!data) return;
+      if (data.payment_status === 'COMPLETED') {
+        setCompletedSale(prev => prev ? { ...prev, payment_status: 'COMPLETED' } : prev);
+        toast.success('Admin approved the discount. You can now print the bill!');
+        setPendingApprovalDbSaleId(null);
+      } else if (data.payment_status === 'CANCELLED') {
+        setCompletedSale(prev => prev ? { ...prev, payment_status: 'CANCELLED' } : prev);
+        toast.error('Admin rejected the discount. The sale has been cancelled.');
+        setPendingApprovalDbSaleId(null);
+      }
+    }, 15000);
+    return () => clearInterval(interval);
+  }, [pendingApprovalDbSaleId]);
 
   useEffect(() => {
     const fetchVisitsForPatient = async () => {
@@ -794,9 +820,10 @@ const PharmacyBilling: React.FC = () => {
     clearCart();
 
     if (totals.totalDiscount > 0 && !isAdmin) {
-      alert(`⏳ Bill submitted for admin discount approval. Sale ID: ${response.sale_id}`);
+      setPendingApprovalDbSaleId(response.sale_id);
+      toast.info('Bill submitted for admin discount approval. You will be notified when approved.');
     } else {
-      alert(`✅ Sale completed successfully! Sale ID: ${response.sale_id}`);
+      toast.success('Sale completed successfully!');
     }
   };
 
@@ -1744,7 +1771,7 @@ const PharmacyBilling: React.FC = () => {
       </div>
 
       {/* Sale Completion Dialog */}
-      <Dialog open={!!completedSale} onOpenChange={() => setCompletedSale(null)}>
+      <Dialog open={!!completedSale} onOpenChange={() => { setCompletedSale(null); setPendingApprovalDbSaleId(null); }}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle className="text-center">
@@ -1754,6 +1781,13 @@ const PharmacyBilling: React.FC = () => {
                     <Clock className="h-6 w-6 text-amber-600" />
                   </div>
                   <span className="text-amber-600">Pending Admin Approval</span>
+                </>
+              ) : completedSale?.payment_status === 'CANCELLED' ? (
+                <>
+                  <div className="flex items-center justify-center w-12 h-12 rounded-full bg-red-100 mx-auto mb-2">
+                    <XCircle className="h-6 w-6 text-red-600" />
+                  </div>
+                  <span className="text-red-600">Discount Rejected by Admin</span>
                 </>
               ) : (
                 <>
@@ -1792,7 +1826,12 @@ const PharmacyBilling: React.FC = () => {
               {completedSale.payment_status === 'PENDING_DISCOUNT_APPROVAL' ? (
                 <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-center space-y-1">
                   <p className="text-amber-800 font-medium text-sm">Bill printing is blocked until admin approves the discount.</p>
-                  <p className="text-amber-600 text-xs">Once approved, the bill can be printed from View Sales.</p>
+                  <p className="text-amber-600 text-xs">Checking for approval every 15 seconds. Once approved, you can print from View Sales.</p>
+                </div>
+              ) : completedSale.payment_status === 'CANCELLED' ? (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-center space-y-1">
+                  <p className="text-red-800 font-medium text-sm">Admin rejected the discount. This sale has been cancelled.</p>
+                  <p className="text-red-600 text-xs">Please create a new sale without the discount if needed.</p>
                 </div>
               ) : (
                 <div className="flex gap-2">

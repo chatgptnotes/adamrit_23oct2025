@@ -90,6 +90,32 @@ const PharmacyDashboard: React.FC = () => {
     return u.email || u.username || 'Admin';
   };
 
+  const restorePharmacyStock = async (saleId: string) => {
+    const { data: items } = await supabase
+      .from('pharmacy_sale_items')
+      .select('medicine_id, batch_number, quantity')
+      .eq('sale_id', saleId);
+    if (!items) return;
+    for (const item of items) {
+      if (!item.medicine_id || !item.batch_number) continue;
+      const { data: batch } = await supabase
+        .from('medicine_batch_inventory')
+        .select('id, current_stock, sold_quantity')
+        .eq('medicine_id', item.medicine_id)
+        .eq('batch_number', item.batch_number)
+        .single();
+      if (!batch) continue;
+      await supabase
+        .from('medicine_batch_inventory')
+        .update({
+          current_stock: (batch.current_stock || 0) + item.quantity,
+          sold_quantity: Math.max(0, (batch.sold_quantity || 0) - item.quantity),
+          updated_at: new Date().toISOString()
+        } as any)
+        .eq('id', batch.id);
+    }
+  };
+
   const handleApprovePharmacyDiscount = async (saleId: string, discount: number) => {
     setIsProcessing(true);
     try {
@@ -119,8 +145,9 @@ const PharmacyDashboard: React.FC = () => {
         .update({ payment_status: 'CANCELLED', updated_at: new Date().toISOString() } as any)
         .eq('sale_id', rejectingPharmacySaleId);
       if (error) throw error;
+      await restorePharmacyStock(rejectingPharmacySaleId);
       await logActivity('pharmacy_discount_rejected', { sale_id: rejectingPharmacySaleId, reason: pharmacyRejectionReason, rejected_by: approver }, 'PharmacyDashboard');
-      toast.success('Pharmacy discount rejected. Sale cancelled.');
+      toast.success('Pharmacy discount rejected. Sale cancelled. Stock restored.');
       setPharmacyRejectDialogOpen(false);
       setRejectingPharmacySaleId(null);
       setPharmacyRejectionReason('');
@@ -696,32 +723,6 @@ const PharmacyDashboard: React.FC = () => {
               )}
             </div>
 
-            {/* Reject Dialog */}
-            <Dialog open={pharmacyRejectDialogOpen} onOpenChange={setPharmacyRejectDialogOpen}>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Reject Pharmacy Discount</DialogTitle>
-                </DialogHeader>
-                <div className="py-4">
-                  <label className="text-sm font-medium mb-2 block">Reason for rejection <span className="text-red-500">*</span></label>
-                  <Textarea
-                    placeholder="Enter the reason for rejecting this pharmacy discount..."
-                    value={pharmacyRejectionReason}
-                    onChange={(e) => setPharmacyRejectionReason(e.target.value)}
-                    rows={3}
-                  />
-                  <p className="text-xs text-muted-foreground mt-2">The pharmacy sale will be cancelled. The pharmacist will need to create a new sale without the discount.</p>
-                </div>
-                <DialogFooter>
-                  <Button variant="outline" onClick={() => { setPharmacyRejectDialogOpen(false); setPharmacyRejectionReason(''); }}>
-                    Cancel
-                  </Button>
-                  <Button variant="destructive" onClick={handleRejectPharmacyDiscount} disabled={isProcessing || !pharmacyRejectionReason.trim()}>
-                    {isProcessing ? 'Rejecting...' : 'Reject & Cancel Sale'}
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
           </TabsContent>
         )}
       </Tabs>

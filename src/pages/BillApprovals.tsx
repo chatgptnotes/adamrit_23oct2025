@@ -193,6 +193,32 @@ const BillApprovals = () => {
     staleTime: 60000,
   });
 
+  const restorePharmacyStock = async (saleId: string) => {
+    const { data: items } = await supabase
+      .from('pharmacy_sale_items')
+      .select('medicine_id, batch_number, quantity')
+      .eq('sale_id', saleId);
+    if (!items) return;
+    for (const item of items) {
+      if (!item.medicine_id || !item.batch_number) continue;
+      const { data: batch } = await supabase
+        .from('medicine_batch_inventory')
+        .select('id, current_stock, sold_quantity')
+        .eq('medicine_id', item.medicine_id)
+        .eq('batch_number', item.batch_number)
+        .single();
+      if (!batch) continue;
+      await supabase
+        .from('medicine_batch_inventory')
+        .update({
+          current_stock: (batch.current_stock || 0) + item.quantity,
+          sold_quantity: Math.max(0, (batch.sold_quantity || 0) - item.quantity),
+          updated_at: new Date().toISOString()
+        } as any)
+        .eq('id', batch.id);
+    }
+  };
+
   const handleApprovePharmacyDiscount = async (saleId: string, discount: number) => {
     setIsProcessing(true);
     try {
@@ -222,8 +248,9 @@ const BillApprovals = () => {
         .update({ payment_status: 'CANCELLED', updated_at: new Date().toISOString() } as any)
         .eq('sale_id', rejectingPharmacySaleId);
       if (error) throw error;
+      await restorePharmacyStock(rejectingPharmacySaleId);
       await logActivity('pharmacy_discount_rejected', { sale_id: rejectingPharmacySaleId, reason: pharmacyRejectionReason, rejected_by: approver }, 'BillApprovals');
-      toast.success('Pharmacy discount rejected. Sale cancelled.');
+      toast.success('Pharmacy discount rejected. Sale cancelled. Stock restored.');
       setPharmacyRejectDialogOpen(false);
       setRejectingPharmacySaleId(null);
       setPharmacyRejectionReason('');
