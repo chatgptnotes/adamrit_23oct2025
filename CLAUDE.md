@@ -24,6 +24,32 @@
 - Validate all user inputs
 - Parameterized queries for database access
 
+## 🚫 NO DEPLOYMENT RULE (hard project rule)
+
+**Do NOT deploy anything to production without explicit per-action user permission, every time.**
+
+This is a live hospital management system. Bad deploys can break billing, discharge, and patient-facing flows.
+
+**Forbidden without asking first:**
+- `git push` to `main` (auto-deploys via Vercel)
+- Merging any PR into `main` (`gh pr merge`, GitHub UI auto-merge, etc.)
+- `supabase db push` / applying migrations against the live project `xvkxccqaopbnkvwgyfjv`
+- `vercel deploy`, `vercel deploy --prod`, `vercel promote`
+- `npm publish`
+- Removing build-chain safety gates (`check:finalbill`, branch protection, required CI checks)
+- The Super-Admin Code Assistant's **Promote** action (when built) — always a manual user click
+- Any cron / scheduled job that propagates code to prod
+
+**Allowed without re-asking:**
+- Editing files locally
+- Creating and pushing to feature branches (they create preview deploys; main is untouched)
+- Local `npm run dev`, `lint`, `build`, `test`
+- Reading any file or running read-only `gh` / `git` queries
+
+**One blanket approval doesn't carry over.** Each deploy-affecting step needs its own per-action approval in the current conversation. If unsure whether a step deploys — assume it does and ask.
+
+This rule is narrower than but consistent with [`~/.claude/skills/finalbill-locked/`](file:///Users/apple/.claude/skills/finalbill-locked) (which freezes `FinalBill.tsx` specifically).
+
 
 <!-- IRONBARK:START - Auto-generated, do not edit -->
 ## Ironbark
@@ -35,77 +61,115 @@ This project uses the Ironbark learning loop with auto-sync to the community ski
 - **Background sync**: Every 30 min, `sync-cli.js` pulls new community skills and pushes local ones
 - **Opt-out**: `IRONBARK_SYNC_DISABLED=1`
 
-### Available Harvested Skills (65)
+### Available Harvested Skills (103)
 
 Loaded from `~/.claude/skills/harvested/`. Reference any skill below by name or path when the task matches.
 
 | Skill | Description | Path |
 |-------|-------------|------|
-| `async-ai-advisory-hot-path` |  | `C:/Users/MY HOME/.claude/skills/harvested/async-ai-advisory-hot-path/SKILL.md` |
-| `auto-tenant-fetch-wrapper` |  | `C:/Users/MY HOME/.claude/skills/harvested/auto-tenant-fetch-wrapper/SKILL.md` |
-| `bni-crm-build-pitfalls` |  | `C:/Users/MY HOME/.claude/skills/harvested/bni-crm-build-pitfalls/SKILL.md` |
-| `chatbot-reply-intent-gate` |  | `C:/Users/MY HOME/.claude/skills/harvested/chatbot-reply-intent-gate/SKILL.md` |
-| `claude-vps-ssh-access` |  | `C:/Users/MY HOME/.claude/skills/harvested/claude-vps-ssh-access/SKILL.md` |
-| `cloud-to-vps-http-bridge` |  | `C:/Users/MY HOME/.claude/skills/harvested/cloud-to-vps-http-bridge/SKILL.md` |
-| `credential-survivorship-audit` |  | `C:/Users/MY HOME/.claude/skills/harvested/credential-survivorship-audit/SKILL.md` |
-| `custom-slash-command-protocol` |  | `C:/Users/MY HOME/.claude/skills/harvested/custom-slash-command-protocol/SKILL.md` |
-| `dual-llm-provider-budget-defense` |  | `C:/Users/MY HOME/.claude/skills/harvested/dual-llm-provider-budget-defense/SKILL.md` |
-| `eventemitter-socketio-zustand-pipeline` |  | `C:/Users/MY HOME/.claude/skills/harvested/eventemitter-socketio-zustand-pipeline/SKILL.md` |
-| `excel-matrix-to-react-lookup` |  | `C:/Users/MY HOME/.claude/skills/harvested/excel-matrix-to-react-lookup/SKILL.md` |
-| `exhaustive-error-hunting` |  | `C:/Users/MY HOME/.claude/skills/harvested/exhaustive-error-hunting/SKILL.md` |
-| `express-rate-limit-hardening` |  | `C:/Users/MY HOME/.claude/skills/harvested/express-rate-limit-hardening/SKILL.md` |
-| `express-tenant-middleware-chain` |  | `C:/Users/MY HOME/.claude/skills/harvested/express-tenant-middleware-chain/SKILL.md` |
-| `global-claude-md-standards` |  | `C:/Users/MY HOME/.claude/skills/harvested/global-claude-md-standards/SKILL.md` |
-| `google-oauth-coop-vercel-fix` |  | `C:/Users/MY HOME/.claude/skills/harvested/google-oauth-coop-vercel-fix/SKILL.md` |
-| `html-to-pptx-python` |  | `C:/Users/MY HOME/.claude/skills/harvested/html-to-pptx-python/SKILL.md` |
-| `karpathy-guidelines` |  | `C:/Users/MY HOME/.claude/skills/harvested/karpathy-guidelines/SKILL.md` |
-| `llm-chat-context-config` |  | `C:/Users/MY HOME/.claude/skills/harvested/llm-chat-context-config/SKILL.md` |
-| `llm-model-routing` |  | `C:/Users/MY HOME/.claude/skills/harvested/llm-model-routing/SKILL.md` |
-| `llm-provider-url-construction-bug` |  | `C:/Users/MY HOME/.claude/skills/harvested/llm-provider-url-construction-bug/SKILL.md` |
-| `llm-vision-confidence-escalation-cascade` |  | `C:/Users/MY HOME/.claude/skills/harvested/llm-vision-confidence-escalation-cascade/SKILL.md` |
-| `multi-channel-alert-gateway` |  | `C:/Users/MY HOME/.claude/skills/harvested/multi-channel-alert-gateway/SKILL.md` |
-| `multi-tenant-audit-checklist` |  | `C:/Users/MY HOME/.claude/skills/harvested/multi-tenant-audit-checklist/SKILL.md` |
-| `no-mock-data-in-production` |  | `C:/Users/MY HOME/.claude/skills/harvested/no-mock-data-in-production/SKILL.md` |
-| `no-unwired-placeholders` |  | `C:/Users/MY HOME/.claude/skills/harvested/no-unwired-placeholders/SKILL.md` |
-| `oauth-headless-ssh-tunnel` |  | `C:/Users/MY HOME/.claude/skills/harvested/oauth-headless-ssh-tunnel/SKILL.md` |
-| `openclaw-whatsapp-loop-fix` |  | `C:/Users/MY HOME/.claude/skills/harvested/openclaw-whatsapp-loop-fix/SKILL.md` |
-| `openwrt-busybox-shell-scripting` |  | `C:/Users/MY HOME/.claude/skills/harvested/openwrt-busybox-shell-scripting/SKILL.md` |
-| `pentest-driven-architecture-review` |  | `C:/Users/MY HOME/.claude/skills/harvested/pentest-driven-architecture-review/SKILL.md` |
-| `pgvector-multitenant-retrieval` |  | `C:/Users/MY HOME/.claude/skills/harvested/pgvector-multitenant-retrieval/SKILL.md` |
-| `placeholder-audit-pattern` |  | `C:/Users/MY HOME/.claude/skills/harvested/placeholder-audit-pattern/SKILL.md` |
-| `plan-file-versioned-evolution` |  | `C:/Users/MY HOME/.claude/skills/harvested/plan-file-versioned-evolution/SKILL.md` |
-| `plc-live-test-infrastructure` |  | `C:/Users/MY HOME/.claude/skills/harvested/plc-live-test-infrastructure/SKILL.md` |
-| `pm2-cluster-scada-pitfall` |  | `C:/Users/MY HOME/.claude/skills/harvested/pm2-cluster-scada-pitfall/SKILL.md` |
-| `prisma-sql-injection-defense` |  | `C:/Users/MY HOME/.claude/skills/harvested/prisma-sql-injection-defense/SKILL.md` |
-| `process-log-tracing` |  | `C:/Users/MY HOME/.claude/skills/harvested/process-log-tracing/SKILL.md` |
-| `project-gate-pattern` |  | `C:/Users/MY HOME/.claude/skills/harvested/project-gate-pattern/SKILL.md` |
-| `proposal-field-standardization` |  | `C:/Users/MY HOME/.claude/skills/harvested/proposal-field-standardization/SKILL.md` |
-| `pull-based-remote-agent-architecture` |  | `C:/Users/MY HOME/.claude/skills/harvested/pull-based-remote-agent-architecture/SKILL.md` |
-| `react-error-object-guard` |  | `C:/Users/MY HOME/.claude/skills/harvested/react-error-object-guard/SKILL.md` |
-| `reactflow-data-persistence` |  | `C:/Users/MY HOME/.claude/skills/harvested/reactflow-data-persistence/SKILL.md` |
-| `rollback-policy-pattern` |  | `C:/Users/MY HOME/.claude/skills/harvested/rollback-policy-pattern/SKILL.md` |
-| `scada-realtime-reactflow-debugging` |  | `C:/Users/MY HOME/.claude/skills/harvested/scada-realtime-reactflow-debugging/SKILL.md` |
-| `scada-tag-autocomplete` |  | `C:/Users/MY HOME/.claude/skills/harvested/scada-tag-autocomplete/SKILL.md` |
-| `screen-persistence-pattern` |  | `C:/Users/MY HOME/.claude/skills/harvested/screen-persistence-pattern/SKILL.md` |
-| `screenshot-error-diagnosis` |  | `C:/Users/MY HOME/.claude/skills/harvested/screenshot-error-diagnosis/SKILL.md` |
-| `sliding-window-dedup-guard` |  | `C:/Users/MY HOME/.claude/skills/harvested/sliding-window-dedup-guard/SKILL.md` |
-| `socketio-room-subscription-chain` |  | `C:/Users/MY HOME/.claude/skills/harvested/socketio-room-subscription-chain/SKILL.md` |
-| `split-auth-modal-signin-signup` |  | `C:/Users/MY HOME/.claude/skills/harvested/split-auth-modal-signin-signup/SKILL.md` |
-| `stateful-cli-as-http-service` |  | `C:/Users/MY HOME/.claude/skills/harvested/stateful-cli-as-http-service/SKILL.md` |
-| `supabase-polling-overload-fix` |  | `C:/Users/MY HOME/.claude/skills/harvested/supabase-polling-overload-fix/SKILL.md` |
-| `supabase-tenant-filtering` |  | `C:/Users/MY HOME/.claude/skills/harvested/supabase-tenant-filtering/SKILL.md` |
-| `svg-icons-html-pdf` |  | `C:/Users/MY HOME/.claude/skills/harvested/svg-icons-html-pdf/SKILL.md` |
-| `svg-sanitization-dompurify` |  | `C:/Users/MY HOME/.claude/skills/harvested/svg-sanitization-dompurify/SKILL.md` |
-| `timezone-aware-cron-fanout` |  | `C:/Users/MY HOME/.claude/skills/harvested/timezone-aware-cron-fanout/SKILL.md` |
-| `vercel-prebuilt-deploy` |  | `C:/Users/MY HOME/.claude/skills/harvested/vercel-prebuilt-deploy/SKILL.md` |
-| `vite-env-url-detection` |  | `C:/Users/MY HOME/.claude/skills/harvested/vite-env-url-detection/SKILL.md` |
-| `whatsapp-instant-ack` |  | `C:/Users/MY HOME/.claude/skills/harvested/whatsapp-instant-ack/SKILL.md` |
-| `whatsapp-personalized-research` |  | `C:/Users/MY HOME/.claude/skills/harvested/whatsapp-personalized-research/SKILL.md` |
-| `whatsapp-selfchat-token-drain` |  | `C:/Users/MY HOME/.claude/skills/harvested/whatsapp-selfchat-token-drain/SKILL.md` |
-| `worker-readonly-db-role-pattern` |  | `C:/Users/MY HOME/.claude/skills/harvested/worker-readonly-db-role-pattern/SKILL.md` |
-| `zai-openai-compatible-provider` |  | `C:/Users/MY HOME/.claude/skills/harvested/zai-openai-compatible-provider/SKILL.md` |
-| `zero-hardcode-integration-protocol` |  | `C:/Users/MY HOME/.claude/skills/harvested/zero-hardcode-integration-protocol/SKILL.md` |
-| `zero-mock-zero-fallback` |  | `C:/Users/MY HOME/.claude/skills/harvested/zero-mock-zero-fallback/SKILL.md` |
+| `Adamrit Final Bill Lock — pre-deploy SHA256 check` | Freezes src/pages/FinalBill.tsx in the Adamrit hospital-management app. A `prebuild` script (chained ahead of `vite build`, which Vercel inv | `/Users/apple/.claude/skills/harvested/adamrit-check-test/SKILL.md` |
+| `Annotated Sales-Pitch Coaching PDF` | When you write a 30/60/90-second elevator pitch for someone (founder rehearsing for an enterprise meeting, BNI member doing a 60-second intr | `/Users/apple/.claude/skills/harvested/annotated-pitch-coaching-pdf/SKILL.md` |
+| `Async AI Advisory on Real-Time Hot Path` | Pattern for void-launching AI analysis from time-critical control loops (alarm engines, tag processors) with dedup guards, cooldown periods, | `/Users/apple/.claude/skills/harvested/async-ai-advisory-hot-path/SKILL.md` |
+| `Auto-Tenant Fetch Wrapper` | Modify the frontend API fetch wrapper to auto-append tenant_id from session storage so all existing API calls get tenant scoping without per | `/Users/apple/.claude/skills/harvested/auto-tenant-fetch-wrapper/SKILL.md` |
+| `BNI CRM — Bugs & Gotchas Harvested During Build` | Non-obvious issues encountered while building a Supabase-backed multi-page CRM (BNI 121). Covers nginx root-path confusion, PostgREST schema | `/Users/apple/.claude/skills/harvested/bni-crm-build-pitfalls/SKILL.md` |
+| `Browser-Console curl|bash Deploy Bootstrap` | When SSH to a VPS is blocked from the agent's network and the only available shell is a browser-based console (Hostinger hPanel, DigitalOcea | `/Users/apple/.claude/skills/harvested/browser-console-curl-bash-deploy/SKILL.md` |
+| `bulk-file-to-db-importer` | Node.js script to bulk-import local files (HTML, PDF, etc.) into a Supabase table under a specific user, with a permanent exclusion list and | `/Users/apple/.claude/skills/harvested/bulk-file-to-db-importer/SKILL.md` |
+| `Chatbot Reply/Ignore Intent Gate` | System prompt pattern that adds a first-pass REPLY vs IGNORE decision layer to any chatbot, preventing it from replying to casual acknowledg | `/Users/apple/.claude/skills/harvested/chatbot-reply-intent-gate/SKILL.md` |
+| `Claude CLI: ANTHROPIC_API_KEY env silently overrides Max-plan OAuth` | When the Claude CLI runs inside a container or service and ANTHROPIC_API_KEY is in the environment, it ignores the OAuth credentials in ~/.c | `/Users/apple/.claude/skills/harvested/claude-cli-oauth-vs-apikey-precedence/SKILL.md` |
+| `Claude Code -> DeepSeek Backend (Anthropic-Compatible Redirect)` | Point Claude Code at DeepSeek's Anthropic-compatible endpoint via ANTHROPIC_BASE_URL + ANTHROPIC_AUTH_TOKEN + ANTHROPIC_MODEL env vars. Cove | `/Users/apple/.claude/skills/harvested/claude-code-deepseek-backend/SKILL.md` |
+| `Claude Code Permanent SSH Access to VPS` | Set up passwordless SSH key access so Claude Code can run remote commands on a VPS directly via Bash tool, without prompting for a password  | `/Users/apple/.claude/skills/harvested/claude-vps-ssh-access/SKILL.md` |
+| `cloud-to-vps-http-bridge` | Lightweight Node.js HTTP bridge that lets a serverless cloud platform (Vercel, Railway, etc.) trigger actions on a self-hosted VPS service — | `/Users/apple/.claude/skills/harvested/cloud-to-vps-http-bridge/SKILL.md` |
+| `Credential Survivorship Audit` | When a credentials-based failure recurs after a previous fix, the credential was only partially removed. Grep all config locations first, fi | `/Users/apple/.claude/skills/harvested/credential-survivorship-audit/SKILL.md` |
+| `Cron-Poll Continuous Deploy via git ls-remote SHA Check` | When GitHub Actions SSH-deploy and inbound webhooks are both unavailable (SSH port blocked from runners, VPS behind NAT/firewall, no webhook | `/Users/apple/.claude/skills/harvested/cron-poll-continuous-deploy/SKILL.md` |
+| `Custom Slash Command — Encode Multi-Step Protocols` | Create custom Claude Code slash commands in ~/.claude/commands/ that invoke repeatable multi-step workflows with $ARGUMENTS substitution — s | `/Users/apple/.claude/skills/harvested/custom-slash-command-protocol/SKILL.md` |
+| `document-version-history` | Save every version of a document before overwriting — Supabase versions table, PATCH intercept, restore endpoint, and UI history panel | `/Users/apple/.claude/skills/harvested/document-version-history/SKILL.md` |
+| `Dual LLM Provider Budget Defense` | Production budget-burn protection when running two LLM providers — per-user app-layer daily cap (not nginx per-IP), burst detection, provide | `/Users/apple/.claude/skills/harvested/dual-llm-provider-budget-defense/SKILL.md` |
+| `Dual-Publish Reusable Setup Guide as Local Skill + Standalone Public Repo` | When the user asks to save procedural how-to content "for next time," publish it in two places at once - as a harvested SKILL.md (auto-loads | `/Users/apple/.claude/skills/harvested/dual-publish-skill-and-repo/SKILL.md` |
+| `Email-Allowlist Dual-Gate Dashboard` | Restrict access to a privileged dashboard (CEO/CFO/Director/Admin view) to a hard-coded allowlist of email addresses. Defense in depth at th | `/Users/apple/.claude/skills/harvested/email-allowlist-dual-gate-dashboard/SKILL.md` |
+| `EventEmitter → Socket.IO → Zustand Reactive Pipeline` | Full backend-to-frontend reactive chain using Node EventEmitter as source, Socket.IO rooms for transport, and Zustand store for state — with | `/Users/apple/.claude/skills/harvested/eventemitter-socketio-zustand-pipeline/SKILL.md` |
+| `excel-matrix-to-react-lookup` | Convert a multi-dimensional Excel combination matrix into a JS lookup table and React UI card, dynamically driven by algorithm/API output sc | `/Users/apple/.claude/skills/harvested/excel-matrix-to-react-lookup/SKILL.md` |
+| `Exhaustive Error Hunting — Never Stop at the First Fix` | When debugging a broken feature, NEVER assume the first error found is the only one. Systematically trace the entire data path and fix ALL b | `/Users/apple/.claude/skills/harvested/exhaustive-error-hunting/SKILL.md` |
+| `Express Rate Limit Hardening` | Security fixes for express-rate-limit — never trust X-Forwarded-For in keyGenerator, handle IPv6, use validate options | `/Users/apple/.claude/skills/harvested/express-rate-limit-hardening/SKILL.md` |
+| `Express Tenant Middleware Chain` | requireAuth → requireTenantAccess → route pattern with profile caching and role-based tenant resolution for multi-tenant Express apps | `/Users/apple/.claude/skills/harvested/express-tenant-middleware-chain/SKILL.md` |
+| `gh api Bulk Operations Without Zsh Glob Expansion Bugs` | When scripting `gh api` to POST/PATCH the same payload to many GitHub repos (bulk webhooks, branch-protection rules, repo settings), the `-f | `/Users/apple/.claude/skills/harvested/gh-api-bulk-json-stdin/SKILL.md` |
+| `Global CLAUDE.md — Auto-Loaded Coding Standards` | Create ~/.claude/CLAUDE.md to inject coding rules, forbidden patterns, and workflow protocols into every Claude Code session automatically — | `/Users/apple/.claude/skills/harvested/global-claude-md-standards/SKILL.md` |
+| `Google OAuth COOP Popup Fix on Vercel` | Two-stage fix for Google OAuth popup blocked by Cross-Origin-Opener-Policy (COOP) on Vercel — first add permissive headers, then switch to c | `/Users/apple/.claude/skills/harvested/google-oauth-coop-vercel-fix/SKILL.md` |
+| `Hand-Fillable PDF Blanks via Dotted-Underline CSS Spans` | When generating a PDF that will be printed and signed by hand (legal forms, KYC, lease agreements, school admission, customs declarations, v | `/Users/apple/.claude/skills/harvested/dotted-blank-fillable-pdf/SKILL.md` |
+| `HTML Print Window with Per-Section Page Breaks` | Generate downloadable PDFs from a SPA by opening a styled HTML document in a new window, applying CSS `@media print` rules with `page-break- | `/Users/apple/.claude/skills/harvested/html-print-window-section-pagebreaks/SKILL.md` |
+| `HTML-to-PPTX Programmatic Generation` | Generate professional PowerPoint presentations (.pptx) programmatically using python-pptx — build slides with shapes, colored cards, code bl | `/Users/apple/.claude/skills/harvested/html-to-pptx-python/SKILL.md` |
+| `HTTP API Failure Isolation via Probe Matrix` | When an HTTP API call fails with an ambiguous error and you don't know whether the cause is the URL, the auth header, the request body, the  | `/Users/apple/.claude/skills/harvested/http-api-probe-matrix-isolation/SKILL.md` |
+| `Idempotent ~/.zshrc / ~/.bashrc Block Append with Marker-Based Dedupe` | Append a multi-line block of exports/aliases/path edits to a user's shell rc file via an installer that is safe to re-run. Uses a marker com | `/Users/apple/.claude/skills/harvested/idempotent-shellrc-marker-dedupe/SKILL.md` |
+| `Industrial Rollback Policy Pattern` | PLC batch write rollback with persistence, exponential retry, timeout, and real-time operator notifications via Socket.IO | `/Users/apple/.claude/skills/harvested/rollback-policy-pattern/SKILL.md` |
+| `karpathy-guidelines` | Behavioral guidelines to reduce common LLM coding mistakes. Use when writing, reviewing, or refactoring code to avoid overcomplication, make | `/Users/apple/.claude/skills/harvested/karpathy-guidelines/SKILL.md` |
+| `LLM Chat Context — History Depth and Temperature Config` | Configure conversation history depth (maxHistoryMessages) and temperature on a deployed LLM chatbot to prevent context amnesia and hallucina | `/Users/apple/.claude/skills/harvested/llm-chat-context-config/SKILL.md` |
+| `LLM Model Routing` | Regex-based classifier to route simple user queries to cheap models (Haiku) and complex ones to expensive models (Sonnet), with conservative | `/Users/apple/.claude/skills/harvested/llm-model-routing/SKILL.md` |
+| `LLM Provider baseUrl + API-Type URL Construction Bug` | When a custom LLM provider's baseUrl already includes a version suffix and the gateway appends /v1/messages, you get /{version}/v1/messages  | `/Users/apple/.claude/skills/harvested/llm-provider-url-construction-bug/SKILL.md` |
+| `LLM Vision Confidence Escalation Cascade` | Two-stage vision pipeline — cheap primary model on every request, expensive model only on low-confidence results. Cuts cost ~80% vs single-m | `/Users/apple/.claude/skills/harvested/llm-vision-confidence-escalation-cascade/SKILL.md` |
+| `Mac Disk Space Cleanup Playbook` | Systematic Mac disk space recovery — ordered by impact. Covers Chrome AI models, screen recordings, node_modules, Zoom recordings, app cache | `/Users/apple/.claude/skills/harvested/mac-disk-space-cleanup-playbook/SKILL.md` |
+| `macOS Chrome Disk-Write Quota Crash Fix` | Diagnose and fix Chrome being killed by macOS for exceeding disk write limits — root cause is the 4 GB OptGuideOnDeviceModel AI model rewrit | `/Users/apple/.claude/skills/harvested/macos-chrome-disk-write-crash-fix/SKILL.md` |
+| `MCA Director-Appointment Form Generator (DIR-2 / DIR-8 / MBP-1 / Info Template)` | A repeatable HTML→PDF generator for filling India's Ministry of Corporate Affairs director-appointment forms. The user keeps verified KYC va | `/Users/apple/.claude/skills/harvested/mca-director-form-generator/SKILL.md` |
+| `Multi-Channel Alert Gateway` | BaseChannel abstraction + severity-based routing + parallel delivery via Promise.allSettled + retry + delivery tracking table | `/Users/apple/.claude/skills/harvested/multi-channel-alert-gateway/SKILL.md` |
+| `Multi-Tenant Audit Checklist` | Systematic methodology for finding multi-tenant data leaks — check every GET endpoint, AI context, external clients, and trace ownership cha | `/Users/apple/.claude/skills/harvested/multi-tenant-audit-checklist/SKILL.md` |
+| `No Mock Data in Production SCADA/Multi-Modal Apps` | Eliminate hardcoded mock arrays in CRUD pages and backend demo-data fallbacks — every feature must use real API calls with database persiste | `/Users/apple/.claude/skills/harvested/no-mock-data-in-production/SKILL.md` |
+| `No Unwired Placeholders — Wire Everything on First Pass` | Every button, link, and interactive element must have a working onClick/navigation handler from the moment it's created. Never leave placeho | `/Users/apple/.claude/skills/harvested/no-unwired-placeholders/SKILL.md` |
+| `oauth-headless-ssh-tunnel` | Complete an OAuth2 browser flow on a headless Linux server by forwarding the redirect URI port via SSH tunnel — no browser, VNC, or public p | `/Users/apple/.claude/skills/harvested/oauth-headless-ssh-tunnel/SKILL.md` |
+| `OpenClaw WhatsApp Echo Loop & LLM Quota Fix` | Stop infinite WhatsApp message loops caused by selfChatMode and quota-exceeded LLM keys in OpenClaw. Also covers zai/custom provider 404 bug | `/Users/apple/.claude/skills/harvested/openclaw-whatsapp-loop-fix/SKILL.md` |
+| `openwrt-busybox-shell-scripting` | Practical shell scripting on OpenWrt/BusyBox edge devices (Teltonika TRB/RUT, GL.iNet, etc.). Covers what doesn't work (bash, jq, arrays) an | `/Users/apple/.claude/skills/harvested/openwrt-busybox-shell-scripting/SKILL.md` |
+| `pdf-spec-to-compliance-matrix` | Methodological pattern for turning a vendor specification PDF into a citation-anchored markdown compliance matrix. Extract PDF text with pdf | `/Users/apple/.claude/skills/harvested/pdf-spec-to-compliance-matrix/SKILL.md` |
+| `Pentest-Driven Architecture Review` | Validate architectural decisions against the most recent pentest report + a handful of targeted live probes — faster and more precise than r | `/Users/apple/.claude/skills/harvested/pentest-driven-architecture-review/SKILL.md` |
+| `pgvector Multi-Tenant Retrieval` | Multi-tenant pgvector RAG pattern — enforce project/tenant isolation at the query layer with WHERE project_id = ANY($ids), never trust RLS w | `/Users/apple/.claude/skills/harvested/pgvector-multitenant-retrieval/SKILL.md` |
+| `Placeholder Audit and Resolution Pattern` | Systematic scan for empty placeholders, disabled buttons, stub endpoints, dead files, and unmounted routes — then resolve each by either imp | `/Users/apple/.claude/skills/harvested/placeholder-audit-pattern/SKILL.md` |
+| `Plan File Versioned Evolution` | How to evolve a committed roadmap document incrementally via targeted Edit calls, version-bump footers, and commit messages that explain WHY | `/Users/apple/.claude/skills/harvested/plan-file-versioned-evolution/SKILL.md` |
+| `PLC Live Integration Test Infrastructure` | Software PLC simulators + test harness for validating SCADA protocol adapters with real TCP traffic instead of mocks | `/Users/apple/.claude/skills/harvested/plc-live-test-infrastructure/SKILL.md` |
+| `PM2 Cluster Mode Breaks In-Memory SCADA State` | PM2 cluster mode causes polling engine, tag engine, and Socket.IO room subscriptions to split across workers — use single instance for SCADA | `/Users/apple/.claude/skills/harvested/pm2-cluster-scada-pitfall/SKILL.md` |
+| `Postgres FK Constraint Repair via Dynamic DO Block` | When a foreign-key constraint was added out-of-band (via the database dashboard, ad-hoc psql session, or an old script) and you don't know w | `/Users/apple/.claude/skills/harvested/postgres-fk-repair-dynamic-block/SKILL.md` |
+| `PostgREST Schema Cache Reload After DDL` | Supabase / PostgREST returns "Could not find the 'X' column of 'Y' in the schema cache" even after `alter table add column` succeeds, becaus | `/Users/apple/.claude/skills/harvested/postgrest-schema-cache-reload/SKILL.md` |
+| `Prisma SQL Injection Defense` | Safe patterns for dynamic SQL with Prisma $queryRawUnsafe — allowlist maps instead of string interpolation for identifiers | `/Users/apple/.claude/skills/harvested/prisma-sql-injection-defense/SKILL.md` |
+| `Process Log Tracing — Find Logs When Not Under Named Systemd Service` | When a process logs to systemd journal but isn't registered as a named service, journalctl -u <name> returns nothing. Trace via fd/1 socket  | `/Users/apple/.claude/skills/harvested/process-log-tracing/SKILL.md` |
+| `Project Gate Pattern` | Enforce project selection before accessing project-scoped pages — gate at layout level, not per-page | `/Users/apple/.claude/skills/harvested/project-gate-pattern/SKILL.md` |
+| `proposal-field-standardization` |  | `/Users/apple/.claude/skills/harvested/proposal-field-standardization/SKILL.md` |
+| `pull-based-remote-agent-architecture` | Remote shell execution on NAT-bound IoT/edge devices via cloud-polling agent. Device pulls commands from HTTPS API instead of accepting inbo | `/Users/apple/.claude/skills/harvested/pull-based-remote-agent-architecture/SKILL.md` |
+| `quick-login-direct-auth` | Quick-login buttons that directly authenticate via Supabase auth API on click — not just pre-filling form fields. Fixes the pattern where cl | `/Users/apple/.claude/skills/harvested/quick-login-direct-auth/SKILL.md` |
+| `railway-cli-noninteractive-auth` | Railway CLI's OAuth login token doesn't persist to non-interactive subshells (Claude Code, CI scripts, cron). The ~/.railway/config.json tok | `/Users/apple/.claude/skills/harvested/railway-cli-noninteractive-auth/SKILL.md` |
+| `railway-native-dep-removal` | When migrating from a native C++ npm package (better-sqlite3, bcrypt, sharp, canvas) to a pure-JS alternative (Prisma, argon2, etc.), remove | `/Users/apple/.claude/skills/harvested/railway-native-dep-removal/SKILL.md` |
+| `railway-toml-ui-precedence` | Railway UI custom build/start commands override railway.toml. If both are set and the UI has a typo, railway.toml is silently ignored. Fix b | `/Users/apple/.claude/skills/harvested/railway-toml-ui-precedence/SKILL.md` |
+| `React Async-Callback State Snapshot Before Reset` | Bug pattern — when a handler resets React state synchronously AND fires an async mutation whose `onSuccess` later needs that same state, the | `/Users/apple/.claude/skills/harvested/react-async-state-snapshot/SKILL.md` |
+| `React Error Object Rendering Guard` | Prevent React error #31 when API proxy/intermediary returns {code, message} objects instead of {error: string} — always coerce error state t | `/Users/apple/.claude/skills/harvested/react-error-object-guard/SKILL.md` |
+| `ReactFlow Node Data Persistence` | Fix silent data loss in ReactFlow editors where elementsToNodes/nodesToElements serialization drops custom fields like tag bindings, animati | `/Users/apple/.claude/skills/harvested/reactflow-data-persistence/SKILL.md` |
+| `Responsive shadcn Dialog with Pinned Header/Footer and Scrollable Body` | Make a shadcn (Radix UI) `<DialogContent>` responsive on small viewports — body content scrolls inside the dialog while the header (title) a | `/Users/apple/.claude/skills/harvested/shadcn-dialog-responsive-scrollable/SKILL.md` |
+| `rsync Deploy Protection in a Directory Shared with Human-Managed Files` | Your deploy script rsyncs a repo subtree into a directory that *also* contains files maintained outside the repo (a public landing page, ad- | `/Users/apple/.claude/skills/harvested/rsync-deploy-shared-dir-protection/SKILL.md` |
+| `SCADA Real-Time ReactFlow — Complete Debugging Case Study` | 12-issue chain that prevented live PLC tag values from updating ReactFlow HMI elements. Documents every failure point and the final working  | `/Users/apple/.claude/skills/harvested/scada-realtime-reactflow-debugging/SKILL.md` |
+| `SCADA Screen Persistence Pattern` | HMI screens stored in Zustand must persist to database via API — loadScreens on mount, save on create/update/delete | `/Users/apple/.claude/skills/harvested/screen-persistence-pattern/SKILL.md` |
+| `SCADA Tag Autocomplete Component` | Inline searchable dropdown for selecting PLC/SCADA tags scoped to the active project — fetches once, filters client-side | `/Users/apple/.claude/skills/harvested/scada-tag-autocomplete/SKILL.md` |
+| `Screenshot-to-Root-Cause Error Diagnosis` | Decode minified React/production errors from browser screenshots — decode error URLs, trace stack traces, identify the actual component and  | `/Users/apple/.claude/skills/harvested/screenshot-error-diagnosis/SKILL.md` |
+| `Self-Updating Cron Script via Remote Fetch and Atomic Re-Exec` | A long-running cron script installed at `/usr/local/bin/foo.sh` is a frozen snapshot of the day it was installed — every logic change requir | `/Users/apple/.claude/skills/harvested/self-updating-cron-script/SKILL.md` |
+| `shared-vps-coexistence` | Operational rules and procedures for safely adding a new product to a busy multi-tenant Linux VPS (Hostinger, DigitalOcean droplet, EC2, bar | `/Users/apple/.claude/skills/harvested/shared-vps-coexistence/SKILL.md` |
+| `Sliding Window Dedup Guard` | Time-windowed event counting with three dedup layers (memory Map, database query, cooldown period) for rate-sensitive detectors that must av | `/Users/apple/.claude/skills/harvested/sliding-window-dedup-guard/SKILL.md` |
+| `Socket.IO Room Subscription Chain` | Complete the subscribe chain — frontend store must emit subscribe event to server, server must join client to room, then room-scoped emit wo | `/Users/apple/.claude/skills/harvested/socketio-room-subscription-chain/SKILL.md` |
+| `Soft-Delete via hidden Flag for Reversible Dedupe` | Instead of `delete from`, mark duplicate or stale records with `hidden=true` and have every list view filter `hidden=false` by default with  | `/Users/apple/.claude/skills/harvested/soft-delete-hidden-flag/SKILL.md` |
+| `Split Auth Modal — Sign-In vs Sign-Up Mode` | Single AuthModal component with a `mode` prop that drives distinct UX flows — sign-in rejects new users, sign-up shows details form for new  | `/Users/apple/.claude/skills/harvested/split-auth-modal-signin-signup/SKILL.md` |
+| `stateful-cli-as-http-service` | Wrap a stateful or interactive CLI (claude, gh copilot, REPL tools) as an HTTP service. Covers the subset of CLI-bridge problems the plain c | `/Users/apple/.claude/skills/harvested/stateful-cli-as-http-service/SKILL.md` |
+| `Subscription vs Pay-As-You-Go API Key Billing Mismatch (Insufficient-Balance Despite Valid Plan)` | When a SaaS / LLM provider returns "insufficient balance" or 4xx-billing errors despite an active, paid subscription, the most common cause  | `/Users/apple/.claude/skills/harvested/subscription-vs-payg-api-key-billing-mismatch/SKILL.md` |
+| `Supabase Owner-Only Storage + RLS for Sensitive Per-User PII` | When a Supabase app needs to store sensitive per-user files (KYC docs, ID cards, medical reports, financial records) such that only the file | `/Users/apple/.claude/skills/harvested/supabase-owner-only-storage-pii/SKILL.md` |
+| `Supabase Polling Overload — Diagnosis and Fix` | When Supabase shows millions of DB requests from a React app, the cause is almost always cascading React Query refetchIntervals and unguarde | `/Users/apple/.claude/skills/harvested/supabase-polling-overload-fix/SKILL.md` |
+| `Supabase SQL → Clipboard Workflow` | When `supabase db push` is blocked by historical unapplied migrations on a linked project, copy each new migration's SQL to the macOS clipbo | `/Users/apple/.claude/skills/harvested/supabase-sql-clipboard-workflow/SKILL.md` |
+| `Supabase Tenant Filtering via Inner Joins` | Use !inner join + dot-notation filtering to scope Supabase queries through related tables for multi-tenant isolation | `/Users/apple/.claude/skills/harvested/supabase-tenant-filtering/SKILL.md` |
+| `supabase-multi-tenant-rls-jwt-claims` | Full recipe for multi-tenant SaaS isolation on Supabase using Postgres Row Level Security and JWT custom claims. Covers the profiles ↔ auth. | `/Users/apple/.claude/skills/harvested/supabase-multi-tenant-rls-jwt-claims/SKILL.md` |
+| `SVG Sanitization with DOMPurify` | Replace regex-based SVG sanitizers with DOMPurify SVG profile — regex is trivially bypassable | `/Users/apple/.claude/skills/harvested/svg-sanitization-dompurify/SKILL.md` |
+| `svg-icons-html-pdf` |  | `/Users/apple/.claude/skills/harvested/svg-icons-html-pdf/SKILL.md` |
+| `Timezone-Aware Hourly Cron Fanout` | Run an hourly cron that uses Intl.DateTimeFormat to check each user's local hour — only deliver to users whose timezone hour matches the tar | `/Users/apple/.claude/skills/harvested/timezone-aware-cron-fanout/SKILL.md` |
+| `Token-Saving Toolkit Install` | One-stop install procedure for the 5 Claude Code tools that cut token / API spend the most — Graphify (codebase knowledge graph), Firecrawl  | `/Users/apple/.claude/skills/harvested/token-saving-toolkit-install/SKILL.md` |
+| `Vercel Prebuilt Deploy Workaround` | When Vercel remote builds fail silently (empty error message), build locally with vercel build --prod then deploy with vercel deploy --prebu | `/Users/apple/.claude/skills/harvested/vercel-prebuilt-deploy/SKILL.md` |
+| `vercel-frontend-vps-backend-split` | Topology pattern when the frontend is on Vercel (auto-deploy from GitHub) but the backend (API + DB + workers) lives on a separate self-host | `/Users/apple/.claude/skills/harvested/vercel-frontend-vps-backend-split/SKILL.md` |
+| `Vite Environment URL Auto-Detection` | Frontend apps deployed to Vercel must auto-detect API/WebSocket URLs for production vs development — never default to localhost for both API | `/Users/apple/.claude/skills/harvested/vite-env-url-detection/SKILL.md` |
+| `WhatsApp Instant Acknowledgment Before Slow Processing` | Send an immediate ack message to the user before kicking off a long-running operation (AI inference, email fetch, DB query). Prevents user t | `/Users/apple/.claude/skills/harvested/whatsapp-instant-ack/SKILL.md` |
+| `WhatsApp Personalized Research Before Replying` | Before replying to any BNI member on WhatsApp, research their company, specialty, city, and prior conversation context. Never send generic r | `/Users/apple/.claude/skills/harvested/whatsapp-personalized-research/SKILL.md` |
+| `WhatsApp Self-Chat Loop — Token Drain Diagnosis` | When LLM balance drains faster than expected on a WhatsApp bot, check for self-chat loop (bot replying to its own number) and oversized per- | `/Users/apple/.claude/skills/harvested/whatsapp-selfchat-token-drain/SKILL.md` |
+| `Worker Read-Only DB Role Pattern` | Background workers (BullMQ, cron, etc.) should read operational data via a dedicated SELECT-only Postgres role with its own DATABASE_URL — n | `/Users/apple/.claude/skills/harvested/worker-readonly-db-role-pattern/SKILL.md` |
+| `Z.AI (Zhipu GLM) Provider Config — OpenAI-Compatible Format` | Z.AI (bigmodel.cn / zhipuai.cn) uses OpenAI-compatible /chat/completions API. Setting api type to "anthropic-messages" appends /v1/messages  | `/Users/apple/.claude/skills/harvested/zai-openai-compatible-provider/SKILL.md` |
+| `Z.AI GLM Coding Plan + Claude Code (Anthropic-Compatible Endpoint, Per-Slot Model Mapping)` | Configure Claude Code to use Z.AI's GLM Coding Plan (Lite / Pro / Max subscription) via the Anthropic-compatible endpoint at api.z.ai/api/an | `/Users/apple/.claude/skills/harvested/zai-coding-plan-claude-code/SKILL.md` |
+| `Zero Mock, Zero Fallback — Honest Data or Honest Error` | Enforce strict no-mock, no-fallback policy across frontend and backend. API failure shows error, empty data shows blank — never fake data, n | `/Users/apple/.claude/skills/harvested/zero-mock-zero-fallback/SKILL.md` |
+| `Zero-Hardcode Bottom-Up Integration Protocol` | 5-step mandatory build order for any data-display feature — Backend → Verify → Store → UI → Traceability. Prevents AI from hallucinating a " | `/Users/apple/.claude/skills/harvested/zero-hardcode-integration-protocol/SKILL.md` |
 
 _Catalog auto-regenerated on every Claude Code session start. Do not edit between the IRONBARK markers, manual edits outside the block are preserved._
 
