@@ -15,10 +15,14 @@ import { AppSidebarProps } from './sidebar/types';
 import { useMenuItems } from './sidebar/useMenuItems';
 import { SidebarMenuItem } from './sidebar/SidebarMenuItem';
 import { SidebarHeaderComponent } from './sidebar/SidebarHeaderComponent';
+import { Link } from 'react-router-dom';
+import { usePermissions } from '@/hooks/usePermissions';
+import { Shield } from 'lucide-react';
 
 export function AppSidebar(props: AppSidebarProps) {
   const { mainItems, masterItems } = useMenuItems(props);
   const [search, setSearch] = useState('');
+  const { isSuperAdmin } = usePermissions();
 
   const filteredMain = mainItems.filter(item =>
     item.title.toLowerCase().includes(search.toLowerCase())
@@ -65,6 +69,28 @@ export function AppSidebar(props: AppSidebarProps) {
                   {filteredMasters.map((item) => (
                     <SidebarMenuItem key={item.title} item={item} />
                   ))}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          </>
+        )}
+
+        {isSuperAdmin && (
+          <>
+            <SidebarSeparator />
+            <SidebarGroup>
+              <SidebarGroupLabel className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Super-Admin
+              </SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  <Link
+                    to="/admin/code-assistant"
+                    className="flex items-center gap-2 px-3 py-2 text-sm rounded-md hover:bg-muted transition-colors"
+                  >
+                    <Shield className="h-4 w-4" />
+                    <span>Code Assistant</span>
+                  </Link>
                 </SidebarMenu>
               </SidebarGroupContent>
             </SidebarGroup>

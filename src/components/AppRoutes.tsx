@@ -16,6 +16,11 @@ import AdvanceStatementReport from "../pages/AdvanceStatementReport";
 import NoDeductionLetterPage from "../pages/NoDeductionLetter";
 import CurrentlyAdmittedPatients from "../pages/CurrentlyAdmittedPatients";
 
+// Super-Admin panel (lazy-loaded)
+const AdminPanel = lazy(() => import("../pages/admin/AdminPanel"));
+const CodeAssistantPage = lazy(() => import("../pages/admin/CodeAssistant"));
+const ComingSoonPage = lazy(() => import("../pages/admin/ComingSoon"));
+
 // Lazy load discharged patients page
 const DischargedPatients = lazy(() => import("../pages/DischargedPatients"));
 const Accommodation = lazy(() => import("../pages/Accommodation"));
@@ -304,6 +309,19 @@ export const AppRoutes = () => {
         <Route path="/telephony" element={<Suspense fallback={<PageLoader />}><TelephonyDashboard /></Suspense>} />
         <Route path="/payment-qr" element={<Suspense fallback={<PageLoader />}><PaymentQR /></Suspense>} />
         <Route path="/queue-status" element={<QueueStatus />} />
+        {/* Super-Admin panel */}
+        <Route path="/admin" element={<Suspense fallback={<PageLoader />}><AdminPanel /></Suspense>}>
+          <Route index element={<Suspense fallback={<PageLoader />}><CodeAssistantPage /></Suspense>} />
+          <Route path="code-assistant" element={<Suspense fallback={<PageLoader />}><CodeAssistantPage /></Suspense>} />
+          <Route path="logic-studio"   element={<Suspense fallback={<PageLoader />}><ComingSoonPage /></Suspense>} />
+          <Route path="users"          element={<Suspense fallback={<PageLoader />}><ComingSoonPage /></Suspense>} />
+          <Route path="audit-log"      element={<Suspense fallback={<PageLoader />}><ComingSoonPage /></Suspense>} />
+          <Route path="usage"          element={<Suspense fallback={<PageLoader />}><ComingSoonPage /></Suspense>} />
+          <Route path="deployments"    element={<Suspense fallback={<PageLoader />}><ComingSoonPage /></Suspense>} />
+          <Route path="settings"       element={<Suspense fallback={<PageLoader />}><ComingSoonPage /></Suspense>} />
+          <Route path="ai-models"      element={<Suspense fallback={<PageLoader />}><ComingSoonPage /></Suspense>} />
+        </Route>
+
         {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
         <Route path="/master-data" element={<Suspense fallback={<PageLoader />}><MasterData /></Suspense>} />
         <Route path="*" element={<NotFound />} />
