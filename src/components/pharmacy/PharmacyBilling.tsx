@@ -99,6 +99,7 @@ interface Sale {
   payment_method: 'CASH' | 'CARD' | 'UPI' | 'INSURANCE' | 'CREDIT';
   payment_reference?: string;
   status: 'PENDING' | 'COMPLETED' | 'CANCELLED' | 'REFUNDED';
+  payment_status?: string;
   cashier_name?: string;
   items: CartItem[];
 }
@@ -637,6 +638,7 @@ const PharmacyBilling: React.FC = () => {
       payment_method: paymentMethod,
       payment_reference: paymentReference,
       status: 'COMPLETED',
+      payment_status: (totals.totalDiscount > 0 && !isAdmin) ? 'PENDING_DISCOUNT_APPROVAL' : 'COMPLETED',
       cashier_name: 'Current User',
       items: [...cart]
     };
@@ -1745,9 +1747,20 @@ const PharmacyBilling: React.FC = () => {
       <Dialog open={!!completedSale} onOpenChange={() => setCompletedSale(null)}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle className="text-center text-green-600">
-              <CheckCircle className="h-6 w-6 mx-auto mb-2" />
-              Sale Completed Successfully!
+            <DialogTitle className="text-center">
+              {completedSale?.payment_status === 'PENDING_DISCOUNT_APPROVAL' ? (
+                <>
+                  <div className="flex items-center justify-center w-12 h-12 rounded-full bg-amber-100 mx-auto mb-2">
+                    <Clock className="h-6 w-6 text-amber-600" />
+                  </div>
+                  <span className="text-amber-600">Pending Admin Approval</span>
+                </>
+              ) : (
+                <>
+                  <CheckCircle className="h-6 w-6 mx-auto mb-2 text-green-600" />
+                  <span className="text-green-600">Sale Completed Successfully!</span>
+                </>
+              )}
             </DialogTitle>
           </DialogHeader>
           {completedSale && (
@@ -1758,7 +1771,7 @@ const PharmacyBilling: React.FC = () => {
                   {new Date(completedSale.sale_date).toLocaleString()}
                 </div>
               </div>
-              
+
               <div className="space-y-2">
                 <div className="flex justify-between">
                   <span>Total Amount:</span>
@@ -1775,13 +1788,20 @@ const PharmacyBilling: React.FC = () => {
                   </div>
                 )}
               </div>
-              
-              <div className="flex gap-2">
-                <Button className="w-full" onClick={printReceipt}>
-                  <Printer className="h-4 w-4 mr-2" />
-                  Print Receipt
-                </Button>
-              </div>
+
+              {completedSale.payment_status === 'PENDING_DISCOUNT_APPROVAL' ? (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-center space-y-1">
+                  <p className="text-amber-800 font-medium text-sm">Bill printing is blocked until admin approves the discount.</p>
+                  <p className="text-amber-600 text-xs">Once approved, the bill can be printed from View Sales.</p>
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <Button className="w-full" onClick={printReceipt}>
+                    <Printer className="h-4 w-4 mr-2" />
+                    Print Receipt
+                  </Button>
+                </div>
+              )}
             </div>
           )}
         </DialogContent>
