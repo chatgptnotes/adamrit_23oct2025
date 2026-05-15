@@ -13,7 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Calendar, CalendarDays, Loader2 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
-import { geminiGenerateContentUrl } from "@/lib/gemini";
+import { geminiGenerateContentUrl, geminiFetch } from "@/lib/gemini";
 import { format } from 'date-fns';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -4284,6 +4284,17 @@ DD/MM/YYYY:-Test Category: Test1:Value1 unit, Test2:Value2 unit`);
 
                   setIsChatGptLoading(true);
                   try {
+                    // Fail fast if the Gemini key is missing or still the
+                    // .env.example placeholder — otherwise the call to
+                    // Google returns a generic "API key not valid" that
+                    // masks the real problem (the key was never set).
+                    const geminiApiKey = import.meta.env.VITE_GEMINI_API_KEY;
+                    if (!geminiApiKey || geminiApiKey === 'your_gemini_api_key_here') {
+                      throw new Error(
+                        'Gemini API key is not configured. Add VITE_GEMINI_API_KEY=<your-key> to .env and restart the dev server.'
+                      );
+                    }
+
                     toast({
                       title: "Processing",
                       description: "Generating description with AI...",
@@ -4307,7 +4318,7 @@ ${allProcedures}
 
 INSTRUCTIONS: Write exactly 3-4 lines. Include procedure name, surgeon name, type of anaesthesia, and post-operative condition. Use formal medical language. No bullet points or numbering. Write as a continuous paragraph.`;
 
-                    const response = await fetch(geminiGenerateContentUrl(import.meta.env.VITE_GEMINI_API_KEY), {
+                    const response = await geminiFetch(geminiGenerateContentUrl(geminiApiKey), {
                       method: 'POST',
                       headers: {
                         'Content-Type': 'application/json'
@@ -4324,11 +4335,6 @@ INSTRUCTIONS: Write exactly 3-4 lines. Include procedure name, surgeon name, typ
                         }
                       })
                     });
-
-                    if (!response.ok) {
-                      const errorData = await response.json();
-                      throw new Error(`Gemini API error: ${errorData.error?.message || response.statusText}`);
-                    }
 
                     const data = await response.json();
                     const generatedDescription = data.candidates?.[0]?.content?.parts?.[0]?.text;
