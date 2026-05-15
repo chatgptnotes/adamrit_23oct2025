@@ -352,6 +352,12 @@ export const menuItems: MenuItemDef[] = [
     section: 'masters',
   },
   {
+    title: "PMJAY / MJPJAY Master",
+    url: "/pmjay-mjpjay-master",
+    icon: Shield,
+    section: 'masters',
+  },
+  {
     title: "Ayushman Surgeons",
     url: "/ayushman-surgeons",
     icon: Stethoscope,
