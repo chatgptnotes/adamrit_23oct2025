@@ -40,6 +40,15 @@ import LowStockMedicines from './LowStockMedicines';
 import PrescriptionQueue from './PrescriptionQueue';
 import PrescriptionNotificationBell from './PrescriptionNotificationBell';
 import { usePendingPrescriptions } from '@/hooks/usePendingPrescriptions';
+import { useAuth } from '@/contexts/AuthContext';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
+import { Badge } from '@/components/ui/badge';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Textarea } from '@/components/ui/textarea';
+import { CheckCircle, XCircle, ShieldCheck } from 'lucide-react';
+import { logActivity } from '@/lib/activity-logger';
+import { toast } from 'sonner';
 
 const PharmacyDashboard: React.FC = () => {
   const [searchParams] = useSearchParams();
@@ -49,6 +58,76 @@ const PharmacyDashboard: React.FC = () => {
   const [purchaseOrderView, setPurchaseOrderView] = useState<'list' | 'add' | 'edit'>('list');
   const [selectedPurchaseOrderId, setSelectedPurchaseOrderId] = useState<string | null>(null);
   const [autoOpenPrescriptionId, setAutoOpenPrescriptionId] = useState<string | null>(null);
+  const [pharmacyRejectDialogOpen, setPharmacyRejectDialogOpen] = useState(false);
+  const [rejectingPharmacySaleId, setRejectingPharmacySaleId] = useState<string | null>(null);
+  const [pharmacyRejectionReason, setPharmacyRejectionReason] = useState('');
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [approvalListDialogOpen, setApprovalListDialogOpen] = useState(false);
+
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const isAdmin = user?.role === 'admin' || user?.role === 'superadmin' || user?.role === 'super_admin';
+
+  const { data: pendingPharmacyDiscounts = [] } = useQuery({
+    queryKey: ['pending-pharmacy-discount-approvals'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('pharmacy_sales')
+        .select('sale_id, bill_number, patient_name, discount, discount_percentage, total_amount, created_by, created_at, hospital_name')
+        .eq('payment_status', 'PENDING_DISCOUNT_APPROVAL')
+        .order('created_at', { ascending: false });
+      if (error) return [];
+      return data || [];
+    },
+    enabled: isAdmin,
+    refetchInterval: 60000,
+    staleTime: 30000,
+  });
+
+  const getUserIdentifier = () => {
+    const raw = localStorage.getItem('hmis_user');
+    const u = raw ? JSON.parse(raw) : {};
+    return u.email || u.username || 'Admin';
+  };
+
+  const handleApprovePharmacyDiscount = async (saleId: string, discount: number) => {
+    setIsProcessing(true);
+    try {
+      const approver = getUserIdentifier();
+      const { error } = await supabase
+        .from('pharmacy_sales')
+        .update({ payment_status: 'COMPLETED', updated_at: new Date().toISOString() } as any)
+        .eq('sale_id', saleId);
+      if (error) throw error;
+      await logActivity('pharmacy_discount_approved', { sale_id: saleId, discount, approved_by: approver }, 'PharmacyDashboard');
+      toast.success(`Pharmacy discount of Rs. ${discount.toLocaleString('en-IN')} approved`);
+      queryClient.invalidateQueries({ queryKey: ['pending-pharmacy-discount-approvals'] });
+    } catch { toast.error('Failed to approve pharmacy discount'); }
+    setIsProcessing(false);
+  };
+
+  const handleRejectPharmacyDiscount = async () => {
+    if (!rejectingPharmacySaleId || !pharmacyRejectionReason.trim()) {
+      toast.error('Please provide a reason for rejection');
+      return;
+    }
+    setIsProcessing(true);
+    try {
+      const approver = getUserIdentifier();
+      const { error } = await supabase
+        .from('pharmacy_sales')
+        .update({ payment_status: 'CANCELLED', updated_at: new Date().toISOString() } as any)
+        .eq('sale_id', rejectingPharmacySaleId);
+      if (error) throw error;
+      await logActivity('pharmacy_discount_rejected', { sale_id: rejectingPharmacySaleId, reason: pharmacyRejectionReason, rejected_by: approver }, 'PharmacyDashboard');
+      toast.success('Pharmacy discount rejected. Sale cancelled.');
+      setPharmacyRejectDialogOpen(false);
+      setRejectingPharmacySaleId(null);
+      setPharmacyRejectionReason('');
+      queryClient.invalidateQueries({ queryKey: ['pending-pharmacy-discount-approvals'] });
+    } catch { toast.error('Failed to reject pharmacy discount'); }
+    setIsProcessing(false);
+  };
 
   // Update tab when URL changes (e.g., returning from Edit Sale Bill)
   useEffect(() => {
@@ -112,6 +191,22 @@ const PharmacyDashboard: React.FC = () => {
           </div>
         </div>
         <div className="flex items-center gap-3">
+          {isAdmin && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="relative"
+              aria-label={`${pendingPharmacyDiscounts.length} pending discount approvals`}
+              onClick={() => setApprovalListDialogOpen(true)}
+            >
+              <ShieldCheck className={pendingPharmacyDiscounts.length > 0 ? 'h-5 w-5 text-orange-600' : 'h-5 w-5 text-muted-foreground'} />
+              {pendingPharmacyDiscounts.length > 0 && (
+                <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 flex items-center justify-center rounded-full bg-red-600 text-white text-[10px] font-semibold leading-none">
+                  {pendingPharmacyDiscounts.length > 99 ? '99+' : pendingPharmacyDiscounts.length}
+                </span>
+              )}
+            </Button>
+          )}
           <PrescriptionNotificationBell
             count={pendingPrescriptionsCount}
             recent={pendingPrescriptionsRecent}
@@ -146,6 +241,14 @@ const PharmacyDashboard: React.FC = () => {
           <TabsTrigger value="purchase-order">Purchase Order</TabsTrigger>
           <TabsTrigger value="low-stock">Low Stock</TabsTrigger>
           <TabsTrigger value="prescriptions">Prescriptions</TabsTrigger>
+          {isAdmin && (
+            <TabsTrigger value="discount-approvals" className="relative">
+              Discount Approvals
+              {pendingPharmacyDiscounts.length > 0 && (
+                <span className="ml-1 bg-red-500 text-white text-xs rounded-full px-1.5 py-0.5">{pendingPharmacyDiscounts.length}</span>
+              )}
+            </TabsTrigger>
+          )}
           </div>
         </TabsList>
 
@@ -211,6 +314,7 @@ const PharmacyDashboard: React.FC = () => {
                 </div>
               </CardContent>
             </Card>
+
           </div>
 
           {/* Quick Actions */}
@@ -518,7 +622,238 @@ const PharmacyDashboard: React.FC = () => {
             onAutoOpenHandled={() => setAutoOpenPrescriptionId(null)}
           />
         </TabsContent>
+
+        {isAdmin && (
+          <TabsContent value="discount-approvals">
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 mb-2">
+                <ShieldCheck className="h-5 w-5 text-orange-500" />
+                <h2 className="text-lg font-semibold">Pharmacy Discount Approvals</h2>
+                {pendingPharmacyDiscounts.length > 0 && (
+                  <Badge variant="destructive">{pendingPharmacyDiscounts.length} pending</Badge>
+                )}
+              </div>
+
+              {pendingPharmacyDiscounts.length === 0 ? (
+                <div className="text-center py-16 border rounded-lg bg-gray-50">
+                  <CheckCircle className="h-12 w-12 text-green-400 mx-auto mb-3" />
+                  <p className="text-lg font-medium text-green-600">All caught up!</p>
+                  <p className="text-sm text-muted-foreground">No pharmacy discount requests pending approval.</p>
+                </div>
+              ) : (
+                <div className="overflow-auto border rounded-lg">
+                  <table className="w-full text-sm">
+                    <thead className="bg-orange-50 border-b">
+                      <tr>
+                        <th className="p-3 text-left">Hospital</th>
+                        <th className="p-3 text-left">Bill No</th>
+                        <th className="p-3 text-left">Patient</th>
+                        <th className="p-3 text-right">Discount</th>
+                        <th className="p-3 text-right">Total Amount</th>
+                        <th className="p-3 text-left">Requested By</th>
+                        <th className="p-3 text-left">Date</th>
+                        <th className="p-3 text-center">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {pendingPharmacyDiscounts.map((sale: any) => (
+                        <tr key={sale.sale_id} className="border-t hover:bg-orange-50/50">
+                          <td className="p-3">
+                            <Badge className={sale.hospital_name === 'hope' ? 'bg-blue-100 text-blue-800 hover:bg-blue-100' : sale.hospital_name === 'ayushman' ? 'bg-green-100 text-green-800 hover:bg-green-100' : 'bg-gray-100 text-gray-800 hover:bg-gray-100'}>
+                              {sale.hospital_name === 'hope' ? 'Hope' : sale.hospital_name === 'ayushman' ? 'Ayushman' : sale.hospital_name || '-'}
+                            </Badge>
+                          </td>
+                          <td className="p-3 font-mono font-medium">{sale.bill_number || '-'}</td>
+                          <td className="p-3 font-medium">{sale.patient_name || '-'}</td>
+                          <td className="p-3 text-right font-mono font-semibold text-orange-700">
+                            Rs. {(Number(sale.discount) || 0).toLocaleString('en-IN')}
+                            {sale.discount_percentage > 0 && (
+                              <span className="text-xs text-orange-500 ml-1">({sale.discount_percentage}%)</span>
+                            )}
+                          </td>
+                          <td className="p-3 text-right font-mono font-semibold">
+                            Rs. {(Number(sale.total_amount) || 0).toLocaleString('en-IN')}
+                          </td>
+                          <td className="p-3 text-muted-foreground">{sale.created_by || '-'}</td>
+                          <td className="p-3 text-muted-foreground">
+                            {sale.created_at ? new Date(sale.created_at).toLocaleDateString('en-IN') : '-'}
+                          </td>
+                          <td className="p-3">
+                            <div className="flex items-center justify-center gap-2">
+                              <Button size="sm" className="bg-green-600 hover:bg-green-700" onClick={() => handleApprovePharmacyDiscount(sale.sale_id, sale.discount)} disabled={isProcessing}>
+                                <CheckCircle className="h-4 w-4 mr-1" /> Approve
+                              </Button>
+                              <Button size="sm" variant="destructive" onClick={() => { setRejectingPharmacySaleId(sale.sale_id); setPharmacyRejectDialogOpen(true); }} disabled={isProcessing}>
+                                <XCircle className="h-4 w-4 mr-1" /> Reject
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            {/* Reject Dialog */}
+            <Dialog open={pharmacyRejectDialogOpen} onOpenChange={setPharmacyRejectDialogOpen}>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Reject Pharmacy Discount</DialogTitle>
+                </DialogHeader>
+                <div className="py-4">
+                  <label className="text-sm font-medium mb-2 block">Reason for rejection <span className="text-red-500">*</span></label>
+                  <Textarea
+                    placeholder="Enter the reason for rejecting this pharmacy discount..."
+                    value={pharmacyRejectionReason}
+                    onChange={(e) => setPharmacyRejectionReason(e.target.value)}
+                    rows={3}
+                  />
+                  <p className="text-xs text-muted-foreground mt-2">The pharmacy sale will be cancelled. The pharmacist will need to create a new sale without the discount.</p>
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => { setPharmacyRejectDialogOpen(false); setPharmacyRejectionReason(''); }}>
+                    Cancel
+                  </Button>
+                  <Button variant="destructive" onClick={handleRejectPharmacyDiscount} disabled={isProcessing || !pharmacyRejectionReason.trim()}>
+                    {isProcessing ? 'Rejecting...' : 'Reject & Cancel Sale'}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          </TabsContent>
+        )}
       </Tabs>
+
+      {/* Approval List Dialog */}
+      <Dialog open={approvalListDialogOpen} onOpenChange={setApprovalListDialogOpen}>
+        <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col p-0 gap-0 overflow-hidden">
+          {/* Header */}
+          <div className="bg-gradient-to-r from-orange-500 to-orange-600 px-6 py-4 rounded-t-lg">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="bg-white/20 rounded-full p-2">
+                  <ShieldCheck className="h-5 w-5 text-white" />
+                </div>
+                <div>
+                  <h2 className="text-white font-semibold text-lg">Discount Approvals</h2>
+                  <p className="text-orange-100 text-xs">Pharmacy sales pending admin review</p>
+                </div>
+              </div>
+              {pendingPharmacyDiscounts.length > 0 && (
+                <span className="bg-white text-orange-600 text-sm font-bold px-3 py-1 rounded-full">
+                  {pendingPharmacyDiscounts.length} pending
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Body */}
+          <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3">
+            {pendingPharmacyDiscounts.length === 0 ? (
+              <div className="text-center py-14">
+                <div className="bg-green-50 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
+                  <CheckCircle className="h-8 w-8 text-green-500" />
+                </div>
+                <p className="text-base font-semibold text-green-700">All caught up!</p>
+                <p className="text-sm text-muted-foreground mt-1">No pharmacy discount requests pending approval.</p>
+              </div>
+            ) : (
+              pendingPharmacyDiscounts.map((sale: any) => (
+                <div key={sale.sale_id} className="border rounded-xl p-4 bg-white hover:shadow-md transition-shadow">
+                  <div className="flex items-start justify-between gap-4">
+                    {/* Left: patient + bill info */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap mb-1">
+                        <Badge className={sale.hospital_name === 'hope' ? 'bg-blue-100 text-blue-700 hover:bg-blue-100 text-xs' : sale.hospital_name === 'ayushman' ? 'bg-green-100 text-green-700 hover:bg-green-100 text-xs' : 'bg-gray-100 text-gray-700 hover:bg-gray-100 text-xs'}>
+                          {sale.hospital_name === 'hope' ? 'Hope' : sale.hospital_name === 'ayushman' ? 'Ayushman' : sale.hospital_name || 'Unknown'}
+                        </Badge>
+                        <span className="font-mono text-xs text-muted-foreground">{sale.bill_number || 'No Bill No.'}</span>
+                      </div>
+                      <p className="font-semibold text-gray-900 truncate">{sale.patient_name || 'Unknown Patient'}</p>
+                      <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
+                        <span>By <span className="font-medium text-gray-700">{sale.created_by || '-'}</span></span>
+                        <span>·</span>
+                        <span>{sale.created_at ? new Date(sale.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'}</span>
+                      </div>
+                    </div>
+
+                    {/* Center: amounts */}
+                    <div className="text-right shrink-0">
+                      <div className="inline-flex items-center gap-1 bg-orange-50 border border-orange-200 rounded-lg px-3 py-1 mb-1">
+                        <span className="text-xs text-orange-600 font-medium">Discount</span>
+                        <span className="text-orange-700 font-bold text-sm">
+                          ₹{(Number(sale.discount) || 0).toLocaleString('en-IN')}
+                        </span>
+                        {sale.discount_percentage > 0 && (
+                          <span className="text-orange-400 text-xs">({sale.discount_percentage}%)</span>
+                        )}
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Total: <span className="font-semibold text-gray-800">₹{(Number(sale.total_amount) || 0).toLocaleString('en-IN')}</span>
+                      </p>
+                    </div>
+
+                    {/* Right: actions */}
+                    <div className="flex flex-col gap-2 shrink-0">
+                      <Button
+                        size="sm"
+                        className="bg-green-600 hover:bg-green-700 text-white gap-1"
+                        onClick={() => handleApprovePharmacyDiscount(sale.sale_id, sale.discount)}
+                        disabled={isProcessing}
+                      >
+                        <CheckCircle className="h-3.5 w-3.5" /> Approve
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        className="gap-1"
+                        onClick={() => { setRejectingPharmacySaleId(sale.sale_id); setPharmacyRejectDialogOpen(true); }}
+                        disabled={isProcessing}
+                      >
+                        <XCircle className="h-3.5 w-3.5" /> Reject
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* Footer */}
+          <div className="border-t px-6 py-3 flex justify-end bg-gray-50 rounded-b-lg">
+            <Button variant="outline" onClick={() => setApprovalListDialogOpen(false)}>Close</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reject Confirmation Dialog */}
+      <Dialog open={pharmacyRejectDialogOpen} onOpenChange={setPharmacyRejectDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reject Pharmacy Discount</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <label className="text-sm font-medium mb-2 block">Reason for rejection <span className="text-red-500">*</span></label>
+            <Textarea
+              placeholder="Enter the reason for rejecting this pharmacy discount..."
+              value={pharmacyRejectionReason}
+              onChange={(e) => setPharmacyRejectionReason(e.target.value)}
+              rows={3}
+            />
+            <p className="text-xs text-muted-foreground mt-2">The pharmacy sale will be cancelled. The pharmacist will need to create a new sale without the discount.</p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setPharmacyRejectDialogOpen(false); setPharmacyRejectionReason(''); }}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleRejectPharmacyDiscount} disabled={isProcessing || !pharmacyRejectionReason.trim()}>
+              {isProcessing ? 'Rejecting...' : 'Reject & Cancel Sale'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

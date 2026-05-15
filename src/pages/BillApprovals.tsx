@@ -77,6 +77,10 @@ const BillApprovals = () => {
   const [discountRejectDialogOpen, setDiscountRejectDialogOpen] = useState(false);
   const [rejectingDiscountId, setRejectingDiscountId] = useState<string | null>(null);
   const [discountRejectionReason, setDiscountRejectionReason] = useState('');
+  const [pharmacyRejectDialogOpen, setPharmacyRejectDialogOpen] = useState(false);
+  const [rejectingPharmacySaleId, setRejectingPharmacySaleId] = useState<string | null>(null);
+  const [pharmacyRejectionReason, setPharmacyRejectionReason] = useState('');
+  const [discountSubTab, setDiscountSubTab] = useState<'visit' | 'pharmacy'>('pharmacy');
 
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin' || user?.role === 'super_admin';
 
@@ -151,6 +155,23 @@ const BillApprovals = () => {
     staleTime: 60000,
   });
 
+  // Fetch pending pharmacy discount approvals
+  const { data: pendingPharmacyDiscounts = [] } = useQuery({
+    queryKey: ['pending-pharmacy-discount-approvals'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('pharmacy_sales')
+        .select('sale_id, bill_number, patient_name, patient_id, discount, discount_percentage, total_amount, created_by, created_at, hospital_name, payment_method')
+        .eq('payment_status', 'PENDING_DISCOUNT_APPROVAL')
+        .order('created_at', { ascending: false });
+      if (error) return [];
+      return data || [];
+    },
+    enabled: isAdmin,
+    refetchInterval: 120000,
+    staleTime: 60000,
+  });
+
   // Fetch pending package approvals
   const { data: pendingPackages = [] } = useQuery({
     queryKey: ['pending-package-approvals'],
@@ -171,6 +192,45 @@ const BillApprovals = () => {
     refetchInterval: 120000,
     staleTime: 60000,
   });
+
+  const handleApprovePharmacyDiscount = async (saleId: string, discount: number) => {
+    setIsProcessing(true);
+    try {
+      const approver = getUserIdentifier();
+      const { error } = await supabase
+        .from('pharmacy_sales')
+        .update({ payment_status: 'COMPLETED', updated_at: new Date().toISOString() } as any)
+        .eq('sale_id', saleId);
+      if (error) throw error;
+      await logActivity('pharmacy_discount_approved', { sale_id: saleId, discount, approved_by: approver }, 'BillApprovals');
+      toast.success(`Pharmacy discount of Rs. ${discount.toLocaleString('en-IN')} approved`);
+      queryClient.invalidateQueries({ queryKey: ['pending-pharmacy-discount-approvals'] });
+    } catch { toast.error('Failed to approve pharmacy discount'); }
+    setIsProcessing(false);
+  };
+
+  const handleRejectPharmacyDiscount = async () => {
+    if (!rejectingPharmacySaleId || !pharmacyRejectionReason.trim()) {
+      toast.error('Please provide a reason for rejection');
+      return;
+    }
+    setIsProcessing(true);
+    try {
+      const approver = getUserIdentifier();
+      const { error } = await supabase
+        .from('pharmacy_sales')
+        .update({ payment_status: 'CANCELLED', updated_at: new Date().toISOString() } as any)
+        .eq('sale_id', rejectingPharmacySaleId);
+      if (error) throw error;
+      await logActivity('pharmacy_discount_rejected', { sale_id: rejectingPharmacySaleId, reason: pharmacyRejectionReason, rejected_by: approver }, 'BillApprovals');
+      toast.success('Pharmacy discount rejected. Sale cancelled.');
+      setPharmacyRejectDialogOpen(false);
+      setRejectingPharmacySaleId(null);
+      setPharmacyRejectionReason('');
+      queryClient.invalidateQueries({ queryKey: ['pending-pharmacy-discount-approvals'] });
+    } catch { toast.error('Failed to reject pharmacy discount'); }
+    setIsProcessing(false);
+  };
 
   const handleApprovePackage = async (visitUUID: string, visitId: string, packageAmount: string) => {
     setIsProcessing(true);
@@ -370,7 +430,7 @@ const BillApprovals = () => {
             <CardContent className="p-4 flex items-center gap-3">
               <Percent className="h-8 w-8 text-orange-500" />
               <div>
-                <p className="text-2xl font-bold">{pendingDiscounts.length}</p>
+                <p className="text-2xl font-bold">{pendingDiscounts.length + pendingPharmacyDiscounts.length}</p>
                 <p className="text-sm text-muted-foreground">Discounts Pending</p>
               </div>
             </CardContent>
@@ -421,8 +481,8 @@ const BillApprovals = () => {
             <TabsTrigger value="discounts" className="gap-2">
               <Percent className="h-4 w-4" />
               Discount Requests
-              {pendingDiscounts.length > 0 && (
-                <Badge variant="destructive" className="ml-1 text-xs">{pendingDiscounts.length}</Badge>
+              {(pendingDiscounts.length + pendingPharmacyDiscounts.length) > 0 && (
+                <Badge variant="destructive" className="ml-1 text-xs">{pendingDiscounts.length + pendingPharmacyDiscounts.length}</Badge>
               )}
             </TabsTrigger>
             <TabsTrigger value="packages" className="gap-2">
@@ -525,65 +585,153 @@ const BillApprovals = () => {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Percent className="h-5 w-5 text-orange-500" />
-                  Pending Discount Approvals ({pendingDiscounts.length})
+                  Pending Discount Approvals ({pendingDiscounts.length + pendingPharmacyDiscounts.length})
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                {pendingDiscounts.length === 0 ? (
-                  <div className="text-center py-8">
-                    <CheckCircle className="h-10 w-10 text-green-400 mx-auto mb-2" />
-                    <p className="text-sm text-muted-foreground">No discount requests pending.</p>
-                  </div>
-                ) : (
-                  <div className="overflow-auto">
-                    <table className="w-full text-sm">
-                      <thead className="bg-orange-50">
-                        <tr>
-                          <th className="p-3 text-left">Hospital</th>
-                          <th className="p-3 text-left">Patient</th>
-                          <th className="p-3 text-right">Discount Amount</th>
-                          <th className="p-3 text-left">Reason</th>
-                          <th className="p-3 text-left">Requested By</th>
-                          <th className="p-3 text-center">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {pendingDiscounts.map((disc: any) => (
-                          <tr key={disc.id} className="border-t hover:bg-orange-50/50">
-                            <td className="p-3">
-                              <Badge className={disc.hospital_name === 'hope' ? 'bg-blue-100 text-blue-800 hover:bg-blue-100' : disc.hospital_name === 'ayushman' ? 'bg-green-100 text-green-800 hover:bg-green-100' : 'bg-gray-100 text-gray-800 hover:bg-gray-100'}>
-                                {disc.hospital_name === 'hope' ? 'Hope' : disc.hospital_name === 'ayushman' ? 'Ayushman' : disc.hospital_name || '-'}
-                              </Badge>
-                            </td>
-                            <td className="p-3">
-                              <div className="font-medium">{disc.patientName}</div>
-                              {disc.registrationNumber && <div className="text-xs text-muted-foreground font-mono">{disc.registrationNumber}</div>}
-                            </td>
-                            <td className="p-3 text-right font-mono font-semibold text-orange-700">
-                              Rs. {(Number(disc.discount_amount) || 0).toLocaleString('en-IN')}
-                            </td>
-                            <td className="p-3 text-muted-foreground">{disc.discount_reason || '-'}</td>
-                            <td className="p-3 text-muted-foreground">{disc.applied_by || '-'}</td>
-                            <td className="p-3">
-                              <div className="flex items-center justify-center gap-2">
-                                <Button size="sm" className="bg-green-600 hover:bg-green-700" onClick={() => handleApproveDiscount(disc.id, disc.discount_amount)} disabled={isProcessing}>
-                                  <CheckCircle className="h-4 w-4 mr-1" /> Approve
-                                </Button>
-                                <Button size="sm" variant="destructive" onClick={() => { setRejectingDiscountId(disc.id); setDiscountRejectDialogOpen(true); }} disabled={isProcessing}>
-                                  <XCircle className="h-4 w-4 mr-1" /> Reject
-                                </Button>
-                                {disc.visitIdStr && (
-                                  <Button size="sm" variant="outline" onClick={() => navigate(`/invoice/${disc.visitIdStr}`)}>
-                                    <Eye className="h-4 w-4 mr-1" /> View Invoice
-                                  </Button>
-                                )}
-                              </div>
-                            </td>
+                {/* Sub-tab toggle */}
+                <div className="flex gap-2 mb-4 border-b pb-3">
+                  <button
+                    onClick={() => setDiscountSubTab('pharmacy')}
+                    className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${discountSubTab === 'pharmacy' ? 'bg-orange-100 text-orange-800 border border-orange-300' : 'text-muted-foreground hover:bg-gray-100'}`}
+                  >
+                    Pharmacy Discounts
+                    {pendingPharmacyDiscounts.length > 0 && (
+                      <span className="ml-2 bg-orange-500 text-white text-xs rounded-full px-1.5 py-0.5">{pendingPharmacyDiscounts.length}</span>
+                    )}
+                  </button>
+                  <button
+                    onClick={() => setDiscountSubTab('visit')}
+                    className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${discountSubTab === 'visit' ? 'bg-orange-100 text-orange-800 border border-orange-300' : 'text-muted-foreground hover:bg-gray-100'}`}
+                  >
+                    Visit Discounts
+                    {pendingDiscounts.length > 0 && (
+                      <span className="ml-2 bg-orange-500 text-white text-xs rounded-full px-1.5 py-0.5">{pendingDiscounts.length}</span>
+                    )}
+                  </button>
+                </div>
+
+                {/* Pharmacy Discounts sub-tab */}
+                {discountSubTab === 'pharmacy' && (
+                  pendingPharmacyDiscounts.length === 0 ? (
+                    <div className="text-center py-8">
+                      <CheckCircle className="h-10 w-10 text-green-400 mx-auto mb-2" />
+                      <p className="text-sm text-muted-foreground">No pharmacy discount requests pending.</p>
+                    </div>
+                  ) : (
+                    <div className="overflow-auto">
+                      <table className="w-full text-sm">
+                        <thead className="bg-orange-50">
+                          <tr>
+                            <th className="p-3 text-left">Hospital</th>
+                            <th className="p-3 text-left">Bill No</th>
+                            <th className="p-3 text-left">Patient</th>
+                            <th className="p-3 text-right">Discount</th>
+                            <th className="p-3 text-right">Total Amount</th>
+                            <th className="p-3 text-left">Requested By</th>
+                            <th className="p-3 text-left">Date</th>
+                            <th className="p-3 text-center">Actions</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                        </thead>
+                        <tbody>
+                          {pendingPharmacyDiscounts.map((sale: any) => (
+                            <tr key={sale.sale_id} className="border-t hover:bg-orange-50/50">
+                              <td className="p-3">
+                                <Badge className={sale.hospital_name === 'hope' ? 'bg-blue-100 text-blue-800 hover:bg-blue-100' : sale.hospital_name === 'ayushman' ? 'bg-green-100 text-green-800 hover:bg-green-100' : 'bg-gray-100 text-gray-800 hover:bg-gray-100'}>
+                                  {sale.hospital_name === 'hope' ? 'Hope' : sale.hospital_name === 'ayushman' ? 'Ayushman' : sale.hospital_name || '-'}
+                                </Badge>
+                              </td>
+                              <td className="p-3 font-mono font-medium">{sale.bill_number || '-'}</td>
+                              <td className="p-3 font-medium">{sale.patient_name || '-'}</td>
+                              <td className="p-3 text-right font-mono font-semibold text-orange-700">
+                                Rs. {(Number(sale.discount) || 0).toLocaleString('en-IN')}
+                                {sale.discount_percentage > 0 && (
+                                  <span className="text-xs text-orange-500 ml-1">({sale.discount_percentage}%)</span>
+                                )}
+                              </td>
+                              <td className="p-3 text-right font-mono font-semibold">
+                                Rs. {(Number(sale.total_amount) || 0).toLocaleString('en-IN')}
+                              </td>
+                              <td className="p-3 text-muted-foreground">{sale.created_by || '-'}</td>
+                              <td className="p-3 text-muted-foreground">
+                                {sale.created_at ? new Date(sale.created_at).toLocaleDateString('en-IN') : '-'}
+                              </td>
+                              <td className="p-3">
+                                <div className="flex items-center justify-center gap-2">
+                                  <Button size="sm" className="bg-green-600 hover:bg-green-700" onClick={() => handleApprovePharmacyDiscount(sale.sale_id, sale.discount)} disabled={isProcessing}>
+                                    <CheckCircle className="h-4 w-4 mr-1" /> Approve
+                                  </Button>
+                                  <Button size="sm" variant="destructive" onClick={() => { setRejectingPharmacySaleId(sale.sale_id); setPharmacyRejectDialogOpen(true); }} disabled={isProcessing}>
+                                    <XCircle className="h-4 w-4 mr-1" /> Reject
+                                  </Button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )
+                )}
+
+                {/* Visit Discounts sub-tab */}
+                {discountSubTab === 'visit' && (
+                  pendingDiscounts.length === 0 ? (
+                    <div className="text-center py-8">
+                      <CheckCircle className="h-10 w-10 text-green-400 mx-auto mb-2" />
+                      <p className="text-sm text-muted-foreground">No visit discount requests pending.</p>
+                    </div>
+                  ) : (
+                    <div className="overflow-auto">
+                      <table className="w-full text-sm">
+                        <thead className="bg-orange-50">
+                          <tr>
+                            <th className="p-3 text-left">Hospital</th>
+                            <th className="p-3 text-left">Patient</th>
+                            <th className="p-3 text-right">Discount Amount</th>
+                            <th className="p-3 text-left">Reason</th>
+                            <th className="p-3 text-left">Requested By</th>
+                            <th className="p-3 text-center">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {pendingDiscounts.map((disc: any) => (
+                            <tr key={disc.id} className="border-t hover:bg-orange-50/50">
+                              <td className="p-3">
+                                <Badge className={disc.hospital_name === 'hope' ? 'bg-blue-100 text-blue-800 hover:bg-blue-100' : disc.hospital_name === 'ayushman' ? 'bg-green-100 text-green-800 hover:bg-green-100' : 'bg-gray-100 text-gray-800 hover:bg-gray-100'}>
+                                  {disc.hospital_name === 'hope' ? 'Hope' : disc.hospital_name === 'ayushman' ? 'Ayushman' : disc.hospital_name || '-'}
+                                </Badge>
+                              </td>
+                              <td className="p-3">
+                                <div className="font-medium">{disc.patientName}</div>
+                                {disc.registrationNumber && <div className="text-xs text-muted-foreground font-mono">{disc.registrationNumber}</div>}
+                              </td>
+                              <td className="p-3 text-right font-mono font-semibold text-orange-700">
+                                Rs. {(Number(disc.discount_amount) || 0).toLocaleString('en-IN')}
+                              </td>
+                              <td className="p-3 text-muted-foreground">{disc.discount_reason || '-'}</td>
+                              <td className="p-3 text-muted-foreground">{disc.applied_by || '-'}</td>
+                              <td className="p-3">
+                                <div className="flex items-center justify-center gap-2">
+                                  <Button size="sm" className="bg-green-600 hover:bg-green-700" onClick={() => handleApproveDiscount(disc.id, disc.discount_amount)} disabled={isProcessing}>
+                                    <CheckCircle className="h-4 w-4 mr-1" /> Approve
+                                  </Button>
+                                  <Button size="sm" variant="destructive" onClick={() => { setRejectingDiscountId(disc.id); setDiscountRejectDialogOpen(true); }} disabled={isProcessing}>
+                                    <XCircle className="h-4 w-4 mr-1" /> Reject
+                                  </Button>
+                                  {disc.visitIdStr && (
+                                    <Button size="sm" variant="outline" onClick={() => navigate(`/invoice/${disc.visitIdStr}`)}>
+                                      <Eye className="h-4 w-4 mr-1" /> View Invoice
+                                    </Button>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )
                 )}
               </CardContent>
             </Card>
@@ -798,6 +946,33 @@ const BillApprovals = () => {
               </Button>
               <Button variant="destructive" onClick={handleReject} disabled={isProcessing || !rejectionReason.trim()}>
                 {isProcessing ? 'Rejecting...' : 'Reject Bill'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Pharmacy Discount Reject Dialog */}
+        <Dialog open={pharmacyRejectDialogOpen} onOpenChange={setPharmacyRejectDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Reject Pharmacy Discount</DialogTitle>
+            </DialogHeader>
+            <div className="py-4">
+              <label className="text-sm font-medium mb-2 block">Reason for rejection <span className="text-red-500">*</span></label>
+              <Textarea
+                placeholder="Enter the reason for rejecting this pharmacy discount..."
+                value={pharmacyRejectionReason}
+                onChange={(e) => setPharmacyRejectionReason(e.target.value)}
+                rows={3}
+              />
+              <p className="text-xs text-muted-foreground mt-2">The pharmacy sale will be cancelled. The pharmacist will need to create a new sale without the discount.</p>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => { setPharmacyRejectDialogOpen(false); setPharmacyRejectionReason(''); }}>
+                Cancel
+              </Button>
+              <Button variant="destructive" onClick={handleRejectPharmacyDiscount} disabled={isProcessing || !pharmacyRejectionReason.trim()}>
+                {isProcessing ? 'Rejecting...' : 'Reject & Cancel Sale'}
               </Button>
             </DialogFooter>
           </DialogContent>
