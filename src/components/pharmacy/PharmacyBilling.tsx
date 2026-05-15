@@ -836,6 +836,7 @@ const PharmacyBilling: React.FC = () => {
 
   const printReceipt = () => {
     if (!completedSale) return;
+    if (completedSale.payment_status === 'PENDING_DISCOUNT_APPROVAL' || completedSale.payment_status === 'CANCELLED') return;
 
     const printWindow = window.open('', '', 'width=800,height=600');
     if (!printWindow) return;

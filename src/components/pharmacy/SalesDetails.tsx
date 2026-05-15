@@ -736,10 +736,16 @@ export const SalesDetails: React.FC = () => {
   const printSelectedPrescriptions = async () => {
     if (selectedBills.length === 0) return;
 
-    // Get the selected bills data
+    // Get the selected bills data — exclude pending-approval and cancelled bills from bulk print
     const selectedBillsData = selectedPatient?.bills?.filter((bill: any) =>
-      selectedBills.includes(bill.sale_id)
+      selectedBills.includes(bill.sale_id) &&
+      bill.payment_status !== 'PENDING_DISCOUNT_APPROVAL' &&
+      bill.payment_status !== 'CANCELLED'
     ) || [];
+
+    if (selectedBillsData.length < (selectedPatient?.bills?.filter((b: any) => selectedBills.includes(b.sale_id)).length || 0)) {
+      alert('Note: Bills with pending admin approval or cancelled status were excluded from the print.');
+    }
 
     if (selectedBillsData.length === 0) return;
 
@@ -1048,7 +1054,9 @@ export const SalesDetails: React.FC = () => {
   const printPaymentDetails = () => {
     if (!selectedPatient || !selectedPatient.bills) return;
 
-    const bills = selectedPatient.bills;
+    const bills = selectedPatient.bills.filter(
+      (b: any) => b.payment_status !== 'PENDING_DISCOUNT_APPROVAL' && b.payment_status !== 'CANCELLED'
+    );
 
     // Calculate totals
     const totalPaid = bills.reduce((sum: number, b: any) => {
@@ -1137,7 +1145,9 @@ export const SalesDetails: React.FC = () => {
   const printSaleDetails = () => {
     if (!selectedPatient || !selectedPatient.bills) return;
 
-    const bills = selectedPatient.bills;
+    const bills = selectedPatient.bills.filter(
+      (b: any) => b.payment_status !== 'PENDING_DISCOUNT_APPROVAL' && b.payment_status !== 'CANCELLED'
+    );
 
     // Sort bills by date ascending
     const sortedBills = [...bills].sort((a: any, b: any) =>
@@ -1442,7 +1452,9 @@ export const SalesDetails: React.FC = () => {
   const exportSaleDetailsToExcel = async () => {
     if (!selectedPatient || !selectedPatient.bills || selectedPatient.bills.length === 0) return;
 
-    const bills = selectedPatient.bills;
+    const bills = selectedPatient.bills.filter(
+      (b: any) => b.payment_status !== 'PENDING_DISCOUNT_APPROVAL' && b.payment_status !== 'CANCELLED'
+    );
 
     // Sort bills by date ascending
     const sortedBills = [...bills].sort((a: any, b: any) =>
@@ -1949,11 +1961,18 @@ export const SalesDetails: React.FC = () => {
                         title="Select all"
                         checked={
                           selectedPatient?.bills?.length > 0 &&
-                          selectedPatient.bills.every((b: any) => selectedBills.includes(b.sale_id))
+                          selectedPatient.bills
+                            .filter((b: any) => b.payment_status !== 'PENDING_DISCOUNT_APPROVAL' && b.payment_status !== 'CANCELLED')
+                            .every((b: any) => selectedBills.includes(b.sale_id)) &&
+                          selectedPatient.bills.some((b: any) => b.payment_status !== 'PENDING_DISCOUNT_APPROVAL' && b.payment_status !== 'CANCELLED')
                         }
                         onChange={(e) => {
                           if (e.target.checked) {
-                            setSelectedBills(selectedPatient.bills.map((b: any) => b.sale_id));
+                            setSelectedBills(
+                              selectedPatient.bills
+                                .filter((b: any) => b.payment_status !== 'PENDING_DISCOUNT_APPROVAL' && b.payment_status !== 'CANCELLED')
+                                .map((b: any) => b.sale_id)
+                            );
                           } else {
                             setSelectedBills([]);
                           }
@@ -2061,7 +2080,9 @@ export const SalesDetails: React.FC = () => {
                         <td className="px-1 py-2">
                           <input
                             type="checkbox"
-                            className="h-4 w-4 rounded border-gray-300 text-cyan-600 focus:ring-cyan-500"
+                            className="h-4 w-4 rounded border-gray-300 text-cyan-600 focus:ring-cyan-500 disabled:opacity-30 disabled:cursor-not-allowed"
+                            disabled={bill.payment_status === 'PENDING_DISCOUNT_APPROVAL' || bill.payment_status === 'CANCELLED'}
+                            title={bill.payment_status === 'PENDING_DISCOUNT_APPROVAL' ? 'Cannot select: awaiting admin approval' : bill.payment_status === 'CANCELLED' ? 'Cannot select: bill cancelled' : ''}
                             checked={selectedBills.includes(bill.sale_id)}
                             onChange={(e) => {
                               if (e.target.checked) {
@@ -2464,6 +2485,18 @@ export const SalesDetails: React.FC = () => {
           </DialogHeader>
           {viewBillModal && (
             <div className="space-y-4">
+              {viewBillModal.payment_status === 'PENDING_DISCOUNT_APPROVAL' && (
+                <div className="bg-amber-50 border border-amber-300 rounded-lg px-4 py-2 flex items-center gap-2 text-sm text-amber-800">
+                  <span className="font-semibold">⏳ Pending Admin Approval</span>
+                  <span>— The discount on this bill has not yet been authorised. Totals shown are not final.</span>
+                </div>
+              )}
+              {viewBillModal.payment_status === 'CANCELLED' && (
+                <div className="bg-red-50 border border-red-300 rounded-lg px-4 py-2 flex items-center gap-2 text-sm text-red-800">
+                  <span className="font-semibold">✕ Cancelled</span>
+                  <span>— This sale was cancelled (discount rejected). Stock has been restored.</span>
+                </div>
+              )}
               {/* Bill Header Info */}
               <div className="grid grid-cols-3 gap-4 bg-gray-50 p-4 rounded-lg">
                 <div>

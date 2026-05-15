@@ -69,11 +69,11 @@ const PharmacyDashboard: React.FC = () => {
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin' || user?.role === 'super_admin';
 
   const { data: pendingPharmacyDiscounts = [] } = useQuery({
-    queryKey: ['pending-pharmacy-discount-approvals'],
+    queryKey: ['pending-pharmacy-discount-approvals', 'dashboard'],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('pharmacy_sales')
-        .select('sale_id, bill_number, patient_name, discount, discount_percentage, total_amount, created_by, created_at, hospital_name')
+        .select('sale_id, bill_number, patient_name, patient_id, discount, discount_percentage, total_amount, created_by, created_at, hospital_name, payment_method')
         .eq('payment_status', 'PENDING_DISCOUNT_APPROVAL')
         .order('created_at', { ascending: false });
       if (error) return [];

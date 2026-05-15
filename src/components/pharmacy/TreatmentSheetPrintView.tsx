@@ -63,6 +63,8 @@ const TreatmentSheetPrintView: React.FC<TreatmentSheetPrintViewProps> = ({ visit
         .from('pharmacy_sales')
         .select('sale_id, sale_date')
         .eq('visit_id', visitId)
+        .neq('payment_status', 'PENDING_DISCOUNT_APPROVAL')
+        .neq('payment_status', 'CANCELLED')
         .order('sale_date', { ascending: true });
 
       if (!salesError && sales && sales.length > 0) {

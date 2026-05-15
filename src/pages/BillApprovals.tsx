@@ -157,7 +157,7 @@ const BillApprovals = () => {
 
   // Fetch pending pharmacy discount approvals
   const { data: pendingPharmacyDiscounts = [] } = useQuery({
-    queryKey: ['pending-pharmacy-discount-approvals'],
+    queryKey: ['pending-pharmacy-discount-approvals', 'bill-approvals'],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('pharmacy_sales')
@@ -168,8 +168,8 @@ const BillApprovals = () => {
       return data || [];
     },
     enabled: isAdmin,
-    refetchInterval: 120000,
-    staleTime: 60000,
+    refetchInterval: 60000,
+    staleTime: 30000,
   });
 
   // Fetch pending package approvals
@@ -653,6 +653,7 @@ const BillApprovals = () => {
                             <th className="p-3 text-left">Hospital</th>
                             <th className="p-3 text-left">Bill No</th>
                             <th className="p-3 text-left">Patient</th>
+                            <th className="p-3 text-left">Mode</th>
                             <th className="p-3 text-right">Discount</th>
                             <th className="p-3 text-right">Total Amount</th>
                             <th className="p-3 text-left">Requested By</th>
@@ -670,6 +671,11 @@ const BillApprovals = () => {
                               </td>
                               <td className="p-3 font-mono font-medium">{sale.bill_number || '-'}</td>
                               <td className="p-3 font-medium">{sale.patient_name || '-'}</td>
+                              <td className="p-3">
+                                <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${sale.payment_method === 'CREDIT' ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-700'}`}>
+                                  {sale.payment_method || 'CASH'}
+                                </span>
+                              </td>
                               <td className="p-3 text-right font-mono font-semibold text-orange-700">
                                 Rs. {(Number(sale.discount) || 0).toLocaleString('en-IN')}
                                 {sale.discount_percentage > 0 && (
