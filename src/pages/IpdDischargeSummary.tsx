@@ -2081,23 +2081,28 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
       console.log('🔍 Surgery description for print:', descriptionToUse ? 'Found (' + descriptionToUse.substring(0, 50) + '...)' : 'Empty');
       const printHTML = generatePrintHTML(summaryData, patientInfo, visitId, formattedLabResults, surgeryRowsToUse, descriptionToUse);
 
-      // Open print preview in new window
+      // Open print preview in new window. The print trigger is embedded
+      // inside the printed HTML itself (see <script> at the end of
+      // generatePrintHTML) so it fires reliably regardless of when load
+      // resolves relative to document.write().
       const printWindow = window.open('', '_blank');
-      if (printWindow) {
-        printWindow.document.write(printHTML);
-        printWindow.document.close();
-
-        // Wait for content to load then trigger print
-        printWindow.onload = () => {
-          printWindow.focus();
-          printWindow.print();
-        };
-
+      if (!printWindow) {
         toast({
-          title: "Success",
-          description: "Print preview opened successfully!",
+          title: "Popup blocked",
+          description: "Allow popups for this site, then click Print Preview again.",
+          variant: "destructive",
         });
+        return;
       }
+
+      printWindow.document.open();
+      printWindow.document.write(printHTML);
+      printWindow.document.close();
+
+      toast({
+        title: "Success",
+        description: "Print preview opened successfully!",
+      });
 
     } catch (error) {
       console.error('❌ Print preview error:', error);
@@ -2717,6 +2722,28 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
   <div class="emergency-note">
     <strong>Note: URGENT CARE/ EMERGENCY CARE IS AVAILABLE 24 X 7. PLEASE CONTACT: 7030974619, 9373111709.</strong>
   </div>
+
+  <script>
+    // Trigger print reliably across browsers. document.write() can race the
+    // window's onload event, so we wait for images/fonts before calling print()
+    // and fall back to a timer if load has already fired.
+    (function () {
+      var printed = false;
+      function doPrint() {
+        if (printed) return;
+        printed = true;
+        try { window.focus(); } catch (e) {}
+        window.print();
+      }
+      if (document.readyState === 'complete') {
+        setTimeout(doPrint, 250);
+      } else {
+        window.addEventListener('load', function () { setTimeout(doPrint, 250); });
+        // Hard fallback in case load never fires
+        setTimeout(doPrint, 1500);
+      }
+    })();
+  </script>
 </body>
 </html>
     `;
@@ -4651,7 +4678,7 @@ IMPORTANT INSTRUCTIONS:
 6. For DIAGNOSIS: Keep as is in simple format. Do NOT expand into detailed sentences.
 7. For CLINICAL HISTORY: Write a comprehensive 4-5 sentence medical paragraph. Include: presenting complaints with severity, associated symptoms, time of onset, duration, aggravating/relieving factors, relevant past medical history, and any risk factors. Use professional medical terminology.
 8. For EXAMINATION: Write a comprehensive 4-5 sentence medical paragraph. Include: general appearance, vital signs with clinical interpretation (e.g., "tachycardia suggesting..." or "normotensive"), systemic examination findings, and overall clinical impression. Use professional medical terminology.
-9. For HOSPITAL STAY NOTES: Write a brief 2-3 sentence summary of the patient's hospital stay and treatment. Keep it concise.
+9. For HOSPITAL STAY NOTES: Write a comprehensive 5-7 sentence medical paragraph (or two short paragraphs) describing the entire hospital course in detail. Include: day-by-day progression of clinical condition, response to treatment, vital sign trends, any complications or interventions performed during the stay, multidisciplinary team inputs, key investigation findings reviewed during admission, and the patient's status at the time of discharge. Use professional medical terminology and avoid one-line summaries.
 10. For ADVICE: If specific advice is provided in the input, use it EXACTLY as given — do NOT paraphrase or shorten it. Only write a generic 2-3 sentence advice paragraph if NO advice data is present in the input.`;
 
                           // Call Google Gemini API
