@@ -62,6 +62,9 @@ interface CompletedBill {
   medicines: MedicineRow[];
 }
 
+// Built-in doctor names always available for selection, regardless of DB contents
+const DEFAULT_DOCTORS = ['Dr. B. K. Murali'];
+
 const DirectSaleBill: React.FC = () => {
   const { toast } = useToast();
   const { hospitalConfig } = useAuth();
@@ -69,7 +72,9 @@ const DirectSaleBill: React.FC = () => {
   const [patientName, setPatientName] = useState('');
   const [doctorSearchTerm, setDoctorSearchTerm] = useState('');
   const [showDoctorResults, setShowDoctorResults] = useState(false);
-  const [doctorSuggestions, setDoctorSuggestions] = useState<Array<{name: string}>>([]);
+  const [doctorSuggestions, setDoctorSuggestions] = useState<Array<{name: string}>>(
+    DEFAULT_DOCTORS.map(name => ({ name }))
+  );
   const [dateOfBirth, setDateOfBirth] = useState('');
   const [age, setAge] = useState('');
   const [gender, setGender] = useState('');
@@ -352,10 +357,18 @@ const DirectSaleBill: React.FC = () => {
     }));
   };
 
-  // Fetch doctor names from ayushman_consultants table
+  // Fetch doctor names from ayushman_consultants, merged with built-in defaults
   const searchDoctors = async (searchTerm: string) => {
-    if (searchTerm.length < 2) {
-      setDoctorSuggestions([]);
+    const term = searchTerm.trim().toLowerCase();
+
+    // Built-in defaults: show all when nothing typed yet, filter once typing
+    const defaults = DEFAULT_DOCTORS
+      .filter(name => term.length < 2 || name.toLowerCase().includes(term))
+      .map(name => ({ name }));
+
+    // Too short to query the DB - still surface the defaults
+    if (term.length < 2) {
+      setDoctorSuggestions(defaults);
       return;
     }
 
@@ -368,26 +381,26 @@ const DirectSaleBill: React.FC = () => {
 
       if (error) throw error;
 
-      // Remove duplicates based on name
-      const uniqueDoctors = data?.reduce((acc: Array<{name: string}>, curr: any) => {
-        if (curr.name && !acc.some(d => d.name === curr.name)) {
-          acc.push({ name: curr.name });
+      // Defaults first, then unique DB results
+      const merged = [...defaults];
+      data?.forEach((curr: any) => {
+        if (curr.name && !merged.some(d => d.name === curr.name)) {
+          merged.push({ name: curr.name });
         }
-        return acc;
-      }, []) || [];
+      });
 
-      setDoctorSuggestions(uniqueDoctors);
+      setDoctorSuggestions(merged);
     } catch (error: any) {
       console.error('Error searching doctors:', error);
+      // Still surface default doctors even if the DB query fails
+      setDoctorSuggestions(defaults);
     }
   };
 
-  // Handle doctor name search
+  // Handle doctor name search (also surfaces default doctors when empty)
   useEffect(() => {
     const debounceTimer = setTimeout(() => {
-      if (doctorSearchTerm) {
-        searchDoctors(doctorSearchTerm);
-      }
+      searchDoctors(doctorSearchTerm);
     }, 300);
 
     return () => clearTimeout(debounceTimer);
@@ -498,6 +511,8 @@ const DirectSaleBill: React.FC = () => {
         quantity_unit: med.quantityUnit,
         pack: med.pack || null,
         batch_no: med.batchNo || null,
+        batch_inventory_id: med.batchInventoryId || null,
+        medicine_id: med.medicineId || null,
         stock: med.stock || null,
         expiry_date: med.expiryDate || null,
         mrp: med.mrp ? parseFloat(med.mrp) : null,
@@ -547,17 +562,19 @@ const DirectSaleBill: React.FC = () => {
           } else {
           }
 
-          // Log stock movement
+          // Log stock movement (column names/types must match batch_stock_movements schema)
           await supabase
             .from('batch_stock_movements')
             .insert({
-              batch_id: med.batchInventoryId,
+              batch_inventory_id: med.batchInventoryId,
+              medicine_id: med.medicineId,
+              batch_number: med.batchNo,
               movement_type: 'OUT',
-              quantity_before: batchData.current_stock,
-              quantity_changed: soldQty,
-              quantity_after: newStock,
               reference_type: 'DIRECT_SALE',
-              reference_id: billNumber,
+              reference_number: billNumber,
+              quantity_before: batchData.current_stock,
+              quantity_changed: -soldQty, // negative for OUT; satisfies after = before + changed
+              quantity_after: newStock,
               reason: `Direct sale to ${patientName}`,
               performed_by: user?.id || null
             });
@@ -966,9 +983,8 @@ const DirectSaleBill: React.FC = () => {
                 setShowDoctorResults(true);
               }}
               onFocus={() => {
-                if (doctorSearchTerm && doctorSuggestions.length > 0) {
-                  setShowDoctorResults(true);
-                }
+                searchDoctors(doctorSearchTerm);
+                setShowDoctorResults(true);
               }}
               onBlur={() => setTimeout(() => setShowDoctorResults(false), 200)}
             />
