@@ -201,6 +201,9 @@ const CameraUpload: React.FC<CameraUploadProps> = ({
   const [savedPrescriptionNumber, setSavedPrescriptionNumber] = useState<string>('');
   // Persist patient info for prescription modal (survives clearCapture)
   const [prescriptionPatient, setPrescriptionPatient] = useState<PatientResult | null>(null);
+  // Source image of the uploaded prescription — linked to the prescription row
+  const [prescriptionImageUrl, setPrescriptionImageUrl] = useState<string | null>(null);
+  const [prescriptionImageType, setPrescriptionImageType] = useState<string | null>(null);
 
   // OPD Summary extraction state
   const [opdExtracted, setOpdExtracted] = useState<OpdExtractedData | null>(null);
@@ -1264,6 +1267,9 @@ Rules:
       if ((category === 'prescription' || category === 'treatment_sheet') && selectedPatient) {
         // CRITICAL: Save patient info BEFORE clearCapture() wipes selectedPatient
         setPrescriptionPatient({ ...selectedPatient });
+        // Remember the uploaded source image so it can be linked to the prescription
+        setPrescriptionImageUrl(publicUrl);
+        setPrescriptionImageType(selectedFile?.type || 'image/jpeg');
 
         // Auto-fill doctor name from latest visit
         try {
@@ -1897,18 +1903,38 @@ Rules:
       console.log('💊 [RX SAVE] prescriptionPatient:', prescriptionPatient?.id, prescriptionPatient?.name);
       console.log('💊 [RX SAVE] selectedPatient:', selectedPatient?.id, selectedPatient?.name);
 
-      const { data: rxData, error: rxError } = await (supabase as any)
+      // The prescription_image_* columns need migration 20260516000001. If it
+      // hasn't been applied yet, the insert is retried without them so creating
+      // a prescription never hard-fails (the photo link is simply skipped).
+      const rxPayload: Record<string, any> = {
+        prescription_number: prescriptionNumber,
+        patient_id: patientIdToSave,
+        doctor_name: prescriptionDoctor || 'As per records',
+        prescription_date: today,
+        status: 'PENDING',
+        notes: prescriptionResult || '',
+        prescription_image_url: prescriptionImageUrl,
+        prescription_image_type: prescriptionImageType,
+      };
+
+      let { data: rxData, error: rxError } = await (supabase as any)
         .from('prescriptions')
-        .insert({
-          prescription_number: prescriptionNumber,
-          patient_id: patientIdToSave,
-          doctor_name: prescriptionDoctor || 'As per records',
-          prescription_date: today,
-          status: 'PENDING',
-          notes: prescriptionResult || '',
-        })
+        .insert(rxPayload)
         .select('id')
         .single();
+
+      if (rxError && /prescription_image_(url|type)/.test(rxError.message || '')) {
+        console.warn(
+          'prescription_image_* columns missing — saving without photo link. Apply migration 20260516000001.'
+        );
+        delete rxPayload.prescription_image_url;
+        delete rxPayload.prescription_image_type;
+        ({ data: rxData, error: rxError } = await (supabase as any)
+          .from('prescriptions')
+          .insert(rxPayload)
+          .select('id')
+          .single());
+      }
 
       if (rxError) {
         console.error('Error inserting prescription:', rxError);
@@ -2072,6 +2098,8 @@ Rules:
           setPrescriptionDoctor('');
           setReviewMedicines([]);
           setPrescriptionPatient(null);
+          setPrescriptionImageUrl(null);
+          setPrescriptionImageType(null);
           setSavedPrintHtml('');
           setSavedPrescriptionNumber('');
         }
