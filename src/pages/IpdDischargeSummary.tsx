@@ -4655,37 +4655,15 @@ INSTRUCTIONS: Write exactly 3-4 lines. Include procedure name, surgeon name, typ
 
                           console.log('🤖 Sending to Gemini:', contentToSend);
 
-                          // System prompt for Gemini
-                          const systemPrompt = `You are a medical documentation assistant.
+                          // The OT-notes template the user selects drives the
+                          // structure, sections, headings, tables, formatting and
+                          // length of the summary. This baseline only carries the
+                          // safety rules that must hold for ANY template.
+                          const systemPrompt = `You are a medical documentation assistant generating a hospital discharge summary. Follow the user's template/instructions below for structure, sections, headings, tables, formatting and length.
 
-CRITICAL FORMATTING RULES:
-- Do NOT use any markdown formatting like ** or ## or * or _
-- Write in PLAIN TEXT only - no bold, no headers with hashtags
-- For tables, use simple pipe format: | Column | Column |
-- Write section headers as plain text like "DIAGNOSIS:" not "**DIAGNOSIS:**"
-
-CRITICAL - DO NOT INCLUDE PATIENT DETAILS:
-- NEVER include patient name, age, gender, address, registration ID, admission date, discharge date, treating consultant, or corporate type
-- Patient information is ALREADY displayed at the top of the document - do not repeat it
-- If input contains patient details, IGNORE them completely
-
-IMPORTANT INSTRUCTIONS:
-1. ALWAYS follow this EXACT section order: DIAGNOSIS → CLINICAL HISTORY → EXAMINATION → HOSPITAL STAY NOTES → MEDICATIONS ON DISCHARGE → ADVICE. Do NOT include empty sections.
-2. Do NOT include SURGERY DETAILS or OPERATION NOTES - they are displayed separately in a table.
-3. Do NOT include INVESTIGATIONS section - it is displayed separately from the database.
-4. MEDICATIONS ON DISCHARGE:
-   - If NO MEDICATIONS data is provided in the input, OMIT this section entirely. Do NOT generate an empty table header.
-   - If medications ARE provided, format as a pipe table with EXACTLY these columns and no others:
-     | Medicine | Route | Dose/Frequency | Days |
-     |----------|-------|----------------|------|
-   - Do NOT add columns like "Indian Brand", "Strength", "Hindi", or any translation column.
-   - Each medication = one row. Do NOT omit any medication. Use the data exactly as provided.
-5. Do NOT include the emergency contact line in the ADVICE section.
-6. For DIAGNOSIS: Keep as is in simple format. Do NOT expand into detailed sentences.
-7. For CLINICAL HISTORY: Write a comprehensive 4-5 sentence medical paragraph. Include: presenting complaints with severity, associated symptoms, time of onset, duration, aggravating/relieving factors, relevant past medical history, and any risk factors. Use professional medical terminology.
-8. For EXAMINATION: Write a comprehensive 4-5 sentence medical paragraph. Include: general appearance, vital signs with clinical interpretation (e.g., "tachycardia suggesting..." or "normotensive"), systemic examination findings, and overall clinical impression. Use professional medical terminology.
-9. For HOSPITAL STAY NOTES: Write a comprehensive 5-7 sentence medical paragraph (or two short paragraphs) describing the entire hospital course in detail. Include: day-by-day progression of clinical condition, response to treatment, vital sign trends, any complications or interventions performed during the stay, multidisciplinary team inputs, key investigation findings reviewed during admission, and the patient's status at the time of discharge. Use professional medical terminology and avoid one-line summaries.
-10. For ADVICE: If specific advice is provided in the input, use it EXACTLY as given — do NOT paraphrase or shorten it. Only write a generic 2-3 sentence advice paragraph if NO advice data is present in the input.`;
+The following rules are non-negotiable and OVERRIDE any conflicting instruction in the template:
+- Use ONLY the clinical data provided in the input. Never invent, fabricate or "make up" diagnoses, complaints, examination findings, events, investigations, operation notes or medications. If a detail is not provided, omit it or state it was not recorded — never guess.
+- Do NOT include the patient's name, age or sex.`;
 
                           // Call Google Gemini API
                           const response = await fetch(geminiGenerateContentUrl(import.meta.env.VITE_GEMINI_API_KEY), {
