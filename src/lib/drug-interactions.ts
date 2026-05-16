@@ -50,16 +50,39 @@ Rules:
 Respond with ONLY valid JSON (no markdown, no commentary) in EXACTLY this shape:
 {"interactions":[{"drugs":["Medicine A","Medicine B"],"severity":"major","effect":"what happens","recommendation":"what to do"}],"summary":"one-line overall summary"}`;
 
-  const res = await geminiFetch(geminiGenerateContentUrl(apiKey), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { temperature: 0.2, maxOutputTokens: 1500 },
-    }),
-  });
+  // Abort the request if the AI does not respond — otherwise the panel would
+  // spin on "Analyzing…" forever.
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 30000);
+  let data: any;
+  try {
+    const res = await geminiFetch(geminiGenerateContentUrl(apiKey), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: {
+          temperature: 0.2,
+          maxOutputTokens: 2048,
+          // Force clean JSON output (no markdown fences).
+          responseMimeType: 'application/json',
+          // Disable Gemini 2.5 "thinking" — those tokens otherwise consume the
+          // output budget and slow the response, leaving the panel stuck.
+          thinkingConfig: { thinkingBudget: 0 },
+        },
+      }),
+      signal: controller.signal,
+    });
+    data = await res.json();
+  } catch (e: any) {
+    if (e?.name === 'AbortError') {
+      throw new Error('The interaction check timed out (no response from the AI). Tap Re-check to retry.');
+    }
+    throw e;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 
-  const data = await res.json();
   const text: string = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
   const match = text.match(/\{[\s\S]*\}/);
   if (!match) {
