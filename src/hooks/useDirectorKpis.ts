@@ -65,13 +65,14 @@ export function getDateRange(period: KpiPeriod, specificMonth: string): DateRang
 }
 
 // A hospital-scoped exact-count query over visits (head:true → no rows transferred).
+// The visits → patients !inner embed is proven (MarketingDashboard.tsx uses the same shape).
 const visitCount = (hospitalType: string) =>
   sb
     .from('visits')
     .select('id, patients!inner(hospital_name)', { count: 'exact', head: true })
     .eq('patients.hospital_name', hospitalType);
 
-async function fetchPeriodKpis(hospitalType: string, range: DateRange) {
+async function fetchPeriodCounts(hospitalType: string, range: DateRange) {
   const [adm, dis, opd] = await Promise.all([
     visitCount(hospitalType)
       .not('admission_date', 'is', null)
@@ -90,52 +91,62 @@ async function fetchPeriodKpis(hospitalType: string, range: DateRange) {
   if (dis.error) throw dis.error;
   if (opd.error) throw opd.error;
 
-  // Collection spans two ad-hoc tables (advance_payment, final_payments) with an
-  // unreliable schema — isolate it so a failure here degrades only the Collection
-  // card, not the whole strip.
-  let collection: number | null = null;
-  try {
-    const [advance, finalPay] = await Promise.all([
-      sb
-        .from('advance_payment')
-        .select('advance_amount, amount, visits!inner!visit_id(patients!inner(hospital_name))')
-        .eq('visits.patients.hospital_name', hospitalType)
-        .eq('status', 'ACTIVE')
-        .eq('is_refund', false)
-        .gte('created_at', range.startISO)
-        .lt('created_at', range.endISO),
-      sb
-        .from('final_payments')
-        .select('amount, visits!inner!visit_id(patients!inner(hospital_name))')
-        .eq('visits.patients.hospital_name', hospitalType)
-        .gte('created_at', range.startISO)
-        .lt('created_at', range.endISO),
-    ]);
-    if (advance.error) throw advance.error;
-    if (finalPay.error) throw finalPay.error;
-
-    // advance_payment is queried as `amount` in some files and `advance_amount` in
-    // others — prefer the explicit advance_amount, fall back to amount.
-    const advanceTotal = (advance.data || []).reduce(
-      (s: number, r: any) => s + (Number(r.advance_amount ?? r.amount) || 0),
-      0,
-    );
-    const finalTotal = (finalPay.data || []).reduce(
-      (s: number, r: any) => s + (Number(r.amount) || 0),
-      0,
-    );
-    collection = advanceTotal + finalTotal;
-  } catch (err) {
-    console.error('Director KPI collection query failed:', err);
-    collection = null;
-  }
-
   return {
     admissions: adm.count ?? 0,
     discharges: dis.count ?? 0,
     opdVisits: opd.count ?? 0,
-    collection,
   };
+}
+
+/**
+ * Every visit_id belonging to the hospital. Used to scope payments client-side:
+ * advance_payment / final_payments have no usable PostgREST relationship to embed
+ * through, so we can't filter them by a join. The visits → patients !inner embed,
+ * however, is proven to work (it backs the count cards above).
+ */
+async function fetchHospitalVisitIds(hospitalType: string): Promise<Set<string>> {
+  const { data, error } = await sb
+    .from('visits')
+    .select('visit_id, patients!inner(hospital_name)')
+    .eq('patients.hospital_name', hospitalType);
+  if (error) throw error;
+  return new Set((data || []).map((v: any) => v.visit_id).filter(Boolean));
+}
+
+/**
+ * Total money received in the period for the hospital = advance payments + final
+ * payments. Both tables are queried plainly (no embeds — proven shapes from
+ * DailyReconciliation.tsx and useFinancialSummary.ts) and then filtered to the
+ * hospital's visits client-side.
+ */
+async function fetchCollection(range: DateRange, hospitalVisitIds: Set<string>) {
+  const [advance, finalPay] = await Promise.all([
+    sb
+      .from('advance_payment')
+      .select('advance_amount, amount, visit_id')
+      .eq('status', 'ACTIVE')
+      .eq('is_refund', false)
+      .gte('created_at', range.startISO)
+      .lt('created_at', range.endISO),
+    sb
+      .from('final_payments')
+      .select('amount, visit_id')
+      .gte('created_at', range.startISO)
+      .lt('created_at', range.endISO),
+  ]);
+  if (advance.error) throw advance.error;
+  if (finalPay.error) throw finalPay.error;
+
+  // advance_payment is queried as `amount` in some files and `advance_amount` in
+  // others — prefer the explicit advance_amount, fall back to amount.
+  const advanceTotal = (advance.data || [])
+    .filter((r: any) => hospitalVisitIds.has(r.visit_id))
+    .reduce((s: number, r: any) => s + (Number(r.advance_amount ?? r.amount) || 0), 0);
+  const finalTotal = (finalPay.data || [])
+    .filter((r: any) => hospitalVisitIds.has(r.visit_id))
+    .reduce((s: number, r: any) => s + (Number(r.amount) || 0), 0);
+
+  return advanceTotal + finalTotal;
 }
 
 async function fetchLiveKpis(hospitalType: string) {
@@ -167,12 +178,31 @@ export function useDirectorKpis(period: KpiPeriod, specificMonth: string) {
   const { user } = useAuth();
   const hospitalType = user?.hospitalType;
 
-  const periodQuery = useQuery({
-    queryKey: ['director-kpis-period', hospitalType, period, specificMonth],
-    queryFn: () => fetchPeriodKpis(hospitalType as string, getDateRange(period, specificMonth)),
+  const countsQuery = useQuery({
+    queryKey: ['director-kpis-counts', hospitalType, period, specificMonth],
+    queryFn: () => fetchPeriodCounts(hospitalType as string, getDateRange(period, specificMonth)),
     enabled: !!hospitalType,
     staleTime: 60_000,
-    // Keep the previous numbers on screen while a period change refetches.
+    placeholderData: (prev) => prev,
+  });
+
+  // Hospital → visit_id set. Period-independent, so it is cached on its own key and
+  // is NOT refetched when the period selector changes.
+  const visitIdsQuery = useQuery({
+    queryKey: ['director-hospital-visit-ids', hospitalType],
+    queryFn: () => fetchHospitalVisitIds(hospitalType as string),
+    enabled: !!hospitalType,
+    staleTime: 5 * 60_000,
+  });
+
+  // Collection is its own query: it depends on the visit-id set, and if it fails it
+  // must degrade only the Collection card — not the whole strip.
+  const collectionQuery = useQuery({
+    queryKey: ['director-kpis-collection', hospitalType, period, specificMonth],
+    queryFn: () =>
+      fetchCollection(getDateRange(period, specificMonth), visitIdsQuery.data as Set<string>),
+    enabled: !!hospitalType && !!visitIdsQuery.data,
+    staleTime: 60_000,
     placeholderData: (prev) => prev,
   });
 
@@ -185,20 +215,24 @@ export function useDirectorKpis(period: KpiPeriod, specificMonth: string) {
   });
 
   const data: DirectorKpiData = {
-    admissions: periodQuery.data?.admissions ?? null,
-    discharges: periodQuery.data?.discharges ?? null,
-    opdVisits: periodQuery.data?.opdVisits ?? null,
-    collection: periodQuery.data?.collection ?? null,
+    admissions: countsQuery.data?.admissions ?? null,
+    discharges: countsQuery.data?.discharges ?? null,
+    opdVisits: countsQuery.data?.opdVisits ?? null,
+    collection: collectionQuery.data ?? null,
     activeIpd: liveQuery.data?.activeIpd ?? null,
     pendingApprovals: liveQuery.data?.pendingApprovals ?? null,
   };
 
   return {
     data,
-    isLoading: periodQuery.isLoading || liveQuery.isLoading,
-    error: (periodQuery.error || liveQuery.error) as Error | null,
+    isLoading: countsQuery.isLoading || liveQuery.isLoading,
+    // Collection failures are intentionally not surfaced here — that card just shows
+    // "—" while admissions/discharges/OPD/live stay visible.
+    error: (countsQuery.error || liveQuery.error) as Error | null,
     refetch: () => {
-      periodQuery.refetch();
+      countsQuery.refetch();
+      visitIdsQuery.refetch();
+      collectionQuery.refetch();
       liveQuery.refetch();
     },
   };
