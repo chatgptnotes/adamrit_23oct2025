@@ -4,6 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
 import { ArrowLeft, FileText, Search, Download, Printer } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { format } from 'date-fns';
@@ -107,6 +108,7 @@ const AdvanceStatementReport = () => {
           package_amount,
           extension_days_count,
           package_name,
+          treatment_type,
           ipd_admission_notes,
           patients!inner (
             id,
@@ -760,8 +762,8 @@ const AdvanceStatementReport = () => {
               body { margin: 0; padding: 10px; font-family: Arial, sans-serif; }
               h1 { font-size: 18px; margin-bottom: 20px; text-align: center; }
               h2 { font-size: 16px; margin: 15px 0 10px 0; }
-              table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 11px; }
-              th, td { border: 1px solid #000; padding: 6px; text-align: left; vertical-align: top; font-size: 11px; }
+              table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 11px; table-layout: fixed; }
+              th, td { border: 1px solid #000; padding: 4px; text-align: left; vertical-align: top; font-size: 10px; word-wrap: break-word; overflow-wrap: break-word; }
               th { background-color: #f5f5f5; font-weight: bold; }
               .patient-details { margin-bottom: 5px; font-size: 10px; }
               .diagnosis-item { background-color: #f0f8ff; padding: 4px; margin: 2px 0; border-radius: 3px; display: inline-block; font-size: 10px; }
@@ -807,25 +809,26 @@ const AdvanceStatementReport = () => {
           <table>
             <thead>
               <tr>
-                <th style="width: 3%;">Sr.</th>
-                <th style="width: 12%;">Patient Details</th>
-                ${hospitalType === 'hope' ? '<th style="width: 6%;">Corporate</th>' : ''}
-                <th style="width: 6%;">Room/Bed</th>
-                <th style="width: 6%;">Admission</th>
-                <th style="width: 8%;">Diagnosis</th>
-                <th style="width: 6%;">Pkg Details</th>
-                <th style="width: 4%;">Pkg Days</th>
-                <th style="width: 5%;">Pkg Amt</th>
-                <th style="width: 5%;">Lab Amt</th>
-                <th style="width: 5%;">Pharmacy</th>
-                <th style="width: 5%;">Pharma Paid</th>
-                <th style="width: 9%;">Surgery/Procedure</th>
-                <th style="width: 7%;">Total Bill</th>
-                <th style="width: 7%;">Advance</th>
-                <th style="width: 9%;">Last Payment</th>
-                <th style="width: 7%;">Balance</th>
-                <th style="width: 7%;">Ask to Pay</th>
-                <th style="width: 8%;">Remark</th>
+                <th style="width: 2%;">Sr.</th>
+                <th style="width: 9%;">Patient Details</th>
+                ${hospitalType === 'hope' ? '<th style="width: 5%;">Corporate</th>' : ''}
+                <th style="width: 5%;">Room/Bed</th>
+                <th style="width: 5%;">Admission</th>
+                <th style="width: 6%;">Diagnosis</th>
+                <th style="width: 4%;">Treatment</th>
+                <th style="width: 5%;">Pkg Details</th>
+                <th style="width: 3%;">Pkg Days</th>
+                <th style="width: 4%;">Pkg Amt</th>
+                <th style="width: 4%;">Lab Amt</th>
+                <th style="width: 4%;">Pharmacy</th>
+                <th style="width: 4%;">Pharma Paid</th>
+                <th style="width: 7%;">Surgery/Procedure</th>
+                <th style="width: 5%;">Total Bill</th>
+                <th style="width: 5%;">Advance</th>
+                <th style="width: 7%;">Last Payment</th>
+                <th style="width: 5%;">Balance</th>
+                <th style="width: 5%;">Ask to Pay</th>
+                <th style="width: 6%;">Remark</th>
               </tr>
             </thead>
             <tbody>
@@ -913,6 +916,7 @@ const AdvanceStatementReport = () => {
                     <td>${roomBedText}</td>
                     <td style="text-align: center;">${admissionDateText}</td>
                     <td>${diagnosisText}</td>
+                    <td style="text-align: center;">${(item as any).treatment_type || '-'}</td>
                     <td style="text-align: center;">${item.package_details || '-'}</td>
                     <td style="text-align: center;">${item.package_days || 0}</td>
                     <td style="text-align: right;">₹${(parseFloat(item.package_amount || '0') || 0).toLocaleString('en-IN')}</td>
@@ -953,7 +957,7 @@ const AdvanceStatementReport = () => {
 
   const handleExport = () => {
     // Create CSV content
-    const headers = ['Sr. No.', 'Patient Details', 'Corporate Type', 'Room/Bed', 'Admission Date', 'Diagnosis', 'Package Details', 'Package Days', 'Package Amount', 'Lab Amount', 'Pharmacy', 'Pharmacy Paid', 'Referral Letter', 'Planned Surgery or Procedure and Cost'];
+    const headers = ['Sr. No.', 'Patient Details', 'Corporate Type', 'Room/Bed', 'Admission Date', 'Diagnosis', 'Treatment Type', 'Package Details', 'Package Days', 'Package Amount', 'Lab Amount', 'Pharmacy', 'Pharmacy Paid', 'Referral Letter', 'Planned Surgery or Procedure and Cost'];
     const csvContent = [
       headers.join(','),
       ...advanceData.map((item, index) => {
@@ -1012,6 +1016,7 @@ const AdvanceStatementReport = () => {
           `"${roomBed}"`,
           `"${admissionDate}"`,
           `"${diagnoses}"`,
+          `"${(item as any).treatment_type || ''}"`,
           `"${packageDetails}"`,
           `"${packageDays}"`,
           packageAmount,
@@ -1127,21 +1132,6 @@ const AdvanceStatementReport = () => {
           </div>
         </div>
 
-        {/* Debug Info - Development Only */}
-        {process.env.NODE_ENV === 'development' && (
-          <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200 mb-6">
-            <h3 className="text-sm font-medium text-yellow-800 mb-2">Debug Info</h3>
-            <div className="text-xs text-yellow-700 space-y-1">
-              <p>Raw data count: {allData.length}</p>
-              <p>Filtered data count: {advanceData.length}</p>
-              <p>Search term: "{debouncedSearchTerm}"</p>
-              <p>Date from: {dateFrom || 'None'}</p>
-              <p>Date to: {dateTo || 'None'}</p>
-              <p>Loading: {isLoading ? 'Yes' : 'No'}</p>
-            </div>
-          </div>
-        )}
-
         {/* Summary Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           <div className="bg-white p-6 rounded-lg shadow-sm border">
@@ -1194,6 +1184,7 @@ const AdvanceStatementReport = () => {
                   <TableHead className="min-w-[150px]">Room/Bed</TableHead>
                   <TableHead className="min-w-[120px]">Admission Date</TableHead>
                   <TableHead className="min-w-[200px]">Diagnosis</TableHead>
+                  <TableHead className="min-w-[140px]">Treatment Type</TableHead>
                   <TableHead className="min-w-[150px]">Package Details</TableHead>
                   <TableHead className="min-w-[100px]">Package Days</TableHead>
                   <TableHead className="min-w-[100px]">Extension Days</TableHead>
@@ -1207,13 +1198,13 @@ const AdvanceStatementReport = () => {
               <TableBody>
                 {isLoading ? (
                   <TableRow>
-                    <TableCell colSpan={hospitalType === 'hope' ? 13 : 12} className="text-center py-8">
+                    <TableCell colSpan={hospitalType === 'hope' ? 14 : 13} className="text-center py-8">
                       Loading...
                     </TableCell>
                   </TableRow>
                 ) : advanceData.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={hospitalType === 'hope' ? 13 : 12} className="text-center py-8 text-gray-500">
+                    <TableCell colSpan={hospitalType === 'hope' ? 14 : 13} className="text-center py-8 text-gray-500">
                       No data found
                     </TableCell>
                   </TableRow>
@@ -1320,6 +1311,15 @@ const AdvanceStatementReport = () => {
                         <TableCell>{roomBedDisplay}</TableCell>
                         <TableCell>{admissionDateDisplay}</TableCell>
                         <TableCell>{diagnosisDisplay}</TableCell>
+                        <TableCell>
+                          {(item as any).treatment_type ? (
+                            <Badge variant="outline" className="capitalize">
+                              {(item as any).treatment_type}
+                            </Badge>
+                          ) : (
+                            <span className="text-gray-400">-</span>
+                          )}
+                        </TableCell>
                         <TableCell>
                           <SearchableSelect
                             options={packages.map(pkg => ({ value: pkg.name, label: pkg.name }))}
