@@ -68,7 +68,7 @@ const PharmacyDashboard: React.FC = () => {
   const queryClient = useQueryClient();
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin' || user?.role === 'super_admin';
 
-  const { data: pendingPharmacyDiscounts = [] } = useQuery({
+  const { data: pendingPharmacyDiscounts = [], refetch: refetchPendingDiscounts } = useQuery({
     queryKey: ['pending-pharmacy-discount-approvals', 'dashboard'],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -164,6 +164,26 @@ const PharmacyDashboard: React.FC = () => {
     }
   }, [searchParams]);
 
+  // Live-refresh the discount-approval list when pharmacy sales change,
+  // so a newly submitted bill appears immediately instead of waiting for
+  // the 60s poll.
+  useEffect(() => {
+    if (!isAdmin) return;
+    const channel = (supabase as any)
+      .channel('pharmacy-discount-approvals')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'pharmacy_sales' },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ['pending-pharmacy-discount-approvals'] });
+        }
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [isAdmin, queryClient]);
+
   // Live pending-prescription data (replaces hardcoded mock below).
   // Called ONCE here and threaded into the bell as props so we don't open
   // two realtime channels with the same name.
@@ -224,7 +244,7 @@ const PharmacyDashboard: React.FC = () => {
               size="icon"
               className="relative"
               aria-label={`${pendingPharmacyDiscounts.length} pending discount approvals`}
-              onClick={() => setApprovalListDialogOpen(true)}
+              onClick={() => { refetchPendingDiscounts(); setApprovalListDialogOpen(true); }}
             >
               <ShieldCheck className={pendingPharmacyDiscounts.length > 0 ? 'h-5 w-5 text-orange-600' : 'h-5 w-5 text-muted-foreground'} />
               {pendingPharmacyDiscounts.length > 0 && (

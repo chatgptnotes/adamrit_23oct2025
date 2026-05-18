@@ -83,6 +83,9 @@ const CashBook: React.FC = () => {
   // State for pharmacy credit payments (only for Hope hospital)
   const [pharmacyCreditPayments, setPharmacyCreditPayments] = useState<any[]>([]);
 
+  // State for pharmacy CASH refunds / returns (only for Hope hospital)
+  const [pharmacyRefunds, setPharmacyRefunds] = useState<any[]>([]);
+
   // Fetch pharmacy credit payments for Hope hospital only (CASH payments)
   useEffect(() => {
     const fetchPharmacyCreditPayments = async () => {
@@ -109,6 +112,53 @@ const CashBook: React.FC = () => {
     };
 
     fetchPharmacyCreditPayments();
+  }, [fromDate, toDate, hospitalConfig?.name]);
+
+  // Fetch pharmacy CASH refunds (medicine_returns) for Hope hospital only
+  useEffect(() => {
+    const fetchPharmacyRefunds = async () => {
+      // Only fetch for Hope hospital (check if name contains 'hope', exclude Ayushman)
+      if (!hospitalConfig?.name || !hospitalConfig.name.toLowerCase().includes('hope')) {
+        setPharmacyRefunds([]);
+        return;
+      }
+
+      // medicine_returns.original_sale_id has no reliable FK to pharmacy_sales,
+      // so fetch returns plainly and resolve patient names from `patients` separately.
+      const { data, error } = await supabase
+        .from('medicine_returns')
+        .select('id, return_number, return_date, net_refund, refund_amount, refund_method, status, patient_id')
+        .eq('refund_method', 'CASH')
+        .eq('status', 'PROCESSED')
+        .neq('is_hidden', true)
+        .ilike('hospital_name', '%hope%')
+        .gte('return_date', `${fromDate}T00:00:00`)
+        .lte('return_date', `${toDate}T23:59:59`)
+        .order('return_date', { ascending: true });
+
+      if (error || !data || data.length === 0) {
+        setPharmacyRefunds([]);
+        return;
+      }
+
+      // Resolve patient names — medicine_returns.patient_id is the patients table UUID
+      const patientIds = [...new Set(data.map((r: any) => r.patient_id).filter(Boolean))];
+      const nameById: Record<string, string> = {};
+      if (patientIds.length > 0) {
+        const { data: patientRows } = await supabase
+          .from('patients')
+          .select('id, name')
+          .in('id', patientIds);
+        (patientRows || []).forEach((p: any) => { nameById[p.id] = p.name; });
+      }
+
+      setPharmacyRefunds(data.map((r: any) => ({
+        ...r,
+        patient_name: nameById[r.patient_id] || 'Unknown Patient',
+      })));
+    };
+
+    fetchPharmacyRefunds();
   }, [fromDate, toDate, hospitalConfig?.name]);
 
   // Fetch users and voucher types for dropdowns
@@ -380,8 +430,39 @@ const CashBook: React.FC = () => {
       });
     }
 
+    // Add pharmacy CASH refunds (for Hope hospital only) as CREDIT rows.
+    // Mirrors the original PHARMACY sale DEBIT so sale + refund net to zero.
+    if (pharmacyRefunds && pharmacyRefunds.length > 0) {
+      pharmacyRefunds.forEach((refund: any) => {
+        const date = new Date(refund.return_date);
+        const formattedDate = `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}/${date.getFullYear()}`;
+
+        // Actual cash paid out of the drawer = net_refund (refund_amount - processing_fee)
+        const refundCash = Number(refund.net_refund ?? refund.refund_amount ?? 0);
+
+        // Patient name resolved from the patients table in the fetch effect
+        const patientName = refund.patient_name || 'Unknown Patient';
+
+        const summary = `Pharmacy Refund | CASH: Rs ${refundCash.toLocaleString('en-IN')} | Return ${refund.return_number}`;
+
+        entries.push({
+          type: 'patient-summary' as const,
+          date: formattedDate,
+          particulars: `${patientName} - Pharmacy Refund`,
+          summary: summary,
+          debit: 0,
+          credit: refundCash,
+          patientId: refund.patient_id,
+          visitId: undefined,
+          patientName: patientName,
+          transactionCount: 1,
+          transactionDate: refund.return_date
+        });
+      });
+    }
+
     return entries;
-  }, [dailyTransactions, cashBookData, fromDate, pharmacyCreditPayments]);
+  }, [dailyTransactions, cashBookData, fromDate, pharmacyCreditPayments, pharmacyRefunds]);
 
   // Calculate totals for footer
   const totals = useMemo(() => {

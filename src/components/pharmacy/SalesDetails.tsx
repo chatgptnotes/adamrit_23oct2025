@@ -2227,8 +2227,14 @@ export const SalesDetails: React.FC = () => {
                       selectedPatient.bills.reduce((sum: number, b: any) => sum + (b.total_amount || 0), 0) -
                       // Total Paid (non-credit payments)
                       selectedPatient.bills.reduce((sum: number, b: any) => sum + (b.payment_method === 'CREDIT' ? 0 : (b.total_amount || 0)), 0) -
-                      // Total Returns
-                      (patientReturns?.reduce((sum: number, r: any) => sum + (r.net_refund || 0), 0) || 0) -
+                      // Total Returns — only returns against CREDIT bills.
+                      // A return against a CASH bill self-cancels (the refund balances the
+                      // cash already paid at the counter); subtracting it again would push
+                      // the balance negative for a fully-paid, fully-returned cash bill.
+                      (patientReturns?.reduce((sum: number, r: any) =>
+                        sum + (selectedPatient.bills.some((b: any) =>
+                          b.payment_method === 'CREDIT' && String(b.sale_id) === String(r.original_sale_id)
+                        ) ? (r.net_refund || 0) : 0), 0) || 0) -
                       // Credit Payments Received
                       (patientCreditPayments?.reduce((sum: number, p: any) => sum + (p.amount || 0), 0) || 0)
                     ).toFixed(2)}
@@ -2237,7 +2243,10 @@ export const SalesDetails: React.FC = () => {
                 <div className="text-xs text-gray-300 mt-1">
                   Total: ₹{selectedPatient.bills.reduce((sum: number, b: any) => sum + (b.total_amount || 0), 0).toFixed(2)} -
                   Paid: ₹{selectedPatient.bills.reduce((sum: number, b: any) => sum + (b.payment_method === 'CREDIT' ? 0 : (b.total_amount || 0)), 0).toFixed(2)} -
-                  Returns: ₹{(patientReturns?.reduce((sum: number, r: any) => sum + (r.net_refund || 0), 0) || 0).toFixed(2)} -
+                  Returns: ₹{(patientReturns?.reduce((sum: number, r: any) =>
+                    sum + (selectedPatient.bills.some((b: any) =>
+                      b.payment_method === 'CREDIT' && String(b.sale_id) === String(r.original_sale_id)
+                    ) ? (r.net_refund || 0) : 0), 0) || 0).toFixed(2)} -
                   Credit Received: ₹{(patientCreditPayments?.reduce((sum: number, p: any) => sum + (p.amount || 0), 0) || 0).toFixed(2)}
                 </div>
               </div>
