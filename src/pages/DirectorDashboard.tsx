@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { toast } from 'sonner';
 import { Wallet, Edit2, Trash2, Plus, CheckCircle, AlertTriangle, Calendar, ArrowRight, DollarSign } from 'lucide-react';
+import { DirectorKpiCards } from '@/components/DirectorKpiCards';
 
 const DIRECTOR_EMAILS = ['cmd@hopehospital.com', 'finance@hopehospital.com'];
 
@@ -251,6 +252,8 @@ export default function DirectorDashboard() {
         <h1 className="text-3xl font-bold">Director Dashboard</h1>
         <p className="text-sm text-gray-600">{user?.email}</p>
       </div>
+
+      <DirectorKpiCards />
 
       {(alertSummary.overdueCount > 0 || alertSummary.dueSoonCount > 0) && (
         <div
