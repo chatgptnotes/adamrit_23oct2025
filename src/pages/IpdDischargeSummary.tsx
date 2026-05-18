@@ -4300,23 +4300,45 @@ DD/MM/YYYY:-Test Category: Test1:Value1 unit, Test2:Value2 unit`);
                       description: "Generating description with AI...",
                     });
 
-                    // Extract alias lines from surgeries (to display at top of description)
-                    const aliasLines = surgeryRows
-                      .filter(s => s.alias?.trim())
-                      .map((s, i) => surgeryRows.length > 1 ? `Surgery ${i + 1}: ${s.alias}` : s.alias)
-                      .join('\n');
+                    // alias = the exact procedure the doctor performed (PRIMARY input).
+                    // procedurePerformed = generic billing/master name (context only).
+                    const surgeryBlocks = surgeryRows
+                      .filter(s => s.alias?.trim() || s.procedurePerformed?.trim())
+                      .map((s, i) => {
+                        const exact = s.alias?.trim() || s.procedurePerformed?.trim() || 'Not specified';
+                        return [
+                          `SURGERY ${i + 1}:`,
+                          `- Procedure actually performed (PRIMARY — describe THIS): ${exact}`,
+                          `- Generic billing name (context only): ${s.procedurePerformed?.trim() || 'Not specified'}`,
+                          `- Date: ${s.date?.trim() || 'Not specified'}`,
+                          `- Surgeon: ${s.surgeon?.trim() || 'Not specified'}`,
+                          `- Anaesthetist: ${s.anesthetist?.trim() || 'Not specified'}`,
+                          `- Type of anaesthesia: ${s.anesthesia?.trim() || 'Not specified'}`,
+                          `- Implant used: ${s.implant?.trim() || 'None recorded'}`,
+                        ].join('\n');
+                      })
+                      .join('\n\n');
 
-                    // Build context from all surgery details (using alias instead of procedurePerformed)
-                    const allProcedures = surgeryRows.map((s, i) =>
-                      `Surgery ${i + 1}: ${s.alias || s.procedurePerformed || 'Not specified'} (Surgeon: ${s.surgeon || 'Not specified'}, Anesthesia: ${s.anesthesia || 'Not specified'})`
-                    ).join('\n');
+                    const prompt = `You are a medical scribe writing the "Operation Notes — Description" section of a hospital discharge summary. This is a REAL patient medical record.
 
-                    const prompt = `Write a brief 3-4 line surgical summary. Must include all details below:
+For EACH surgery below, write ONE professional operative-note-style paragraph (about 6-10 lines) describing how that named procedure is conducted as a STANDARD operation of its type.
 
 SURGERIES:
-${allProcedures}
+${surgeryBlocks}
 
-INSTRUCTIONS: Write exactly 3-4 lines. Include procedure name, surgeon name, type of anaesthesia, and post-operative condition. Use formal medical language. No bullet points or numbering. Write as a continuous paragraph.`;
+INCLUDE in each paragraph:
+- Begin with the exact procedure name as a bold heading on its own line: **Procedure Name**
+- The surgical approach and the standard, well-established operative steps for a procedure of this type.
+- The surgeon's name, anaesthetist's name, and type of anaesthesia, woven naturally in.
+- The implant used, if one is listed.
+- Conclude with a routine post-operative statement (procedure completed, patient shifted to recovery in stable condition).
+
+STRICT RULES:
+- Describe ONLY the standard conduct of the named procedure plus the exact fields above.
+- DO NOT invent patient-specific intraoperative findings, measurements, blood-loss volumes, specimen sizes, anatomical findings, complications, or timings.
+- Formal medical language. Continuous prose — no bullet points, no numbering.
+- Multiple surgeries: separate paragraphs with one blank line.
+- Output ONLY the description paragraphs — no preamble, no closing remark.`;
 
                     const response = await geminiFetch(geminiGenerateContentUrl(geminiApiKey), {
                       method: 'POST',
@@ -4330,8 +4352,8 @@ INSTRUCTIONS: Write exactly 3-4 lines. Include procedure name, surgeon name, typ
                           }]
                         }],
                         generationConfig: {
-                          temperature: 0.5,
-                          maxOutputTokens: 2000
+                          temperature: 0.3,
+                          maxOutputTokens: 4000
                         }
                       })
                     });
@@ -4340,12 +4362,7 @@ INSTRUCTIONS: Write exactly 3-4 lines. Include procedure name, surgeon name, typ
                     const generatedDescription = data.candidates?.[0]?.content?.parts?.[0]?.text;
 
                     if (generatedDescription) {
-                      // Combine alias lines at top with AI-generated summary below
-                      const finalDescription = aliasLines
-                        ? `${aliasLines}\n\n${generatedDescription}`
-                        : generatedDescription;
-
-                      setSharedSurgeryDescription(finalDescription);
+                      setSharedSurgeryDescription(generatedDescription.trim());
                       toast({
                         title: "Success",
                         description: "Description generated successfully!",
