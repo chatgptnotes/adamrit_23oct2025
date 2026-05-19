@@ -317,7 +317,7 @@ const AppContent = () => {
                 <button
                   type="button"
                   onClick={() => { setOverride('tablet'); window.location.assign('/'); }}
-                  className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-800"
+                  className="ml-auto mr-2 flex items-center gap-1 text-xs text-gray-500 hover:text-gray-800"
                 >
                   <Tablet className="h-4 w-4" /> Tablet view
                 </button>
