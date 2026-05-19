@@ -1,8 +1,7 @@
 import { lazy, Suspense, type ComponentType, type LazyExoticComponent } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Navigate, useParams } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 import { getModule } from "@/tablet/config/modules";
-import { TabletConfirm } from "@/tablet/components/TabletConfirm";
 
 /** Lazy module-flow registry, keyed by the module id from config/modules.ts. */
 const FLOWS: Record<string, LazyExoticComponent<ComponentType>> = {
@@ -28,22 +27,18 @@ const FLOWS: Record<string, LazyExoticComponent<ComponentType>> = {
   report: lazy(() => import("@/tablet/modules/report/ReportFlow")),
 };
 
-/** Resolves /:moduleId to its flow component. */
+/**
+ * Resolves /:moduleId to its flow component. Any path that is not a known
+ * module — e.g. a stale desktop route such as /dashboard the browser landed
+ * on — redirects to the tablet home instead of dead-ending on an error.
+ */
 export function TabletModuleHost() {
   const { moduleId } = useParams();
-  const navigate = useNavigate();
   const mod = getModule(moduleId);
   const Flow = moduleId ? FLOWS[moduleId] : undefined;
 
   if (!mod || !Flow) {
-    return (
-      <TabletConfirm
-        status="error"
-        title="Module not found"
-        message="This screen is not available."
-        primaryAction={{ label: "Back to Home", onClick: () => navigate("/") }}
-      />
-    );
+    return <Navigate to="/" replace />;
   }
 
   return (

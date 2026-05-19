@@ -22,10 +22,11 @@ export function TabletTopBar() {
     await logout();
   };
 
-  // Switch this browser to the desktop full site (the choice is saved per device).
+  // Switch this browser to the desktop full site (the choice is saved per
+  // device). Always land on "/" — the editions don't share routes.
   const handleFullSite = () => {
     setOverride("full");
-    window.location.reload();
+    window.location.assign("/");
   };
 
   return (
