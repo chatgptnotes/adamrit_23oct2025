@@ -60,6 +60,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox"
 import { DiscountTab } from "@/components/DiscountTab"
 import { AdvancePaymentModal } from "@/components/AdvancePaymentModal"
+import { DrugInteractionPanel } from "@/components/pharmacy/DrugInteractionPanel"
 
 // This component needs to be created or installed. It is not a standard shadcn/ui component.
 // You can find implementations online or build one yourself.
@@ -17848,7 +17849,7 @@ Dr. Murali B K
         </div>
 
         {/* Middle Section - Service Selection */}
-        <div className={`${isMiddleSectionCollapsed ? 'w-12' : 'w-[700px] flex-shrink-0'} bg-white border-r border-gray-200 flex flex-col transition-all duration-300`}>
+        <div className={`${isMiddleSectionCollapsed ? 'w-12' : 'w-[1000px] flex-shrink-0'} bg-white border-r border-gray-200 flex flex-col transition-all duration-300`}>
           {/* Service Selection Header */}
           <div className="p-4 border-b border-gray-200">
             <div className="flex items-center justify-between">
@@ -20456,6 +20457,15 @@ Dr. Murali B K
                                 Refresh
                               </button>
                             </div>
+                            <DrugInteractionPanel
+                              medicines={prescriptionsForPatient.flatMap((p: any) =>
+                                (p.prescription_items || []).map((it: any) => ({
+                                  name: it.medicine_name || '',
+                                  generic: it.generic_name || undefined,
+                                  strength: it.special_instructions || undefined,
+                                }))
+                              )}
+                            />
                             {prescriptionsForPatient.length === 0 ? (
                               <div className="text-center py-4">
                                 <p className="text-sm text-gray-500">No prescriptions found for this patient.</p>
