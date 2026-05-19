@@ -5,6 +5,7 @@ import { getModule } from "@/tablet/config/modules";
 
 /** Lazy module-flow registry, keyed by the module id from config/modules.ts. */
 const FLOWS: Record<string, LazyExoticComponent<ComponentType>> = {
+  director: lazy(() => import("@/tablet/modules/director/DirectorFlow")),
   register: lazy(() => import("@/tablet/modules/register/RegisterPatientFlow")),
   occupancy: lazy(() => import("@/tablet/modules/occupancy/OccupancyBoard")),
   "icu-admission": lazy(() => import("@/tablet/modules/icu-admission/IcuAdmissionFlow")),

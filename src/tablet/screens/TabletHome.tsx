@@ -1,14 +1,14 @@
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
-import { modulesForRole } from "@/tablet/config/modules";
+import { modulesForUser } from "@/tablet/config/modules";
 import { TabletWatermark } from "@/tablet/components/TabletWatermark";
 
 /** Home dashboard — gradient-iconed module tiles, role-filtered. */
 export function TabletHome() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const modules = modulesForRole(user?.role);
+  const modules = modulesForUser(user ?? undefined);
 
   return (
     <div className="relative isolate h-full">

@@ -8,6 +8,7 @@ import {
   DoorOpen,
   FileText,
   HeartPulse,
+  LayoutDashboard,
   LogOut,
   Receipt,
   Stethoscope,
@@ -32,6 +33,15 @@ export interface TabletModule {
 
 /** The 12 v1 tablet modules, in home-grid order. */
 export const TABLET_MODULES: TabletModule[] = [
+  {
+    id: "director",
+    label: "Director Dashboard",
+    description: "KPIs & payment deadlines",
+    icon: LayoutDashboard,
+    accent: "text-purple-600",
+    tint: "from-purple-400 to-purple-600",
+    roles: ["superadmin", "super_admin"],
+  },
   {
     id: "register",
     label: "Register Patient",
@@ -157,11 +167,29 @@ export const TABLET_MODULES: TabletModule[] = [
 ];
 
 const ADMIN_ROLES = ["admin", "superadmin", "super_admin"];
+const DIRECTOR_ROLES = ["superadmin", "super_admin"];
+const DIRECTOR_EMAILS = ["cmd@hopehospital.com", "finance@hopehospital.com"];
 
-/** Modules visible to a given role. Admins (and unknown roles) see all. */
-export function modulesForRole(role: string | undefined): TabletModule[] {
-  if (!role || ADMIN_ROLES.includes(role)) return TABLET_MODULES;
-  return TABLET_MODULES.filter((m) => !m.roles || m.roles.includes(role));
+/**
+ * Modules visible to a given user. Admins (and unknown roles) see all except
+ * the Director tile, which is restricted to superadmin role or director emails.
+ */
+export function modulesForUser(
+  user: { role?: string; email?: string } | undefined,
+): TabletModule[] {
+  const role = user?.role;
+  const email = user?.email?.toLowerCase() ?? "";
+  const isDirectorRole = !!role && DIRECTOR_ROLES.includes(role);
+  const isDirectorEmail = DIRECTOR_EMAILS.includes(email);
+  const isAdmin = !!role && ADMIN_ROLES.includes(role);
+
+  return TABLET_MODULES.filter((m) => {
+    if (m.id === "director") {
+      return isDirectorRole || isDirectorEmail;
+    }
+    if (!role || isAdmin) return true;
+    return !m.roles || m.roles.includes(role);
+  });
 }
 
 export function getModule(id: string | undefined): TabletModule | undefined {

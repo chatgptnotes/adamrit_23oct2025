@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -13,19 +13,17 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { toast } from 'sonner';
 import { Wallet, Edit2, Trash2, Plus, CheckCircle, AlertTriangle, Calendar, ArrowRight, DollarSign } from 'lucide-react';
 import { DirectorKpiCards } from '@/components/DirectorKpiCards';
+import { usePaymentDeadlines, type PaymentDeadline } from '@/hooks/usePaymentDeadlines';
 
 const DIRECTOR_EMAILS = ['cmd@hopehospital.com', 'finance@hopehospital.com'];
+const DIRECTOR_ROLES = ['superadmin', 'super_admin'];
 
-interface PaymentDeadline {
-  id: string;
-  service_name: string;
-  amount: number;
-  due_date: string;
-  status: 'pending' | 'paid' | 'overdue';
-  hospital_type: string;
-  notes?: string;
-  created_at: string;
-}
+const canAccessDirector = (user: { email?: string; role?: string } | null | undefined): boolean => {
+  if (!user) return false;
+  const email = user.email?.toLowerCase() ?? '';
+  const role = user.role ?? '';
+  return DIRECTOR_EMAILS.includes(email) || DIRECTOR_ROLES.includes(role);
+};
 
 interface DeadlineFormData {
   service_name: string;
@@ -56,28 +54,13 @@ export default function DirectorDashboard() {
 
   // Access guard via effect (not during render)
   useEffect(() => {
-    if (!user || !DIRECTOR_EMAILS.includes(user.email.toLowerCase())) {
+    if (!canAccessDirector(user)) {
       navigate('/dashboard', { replace: true });
     }
   }, [user, navigate]);
 
-  // Fetch payment deadlines
-  const { data: deadlines = [], isLoading, error } = useQuery({
-    queryKey: ['paymentDeadlines', user?.hospitalType],
-    queryFn: async () => {
-      if (!user?.hospitalType) throw new Error('Hospital type not available');
-
-      const { data, error } = await supabase
-        .from('payment_deadlines')
-        .select('*')
-        .eq('hospital_type', user.hospitalType)
-        .order('due_date', { ascending: true });
-
-      if (error) throw error;
-      return data as PaymentDeadline[];
-    },
-    enabled: !!user?.hospitalType,
-  });
+  // Fetch payment deadlines (shared with the tablet Director view)
+  const { data: deadlines = [], isLoading, error } = usePaymentDeadlines();
 
   // Sort and filter: pending/overdue first, then paid (show first 3)
   const sortedDeadlines = useMemo(() => {
