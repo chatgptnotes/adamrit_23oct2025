@@ -22,7 +22,7 @@ interface User {
 
 interface AuthContextType {
   user: User | null;
-  login: (credentials: { email: string; password: string }) => Promise<boolean>;
+  login: (credentials: { email: string; password: string; hospitalType?: HospitalType }) => Promise<boolean>;
   loginWithGoogle: () => Promise<void>;
   signup: (userData: { email: string; password: string; role: string; hospitalType: HospitalType }) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
@@ -203,7 +203,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   }, []);
 
   // Database authentication
-  const login = async (credentials: { email: string; password: string }): Promise<boolean> => {
+  const login = async (credentials: { email: string; password: string; hospitalType?: HospitalType }): Promise<boolean> => {
     try {
       // Staff pin login: blank email + @XXXX password
       const isStaffPin = !credentials.email.trim() && credentials.password.startsWith('@') && credentials.password.length === 5;
@@ -213,11 +213,13 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
       if (isStaffPin) {
         const pin = credentials.password.substring(1); // Remove @ prefix
+        // Tablet edition passes hospitalType (device-provisioned); desktop legacy
+        // PIN login passes none and stays scoped to ayushman, unchanged.
         const result = await supabase
           .from('User')
           .select('*')
           .eq('staff_pin', pin)
-          .eq('hospital_type', 'ayushman')
+          .eq('hospital_type', credentials.hospitalType || 'ayushman')
           .single();
         data = result.data;
         error = result.error;
