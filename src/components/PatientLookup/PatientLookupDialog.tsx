@@ -3,15 +3,13 @@ import React, { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Search } from 'lucide-react';
-import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { useAuth } from '@/contexts/AuthContext';
 import { PatientSearchForm } from './PatientSearchForm';
 import { PatientSearchResults } from './PatientSearchResults';
 import { NoResultsSection } from './NoResultsSection';
 import { PatientRegistrationForm } from '@/components/PatientRegistrationForm';
-import { PatientLookupProps, Patient, SearchCriteria } from './types/patientLookup';
+import { PatientLookupProps, Patient } from './types/patientLookup';
+import { usePatientLookup, generateMockMobile } from '@/hooks/usePatientLookup';
 
 export const PatientLookupDialog: React.FC<PatientLookupProps> = ({
   isOpen,
@@ -19,71 +17,22 @@ export const PatientLookupDialog: React.FC<PatientLookupProps> = ({
   onPatientSelected,
   onNewPatientRegistration
 }) => {
-  const [searchCriteria, setSearchCriteria] = useState<SearchCriteria>({
-    mobile: '',
-    name: '',
-    patientId: ''
-  });
-  const [hasSearched, setHasSearched] = useState(false);
   const [showRegistrationForm, setShowRegistrationForm] = useState(false);
   const { toast } = useToast();
-  const { hospitalConfig } = useAuth();
 
-  // Generate mock mobile number from patient ID for demonstration
-  const generateMockMobile = (patientId: string) => {
-    const hash = patientId.split('').reduce((a, b) => {
-      a = ((a << 5) - a) + b.charCodeAt(0);
-      return a & a;
-    }, 0);
-    const phoneBase = Math.abs(hash) % 9000000000 + 1000000000;
-    return phoneBase.toString();
-  };
-
-  const { data: patients = [], isLoading, refetch } = useQuery({
-    queryKey: ['patient-lookup', searchCriteria.mobile, searchCriteria.name, searchCriteria.patientId, hospitalConfig.name],
-    queryFn: async () => {
-      if (!searchCriteria.mobile && !searchCriteria.name && !searchCriteria.patientId) {
-        return [];
-      }
-
-      let query = supabase
-        .from('patients')
-        .select('*')
-        .eq('hospital_name', hospitalConfig.name)
-        .order('created_at', { ascending: false });
-
-      // Search by name
-      if (searchCriteria.name) {
-        query = query.ilike('name', `%${searchCriteria.name}%`);
-      }
-
-      // Search by patients_id instead of id
-      if (searchCriteria.patientId) {
-        query = query.or(`patients_id.ilike.%${searchCriteria.patientId}%`);
-      }
-
-      const { data, error } = await query.limit(10);
-
-      if (error) {
-        console.error('Error searching patients:', error);
-        throw error;
-      }
-
-      // Filter by mock mobile number if provided
-      if (searchCriteria.mobile && data) {
-        return data.filter(patient => {
-          const mockMobile = generateMockMobile(patient.patients_id || patient.id);
-          return mockMobile.includes(searchCriteria.mobile);
-        });
-      }
-
-      return data || [];
-    },
-    enabled: false // We'll trigger this manually
-  });
+  // Shared search logic — same query path as the tablet patient picker.
+  const {
+    criteria,
+    setCriteria,
+    patients,
+    isLoading,
+    hasCriteria,
+    showNoResults,
+    search,
+  } = usePatientLookup();
 
   const handleSearch = () => {
-    if (!searchCriteria.mobile && !searchCriteria.name && !searchCriteria.patientId) {
+    if (!hasCriteria) {
       toast({
         title: "Search Required",
         description: "Please enter at least one search criteria",
@@ -91,8 +40,7 @@ export const PatientLookupDialog: React.FC<PatientLookupProps> = ({
       });
       return;
     }
-    setHasSearched(true);
-    refetch();
+    search();
   };
 
   const handlePatientSelect = (patient: Patient) => {
@@ -128,11 +76,9 @@ export const PatientLookupDialog: React.FC<PatientLookupProps> = ({
     });
   };
 
-  const showNoResults = hasSearched && patients.length === 0 && !isLoading && (searchCriteria.mobile || searchCriteria.name || searchCriteria.patientId);
-
   if (showRegistrationForm) {
     return (
-      <PatientRegistrationForm 
+      <PatientRegistrationForm
         isOpen={true}
         onClose={handleRegistrationClose}
       />
@@ -154,8 +100,8 @@ export const PatientLookupDialog: React.FC<PatientLookupProps> = ({
 
         <div className="space-y-6">
           <PatientSearchForm
-            searchCriteria={searchCriteria}
-            onSearchChange={setSearchCriteria}
+            searchCriteria={criteria}
+            onSearchChange={setCriteria}
             onSearch={handleSearch}
             isLoading={isLoading}
           />
@@ -168,7 +114,7 @@ export const PatientLookupDialog: React.FC<PatientLookupProps> = ({
 
           {showNoResults && (
             <NoResultsSection
-              searchCriteria={searchCriteria}
+              searchCriteria={criteria}
               onNewPatientRegistration={handleNewPatientRegistration}
             />
           )}

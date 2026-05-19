@@ -1,0 +1,227 @@
+/* Tablet Edition — scoped styles. Applied only inside .tablet-root so the
+   desktop website is never affected. */
+
+.tablet-root {
+  /* Scoped dark "clinical console" palette. These override the shadcn design
+     tokens for the tablet edition only — they never leave .tablet-root, so the
+     desktop site (/) keeps its light theme completely untouched. */
+  --background: 222 30% 9%;
+  --foreground: 210 22% 96%;
+  --card: 221 25% 13%;
+  --card-foreground: 210 22% 96%;
+  --popover: 221 25% 13%;
+  --popover-foreground: 210 22% 96%;
+  --primary: 152 56% 45%;
+  --primary-foreground: 222 45% 8%;
+  --secondary: 220 16% 21%;
+  --secondary-foreground: 210 22% 96%;
+  --muted: 220 16% 18%;
+  --muted-foreground: 214 14% 66%;
+  --accent: 220 16% 23%;
+  --accent-foreground: 210 22% 96%;
+  --destructive: 0 64% 56%;
+  --destructive-foreground: 210 22% 98%;
+  --border: 220 14% 24%;
+  --input: 220 14% 24%;
+  --ring: 152 56% 45%;
+
+  --tablet-touch-min: 56px;
+  color-scheme: dark;
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-size: 18px;
+  line-height: 1.5;
+  min-height: 100dvh;
+  color: hsl(var(--foreground));
+  background:
+    radial-gradient(125% 80% at 50% -10%, hsl(216 32% 18%) 0%, transparent 58%),
+    linear-gradient(180deg, hsl(222 30% 10%) 0%, hsl(225 33% 7%) 100%);
+  background-attachment: fixed;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/* Text inputs must remain selectable/editable */
+.tablet-root input,
+.tablet-root textarea,
+.tablet-root [contenteditable="true"] {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* Safe-area aware helpers for fixed bars */
+.tablet-safe-bottom {
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 0.75rem);
+}
+.tablet-safe-top {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+/* Hide scrollbars on touch scroll areas */
+.tablet-no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.tablet-no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Premium elevation — depth tuned for the dark console surface. */
+.tablet-elevate {
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.4),
+    0 14px 30px -12px rgba(0, 0, 0, 0.6);
+}
+.tablet-elevate-lg {
+  box-shadow:
+    0 2px 6px rgba(0, 0, 0, 0.45),
+    0 30px 60px -16px rgba(0, 0, 0, 0.7);
+}
+.tablet-elevate-flat {
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.45);
+}
+
+/*
+ * Module tile — subtle base, accent glow on hover / keyboard focus.
+ * The glow doubles as the focus indicator, so the native outline is removed.
+ */
+.tablet-tile {
+  transition: transform 0.18s ease, box-shadow 0.18s ease,
+    border-color 0.18s ease;
+}
+.tablet-tile:hover,
+.tablet-tile:focus-visible {
+  border-color: hsl(var(--primary));
+  box-shadow:
+    0 0 0 1px hsl(var(--primary) / 0.55),
+    0 0 30px -6px hsl(var(--primary) / 0.5);
+  outline: none;
+}
+.tablet-tile:active {
+  transform: scale(0.985);
+}
+
+/*
+ * Frosted-glass surface — used by the home module tiles. The translucent fill
+ * + backdrop blur let the page gradient and logo watermark show through softly.
+ */
+.tablet-glass {
+  /* Translucent, clearly lighter than the page so it reads as a frosted pane,
+     with a diagonal sheen, a bright hairline edge and a backdrop blur. */
+  background-color: hsl(218 22% 32% / 0.4);
+  background-image: linear-gradient(
+    145deg,
+    hsl(0 0% 100% / 0.16) 0%,
+    hsl(0 0% 100% / 0.03) 40%,
+    hsl(0 0% 100% / 0.08) 100%
+  );
+  border: 1px solid hsl(0 0% 100% / 0.16);
+  -webkit-backdrop-filter: blur(18px) saturate(170%);
+  backdrop-filter: blur(18px) saturate(170%);
+  box-shadow:
+    inset 0 1px 0 0 hsl(0 0% 100% / 0.22),
+    inset 0 -16px 32px -28px hsl(0 0% 0% / 0.6),
+    0 16px 38px -18px rgba(0, 0, 0, 0.75);
+}
+
+/* ============================================================
+   Light theme — opt-in via the in-app toggle. Scoped to
+   .tablet-root.tablet-light so the desktop site is never affected.
+   ============================================================ */
+.tablet-root.tablet-light {
+  --background: 210 40% 97%;
+  --foreground: 222 47% 14%;
+  --card: 0 0% 100%;
+  --card-foreground: 222 47% 14%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 222 47% 14%;
+  --primary: 152 52% 36%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 210 36% 94%;
+  --secondary-foreground: 222 47% 14%;
+  --muted: 210 36% 94%;
+  --muted-foreground: 215 16% 40%;
+  --accent: 210 36% 91%;
+  --accent-foreground: 222 47% 14%;
+  --destructive: 0 72% 48%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 214 30% 85%;
+  --input: 214 30% 85%;
+  --ring: 152 52% 36%;
+  color-scheme: light;
+  background:
+    radial-gradient(125% 80% at 50% -10%, hsl(0 0% 100%) 0%, transparent 60%),
+    linear-gradient(180deg, hsl(210 40% 98%) 0%, hsl(214 32% 92%) 100%);
+  background-attachment: fixed;
+}
+
+.tablet-light .tablet-elevate {
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.06),
+    0 14px 30px -14px rgba(15, 23, 42, 0.18);
+}
+.tablet-light .tablet-elevate-lg {
+  box-shadow:
+    0 2px 6px rgba(15, 23, 42, 0.08),
+    0 30px 60px -18px rgba(15, 23, 42, 0.22);
+}
+.tablet-light .tablet-elevate-flat {
+  box-shadow: 0 1px 3px 0 rgba(15, 23, 42, 0.08);
+}
+
+.tablet-light .tablet-glass {
+  background-color: hsl(0 0% 100% / 0.55);
+  background-image: linear-gradient(
+    145deg,
+    hsl(0 0% 100% / 0.9) 0%,
+    hsl(0 0% 100% / 0.35) 45%,
+    hsl(0 0% 100% / 0.6) 100%
+  );
+  border: 1px solid hsl(214 30% 86% / 0.9);
+  box-shadow:
+    inset 0 1px 0 0 hsl(0 0% 100% / 1),
+    0 16px 38px -20px rgba(15, 23, 42, 0.3);
+}
+
+/* The watermark mark is light-tinted; flip it dark for the light theme. */
+.tablet-light .tablet-watermark {
+  filter: invert(1);
+}
+
+/* Print: restore a light palette so printouts stay legible on paper, and
+   reveal only the marked print area. */
+@media print {
+  .tablet-root {
+    --background: 0 0% 100%;
+    --foreground: 222 47% 11%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+    --muted: 210 40% 96%;
+    --muted-foreground: 215 16% 40%;
+    --border: 214 32% 85%;
+    color: #000;
+    background: #fff;
+  }
+  body * {
+    visibility: hidden;
+  }
+  .tablet-print-area,
+  .tablet-print-area * {
+    visibility: visible;
+  }
+  .tablet-print-area {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    padding: 16px;
+  }
+  .tablet-no-print {
+    display: none !important;
+  }
+}

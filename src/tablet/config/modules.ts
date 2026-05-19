@@ -1,0 +1,169 @@
+import {
+  AlertTriangle,
+  Banknote,
+  BarChart3,
+  BedDouble,
+  ClipboardCheck,
+  ClipboardList,
+  DoorOpen,
+  FileText,
+  HeartPulse,
+  LogOut,
+  Receipt,
+  Stethoscope,
+  UserPlus,
+  Wallet,
+  type LucideIcon,
+} from "lucide-react";
+
+export interface TabletModule {
+  /** URL segment under /t/ and lookup key. */
+  id: string;
+  label: string;
+  description: string;
+  icon: LucideIcon;
+  /** Tailwind text-color class for the tile icon. */
+  accent: string;
+  /** Tailwind gradient stops for the tile icon chip (static for JIT). */
+  tint: string;
+  /** If set, only these roles see the tile (admins always see everything). */
+  roles?: string[];
+}
+
+/** The 12 v1 tablet modules, in home-grid order. */
+export const TABLET_MODULES: TabletModule[] = [
+  {
+    id: "register",
+    label: "Register Patient",
+    description: "New patient & visit",
+    icon: UserPlus,
+    accent: "text-emerald-600",
+    tint: "from-emerald-400 to-emerald-600",
+    roles: ["receptionist", "reception", "front_office", "nurse"],
+  },
+  {
+    id: "occupancy",
+    label: "Bed Occupancy",
+    description: "Live ward & bed status",
+    icon: BedDouble,
+    accent: "text-sky-600",
+    tint: "from-sky-400 to-sky-600",
+  },
+  {
+    id: "icu-admission",
+    label: "ICU Admission",
+    description: "Admit / transfer to ICU bed",
+    icon: HeartPulse,
+    accent: "text-rose-600",
+    tint: "from-rose-400 to-rose-600",
+    roles: ["receptionist", "reception", "nurse", "doctor"],
+  },
+  {
+    id: "advance",
+    label: "Advance Statement",
+    description: "Collect advance & view statement",
+    icon: Wallet,
+    accent: "text-amber-600",
+    tint: "from-amber-400 to-amber-600",
+    roles: ["receptionist", "reception", "billing", "front_office"],
+  },
+  {
+    id: "requisition",
+    label: "Requisition",
+    description: "Raise lab / radiology / store",
+    icon: ClipboardList,
+    accent: "text-indigo-600",
+    tint: "from-indigo-400 to-indigo-600",
+    roles: ["nurse", "doctor", "receptionist", "reception"],
+  },
+  {
+    id: "gate-pass",
+    label: "Gate Pass",
+    description: "Issue & print gate pass",
+    icon: DoorOpen,
+    accent: "text-cyan-600",
+    tint: "from-cyan-400 to-cyan-600",
+  },
+  {
+    id: "discharge-summary",
+    label: "Discharge Summary",
+    description: "View & print summary",
+    icon: FileText,
+    accent: "text-violet-600",
+    tint: "from-violet-400 to-violet-600",
+    roles: ["doctor", "nurse", "consultant"],
+  },
+  {
+    id: "doctor-notes",
+    label: "Doctor Notes",
+    description: "Bedside clinical notes",
+    icon: Stethoscope,
+    accent: "text-teal-600",
+    tint: "from-teal-400 to-teal-600",
+    roles: ["doctor", "consultant", "nurse"],
+  },
+  {
+    id: "medication-round",
+    label: "Medication Round",
+    description: "Mark doses given / missed",
+    icon: ClipboardCheck,
+    accent: "text-pink-600",
+    tint: "from-pink-400 to-pink-600",
+    roles: ["nurse", "doctor"],
+  },
+  {
+    id: "discharge",
+    label: "Discharged Patients",
+    description: "Discharged patient list",
+    icon: LogOut,
+    accent: "text-slate-600",
+    tint: "from-slate-400 to-slate-600",
+  },
+  {
+    id: "dama",
+    label: "DAMA / LAMA",
+    description: "Discharge against medical advice",
+    icon: AlertTriangle,
+    accent: "text-orange-600",
+    tint: "from-orange-400 to-orange-600",
+    roles: ["doctor", "nurse", "consultant"],
+  },
+  {
+    id: "billing",
+    label: "Billing",
+    description: "View bill & collect payment",
+    icon: Receipt,
+    accent: "text-fuchsia-600",
+    tint: "from-fuchsia-400 to-fuchsia-600",
+    roles: ["billing", "receptionist", "reception"],
+  },
+  {
+    id: "cash-in-hand",
+    label: "Cash in Hand",
+    description: "Today's cash position",
+    icon: Banknote,
+    accent: "text-green-600",
+    tint: "from-green-400 to-green-600",
+    roles: ["billing", "receptionist", "reception"],
+  },
+  {
+    id: "report",
+    label: "Reports",
+    description: "Occupancy, collections, census",
+    icon: BarChart3,
+    accent: "text-blue-600",
+    tint: "from-blue-400 to-blue-600",
+  },
+];
+
+const ADMIN_ROLES = ["admin", "superadmin", "super_admin"];
+
+/** Modules visible to a given role. Admins (and unknown roles) see all. */
+export function modulesForRole(role: string | undefined): TabletModule[] {
+  if (!role || ADMIN_ROLES.includes(role)) return TABLET_MODULES;
+  return TABLET_MODULES.filter((m) => !m.roles || m.roles.includes(role));
+}
+
+export function getModule(id: string | undefined): TabletModule | undefined {
+  return TABLET_MODULES.find((m) => m.id === id);
+}

@@ -1,5 +1,5 @@
 
-import React, { Suspense, useEffect, useRef } from "react";
+import React, { Suspense, useEffect, useRef, lazy } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -18,6 +18,11 @@ import { FloatingCameraFAB } from "@/components/CameraUpload";
 import ChatWidget from '@/components/ChatWidget';
 import { useToast } from "@/hooks/use-toast";
 import { HospitalType, getHospitalConfig } from "@/types/hospital";
+import { Tablet } from "lucide-react";
+import { shouldUseTabletEdition, setOverride } from "@/lib/device-class";
+
+// Touch (tablet) edition — rendered on the same URL for tablet/phone devices.
+const TabletApp = lazy(() => import("@/tablet/TabletApp"));
 
 // Role-based default landing routes
 const DIRECTOR_EMAILS = ['cmd@hopehospital.com', 'finance@hopehospital.com'];
@@ -269,9 +274,34 @@ const AppContent = () => {
   }
 
 
+  // Tablet & phone devices get the touch edition; PC gets the full site.
+  // Same URL for all — the device class (or the saved override) decides.
+  if (shouldUseTabletEdition()) {
+    return (
+      <ThemeProvider>
+        <BrowserRouter
+          future={{
+            v7_startTransition: true,
+            v7_relativeSplatPath: true,
+          }}
+        >
+          <Suspense
+            fallback={
+              <div className="min-h-screen flex items-center justify-center">
+                <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-500" />
+              </div>
+            }
+          >
+            <TabletApp />
+          </Suspense>
+        </BrowserRouter>
+      </ThemeProvider>
+    );
+  }
+
   return (
     <ThemeProvider>
-      <BrowserRouter 
+      <BrowserRouter
         future={{
           v7_startTransition: true,
           v7_relativeSplatPath: true
@@ -282,8 +312,15 @@ const AppContent = () => {
           <div className="min-h-screen flex w-full">
             <AppSidebar {...counts} />
             <main className="flex-1 flex flex-col h-screen overflow-hidden">
-              <div className="p-2 ml-4 flex-shrink-0">
+              <div className="p-2 ml-4 flex-shrink-0 flex items-center gap-3">
                 <SidebarTrigger />
+                <button
+                  type="button"
+                  onClick={() => { setOverride('tablet'); window.location.assign('/'); }}
+                  className="ml-auto mr-2 flex items-center gap-1 text-xs text-gray-500 hover:text-gray-800"
+                >
+                  <Tablet className="h-4 w-4" /> Tablet view
+                </button>
               </div>
               <div className="flex-1 min-h-0 overflow-auto">
                 <AppRoutes />
