@@ -45,6 +45,12 @@ interface CameraUploadProps {
   isDialog?: boolean;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+  /** Pre-link the upload to a specific patient (skips the patient search). */
+  presetPatient?: PatientResult | null;
+  /** Pre-select the document type (e.g. 'treatment_sheet'). */
+  presetCategory?: UploadCategory;
+  /** Called after a prescription is successfully saved from a treatment sheet. */
+  onSaved?: () => void;
 }
 
 interface PatientResult {
@@ -154,6 +160,9 @@ const CameraUpload: React.FC<CameraUploadProps> = ({
   isDialog = false,
   open = false,
   onOpenChange,
+  presetPatient = null,
+  presetCategory,
+  onSaved,
 }) => {
   const { toast } = useToast();
   const { hospitalConfig } = useAuth();
@@ -443,6 +452,20 @@ const CameraUpload: React.FC<CameraUploadProps> = ({
       }
     }
   }, [capturedBlob, selectedFile, aiStep]);
+
+  // -------------------------------------------------------------------------
+  // Preset mode: when opened pre-configured (e.g. from the Final Bill
+  // prescriptions tab), link the patient + category up front and go straight
+  // to the upload form, skipping the patient search and AI smart-input step.
+  // -------------------------------------------------------------------------
+
+  useEffect(() => {
+    if (open && presetPatient) {
+      setSelectedPatient(presetPatient);
+      if (presetCategory) setCategory(presetCategory);
+      setAiStep('manual');
+    }
+  }, [open, presetPatient, presetCategory]);
 
   // -------------------------------------------------------------------------
   // AI Smart Upload: parse instruction with Gemini
@@ -1363,7 +1386,11 @@ Rules:
   // -------------------------------------------------------------------------
 
   /** Camera section */
-  const renderCamera = () => (
+  const renderCamera = () => {
+    // In preset mode (e.g. launched from the prescriptions tab) we offer a
+    // plain file picker only — the live camera is hidden.
+    if (presetPatient) return null;
+    return (
     <div className="space-y-3">
       {!cameraActive && !hasFile && (
         <Button
@@ -1407,7 +1434,8 @@ Rules:
       {/* Hidden canvas for capture */}
       <canvas ref={canvasRef} className="hidden" />
     </div>
-  );
+    );
+  };
 
   /** File upload drop zone */
   const renderDropZone = () => {
@@ -2078,6 +2106,8 @@ Rules:
       toast({ title: 'Prescription Saved!', description: `${prescriptionNumber} saved successfully. You can now print it.` });
       // Move to step 3 (saved confirmation) instead of closing
       setPrescriptionStep('saved');
+      // Let the host (e.g. Final Bill prescriptions tab) refresh its list
+      onSaved?.();
     } catch (e) {
       console.error('Error generating prescription:', e);
       toast({ title: 'Error', description: 'Could not generate prescription.', variant: 'destructive' });
@@ -2493,8 +2523,20 @@ Rules:
           <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
-                <Camera className="h-5 w-5 text-blue-600" />
-                Camera Capture & Upload
+                {presetCategory === 'treatment_sheet' ? (
+                  <>
+                    <Upload className="h-5 w-5 text-blue-600" />
+                    Upload Treatment Sheet
+                    {presetPatient && (
+                      <Badge variant="outline" className="ml-1">{presetPatient.name}</Badge>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <Camera className="h-5 w-5 text-blue-600" />
+                    Camera Capture & Upload
+                  </>
+                )}
               </DialogTitle>
             </DialogHeader>
             {content}

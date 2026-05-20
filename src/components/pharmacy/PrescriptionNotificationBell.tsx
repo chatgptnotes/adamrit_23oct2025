@@ -38,7 +38,7 @@ const PrescriptionNotificationBell: React.FC<Props> = ({ count, recent, onViewAl
           variant="ghost"
           size="icon"
           className="relative"
-          aria-label={`${count} pending prescriptions`}
+          aria-label={`${count} prescriptions ready to dispense`}
         >
           <Bell className={count > 0 ? 'h-5 w-5 text-orange-600' : 'h-5 w-5 text-muted-foreground'} />
           {count > 0 && (
@@ -51,14 +51,14 @@ const PrescriptionNotificationBell: React.FC<Props> = ({ count, recent, onViewAl
 
       <DropdownMenuContent align="end" className="w-80">
         <DropdownMenuLabel className="flex items-center justify-between">
-          <span>Pending Prescriptions</span>
-          <span className="text-xs text-muted-foreground font-normal">{count} total</span>
+          <span>Sent to Pharmacy</span>
+          <span className="text-xs text-muted-foreground font-normal">{count} to dispense</span>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
 
         {recent.length === 0 ? (
           <div className="px-3 py-6 text-center text-sm text-muted-foreground">
-            No pending prescriptions
+            No prescriptions awaiting dispense
           </div>
         ) : (
           <div className="max-h-[320px] overflow-y-auto">

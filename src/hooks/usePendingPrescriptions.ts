@@ -25,13 +25,16 @@ export const usePendingPrescriptions = (): UsePendingPrescriptionsResult => {
   const queryClient = useQueryClient();
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // The pharmacy's actionable queue = prescriptions the doctor has APPROVED
+  // (i.e. "sent to pharmacy", awaiting dispense). PENDING ones are still with
+  // the doctor and must NOT alert the pharmacy.
   const countQuery = useQuery({
     queryKey: COUNT_KEY,
     queryFn: async () => {
       const { count, error } = await (supabase as any)
         .from('prescriptions')
         .select('id', { count: 'exact', head: true })
-        .eq('status', 'PENDING');
+        .eq('status', 'APPROVED');
       if (error) return 0;
       return count ?? 0;
     },
@@ -45,7 +48,7 @@ export const usePendingPrescriptions = (): UsePendingPrescriptionsResult => {
       const { data, error } = await (supabase as any)
         .from('prescriptions')
         .select('id, prescription_number, doctor_name, prescription_date, created_at, patients(name)')
-        .eq('status', 'PENDING')
+        .eq('status', 'APPROVED')
         .order('created_at', { ascending: false })
         .limit(5);
 
@@ -74,11 +77,16 @@ export const usePendingPrescriptions = (): UsePendingPrescriptionsResult => {
           if (debounceRef.current) clearTimeout(debounceRef.current);
           debounceRef.current = setTimeout(() => {
             queryClient.invalidateQueries({ queryKey: ['pending-prescriptions'] });
-            // Only fire a toast for brand-new prescriptions, not for
-            // updates (e.g. dispense) or deletes.
-            if (payload?.eventType === 'INSERT') {
+            // Alert the pharmacy the moment a doctor approves a prescription
+            // (status flips to APPROVED = "sent to pharmacy"). We don't toast
+            // on INSERT (still PENDING with the doctor) or on dispense/delete.
+            if (
+              payload?.eventType === 'UPDATE' &&
+              payload?.new?.status === 'APPROVED' &&
+              payload?.old?.status !== 'APPROVED'
+            ) {
               const num = payload?.new?.prescription_number;
-              toast.success(num ? `New prescription #${num}` : 'New prescription received');
+              toast.success(num ? `Prescription #${num} sent to pharmacy` : 'New prescription sent to pharmacy');
             }
           }, 500);
         }

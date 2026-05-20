@@ -61,6 +61,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { DiscountTab } from "@/components/DiscountTab"
 import { AdvancePaymentModal } from "@/components/AdvancePaymentModal"
 import { DrugInteractionPanel } from "@/components/pharmacy/DrugInteractionPanel"
+import CameraUpload from "@/components/CameraUpload"
 
 // This component needs to be created or installed. It is not a standard shadcn/ui component.
 // You can find implementations online or build one yourself.
@@ -2613,6 +2614,7 @@ const FinalBill = () => {
   const [savedPathologyCharges, setSavedPathologyCharges] = useState<any[]>([]);
   const [prescriptionsForPatient, setPrescriptionsForPatient] = useState<any[]>([]);
   const [prescriptionsLoaded, setPrescriptionsLoaded] = useState(false);
+  const [showRxUpload, setShowRxUpload] = useState(false);
   const [addMedicineToRxId, setAddMedicineToRxId] = useState<string | null>(null);
   const [newMedicine, setNewMedicine] = useState({ name: '', generic_name: '', brand_name: '', route: 'IV', frequency: 'BD', duration: '', qty: 3, instructions: '' });
 
@@ -20447,16 +20449,38 @@ Dr. Murali B K
                           <div>
                             <div className="flex justify-between items-center mb-3">
                               <h5 className="font-medium text-gray-900">Prescriptions ({prescriptionsForPatient.length})</h5>
-                              <button
-                                onClick={() => {
+                              <div className="flex items-center gap-2">
+                                <button
+                                  onClick={() => setShowRxUpload(true)}
+                                  disabled={!patientInfo?.id}
+                                  className="text-xs px-2 py-1 bg-green-50 text-green-700 rounded hover:bg-green-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                  Upload Treatment Sheet
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setPrescriptionsLoaded(false);
+                                    fetchPatientPrescriptions();
+                                  }}
+                                  className="text-xs px-2 py-1 bg-blue-50 text-blue-600 rounded hover:bg-blue-100"
+                                >
+                                  Refresh
+                                </button>
+                              </div>
+                            </div>
+                            {patientInfo?.id && (
+                              <CameraUpload
+                                isDialog
+                                open={showRxUpload}
+                                onOpenChange={setShowRxUpload}
+                                presetCategory="treatment_sheet"
+                                presetPatient={{ id: patientInfo.id, name: patientInfo.name }}
+                                onSaved={() => {
                                   setPrescriptionsLoaded(false);
                                   fetchPatientPrescriptions();
                                 }}
-                                className="text-xs px-2 py-1 bg-blue-50 text-blue-600 rounded hover:bg-blue-100"
-                              >
-                                Refresh
-                              </button>
-                            </div>
+                              />
+                            )}
                             <DrugInteractionPanel
                               medicines={prescriptionsForPatient.flatMap((p: any) =>
                                 (p.prescription_items || []).map((it: any) => ({
