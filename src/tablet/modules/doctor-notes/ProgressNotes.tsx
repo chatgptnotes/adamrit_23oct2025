@@ -43,14 +43,16 @@ export function ProgressNotes({
   const [draft, setDraft] = useState("");
 
   const notes = useQuery({
-    queryKey: ["tablet-progress-notes", visit.visitId],
+    queryKey: ["tablet-progress-notes", visit.id],
     queryFn: async (): Promise<ProgressEntry[]> => {
       // select("*") + tolerate errors: a not-yet-added column or table never
       // breaks the screen — it just shows an empty list.
+      // visit_id is a uuid column keyed on visits.id — pass visit.id, not the
+      // text visit code (matches src/pages/IpdDischargeSummary.tsx).
       const { data, error } = await db
         .from("ipd_discharge_summary")
         .select("*")
-        .eq("visit_id", visit.visitId)
+        .eq("visit_id", visit.id)
         .maybeSingle();
       if (error) return [];
       const arr = data?.daily_progress_notes;
@@ -77,7 +79,7 @@ export function ProgressNotes({
       const { data: existing } = await db
         .from("ipd_discharge_summary")
         .select("*")
-        .eq("visit_id", visit.visitId)
+        .eq("visit_id", visit.id)
         .maybeSingle();
       const current = Array.isArray(existing?.daily_progress_notes)
         ? (existing.daily_progress_notes as ProgressEntry[])
@@ -92,7 +94,7 @@ export function ProgressNotes({
       } else {
         const { error } = await db
           .from("ipd_discharge_summary")
-          .insert({ visit_id: visit.visitId, daily_progress_notes: next });
+          .insert({ visit_id: visit.id, daily_progress_notes: next });
         if (error) throw error;
       }
     },
@@ -100,7 +102,7 @@ export function ProgressNotes({
       setDraft("");
       setAdding(false);
       qc.invalidateQueries({
-        queryKey: ["tablet-progress-notes", visit.visitId],
+        queryKey: ["tablet-progress-notes", visit.id],
       });
     },
   });
