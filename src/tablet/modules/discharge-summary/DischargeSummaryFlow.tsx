@@ -27,13 +27,15 @@ export default function DischargeSummaryFlow() {
   const [selected, setSelected] = useState<TabletVisit | null>(null);
 
   const summary = useQuery({
-    queryKey: ["tablet-discharge-summary", selected?.visitId],
+    queryKey: ["tablet-discharge-summary", selected?.id],
     enabled: !!selected,
     queryFn: async () => {
+      // visit_id is a uuid column keyed on visits.id — pass selected.id, not
+      // the text visit code (matches src/pages/IpdDischargeSummary.tsx).
       const { data, error } = await supabase
         .from("ipd_discharge_summary")
         .select("*")
-        .eq("visit_id", selected!.visitId)
+        .eq("visit_id", selected!.id)
         .maybeSingle();
       if (error) throw error;
       return data as Record<string, unknown> | null;
