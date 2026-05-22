@@ -117,11 +117,17 @@ function MedicationRound({
   const prescribed = useQuery({
     queryKey: ["tablet-mar-prescribed", visit.id, visit.visitId],
     queryFn: async (): Promise<PrescribedMed[]> => {
-      const vm = await tryRows([
+      const allRows = await tryRows([
         { table: "visit_medications", col: "visit_id", val: visit.id },
         { table: "visit_medications", col: "visit_id", val: visit.visitId },
       ]);
-      const ids = [...new Set(vm.map((r: any) => r.medication_id).filter(Boolean))];
+      // Nurses administer only what pharmacy actually dispensed.
+      const vm = allRows.filter((r: any) => r.status === "dispensed");
+      // Resolve names against the dispensed medicine (the substitute), not the
+      // doctor's original prescription.
+      const ids = [
+        ...new Set(vm.map((r: any) => r.dispensed_medication_id).filter(Boolean)),
+      ];
       let names: Record<string, any> = {};
       for (const tbl of ["medicine_master", "medication", "medications"]) {
         if (!ids.length) break;
@@ -134,9 +140,10 @@ function MedicationRound({
       return vm.map((r: any) => ({
         id: String(r.id),
         name:
-          names[r.medication_id]?.medicine_name ||
-          names[r.medication_id]?.name ||
-          names[r.medication_id]?.generic_name ||
+          r.dispensed_medication_name ||
+          names[r.dispensed_medication_id]?.medicine_name ||
+          names[r.dispensed_medication_id]?.name ||
+          names[r.dispensed_medication_id]?.generic_name ||
           r.medication_type ||
           "Medication",
         dose: r.dosage || "",
@@ -348,8 +355,8 @@ function MedicationRound({
                         colSpan={4}
                         className="px-3 py-8 text-center text-muted-foreground"
                       >
-                        No medications prescribed yet — ask the doctor to add
-                        them on the Treatment Sheet.
+                        No dispensed medicines yet — they appear here once
+                        pharmacy dispenses the approved Treatment Sheet meds.
                       </td>
                     </tr>
                   ) : (

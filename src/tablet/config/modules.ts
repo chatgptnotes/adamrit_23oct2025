@@ -10,6 +10,7 @@ import {
   HeartPulse,
   LayoutDashboard,
   LogOut,
+  Pill,
   Receipt,
   Stethoscope,
   UserPlus,
@@ -111,6 +112,16 @@ export const TABLET_MODULES: TabletModule[] = [
     accent: "text-teal-600",
     tint: "from-teal-400 to-teal-600",
     roles: ["doctor", "consultant", "nurse"],
+  },
+  {
+    id: "pharmacy-dispense",
+    label: "Pharmacy",
+    description: "Dispense / substitute approved meds",
+    icon: Pill,
+    accent: "text-lime-600",
+    tint: "from-lime-400 to-lime-600",
+    // No role gate: shown to all non-admin roles (the pharmacy role string
+    // varies by deployment). Tighten once that role is confirmed.
   },
   {
     id: "medication-round",
