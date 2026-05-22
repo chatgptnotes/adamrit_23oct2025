@@ -92,9 +92,18 @@ export function ProgressNotes({
           .eq("id", existing.id);
         if (error) throw error;
       } else {
+        // New row: ipd_discharge_summary requires patient_id, patient_name and
+        // admission_date (NOT NULL) — supply them so the first note can save,
+        // matching the insert in src/pages/IpdDischargeSummary.tsx.
         const { error } = await db
           .from("ipd_discharge_summary")
-          .insert({ visit_id: visit.id, daily_progress_notes: next });
+          .insert({
+            visit_id: visit.id,
+            patient_id: visit.patientUuid,
+            patient_name: visit.patientName,
+            admission_date: visit.admissionDate,
+            daily_progress_notes: next,
+          });
         if (error) throw error;
       }
     },

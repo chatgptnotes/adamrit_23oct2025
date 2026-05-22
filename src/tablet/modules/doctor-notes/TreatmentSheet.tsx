@@ -454,16 +454,18 @@ function AddMedicationSection({ visit }: { visit: TabletVisit }) {
   };
 
   const addMed = (m: MedicineResult) => {
-    const isCustom = m.id === CUSTOM_ID;
     addMedications(
       {
         visitId: visit.id,
         medications: [
           {
             medication_type: "prescribed",
-            ...(isCustom
-              ? { custom_medication_name: m.name }
-              : { medication_id: m.id }),
+            // Store every picked medicine by name. The pharmacy search/quick-picks
+            // read from `medicine_master`, but visit_medications.medication_id FKs
+            // to a different `medications` table — sending that id 409s (FK
+            // violation). The chart mapping above falls back to
+            // custom_medication_name, so the name still displays correctly.
+            custom_medication_name: m.name,
             dosage: dosage.trim() || undefined,
             route: route.trim() || undefined,
             frequency: frequency.trim() || undefined,

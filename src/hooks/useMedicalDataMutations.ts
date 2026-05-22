@@ -90,10 +90,17 @@ export const useMedicalDataMutations = () => {
         route?: string;
       }>;
     }) => {
+      // Only columns that exist on visit_medications — `medication_type` and
+      // `status` are NOT real columns (insert 400s PGRST204 if sent). Undefined
+      // fields are dropped from the request body, so optional ones stay optional.
       const medicationEntries = medications.map(med => ({
         visit_id: visitId,
-        ...med,
-        status: 'prescribed',
+        medication_id: med.medication_id,
+        custom_medication_name: med.custom_medication_name,
+        dosage: med.dosage,
+        frequency: med.frequency,
+        duration: med.duration,
+        route: med.route,
         prescribed_date: new Date().toISOString()
       }));
 
