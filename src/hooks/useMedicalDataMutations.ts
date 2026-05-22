@@ -81,8 +81,9 @@ export const useMedicalDataMutations = () => {
     }: { 
       visitId: string; 
       medications: Array<{
-        medication_id: string;
+        medication_id?: string;
         medication_type: string;
+        custom_medication_name?: string;
         dosage?: string;
         frequency?: string;
         duration?: string;
@@ -116,6 +117,58 @@ export const useMedicalDataMutations = () => {
       toast({
         title: "Error",
         description: "Failed to add medications",
+        variant: "destructive"
+      });
+    }
+  });
+
+  const deleteMedicationMutation = useMutation({
+    mutationFn: async ({ rowId }: { rowId: string }) => {
+      const { error } = await supabase
+        .from('visit_medications')
+        .delete()
+        .eq('id', rowId);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['visit-medications-custom'] });
+      toast({
+        title: "Removed",
+        description: "Medication removed",
+      });
+    },
+    onError: (error) => {
+      console.error('Error deleting medication:', error);
+      toast({
+        title: "Error",
+        description: "Failed to remove medication",
+        variant: "destructive"
+      });
+    }
+  });
+
+  const approveMedicationMutation = useMutation({
+    mutationFn: async ({ rowId }: { rowId: string }) => {
+      const { error } = await supabase
+        .from('visit_medications')
+        .update({ is_approved: true, approved_at: new Date().toISOString() })
+        .eq('id', rowId);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['visit-medications-custom'] });
+      toast({
+        title: "Approved",
+        description: "Medication approved",
+      });
+    },
+    onError: (error) => {
+      console.error('Error approving medication:', error);
+      toast({
+        title: "Error",
+        description: "Failed to approve medication",
         variant: "destructive"
       });
     }
@@ -227,10 +280,14 @@ export const useMedicalDataMutations = () => {
     addLabs: addLabsMutation.mutate,
     addRadiology: addRadiologyMutation.mutate,
     addMedications: addMedicationsMutation.mutate,
+    deleteMedication: deleteMedicationMutation.mutate,
+    approveMedication: approveMedicationMutation.mutate,
     updateLabStatus: updateLabStatusMutation.mutate,
     updateRadiologyStatus: updateRadiologyStatusMutation.mutate,
     isAddingLabs: addLabsMutation.isPending,
     isAddingRadiology: addRadiologyMutation.isPending,
     isAddingMedications: addMedicationsMutation.isPending,
+    isDeletingMedication: deleteMedicationMutation.isPending,
+    isApprovingMedication: approveMedicationMutation.isPending,
   };
 };

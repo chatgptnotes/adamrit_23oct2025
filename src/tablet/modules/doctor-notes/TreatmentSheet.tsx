@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Printer, Search } from "lucide-react";
+import { Check, Loader2, Plus, Printer, Search, Trash2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { useMedicalDataMutations } from "@/hooks/useMedicalDataMutations";
@@ -22,6 +22,9 @@ interface MedRow {
   frequency: string;
   duration: string;
   stock: number;
+  isCustom: boolean;
+  isApproved: boolean;
+  addedAt: string | null;
 }
 interface PlanRow {
   day_number: number;
@@ -42,6 +45,9 @@ const FREQUENCIES = ["OD", "BD", "TDS", "QID", "HS", "SOS"];
 const ROUTES = ["Oral", "IV", "IM", "S/C", "Topical"];
 const DURATIONS = ["3 days", "5 days", "7 days", "10 days"];
 const DOSES = ["250 mg", "500 mg", "650 mg", "1 g"];
+
+// Sentinel id for the doctor-typed custom medicine (not in the catalogue).
+const CUSTOM_ID = "__custom__";
 
 const CHIP_BASE =
   "h-11 rounded-full px-4 text-sm font-medium transition-colors";
@@ -125,6 +131,18 @@ export function TreatmentSheet({
   visit: TabletVisit;
   onBack: () => void;
 }) {
+  const qc = useQueryClient();
+  const {
+    deleteMedication,
+    approveMedication,
+    isDeletingMedication,
+    isApprovingMedication,
+  } = useMedicalDataMutations();
+  const invalidateSheet = () =>
+    qc.invalidateQueries({
+      queryKey: ["tablet-treatment-sheet", visit.id, visit.visitId],
+    });
+
   const data = useQuery({
     queryKey: ["tablet-treatment-sheet", visit.id, visit.visitId],
     queryFn: async (): Promise<{ medications: MedRow[]; plan: PlanRow[] }> => {
@@ -155,6 +173,7 @@ export function TreatmentSheet({
             med.medicine_name ||
             med.name ||
             med.generic_name ||
+            m.custom_medication_name ||
             m.medication_type ||
             "Medication",
           dosage: [m.dosage, med.strength].filter(Boolean).join(" "),
@@ -162,6 +181,9 @@ export function TreatmentSheet({
           frequency: m.frequency || "",
           duration: m.duration || "",
           stock: stockMap[m.medication_id] || 0,
+          isCustom: !m.medication_id,
+          isApproved: !!m.is_approved,
+          addedAt: m.created_at || m.prescribed_date || null,
         };
       });
 
@@ -231,13 +253,14 @@ export function TreatmentSheet({
                     <th className={TH}>Frequency</th>
                     <th className={TH}>Duration</th>
                     <th className={TH}>Availability</th>
+                    <th className={`${TH} tablet-no-print`}>Status</th>
                   </tr>
                 </thead>
                 <tbody>
                   {meds.length === 0 ? (
                     <tr>
                       <td
-                        colSpan={7}
+                        colSpan={8}
                         className="px-3 py-8 text-center text-muted-foreground"
                       >
                         No medications added yet — add one below.
@@ -254,6 +277,57 @@ export function TreatmentSheet({
                         <td className={TD}>{m.duration || "—"}</td>
                         <td className={TD}>
                           <StockBadge stock={m.stock} />
+                        </td>
+                        <td className={`${TD} tablet-no-print`}>
+                          {m.isApproved ? (
+                            <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-700">
+                              <Check className="h-3.5 w-3.5" /> Approved
+                            </span>
+                          ) : (
+                            <div className="flex flex-col items-start gap-2">
+                              <span className="inline-flex items-center gap-2">
+                                <span className="whitespace-nowrap rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800">
+                                  Pending
+                                </span>
+                                {m.addedAt ? (
+                                  <span className="whitespace-nowrap text-xs text-muted-foreground">
+                                    {new Date(m.addedAt).toLocaleTimeString([], {
+                                      hour: "2-digit",
+                                      minute: "2-digit",
+                                    })}
+                                  </span>
+                                ) : null}
+                              </span>
+                              <div className="flex gap-2">
+                                <button
+                                  type="button"
+                                  disabled={isApprovingMedication}
+                                  onClick={() =>
+                                    approveMedication(
+                                      { rowId: m.id },
+                                      { onSuccess: invalidateSheet },
+                                    )
+                                  }
+                                  className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+                                >
+                                  <Check className="h-3.5 w-3.5" /> Approve
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={isDeletingMedication}
+                                  onClick={() =>
+                                    deleteMedication(
+                                      { rowId: m.id },
+                                      { onSuccess: invalidateSheet },
+                                    )
+                                  }
+                                  className="inline-flex items-center gap-1 rounded-lg bg-rose-100 px-3 py-1.5 text-xs font-semibold text-rose-700 disabled:opacity-50"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" /> Delete
+                                </button>
+                              </div>
+                            </div>
+                          )}
                         </td>
                       </tr>
                     ))
@@ -356,7 +430,7 @@ function AddMedicationSection({ visit }: { visit: TabletVisit }) {
   // `from` disambiguates a drug that is both a quick pick and a search hit.
   const [expanded, setExpanded] = useState<{
     id: string;
-    from: "quick" | "search";
+    from: "quick" | "search" | "custom";
   } | null>(null);
   const [dosage, setDosage] = useState("");
   const [route, setRoute] = useState("");
@@ -370,7 +444,7 @@ function AddMedicationSection({ visit }: { visit: TabletVisit }) {
     setDuration("");
   };
 
-  const toggleMed = (m: MedicineResult, from: "quick" | "search") => {
+  const toggleMed = (m: MedicineResult, from: "quick" | "search" | "custom") => {
     if (expanded?.id === m.id && expanded.from === from) {
       setExpanded(null);
       return;
@@ -380,13 +454,16 @@ function AddMedicationSection({ visit }: { visit: TabletVisit }) {
   };
 
   const addMed = (m: MedicineResult) => {
+    const isCustom = m.id === CUSTOM_ID;
     addMedications(
       {
         visitId: visit.id,
         medications: [
           {
-            medication_id: m.id,
             medication_type: "prescribed",
+            ...(isCustom
+              ? { custom_medication_name: m.name }
+              : { medication_id: m.id }),
             dosage: dosage.trim() || undefined,
             route: route.trim() || undefined,
             frequency: frequency.trim() || undefined,
@@ -533,9 +610,51 @@ function AddMedicationSection({ visit }: { visit: TabletVisit }) {
           <Loader2 className="h-7 w-7 animate-spin text-primary" />
         </div>
       ) : medicines.length === 0 ? (
-        <p className="py-6 text-center text-muted-foreground">
-          No medicines found. Try another search.
-        </p>
+        <div className="space-y-3 py-4">
+          <p className="text-center text-muted-foreground">
+            No medicines found in the pharmacy.
+          </p>
+          {(() => {
+            const customName = searchTerm.trim();
+            const customMed: MedicineResult = {
+              id: CUSTOM_ID,
+              name: customName,
+              generic: "",
+              type: "",
+              totalStock: 0,
+            };
+            const open = expanded?.from === "custom";
+            return (
+              <div
+                className={cn(
+                  "overflow-hidden rounded-xl border bg-background",
+                  open && "ring-2 ring-primary",
+                )}
+              >
+                <button
+                  type="button"
+                  onClick={() => toggleMed(customMed, "custom")}
+                  className="flex w-full items-center gap-3 p-4 text-left"
+                >
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                    <Plus className="h-5 w-5" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block font-semibold">
+                      Add “{customName}” as a new medicine
+                    </span>
+                    <span className="block text-sm text-muted-foreground">
+                      Prescribe by name for this patient — needs your approval
+                    </span>
+                  </span>
+                </button>
+                {open ? (
+                  <div className="border-t">{renderPanel(customMed)}</div>
+                ) : null}
+              </div>
+            );
+          })()}
+        </div>
       ) : (
         <div className="space-y-2">
           {medicines.map((m) => {
