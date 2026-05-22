@@ -3,7 +3,13 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 
-export const useCounts = () => {
+/**
+ * Sidebar count badges. Pass `enabled: false` to suppress all the count queries
+ * until they're actually needed — critically, while unauthenticated, so they
+ * don't flood the network and starve the login `User` lookup. App.tsx gates
+ * this on `isAuthenticated`.
+ */
+export const useCounts = (enabled: boolean = true) => {
   const { hospitalConfig } = useAuth();
   const { data: diagnosesCount = 0 } = useQuery({
     queryKey: ['diagnoses-count'],
@@ -27,6 +33,7 @@ export const useCounts = () => {
     retry: 1,
     refetchOnWindowFocus: false,
     staleTime: 5 * 60 * 1000,
+    enabled,
   });
 
   const { data: patientsCount = 0 } = useQuery({
@@ -57,6 +64,7 @@ export const useCounts = () => {
     retry: 1,
     refetchOnWindowFocus: false,
     staleTime: 5 * 60 * 1000,
+    enabled,
   });
 
   const { data: usersCount = 0 } = useQuery({
@@ -81,6 +89,7 @@ export const useCounts = () => {
     retry: 1,
     refetchOnWindowFocus: false,
     staleTime: 5 * 60 * 1000,
+    enabled,
   });
 
   const { data: complicationsCount = 0 } = useQuery({
@@ -105,6 +114,7 @@ export const useCounts = () => {
     retry: 1,
     refetchOnWindowFocus: false,
     staleTime: 5 * 60 * 1000,
+    enabled,
   });
 
   const { data: cghsSurgeryCount = 0 } = useQuery({
@@ -129,6 +139,7 @@ export const useCounts = () => {
     retry: 1,
     refetchOnWindowFocus: false,
     staleTime: 5 * 60 * 1000,
+    enabled,
   });
 
   const { data: labCount = 0 } = useQuery({
@@ -153,6 +164,7 @@ export const useCounts = () => {
     retry: 1,
     refetchOnWindowFocus: false,
     staleTime: 5 * 60 * 1000,
+    enabled,
   });
 
   const { data: radiologyCount = 0 } = useQuery({
@@ -177,6 +189,7 @@ export const useCounts = () => {
     retry: 1,
     refetchOnWindowFocus: false,
     staleTime: 5 * 60 * 1000,
+    enabled,
   });
 
   const { data: medicationsCount = 0 } = useQuery({
@@ -201,6 +214,7 @@ export const useCounts = () => {
     retry: 1,
     refetchOnWindowFocus: false,
     staleTime: 5 * 60 * 1000,
+    enabled,
   });
 
   const { data: esicSurgeonsCount = 0 } = useQuery({
@@ -225,6 +239,7 @@ export const useCounts = () => {
     retry: 1,
     refetchOnWindowFocus: false,
     staleTime: 5 * 60 * 1000,
+    enabled,
   });
 
   const { data: refereesCount = 0 } = useQuery({
@@ -249,6 +264,7 @@ export const useCounts = () => {
     retry: 1,
     refetchOnWindowFocus: false,
     staleTime: 5 * 60 * 1000,
+    enabled,
   });
 
   const { data: hopeSurgeonsCount = 0 } = useQuery({
@@ -273,6 +289,7 @@ export const useCounts = () => {
     retry: 1,
     refetchOnWindowFocus: false,
     staleTime: 5 * 60 * 1000,
+    enabled,
   });
 
   const { data: hopeConsultantsCount = 0 } = useQuery({
@@ -297,6 +314,7 @@ export const useCounts = () => {
     retry: 1,
     refetchOnWindowFocus: false,
     staleTime: 5 * 60 * 1000,
+    enabled,
   });
 
   const { data: hopeAnaesthetistsCount = 0 } = useQuery({
@@ -321,6 +339,7 @@ export const useCounts = () => {
     retry: 1,
     refetchOnWindowFocus: false,
     staleTime: 5 * 60 * 1000,
+    enabled,
   });
 
   const { data: ayushmanSurgeonsCount = 0 } = useQuery({
@@ -345,6 +364,7 @@ export const useCounts = () => {
     retry: 1,
     refetchOnWindowFocus: false,
     staleTime: 5 * 60 * 1000,
+    enabled,
   });
 
   const { data: ayushmanConsultantsCount = 0 } = useQuery({
@@ -369,6 +389,7 @@ export const useCounts = () => {
     retry: 1,
     refetchOnWindowFocus: false,
     staleTime: 5 * 60 * 1000,
+    enabled,
   });
 
   const { data: ayushmanAnaesthetistsCount = 0 } = useQuery({
@@ -393,6 +414,7 @@ export const useCounts = () => {
     retry: 1,
     refetchOnWindowFocus: false,
     staleTime: 5 * 60 * 1000,
+    enabled,
   });
 
   const { data: pendingPrescriptionsCount = 0 } = useQuery({
@@ -410,8 +432,9 @@ export const useCounts = () => {
       }
     },
     retry: 1,
-    refetchInterval: 60_000,
+    refetchInterval: enabled ? 60_000 : false,
     staleTime: 30_000,
+    enabled,
   });
 
   return {
