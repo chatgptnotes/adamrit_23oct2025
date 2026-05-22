@@ -424,7 +424,7 @@ export const useCounts = (enabled: boolean = true) => {
         const { count, error } = await (supabase as any)
           .from('prescriptions')
           .select('id', { count: 'exact', head: true })
-          .eq('status', 'PENDING');
+          .or('status.eq.PENDING,and(status.eq.APPROVED,source.eq.ward)');
         if (error) return 0;
         return count ?? 0;
       } catch {

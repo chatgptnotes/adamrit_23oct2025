@@ -79,6 +79,7 @@ interface Prescription {
   doctor_name: string | null;
   prescription_date: string | null;
   status: string;
+  source?: string | null; // 'ward' = bridged from the tablet treatment sheet
   notes: string | null;
   prescription_image_url?: string | null;
   prescription_image_type?: string | null;
@@ -1589,6 +1590,11 @@ const PrescriptionQueue: React.FC<PrescriptionQueueProps> = ({ autoOpenPrescript
                           <p className="font-mono font-medium text-sm">
                             {prescription.prescription_number}
                           </p>
+                          {prescription.source === 'ward' && (
+                            <Badge className="mt-1 text-[10px] bg-purple-100 text-purple-700 border-purple-200">
+                              Ward
+                            </Badge>
+                          )}
                         </TableCell>
 
                         <TableCell>

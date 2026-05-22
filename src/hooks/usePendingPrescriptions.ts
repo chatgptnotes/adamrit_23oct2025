@@ -28,10 +28,12 @@ export const usePendingPrescriptions = (): UsePendingPrescriptionsResult => {
   const countQuery = useQuery({
     queryKey: COUNT_KEY,
     queryFn: async () => {
+      // Pending camera/manual prescriptions PLUS ward orders bridged from the
+      // tablet (created APPROVED so they're dispensable, source='ward').
       const { count, error } = await (supabase as any)
         .from('prescriptions')
         .select('id', { count: 'exact', head: true })
-        .eq('status', 'PENDING');
+        .or('status.eq.PENDING,and(status.eq.APPROVED,source.eq.ward)');
       if (error) return 0;
       return count ?? 0;
     },
@@ -45,7 +47,7 @@ export const usePendingPrescriptions = (): UsePendingPrescriptionsResult => {
       const { data, error } = await (supabase as any)
         .from('prescriptions')
         .select('id, prescription_number, doctor_name, prescription_date, created_at, patients(name)')
-        .eq('status', 'PENDING')
+        .or('status.eq.PENDING,and(status.eq.APPROVED,source.eq.ward)')
         .order('created_at', { ascending: false })
         .limit(5);
 
