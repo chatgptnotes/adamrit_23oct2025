@@ -88,11 +88,13 @@ export const useMedicalDataMutations = () => {
         frequency?: string;
         duration?: string;
         route?: string;
+        start_date?: string; // when this order starts (YYYY-MM-DD); defaults to today
       }>;
     }) => {
       // Only columns that exist on visit_medications — `medication_type` and
       // `status` are NOT real columns (insert 400s PGRST204 if sent). Undefined
       // fields are dropped from the request body, so optional ones stay optional.
+      const today = new Date().toISOString().slice(0, 10);
       const medicationEntries = medications.map(med => ({
         visit_id: visitId,
         medication_id: med.medication_id,
@@ -101,6 +103,7 @@ export const useMedicalDataMutations = () => {
         frequency: med.frequency,
         duration: med.duration,
         route: med.route,
+        start_date: med.start_date || today, // active order starts today
         prescribed_date: new Date().toISOString()
       }));
 
@@ -152,6 +155,83 @@ export const useMedicalDataMutations = () => {
         description: "Failed to remove medication",
         variant: "destructive"
       });
+    }
+  });
+
+  // Stop an active medicine: set its end_date (and optional reason). The row
+  // stays in the chart's history — active vs past is decided by end_date.
+  const discontinueMedicationMutation = useMutation({
+    mutationFn: async ({
+      rowId,
+      notes,
+    }: {
+      rowId: string;
+      notes?: string;
+    }) => {
+      const today = new Date().toISOString().slice(0, 10);
+      const { error } = await supabase
+        .from('visit_medications')
+        .update({ end_date: today, ...(notes ? { notes } : {}) })
+        .eq('id', rowId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['visit-medications-custom'] });
+      toast({ title: "Stopped", description: "Medicine stopped" });
+    },
+    onError: (error) => {
+      console.error('Error stopping medication:', error);
+      toast({ title: "Error", description: "Failed to stop medicine", variant: "destructive" });
+    }
+  });
+
+  // Change a medicine's dose/frequency/route: end the current order today and
+  // start a new active order today. Preserves the full history (one row per order).
+  const changeMedicationMutation = useMutation({
+    mutationFn: async ({
+      rowId,
+      visitId,
+      name,
+      dosage,
+      frequency,
+      duration,
+      route,
+    }: {
+      rowId: string;
+      visitId: string;
+      name: string;
+      dosage?: string;
+      frequency?: string;
+      duration?: string;
+      route?: string;
+    }) => {
+      const today = new Date().toISOString().slice(0, 10);
+      const { error: endErr } = await supabase
+        .from('visit_medications')
+        .update({ end_date: today })
+        .eq('id', rowId);
+      if (endErr) throw endErr;
+      const { error: addErr } = await supabase
+        .from('visit_medications')
+        .insert({
+          visit_id: visitId,
+          custom_medication_name: name,
+          dosage,
+          frequency,
+          duration,
+          route,
+          start_date: today,
+          prescribed_date: new Date().toISOString(),
+        });
+      if (addErr) throw addErr;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['visit-medications-custom'] });
+      toast({ title: "Updated", description: "Medicine updated" });
+    },
+    onError: (error) => {
+      console.error('Error changing medication:', error);
+      toast({ title: "Error", description: "Failed to update medicine", variant: "destructive" });
     }
   });
 
@@ -288,6 +368,8 @@ export const useMedicalDataMutations = () => {
     addRadiology: addRadiologyMutation.mutate,
     addMedications: addMedicationsMutation.mutate,
     deleteMedication: deleteMedicationMutation.mutate,
+    discontinueMedication: discontinueMedicationMutation.mutate,
+    changeMedication: changeMedicationMutation.mutate,
     approveMedication: approveMedicationMutation.mutate,
     updateLabStatus: updateLabStatusMutation.mutate,
     updateRadiologyStatus: updateRadiologyStatusMutation.mutate,
@@ -295,6 +377,8 @@ export const useMedicalDataMutations = () => {
     isAddingRadiology: addRadiologyMutation.isPending,
     isAddingMedications: addMedicationsMutation.isPending,
     isDeletingMedication: deleteMedicationMutation.isPending,
+    isDiscontinuingMedication: discontinueMedicationMutation.isPending,
+    isChangingMedication: changeMedicationMutation.isPending,
     isApprovingMedication: approveMedicationMutation.isPending,
   };
 };
