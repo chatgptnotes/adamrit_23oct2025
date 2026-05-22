@@ -5,6 +5,7 @@ import { shortDate } from "@/tablet/lib/format";
 import { PatientTypeBadge } from "@/tablet/components/PatientTypeBadge";
 import { TabletCard } from "@/tablet/ui/TabletCard";
 import { TabletInput } from "@/tablet/ui/TabletInput";
+import { PullToRefresh } from "@/tablet/components/PullToRefresh";
 
 interface TabletVisitListProps {
   visits: TabletVisit[];
@@ -50,7 +51,7 @@ export function TabletVisitList({
           />
         </div>
       </div>
-      <div className="tablet-no-scrollbar min-h-0 flex-1 overflow-y-auto p-4">
+      <PullToRefresh className="p-4">
         {loading ? (
           <div className="flex justify-center py-10">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -106,7 +107,7 @@ export function TabletVisitList({
             ))}
           </div>
         )}
-      </div>
+      </PullToRefresh>
     </div>
   );
 }

@@ -12,6 +12,7 @@ export interface TabletVisit {
   ward: string | null;
   room: string | null;
   patientName: string;
+  patientUuid: string | null; // patients.id (UUID) — FK for ipd_discharge_summary.patient_id
   patientsId: string | null;
   age: number | null;
   gender: string | null;
@@ -28,6 +29,7 @@ function mapRow(v: any): TabletVisit {
     ward: v.ward_allotted ?? null,
     room: v.room_allotted ?? null,
     patientName: v.patients?.name ?? "Unknown",
+    patientUuid: v.patients?.id ?? null,
     patientsId: v.patients?.patients_id ?? null,
     age: v.patients?.age ?? null,
     gender: v.patients?.gender ?? null,
@@ -35,7 +37,7 @@ function mapRow(v: any): TabletVisit {
 }
 
 const SELECT =
-  "id, visit_id, patient_type, admission_date, discharge_date, discharge_mode, ward_allotted, room_allotted, patients!inner(name, patients_id, age, gender, hospital_name)";
+  "id, visit_id, patient_type, admission_date, discharge_date, discharge_mode, ward_allotted, room_allotted, patients!inner(id, name, patients_id, age, gender, hospital_name)";
 
 /** Currently admitted IPD + Emergency visits for the active hospital. */
 export function useAdmittedVisits() {

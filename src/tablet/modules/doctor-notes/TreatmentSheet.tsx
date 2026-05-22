@@ -1,6 +1,16 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Printer, Search } from "lucide-react";
+import {
+  Ban,
+  Check,
+  ChevronDown,
+  Loader2,
+  Pencil,
+  Plus,
+  Printer,
+  Search,
+  Trash2,
+} from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { useMedicalDataMutations } from "@/hooks/useMedicalDataMutations";
@@ -22,6 +32,15 @@ interface MedRow {
   frequency: string;
   duration: string;
   stock: number;
+  isCustom: boolean;
+  isApproved: boolean;
+  addedAt: string | null;
+  startDate: string | null; // order started (active if endDate is null)
+  endDate: string | null; // order stopped/changed-out — moves it to history
+  notes: string | null; // optional reason captured on stop
+  dispensedName: string | null; // what the pharmacy actually gave
+  isSubstituted: boolean; // pharmacy gave a different medicine
+  substituteReason: string | null;
 }
 interface PlanRow {
   day_number: number;
@@ -42,6 +61,9 @@ const FREQUENCIES = ["OD", "BD", "TDS", "QID", "HS", "SOS"];
 const ROUTES = ["Oral", "IV", "IM", "S/C", "Topical"];
 const DURATIONS = ["3 days", "5 days", "7 days", "10 days"];
 const DOSES = ["250 mg", "500 mg", "650 mg", "1 g"];
+
+// Sentinel id for the doctor-typed custom medicine (not in the catalogue).
+const CUSTOM_ID = "__custom__";
 
 const CHIP_BASE =
   "h-11 rounded-full px-4 text-sm font-medium transition-colors";
@@ -114,9 +136,28 @@ async function tryRows(
   return [];
 }
 
+/** "12 May" style short date; empty string for missing/invalid input. */
+function fmtDate(d: string | null): string {
+  if (!d) return "";
+  const dt = new Date(d);
+  if (Number.isNaN(dt.getTime())) return "";
+  return dt.toLocaleDateString([], { day: "2-digit", month: "short" });
+}
+
+/** Day number of admission (Day 1 = admission day), or null if unknown. */
+function admissionDay(admission: string | null): number | null {
+  if (!admission) return null;
+  const a = new Date(admission);
+  if (Number.isNaN(a.getTime())) return null;
+  const days = Math.floor((Date.now() - a.getTime()) / 86_400_000);
+  return Math.max(1, days + 1);
+}
+
 /**
- * Treatment Sheet — the medication chart table (with live pharmacy stock), an
- * inline "Add medication" search right on the same page, and the daily plan.
+ * Treatment Sheet — a living drug chart. Active medicines for today (each can be
+ * changed or stopped), an inline "Add medication" search, a history of stopped/
+ * changed medicines, and the daily plan. The doctor prescribes by name; pharmacy
+ * dispensing is separate and stock is display-only (never changed here).
  */
 export function TreatmentSheet({
   visit,
@@ -125,6 +166,13 @@ export function TreatmentSheet({
   visit: TabletVisit;
   onBack: () => void;
 }) {
+  const qc = useQueryClient();
+  const [showPast, setShowPast] = useState(false);
+  const invalidateSheet = () =>
+    qc.invalidateQueries({
+      queryKey: ["tablet-treatment-sheet", visit.id, visit.visitId],
+    });
+
   const data = useQuery({
     queryKey: ["tablet-treatment-sheet", visit.id, visit.visitId],
     queryFn: async (): Promise<{ medications: MedRow[]; plan: PlanRow[] }> => {
@@ -155,6 +203,7 @@ export function TreatmentSheet({
             med.medicine_name ||
             med.name ||
             med.generic_name ||
+            m.custom_medication_name ||
             m.medication_type ||
             "Medication",
           dosage: [m.dosage, med.strength].filter(Boolean).join(" "),
@@ -162,6 +211,15 @@ export function TreatmentSheet({
           frequency: m.frequency || "",
           duration: m.duration || "",
           stock: stockMap[m.medication_id] || 0,
+          isCustom: !m.medication_id,
+          isApproved: !!m.is_approved,
+          addedAt: m.created_at || m.prescribed_date || null,
+          startDate: m.start_date || m.prescribed_date || null,
+          endDate: m.end_date || null,
+          notes: m.notes || null,
+          dispensedName: m.dispensed_medication_name || null,
+          isSubstituted: !!m.is_substituted,
+          substituteReason: m.substitute_reason || null,
         };
       });
 
@@ -179,6 +237,9 @@ export function TreatmentSheet({
 
   const meds = data.data?.medications || [];
   const plan = data.data?.plan || [];
+  const activeMeds = meds.filter((m) => !m.endDate);
+  const pastMeds = meds.filter((m) => !!m.endDate);
+  const dayN = admissionDay(visit.admissionDate);
 
   return (
     <FlowScaffold
@@ -212,59 +273,89 @@ export function TreatmentSheet({
             <h3 className="text-lg font-bold">Treatment Sheet</h3>
             <p className="text-sm text-muted-foreground">
               {visit.patientName} · {visit.patientsId || visit.visitId}
+              {dayN ? ` · Day ${dayN}` : ""}
             </p>
           </div>
 
-          {/* Prescribed medications — chart table with live availability */}
+          {/* Day-of-admission line (screen) */}
+          {dayN ? (
+            <p className="tablet-no-print text-sm font-medium text-muted-foreground">
+              Day {dayN} of admission
+              {visit.admissionDate
+                ? ` · admitted ${fmtDate(visit.admissionDate)}`
+                : ""}
+            </p>
+          ) : null}
+
+          {/* Active medicines — today's chart, each can be changed or stopped */}
           <section>
             <h4 className="mb-2 font-semibold">
-              Prescribed medications ({meds.length})
+              Active medicines ({activeMeds.length})
             </h4>
-            <div className="overflow-x-auto rounded-xl border">
-              <table className="w-full text-left">
-                <thead>
-                  <tr className="bg-muted">
-                    <th className={TH}>#</th>
-                    <th className={TH}>Medication</th>
-                    <th className={TH}>Dose</th>
-                    <th className={TH}>Route</th>
-                    <th className={TH}>Frequency</th>
-                    <th className={TH}>Duration</th>
-                    <th className={TH}>Availability</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {meds.length === 0 ? (
-                    <tr>
-                      <td
-                        colSpan={7}
-                        className="px-3 py-8 text-center text-muted-foreground"
-                      >
-                        No medications added yet — add one below.
-                      </td>
-                    </tr>
-                  ) : (
-                    meds.map((m, i) => (
-                      <tr key={m.id} className="last:[&>td]:border-0">
-                        <td className={TD}>{i + 1}</td>
-                        <td className={`${TD} font-medium`}>{m.name}</td>
-                        <td className={TD}>{m.dosage || "—"}</td>
-                        <td className={TD}>{m.route || "—"}</td>
-                        <td className={TD}>{m.frequency || "—"}</td>
-                        <td className={TD}>{m.duration || "—"}</td>
-                        <td className={TD}>
-                          <StockBadge stock={m.stock} />
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
+            {activeMeds.length === 0 ? (
+              <p className="rounded-xl border px-3 py-8 text-center text-muted-foreground">
+                No active medicines — add one below.
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {activeMeds.map((m) => (
+                  <ActiveMedCard
+                    key={m.id}
+                    med={m}
+                    visitId={visit.id}
+                    onChanged={invalidateSheet}
+                  />
+                ))}
+              </div>
+            )}
           </section>
 
           {/* Add medication — inline on this same page (hidden when printing) */}
           <AddMedicationSection visit={visit} />
+
+          {/* Past medicines — stopped / changed-out orders, with date ranges */}
+          {pastMeds.length > 0 ? (
+            <section>
+              <button
+                type="button"
+                onClick={() => setShowPast((v) => !v)}
+                className="tablet-no-print flex w-full items-center justify-between rounded-xl border px-3 py-2.5 text-left font-semibold"
+              >
+                <span>Past medicines ({pastMeds.length})</span>
+                <ChevronDown
+                  className={cn(
+                    "h-5 w-5 transition-transform",
+                    showPast && "rotate-180",
+                  )}
+                />
+              </button>
+              {/* Always print history; on screen, only when expanded */}
+              <h4 className="mb-2 mt-4 hidden font-semibold print:block">
+                Past medicines
+              </h4>
+              <div className={cn("mt-2 space-y-2", !showPast && "hidden print:block")}>
+                {pastMeds.map((m) => (
+                  <div key={m.id} className="rounded-xl border bg-muted/30 p-3">
+                    <p className="font-medium">{m.name}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {[m.dosage, m.frequency, m.route]
+                        .filter(Boolean)
+                        .join(" · ") || "—"}
+                    </p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      {m.startDate ? `Started ${fmtDate(m.startDate)}` : ""}
+                      {m.endDate ? ` – Stopped ${fmtDate(m.endDate)}` : ""}
+                    </p>
+                    {m.notes ? (
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Reason: {m.notes}
+                      </p>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            </section>
+          ) : null}
 
           {/* Daily treatment plan — table */}
           {plan.length > 0 ? (
@@ -301,6 +392,190 @@ export function TreatmentSheet({
         </div>
       )}
     </FlowScaffold>
+  );
+}
+
+/**
+ * One active medicine in the chart — shows the order + pharmacy substitution,
+ * with one-tap Change (ends the order today, starts a new one) and Stop.
+ */
+function ActiveMedCard({
+  med,
+  visitId,
+  onChanged,
+}: {
+  med: MedRow;
+  visitId: string;
+  onChanged: () => void;
+}) {
+  const {
+    changeMedication,
+    discontinueMedication,
+    approveMedication,
+    deleteMedication,
+    isChangingMedication,
+    isDiscontinuingMedication,
+    isApprovingMedication,
+    isDeletingMedication,
+  } = useMedicalDataMutations();
+  const [editing, setEditing] = useState(false);
+  const [dose, setDose] = useState(med.dosage);
+  const [frequency, setFrequency] = useState(med.frequency);
+  const [route, setRoute] = useState(med.route);
+
+  const ACTION =
+    "inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold disabled:opacity-50";
+
+  return (
+    <div className="rounded-xl border bg-background p-3">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="font-semibold">{med.name}</p>
+          <p className="text-sm text-muted-foreground">
+            {[med.dosage, med.frequency, med.route].filter(Boolean).join(" · ") ||
+              "—"}
+          </p>
+          {med.startDate ? (
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Started {fmtDate(med.startDate)}
+            </p>
+          ) : null}
+          {med.isSubstituted ? (
+            <p className="mt-1 inline-block rounded-lg bg-blue-50 px-2 py-1 text-xs text-blue-800">
+              Pharmacy gave: {med.dispensedName || "—"}
+              {med.substituteReason ? ` — ${med.substituteReason}` : " (substituted)"}
+            </p>
+          ) : null}
+        </div>
+        <div className="flex shrink-0 flex-col items-end gap-1">
+          <StockBadge stock={med.stock} />
+          <span
+            className={cn(
+              "whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold",
+              med.isApproved
+                ? "bg-emerald-100 text-emerald-700"
+                : "bg-amber-100 text-amber-800",
+            )}
+          >
+            {med.isApproved ? "Approved" : "Pending"}
+          </span>
+        </div>
+      </div>
+
+      {editing ? (
+        <div className="tablet-no-print mt-3 space-y-3 rounded-lg border bg-muted/30 p-3">
+          <div>
+            <TabletLabel>New dose</TabletLabel>
+            <TabletInput
+              value={dose}
+              onChange={(e) => setDose(e.target.value)}
+              placeholder="e.g. 500 mg"
+            />
+            <div className="mt-2 flex flex-wrap gap-2">
+              {DOSES.map((d) => (
+                <button
+                  key={d}
+                  type="button"
+                  onClick={() => setDose(dose === d ? "" : d)}
+                  className={cn(
+                    CHIP_BASE,
+                    dose === d
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-muted text-foreground",
+                  )}
+                >
+                  {d}
+                </button>
+              ))}
+            </div>
+          </div>
+          <ChipRow
+            label="Frequency"
+            options={FREQUENCIES}
+            value={frequency}
+            onSelect={setFrequency}
+          />
+          <ChipRow label="Route" options={ROUTES} value={route} onSelect={setRoute} />
+          <div className="flex gap-2">
+            <TabletButton
+              variant="outline"
+              className="flex-1"
+              onClick={() => setEditing(false)}
+              disabled={isChangingMedication}
+            >
+              Cancel
+            </TabletButton>
+            <TabletButton
+              className="flex-1"
+              disabled={isChangingMedication}
+              onClick={() =>
+                changeMedication(
+                  {
+                    rowId: med.id,
+                    visitId,
+                    name: med.name,
+                    dosage: dose.trim() || undefined,
+                    frequency: frequency.trim() || undefined,
+                    route: route.trim() || undefined,
+                    duration: med.duration || undefined,
+                  },
+                  {
+                    onSuccess: () => {
+                      setEditing(false);
+                      onChanged();
+                    },
+                  },
+                )
+              }
+            >
+              {isChangingMedication ? "Saving…" : "Save change"}
+            </TabletButton>
+          </div>
+        </div>
+      ) : (
+        <div className="tablet-no-print mt-3 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => setEditing(true)}
+            className={cn(ACTION, "bg-muted text-foreground")}
+          >
+            <Pencil className="h-3.5 w-3.5" /> Change
+          </button>
+          <button
+            type="button"
+            disabled={isDiscontinuingMedication}
+            onClick={() =>
+              discontinueMedication({ rowId: med.id }, { onSuccess: onChanged })
+            }
+            className={cn(ACTION, "bg-amber-100 text-amber-800")}
+          >
+            <Ban className="h-3.5 w-3.5" /> Stop
+          </button>
+          {!med.isApproved ? (
+            <button
+              type="button"
+              disabled={isApprovingMedication}
+              onClick={() =>
+                approveMedication({ rowId: med.id }, { onSuccess: onChanged })
+              }
+              className={cn(ACTION, "bg-emerald-600 text-white")}
+            >
+              <Check className="h-3.5 w-3.5" /> Approve
+            </button>
+          ) : null}
+          <button
+            type="button"
+            disabled={isDeletingMedication}
+            onClick={() =>
+              deleteMedication({ rowId: med.id }, { onSuccess: onChanged })
+            }
+            className={cn(ACTION, "bg-rose-100 text-rose-700")}
+          >
+            <Trash2 className="h-3.5 w-3.5" /> Delete
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -356,7 +631,7 @@ function AddMedicationSection({ visit }: { visit: TabletVisit }) {
   // `from` disambiguates a drug that is both a quick pick and a search hit.
   const [expanded, setExpanded] = useState<{
     id: string;
-    from: "quick" | "search";
+    from: "quick" | "search" | "custom";
   } | null>(null);
   const [dosage, setDosage] = useState("");
   const [route, setRoute] = useState("");
@@ -370,7 +645,7 @@ function AddMedicationSection({ visit }: { visit: TabletVisit }) {
     setDuration("");
   };
 
-  const toggleMed = (m: MedicineResult, from: "quick" | "search") => {
+  const toggleMed = (m: MedicineResult, from: "quick" | "search" | "custom") => {
     if (expanded?.id === m.id && expanded.from === from) {
       setExpanded(null);
       return;
@@ -385,8 +660,13 @@ function AddMedicationSection({ visit }: { visit: TabletVisit }) {
         visitId: visit.id,
         medications: [
           {
-            medication_id: m.id,
             medication_type: "prescribed",
+            // Store every picked medicine by name. The pharmacy search/quick-picks
+            // read from `medicine_master`, but visit_medications.medication_id FKs
+            // to a different `medications` table — sending that id 409s (FK
+            // violation). The chart mapping above falls back to
+            // custom_medication_name, so the name still displays correctly.
+            custom_medication_name: m.name,
             dosage: dosage.trim() || undefined,
             route: route.trim() || undefined,
             frequency: frequency.trim() || undefined,
@@ -533,9 +813,51 @@ function AddMedicationSection({ visit }: { visit: TabletVisit }) {
           <Loader2 className="h-7 w-7 animate-spin text-primary" />
         </div>
       ) : medicines.length === 0 ? (
-        <p className="py-6 text-center text-muted-foreground">
-          No medicines found. Try another search.
-        </p>
+        <div className="space-y-3 py-4">
+          <p className="text-center text-muted-foreground">
+            No medicines found in the pharmacy.
+          </p>
+          {(() => {
+            const customName = searchTerm.trim();
+            const customMed: MedicineResult = {
+              id: CUSTOM_ID,
+              name: customName,
+              generic: "",
+              type: "",
+              totalStock: 0,
+            };
+            const open = expanded?.from === "custom";
+            return (
+              <div
+                className={cn(
+                  "overflow-hidden rounded-xl border bg-background",
+                  open && "ring-2 ring-primary",
+                )}
+              >
+                <button
+                  type="button"
+                  onClick={() => toggleMed(customMed, "custom")}
+                  className="flex w-full items-center gap-3 p-4 text-left"
+                >
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                    <Plus className="h-5 w-5" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block font-semibold">
+                      Add “{customName}” as a new medicine
+                    </span>
+                    <span className="block text-sm text-muted-foreground">
+                      Prescribe by name for this patient — needs your approval
+                    </span>
+                  </span>
+                </button>
+                {open ? (
+                  <div className="border-t">{renderPanel(customMed)}</div>
+                ) : null}
+              </div>
+            );
+          })()}
+        </div>
       ) : (
         <div className="space-y-2">
           {medicines.map((m) => {

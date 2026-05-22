@@ -1,5 +1,6 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import { VitePWA } from "vite-plugin-pwa";
 import path from "path";
 
 // https://vitejs.dev/config/
@@ -10,6 +11,34 @@ export default defineConfig(({ mode }) => ({
   },
   plugins: [
     react(),
+    // Service worker for installability + instant app-shell launch. We keep the
+    // hand-written public/manifest.webmanifest (manifest: false) and only let the
+    // plugin generate/register the SW. No data caching — offline data is out of
+    // scope; this exists so Chrome/Android offers "Install" and the installed
+    // app launches without a blank screen.
+    VitePWA({
+      registerType: "prompt",
+      injectRegister: "auto",
+      manifest: false,
+      includeAssets: [
+        "favicon.ico",
+        "favicon.svg",
+        "apple-touch-icon.png",
+        "splash/*.png",
+      ],
+      workbox: {
+        globPatterns: ["**/*.{js,css,html,ico,png,svg,woff,woff2}"],
+        navigateFallback: "/index.html",
+        // Never serve the SPA shell for API/auth requests.
+        navigateFallbackDenylist: [/^\/api\//],
+        cleanupOutdatedCaches: true,
+        clientsClaim: true,
+        // Allow the larger vendor chunks (pdf/ckeditor) into the precache so the
+        // installed app launches fully offline-capable for its shell.
+        maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
+      },
+      devOptions: { enabled: false },
+    }),
   ],
   resolve: {
     alias: {

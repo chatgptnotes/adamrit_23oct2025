@@ -81,18 +81,29 @@ export const useMedicalDataMutations = () => {
     }: { 
       visitId: string; 
       medications: Array<{
-        medication_id: string;
+        medication_id?: string;
         medication_type: string;
+        custom_medication_name?: string;
         dosage?: string;
         frequency?: string;
         duration?: string;
         route?: string;
+        start_date?: string; // when this order starts (YYYY-MM-DD); defaults to today
       }>;
     }) => {
+      // Only columns that exist on visit_medications — `medication_type` and
+      // `status` are NOT real columns (insert 400s PGRST204 if sent). Undefined
+      // fields are dropped from the request body, so optional ones stay optional.
+      const today = new Date().toISOString().slice(0, 10);
       const medicationEntries = medications.map(med => ({
         visit_id: visitId,
-        ...med,
-        status: 'prescribed',
+        medication_id: med.medication_id,
+        custom_medication_name: med.custom_medication_name,
+        dosage: med.dosage,
+        frequency: med.frequency,
+        duration: med.duration,
+        route: med.route,
+        start_date: med.start_date || today, // active order starts today
         prescribed_date: new Date().toISOString()
       }));
 
@@ -116,6 +127,135 @@ export const useMedicalDataMutations = () => {
       toast({
         title: "Error",
         description: "Failed to add medications",
+        variant: "destructive"
+      });
+    }
+  });
+
+  const deleteMedicationMutation = useMutation({
+    mutationFn: async ({ rowId }: { rowId: string }) => {
+      const { error } = await supabase
+        .from('visit_medications')
+        .delete()
+        .eq('id', rowId);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['visit-medications-custom'] });
+      toast({
+        title: "Removed",
+        description: "Medication removed",
+      });
+    },
+    onError: (error) => {
+      console.error('Error deleting medication:', error);
+      toast({
+        title: "Error",
+        description: "Failed to remove medication",
+        variant: "destructive"
+      });
+    }
+  });
+
+  // Stop an active medicine: set its end_date (and optional reason). The row
+  // stays in the chart's history — active vs past is decided by end_date.
+  const discontinueMedicationMutation = useMutation({
+    mutationFn: async ({
+      rowId,
+      notes,
+    }: {
+      rowId: string;
+      notes?: string;
+    }) => {
+      const today = new Date().toISOString().slice(0, 10);
+      const { error } = await supabase
+        .from('visit_medications')
+        .update({ end_date: today, ...(notes ? { notes } : {}) })
+        .eq('id', rowId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['visit-medications-custom'] });
+      toast({ title: "Stopped", description: "Medicine stopped" });
+    },
+    onError: (error) => {
+      console.error('Error stopping medication:', error);
+      toast({ title: "Error", description: "Failed to stop medicine", variant: "destructive" });
+    }
+  });
+
+  // Change a medicine's dose/frequency/route: end the current order today and
+  // start a new active order today. Preserves the full history (one row per order).
+  const changeMedicationMutation = useMutation({
+    mutationFn: async ({
+      rowId,
+      visitId,
+      name,
+      dosage,
+      frequency,
+      duration,
+      route,
+    }: {
+      rowId: string;
+      visitId: string;
+      name: string;
+      dosage?: string;
+      frequency?: string;
+      duration?: string;
+      route?: string;
+    }) => {
+      const today = new Date().toISOString().slice(0, 10);
+      const { error: endErr } = await supabase
+        .from('visit_medications')
+        .update({ end_date: today })
+        .eq('id', rowId);
+      if (endErr) throw endErr;
+      const { error: addErr } = await supabase
+        .from('visit_medications')
+        .insert({
+          visit_id: visitId,
+          custom_medication_name: name,
+          dosage,
+          frequency,
+          duration,
+          route,
+          start_date: today,
+          prescribed_date: new Date().toISOString(),
+        });
+      if (addErr) throw addErr;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['visit-medications-custom'] });
+      toast({ title: "Updated", description: "Medicine updated" });
+    },
+    onError: (error) => {
+      console.error('Error changing medication:', error);
+      toast({ title: "Error", description: "Failed to update medicine", variant: "destructive" });
+    }
+  });
+
+  const approveMedicationMutation = useMutation({
+    mutationFn: async ({ rowId }: { rowId: string }) => {
+      const { error } = await supabase
+        .from('visit_medications')
+        .update({ is_approved: true, approved_at: new Date().toISOString() })
+        .eq('id', rowId);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['visit-medications-custom'] });
+      toast({
+        title: "Approved",
+        description: "Medication approved",
+      });
+    },
+    onError: (error) => {
+      console.error('Error approving medication:', error);
+      toast({
+        title: "Error",
+        description: "Failed to approve medication",
         variant: "destructive"
       });
     }
@@ -227,10 +367,18 @@ export const useMedicalDataMutations = () => {
     addLabs: addLabsMutation.mutate,
     addRadiology: addRadiologyMutation.mutate,
     addMedications: addMedicationsMutation.mutate,
+    deleteMedication: deleteMedicationMutation.mutate,
+    discontinueMedication: discontinueMedicationMutation.mutate,
+    changeMedication: changeMedicationMutation.mutate,
+    approveMedication: approveMedicationMutation.mutate,
     updateLabStatus: updateLabStatusMutation.mutate,
     updateRadiologyStatus: updateRadiologyStatusMutation.mutate,
     isAddingLabs: addLabsMutation.isPending,
     isAddingRadiology: addRadiologyMutation.isPending,
     isAddingMedications: addMedicationsMutation.isPending,
+    isDeletingMedication: deleteMedicationMutation.isPending,
+    isDiscontinuingMedication: discontinueMedicationMutation.isPending,
+    isChangingMedication: changeMedicationMutation.isPending,
+    isApprovingMedication: approveMedicationMutation.isPending,
   };
 };

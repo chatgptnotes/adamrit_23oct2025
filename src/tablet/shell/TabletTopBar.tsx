@@ -5,6 +5,7 @@ import { getModule } from "@/tablet/config/modules";
 import { setOverride } from "@/lib/device-class";
 import { useTabletTheme } from "@/tablet/theme/TabletTheme";
 import { SyncIndicator } from "./SyncIndicator";
+import { InstallButton } from "./InstallButton";
 
 /** Tablet top bar: back, left-aligned hospital brand, role, sync, theme, full-site, exit. */
 export function TabletTopBar() {
@@ -72,6 +73,8 @@ export function TabletTopBar() {
           ) : null}
 
           <SyncIndicator />
+
+          <InstallButton />
 
           <button
             type="button"

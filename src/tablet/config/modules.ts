@@ -10,6 +10,7 @@ import {
   HeartPulse,
   LayoutDashboard,
   LogOut,
+  Pill,
   Receipt,
   Stethoscope,
   UserPlus,
@@ -113,6 +114,16 @@ export const TABLET_MODULES: TabletModule[] = [
     roles: ["doctor", "consultant", "nurse"],
   },
   {
+    id: "pharmacy-dispense",
+    label: "Pharmacy",
+    description: "Dispense / substitute approved meds",
+    icon: Pill,
+    accent: "text-lime-600",
+    tint: "from-lime-400 to-lime-600",
+    // No role gate: shown to all non-admin roles (the pharmacy role string
+    // varies by deployment). Tighten once that role is confirmed.
+  },
+  {
     id: "medication-round",
     label: "Medication Round",
     description: "Mark doses given / missed",
@@ -195,3 +206,15 @@ export function modulesForUser(
 export function getModule(id: string | undefined): TabletModule | undefined {
   return TABLET_MODULES.find((m) => m.id === id);
 }
+
+/**
+ * Module ids surfaced as primary destinations in the bottom tab bar, in order.
+ * "Home" (the module grid) is added by the nav itself. Tabs the current user
+ * can't see (per `modulesForUser`) are dropped automatically.
+ */
+export const BOTTOM_NAV_IDS = [
+  "register",
+  "billing",
+  "doctor-notes",
+  "medication-round",
+];
