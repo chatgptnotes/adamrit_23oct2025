@@ -66,7 +66,7 @@ export async function bridgeApprovedMedicationToPharmacy(
     if (!v) return;
     const visitQuery = db
       .from("visits")
-      .select("id, patient_id, appointment_with")
+      .select("id, patient_id, appointment_with, patients(hospital_name)")
       .limit(1);
     const { data: visit } = await (
       UUID_RE.test(v) ? visitQuery.eq("id", v) : visitQuery.eq("visit_id", v)
@@ -76,6 +76,9 @@ export async function bridgeApprovedMedicationToPharmacy(
     const visitUuid = visit.id;
     const patientId = visit.patient_id;
     const doctorName = visit.appointment_with || "Ward";
+    // Stamp the patient's hospital so each hospital's pharmacist sees only
+    // their own ward orders (Hope and Ayushman run separate pharmacies).
+    const hospitalName = visit.patients?.hospital_name || null;
 
     // 4. Find-or-create the OPEN ward prescription for this visit.
     let prescriptionId: string | undefined;
@@ -101,6 +104,7 @@ export async function bridgeApprovedMedicationToPharmacy(
           prescription_date: new Date().toISOString().slice(0, 10),
           status: "APPROVED", // doctor already approved on the tablet
           source: "ward",
+          hospital_name: hospitalName,
           notes: "Ward order — auto-bridged from Treatment Sheet",
         })
         .select("id")
