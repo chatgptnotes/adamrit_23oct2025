@@ -167,8 +167,10 @@ const AppContent = () => {
     authError
   } = useAuth();
   const { toast } = useToast();
-  // Always call hooks at the top level; avoid wrapping hooks in try/catch
-  const counts = useCounts();
+  // Always call hooks at the top level; avoid wrapping hooks in try/catch.
+  // Gate the sidebar count queries on auth — otherwise their ~17 exact-count
+  // requests fire on the login/landing page and starve the login `User` lookup.
+  const counts = useCounts(isAuthenticated);
   const [selectedHospitalType, setSelectedHospitalType] = React.useState<HospitalType | null>(null);
   // Role-based redirect is handled by RoleRedirect component inside BrowserRouter (no page reloads)
 
