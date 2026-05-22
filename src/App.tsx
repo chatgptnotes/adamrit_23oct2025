@@ -16,6 +16,7 @@ import LandingPage from "@/components/LandingPage";
 import HospitalSelection from "@/components/HospitalSelection";
 import { FloatingCameraFAB } from "@/components/CameraUpload";
 import ChatWidget from '@/components/ChatWidget';
+import { ReloadPrompt } from "@/pwa/ReloadPrompt";
 import { useToast } from "@/hooks/use-toast";
 import { HospitalType, getHospitalConfig } from "@/types/hospital";
 import { Tablet } from "lucide-react";
@@ -382,6 +383,7 @@ const App = () => {
             }>
               <Toaster />
               <Sonner />
+              <ReloadPrompt />
               <AppContent />
             </Suspense>
           </AuthProvider>
