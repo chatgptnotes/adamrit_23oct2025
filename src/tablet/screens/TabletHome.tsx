@@ -24,7 +24,7 @@ export function TabletHome() {
                 <button
                   key={m.id}
                   type="button"
-                  onClick={() => navigate(`/${m.id}`)}
+                  onClick={() => navigate(`/${m.id}`, { viewTransition: true })}
                   className="tablet-tile tablet-glass flex flex-col gap-3 rounded-2xl p-4 text-left sm:p-5"
                 >
                   <span

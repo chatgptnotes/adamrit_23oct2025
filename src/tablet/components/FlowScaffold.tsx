@@ -1,5 +1,6 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
+import { PullToRefresh } from "@/tablet/components/PullToRefresh";
 
 interface FlowScaffoldProps {
   /** 1-based current step. Omit for single-screen flows. */
@@ -56,9 +57,7 @@ export function FlowScaffold({
         </div>
       ) : null}
 
-      <div className="tablet-no-scrollbar min-h-0 flex-1 overflow-y-auto p-4">
-        {children}
-      </div>
+      <PullToRefresh className="p-4">{children}</PullToRefresh>
 
       {actions ? (
         <div className="tablet-safe-bottom tablet-elevate flex flex-shrink-0 gap-3 border-t border-border bg-card/90 px-4 pt-3 backdrop-blur-md">

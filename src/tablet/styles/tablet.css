@@ -44,6 +44,8 @@
   -webkit-user-select: none;
   user-select: none;
   -webkit-touch-callout: none;
+  /* Kill whole-page rubber-band bounce so it reads like an app, not a page. */
+  overscroll-behavior: none;
 }
 
 /* Text inputs must remain selectable/editable */
@@ -69,6 +71,10 @@
 .tablet-no-scrollbar {
   -ms-overflow-style: none;
   scrollbar-width: none;
+  /* Contain scroll chaining so the browser's native pull-to-refresh never
+     fires — our custom PullToRefresh owns that gesture. Momentum on iOS. */
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 /* Premium elevation — depth tuned for the dark console surface. */
@@ -127,6 +133,36 @@
     inset 0 1px 0 0 hsl(0 0% 100% / 0.22),
     inset 0 -16px 32px -28px hsl(0 0% 0% / 0.6),
     0 16px 38px -18px rgba(0, 0, 0, 0.75);
+}
+
+/* ============================================================
+   Page transitions (View Transitions API). Only fire for tablet
+   navigations that opt in via React Router's `viewTransition`, so the
+   desktop site is unaffected. Progressive enhancement: browsers without
+   support simply navigate with no animation.
+   ============================================================ */
+@media (prefers-reduced-motion: no-preference) {
+  ::view-transition-old(root) {
+    animation: tablet-vt-fade-out 150ms ease both;
+  }
+  ::view-transition-new(root) {
+    animation: tablet-vt-rise-in 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+}
+@keyframes tablet-vt-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+@keyframes tablet-vt-rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* ============================================================
