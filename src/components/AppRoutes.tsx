@@ -15,6 +15,9 @@ import TodaysOpd from "../pages/TodaysOpd";
 import AdvanceStatementReport from "../pages/AdvanceStatementReport";
 import NoDeductionLetterPage from "../pages/NoDeductionLetter";
 import CurrentlyAdmittedPatients from "../pages/CurrentlyAdmittedPatients";
+// Loaded eagerly (no lazy chunk) so an open tab never hits "Failed to fetch
+// dynamically imported module" after a redeploy.
+import IpdDischargeSummary from "../pages/IpdDischargeSummary";
 
 // Lazy load discharged patients page
 const DischargedPatients = lazy(() => import("../pages/DischargedPatients"));
@@ -75,7 +78,6 @@ const GatePassPrintPage = lazy(() => import("../pages/GatePassPrint"));
 const DischargeSummaryPrint = lazy(() => import("../pages/DischargeSummaryPrint"));
 const DischargeSummaryEdit = lazy(() => import("../pages/DischargeSummaryEdit"));
 const OpdSummaryLanding = lazy(() => import("../pages/OpdSummaryLanding"));
-const IpdDischargeSummary = lazy(() => import("../pages/IpdDischargeSummary"));
 const DeathCertificate = lazy(() => import("../pages/DeathCertificate"));
 const PhysiotherapyBill = lazy(() => import("../pages/PhysiotherapyBill"));
 const AdmissionNotes = lazy(() => import("../pages/AdmissionNotes"));
@@ -263,7 +265,7 @@ export const AppRoutes = () => {
         <Route path="/detailed-invoice/:visitId" element={<Suspense fallback={<PageLoader />}><DetailedInvoice /></Suspense>} />
         <Route path="/detailed-invoice" element={<Suspense fallback={<PageLoader />}><DetailedInvoice /></Suspense>} />
         <Route path="/discharge-invoice/:visitId" element={<Suspense fallback={<PageLoader />}><DischargeInvoice /></Suspense>} />
-        <Route path="/ipd-discharge-summary/:visitId" element={<Suspense fallback={<PageLoader />}><IpdDischargeSummary /></Suspense>} />
+        <Route path="/ipd-discharge-summary/:visitId" element={<IpdDischargeSummary />} />
         <Route path="/death-certificate/:visitId" element={<Suspense fallback={<PageLoader />}><DeathCertificate /></Suspense>} />
         <Route path="/bill-submission" element={<Suspense fallback={<PageLoader />}><BillSubmission /></Suspense>} />
         <Route path="/bill-aging-statement" element={<Suspense fallback={<PageLoader />}><BillAgingStatement /></Suspense>} />
