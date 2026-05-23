@@ -1,6 +1,7 @@
 import { useLocation, useNavigate } from "react-router-dom";
-import { ArrowLeft, LogOut, Monitor, Moon, Sun } from "lucide-react";
+import { ArrowLeft, ArrowLeftRight, LogOut, Monitor, Moon, Sun } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { HOSPITAL_CONFIGS, HospitalType } from "@/types/hospital";
 import { getModule } from "@/tablet/config/modules";
 import { setOverride } from "@/lib/device-class";
 import { useTabletTheme } from "@/tablet/theme/TabletTheme";
@@ -11,13 +12,32 @@ import { InstallButton } from "./InstallButton";
 export function TabletTopBar() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, hospitalConfig, logout } = useAuth();
+  const { user, hospitalConfig, logout, isSuperAdmin, isAdmin, switchHospital } =
+    useAuth();
   const { theme, toggleTheme } = useTabletTheme();
 
   const isHome = location.pathname === "/";
   const moduleId = location.pathname.split("/")[1];
   const moduleLabel = getModule(moduleId)?.label;
   const subtitle = moduleLabel || user?.username || user?.email || "";
+
+  // Admin/superadmin only: toggle to the other hospital. Mirrors the desktop
+  // sidebar switcher (SidebarHeaderComponent). switchHospital flips
+  // user.hospitalType and reloads, so every query re-fetches under the new
+  // hospital — no scoping logic changes here.
+  const otherHospitalName = user
+    ? Object.entries(HOSPITAL_CONFIGS).find(
+        ([key]) => key !== user.hospitalType,
+      )?.[1]?.fullName
+    : null;
+
+  const handleSwitchHospital = () => {
+    if (!user) return;
+    const other = (Object.keys(HOSPITAL_CONFIGS) as HospitalType[]).filter(
+      (h) => h !== user.hospitalType,
+    );
+    if (other.length === 1) switchHospital(other[0]);
+  };
 
   const handleLogout = async () => {
     await logout();
@@ -90,6 +110,19 @@ export function TabletTopBar() {
               <Moon className="h-5 w-5" />
             )}
           </button>
+
+          {(isSuperAdmin || isAdmin) && otherHospitalName ? (
+            <button
+              type="button"
+              onClick={handleSwitchHospital}
+              aria-label={`Switch to ${otherHospitalName}`}
+              title={`Switch to ${otherHospitalName}`}
+              className="flex h-11 items-center gap-2 rounded-xl border border-border bg-secondary px-3 text-sm font-semibold text-muted-foreground transition-all hover:text-foreground active:scale-95"
+            >
+              <ArrowLeftRight className="h-4 w-4" />
+              <span className="hidden sm:inline">SWITCH</span>
+            </button>
+          ) : null}
 
           <button
             type="button"
