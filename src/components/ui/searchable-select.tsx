@@ -1,5 +1,5 @@
 import * as React from "react"
-import { Check, ChevronsUpDown } from "lucide-react"
+import { Check, ChevronsUpDown, Plus } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import {
@@ -28,6 +28,14 @@ interface SearchableSelectProps {
   searchPlaceholder?: string
   emptyText?: string
   className?: string
+  /**
+   * When provided, typing a value that doesn't match any option shows an
+   * "Add <value>" row. Selecting it calls onCreateOption with the typed text
+   * so the caller can create the record and select it. Optional — when omitted
+   * the component behaves as a plain select (existing behavior).
+   */
+  onCreateOption?: (label: string) => void | Promise<void>
+  createOptionLabel?: (input: string) => string
 }
 
 export function SearchableSelect({
@@ -38,11 +46,20 @@ export function SearchableSelect({
   searchPlaceholder = "Search...",
   emptyText = "No option found.",
   className,
+  onCreateOption,
+  createOptionLabel = (input) => `Add "${input}"`,
 }: SearchableSelectProps) {
   const [open, setOpen] = React.useState(false)
   const [search, setSearch] = React.useState("")
 
   const selectedOption = options.find((option) => option.value === value)
+
+  // Show a "create" row when the typed text matches no existing option label.
+  const trimmedSearch = search.trim()
+  const canCreate =
+    !!onCreateOption &&
+    trimmedSearch.length > 0 &&
+    !options.some((o) => o.label.toLowerCase() === trimmedSearch.toLowerCase())
 
   // Filter options based on search
   const filteredOptions = React.useMemo(() => {
@@ -89,7 +106,7 @@ export function SearchableSelect({
             onWheel={(e) => e.stopPropagation()}
             onTouchMove={(e) => e.stopPropagation()}
           >
-            {filteredOptions.length === 0 ? (
+            {filteredOptions.length === 0 && !canCreate ? (
               <div className="py-6 text-center text-sm text-muted-foreground">{emptyText}</div>
             ) : (
               <CommandGroup>
@@ -113,6 +130,22 @@ export function SearchableSelect({
                     {option.label}
                   </CommandItem>
                 ))}
+                {canCreate && (
+                  <CommandItem
+                    key="__create__"
+                    value={`__create__${trimmedSearch}`}
+                    onSelect={async () => {
+                      const label = trimmedSearch
+                      setSearch("")
+                      setOpen(false)
+                      await onCreateOption?.(label)
+                    }}
+                    className="px-3 py-2 hover:bg-gray-100 cursor-pointer rounded-sm text-blue-600 font-medium"
+                  >
+                    <Plus className="mr-2 h-4 w-4" />
+                    {createOptionLabel(trimmedSearch)}
+                  </CommandItem>
+                )}
               </CommandGroup>
             )}
           </CommandList>
