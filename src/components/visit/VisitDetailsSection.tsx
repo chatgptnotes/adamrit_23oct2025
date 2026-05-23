@@ -43,7 +43,7 @@ export const VisitDetailsSection: React.FC<VisitDetailsSectionProps> = ({
   patientCorporate
 }) => {
   const { hospitalConfig } = useAuth();
-  const { diagnoses, isLoading: isLoadingDiagnoses } = useDiagnoses();
+  const { diagnoses, isLoading: isLoadingDiagnoses, addDiagnosisAsync } = useDiagnoses();
   const [doctors, setDoctors] = useState<Array<{ id: string; name: string; specialty: string }>>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -433,12 +433,20 @@ export const VisitDetailsSection: React.FC<VisitDetailsSectionProps> = ({
             placeholder={
               isLoadingDiagnoses
                 ? "Loading diagnoses..."
-                : diagnoses.length === 0
-                ? "No diagnoses available"
-                : "Select Diagnosis"
+                : "Select or type Diagnosis"
             }
-            searchPlaceholder="Search diagnoses..."
+            searchPlaceholder="Search or type a new diagnosis..."
             emptyText="No diagnosis found."
+            onCreateOption={async (name) => {
+              try {
+                const created = await addDiagnosisAsync({ name });
+                if (created?.id) {
+                  handleInputChange('diagnosisId', created.id);
+                }
+              } catch {
+                /* toast is surfaced by the useDiagnoses mutation */
+              }
+            }}
           />
         </div>
 

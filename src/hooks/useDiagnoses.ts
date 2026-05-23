@@ -64,6 +64,9 @@ export const useDiagnoses = () => {
     diagnoses,
     isLoading: diagnosesLoading,
     addDiagnosis: addDiagnosisMutation.mutate,
+    // Awaitable variant — resolves with the inserted row so callers can
+    // immediately select the newly created diagnosis by id.
+    addDiagnosisAsync: addDiagnosisMutation.mutateAsync,
     isAddingDiagnosis: addDiagnosisMutation.isPending
   };
 };
