@@ -2,10 +2,9 @@ import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useMutation } from "@tanstack/react-query";
 import { Loader2, Receipt } from "lucide-react";
-import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
 import { useFinalBillData } from "@/hooks/useFinalBillData";
-import { recordOpdServicePayment } from "@/lib/payment-service";
+import { supabase } from "@/integrations/supabase/client";
 import {
   useAdmittedVisits,
   useDischargedVisits,
@@ -63,7 +62,6 @@ function BillingView({
   onBack: () => void;
 }) {
   const navigate = useNavigate();
-  const { user } = useAuth();
   const { billData, isLoading } = useFinalBillData(visit.visitId);
   const [stage, setStage] = useState<"view" | "collect">("view");
   const [amount, setAmount] = useState("");
@@ -73,16 +71,26 @@ function BillingView({
     mutationFn: async () => {
       const value = Number(amount);
       if (!value || value <= 0) throw new Error("Enter a valid amount");
-      const res = await recordOpdServicePayment({
-        visitId: visit.visitId,
-        paymentMode: mode,
-        amount: value,
-        createdBy: user?.id,
+      if (!visit.patientUuid) throw new Error("Patient not linked to this visit");
+      // Record the collection exactly like the desktop AdvancePaymentModal and
+      // the tablet AdvanceFlow: a direct insert into advance_payment. (The old
+      // record_opd_visit_payment RPC compared visit_clinical_services.visit_id
+      // (uuid) to the text visit code and always failed with "uuid = text".)
+      // advance_payment.visit_id stores the TEXT visit code, so pass visit.visitId.
+      const { error } = await supabase.from("advance_payment").insert({
+        patient_id: visit.patientUuid,
+        patient_name: visit.patientName,
+        patients_id: visit.patientsId || null,
+        visit_id: visit.visitId,
+        advance_amount: value,
+        returned_amount: 0,
+        is_refund: false,
+        payment_date: new Date().toISOString(),
+        payment_mode: mode,
+        status: "ACTIVE",
       });
-      if (!res?.success) {
-        throw new Error(res?.error || "Payment could not be recorded");
-      }
-      return res;
+      if (error) throw new Error(error.message || "Payment could not be recorded");
+      return { success: true };
     },
   });
 
