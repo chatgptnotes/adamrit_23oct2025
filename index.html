@@ -20,7 +20,13 @@
     <!-- Dark base background: applies before the CSS bundle/React so there is
          no white flash on launch and safe-area/overscroll gaps stay dark. -->
     <style>
-      html, body { margin: 0; background-color: #0b1220; }
+      html, body { margin: 0; }
+      /* Dark base only for the INSTALLED app (prevents white launch flash and
+         keeps safe-area/overscroll gaps dark). In a normal browser tab the
+         desktop site keeps its light background. */
+      @media (display-mode: standalone), (display-mode: fullscreen), (display-mode: minimal-ui) {
+        html, body { background-color: #0b1220; }
+      }
       #root { min-height: 100dvh; }
     </style>
 
