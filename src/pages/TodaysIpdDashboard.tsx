@@ -228,6 +228,13 @@ const TodaysIpdDashboard = () => {
   // Check if current user is a marketing manager
   const isMarketingManager = user?.role === 'marketing_manager' || user?.role === 'superadmin';
 
+  // Receptionists get the Actions column (view/edit/comments/upload/revoke),
+  // but NOT the destructive delete ("Mark Visit Inactive"), which stays admin-only.
+  const isReceptionist = user?.role === 'receptionist' || user?.role === 'reception';
+
+  // Roles allowed to see the Actions column at all
+  const canSeeActionsColumn = isAdmin || isMarketingManager || isReceptionist;
+
   // Allowed emails to see Referral Doctor/Relationship Manager column
   const ALLOWED_REFERRAL_COLUMN_EMAILS = [
     'marketingmanager@hope.com',
@@ -2869,7 +2876,7 @@ const TodaysIpdDashboard = () => {
                 <TableHead className="font-semibold">Summaries and Certificates</TableHead>
                 <TableHead className="font-semibold">Getpass Notification</TableHead>
                 <TableHead className="font-semibold">Radiology</TableHead>
-                {(isAdmin || isMarketingManager) && <TableHead className="font-semibold">Actions</TableHead>}
+                {canSeeActionsColumn && <TableHead className="font-semibold">Actions</TableHead>}
               </TableRow>
               <TableRow className="bg-muted/30">
                 {!hideColumns && <TableHead></TableHead>}
@@ -2930,7 +2937,7 @@ const TodaysIpdDashboard = () => {
                 <TableHead></TableHead>
                 <TableHead></TableHead>
                 <TableHead></TableHead>
-                {(isAdmin || isMarketingManager) && <TableHead></TableHead>}
+                {canSeeActionsColumn && <TableHead></TableHead>}
               </TableRow>
             </TableHeader>
 
@@ -3320,7 +3327,7 @@ const TodaysIpdDashboard = () => {
                       <Brain className="h-4 w-4 text-violet-600" />
                     </Button>
                   </TableCell>
-                  {(isAdmin || isMarketingManager) && (
+                  {canSeeActionsColumn && (
                    <TableCell>
                      <div className="flex items-center gap-2">
                        <Button
