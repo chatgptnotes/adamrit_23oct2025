@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQueryClient, useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -341,7 +341,7 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
   // Treatment During Hospital Stay States
   const [treatmentCondition, setTreatmentCondition] = useState('Satisfactory');
   const [treatmentStatus, setTreatmentStatus] = useState('Please select');
-  const [reviewDate, setReviewDate] = useState('2025-09-26');
+  const [reviewDate, setReviewDate] = useState('');
   const [residentOnDischarge, setResidentOnDischarge] = useState('Please select');
   const [enableSmsAlert, setEnableSmsAlert] = useState(false);
   const [isChatGptLoading, setIsChatGptLoading] = useState(false);
@@ -833,6 +833,18 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
     retry: false,
     staleTime: 30000
   });
+
+  // Conservative (non-surgical) detection, shared by the UI and the AI prompt.
+  // treatment_type is often NULL, so fall back to: no surgery data => conservative.
+  const isConservativeCase = useMemo(() => {
+    const ttLower = (patientInfo.treatmentType || '').trim().toLowerCase();
+    const hasSurgeryData = surgeryRows.some(s => (s.procedurePerformed || '').trim() || (s.alias || '').trim());
+    return ttLower === 'conservative' || (ttLower !== 'surgical' && !hasSurgeryData);
+  }, [patientInfo.treatmentType, surgeryRows]);
+
+  // Only hide surgery UI once async surgery/OT data has settled, so a NULL-treatment
+  // SURGICAL patient is not briefly mis-detected as conservative while loading.
+  const hideSurgeryUI = isConservativeCase && !isSurgeryLoading && !isOtNotesLoading;
 
   // Fetch diagnosis data from billing system
   const { data: visitDiagnosisData, isLoading: isDiagnosisLoading } = useQuery({
@@ -1343,7 +1355,7 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
           setHospitalStayNotes(summary.hospital_stay_notes || '');
           setTreatmentCondition(summary.condition_on_discharge || 'Satisfactory');
           setTreatmentStatus(summary.treatment_during_stay || 'Please select');
-          setReviewDate(summary.review_on_date ? format(new Date(summary.review_on_date), 'yyyy-MM-dd') : '2025-09-26');
+          setReviewDate(summary.review_on_date ? format(new Date(summary.review_on_date), 'yyyy-MM-dd') : '');
           setResidentOnDischarge(summary.resident_on_discharge || 'Please select');
           setEnableSmsAlert(summary.additional_data?.enable_sms_alert || false);
 
@@ -1770,34 +1782,40 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
 
       console.log('💾 Saving IPD discharge summary with data:', JSON.stringify(dischargeData, null, 2));
 
-      // 3. Check if a discharge summary already exists for this visit
+      // 3. Find the existing discharge summary for this visit and UPDATE it
+      // instead of inserting a new copy. We deliberately keep older duplicate
+      // rows untouched (no deletes) — they stay in the table but are ignored,
+      // since both this save and the print preview always target the NEWEST row.
+      //
+      // The .order(created_at desc).limit(1) is the key fix: the previous code
+      // used .maybeSingle() with no limit, which errors once a visit has >1 row
+      // and silently fell through to insert — that is what created duplicates.
       const { data: existingRecord } = await supabase
         .from('ipd_discharge_summary')
         .select('id')
         .eq('visit_id', visitUUID)
+        .order('created_at', { ascending: false })
+        .limit(1)
         .maybeSingle();
 
-      let dischargeSummary, summaryError;
-
+      let summaryError;
       if (existingRecord) {
-        // Update existing record
-        console.log('📝 Updating existing discharge summary:', existingRecord.id);
+        // Update the newest existing record in place — no new row created.
+        console.log('📝 Updating newest discharge summary:', existingRecord.id);
         const result = await supabase
           .from('ipd_discharge_summary')
           .update(dischargeData)
           .eq('id', existingRecord.id)
           .select()
           .single();
-        dischargeSummary = result.data;
         summaryError = result.error;
       } else {
-        // Insert new record
+        // No summary exists yet for this visit — create the first one.
         const result = await supabase
           .from('ipd_discharge_summary')
           .insert(dischargeData)
           .select()
           .single();
-        dischargeSummary = result.data;
         summaryError = result.error;
       }
 
@@ -1890,7 +1908,7 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
       }
 
       // Fetch discharge summary (get latest if multiple exist)
-      const { data: summaryData, error: summaryError } = await supabase
+      let { data: summaryData, error: summaryError } = await supabase
         .from('ipd_discharge_summary')
         .select('*')
         .eq('visit_id', visitData.id)
@@ -1902,13 +1920,50 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
         throw summaryError;
       }
 
+      // No saved row yet — still allow printing what's currently on screen.
       if (!summaryData) {
-        toast({
-          title: "Error",
-          description: "No discharge summary found. Please save first.",
-          variant: "destructive"
-        });
-        return;
+        if (!stayNotes?.trim() && !diagnosis?.trim()) {
+          toast({
+            title: "Nothing to print yet",
+            description: "Generate the discharge summary first, then click Print.",
+            variant: "destructive"
+          });
+          return;
+        }
+        summaryData = { patient_name: patientInfo.name, reg_id: patientInfo.regId } as any;
+      }
+
+      // Print the LATEST on-screen content even if not yet saved: prefer live form
+      // state, fall back to the saved row so unedited fields still print. This is
+      // why a freshly generated narrative shows up without needing to Save first.
+      summaryData.ot_notes          = stayNotes || summaryData.ot_notes;
+      summaryData.primary_diagnosis = diagnosis || summaryData.primary_diagnosis;
+      summaryData.chief_complaints  = caseSummaryPresentingComplaints || summaryData.chief_complaints;
+      summaryData.discharge_advice  = advice || summaryData.discharge_advice;
+      summaryData.hospital_stay_notes = hospitalStayNotes || summaryData.hospital_stay_notes;
+      if (investigations && investigations.trim()) {
+        summaryData.lab_investigations = { ...(summaryData.lab_investigations || {}), investigations_text: investigations };
+      }
+      const liveMeds = medicationRows
+        .filter(m => m.name && m.name.trim())
+        .map(m => ({
+          name: m.name,
+          unit: m.unit,
+          route: m.route && m.route !== 'Select' ? m.route : '',
+          dose: m.dose && m.dose !== 'Select' ? m.dose : '',
+          days: m.days,
+        }));
+      if (liveMeds.length > 0) summaryData.discharge_medications = liveMeds;
+      if (reviewDate) summaryData.review_on_date = reviewDate;
+      if (residentOnDischarge && residentOnDischarge !== 'Please select') summaryData.resident_on_discharge = residentOnDischarge;
+      if (patientInfo.treatingConsultant) summaryData.treating_consultant = patientInfo.treatingConsultant;
+
+      // Drop a stale/invalid review date (e.g. the old hardcoded 2025 default, or any
+      // date before discharge) so it never prints a nonsensical past review date.
+      const dischargeRef = patientInfo.dateOfDischarge || patientInfo.doa;
+      if (summaryData.review_on_date && dischargeRef &&
+          new Date(summaryData.review_on_date) < new Date(dischargeRef)) {
+        summaryData.review_on_date = null;
       }
 
 
@@ -2228,15 +2283,20 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
 
     // Format medications for table - use correct field name from database
     const medications = summaryData.discharge_medications || summaryData.medications_on_discharge || [];
-    const medicationsHTML = medications.map((med: any) => `
+    const medicationsHTML = medications.map((med: any) => {
+      // Duration: avoid "07 DAYS DAYS" when the value already contains "day".
+      const d = (med.days ?? '').toString().trim();
+      const duration = d ? (/day/i.test(d) ? d : `${d} DAYS`) : '';
+      return `
       <tr>
         <td>${med.name || ''}</td>
         <td>${med.unit || ''}</td>
         <td>${med.route || 'P.O'}</td>
         <td>${med.dose || ''}</td>
-        <td>${med.days || ''} DAYS</td>
+        <td>${duration}</td>
       </tr>
-    `).join('');
+    `;
+    }).join('');
 
     return `
 <!DOCTYPE html>
@@ -2272,11 +2332,26 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
       margin-bottom: 10px;
     }
 
+    .letterhead {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 4px;
+    }
+
+    .letterhead .lh-logo { height: 52px; width: auto; object-fit: contain; }
+    .letterhead .lh-center { flex: 1; text-align: center; }
+    .lh-name { font-size: 18pt; font-weight: bold; letter-spacing: 0.5px; }
+    .lh-sub { font-size: 10pt; font-weight: bold; }
+    .lh-addr { font-size: 8.5pt; }
+
     .header h1 {
-      font-size: 16pt;
+      font-size: 14pt;
       font-weight: bold;
       color: #000;
-      margin: 0;
+      margin: 4px 0 0;
+      text-decoration: underline;
     }
 
     .patient-info {
@@ -2338,6 +2413,15 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
       line-height: 1.6;
       white-space: pre-wrap;
       font-size: 11pt;
+    }
+
+    .inv-line {
+      margin-bottom: 6px;
+      text-align: left;
+    }
+
+    .inv-date {
+      font-weight: bold;
     }
 
     .no-break {
@@ -2432,6 +2516,15 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
 </head>
 <body>
   <div class="header">
+    <div class="letterhead">
+      <img class="lh-logo" src="${window.location.origin}/NABH-LOGO.png" alt="NABH" onerror="this.style.display='none'" />
+      <div class="lh-center">
+        <div class="lh-name">HOPE HOSPITAL</div>
+        <div class="lh-sub">Multispeciality Hospital</div>
+        <div class="lh-addr">Emergency / Urgent Care available 24 x 7 &nbsp;|&nbsp; Ph: 7030974619, 9373111709</div>
+      </div>
+      <img class="lh-logo" src="${window.location.origin}/hope_logo.png" alt="Hope Hospital" onerror="this.style.display='none'" />
+    </div>
     <h1>Discharge Summary</h1>
   </div>
 
@@ -2687,10 +2780,25 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
 
     if (!hasRealLabResults && !hasRealInvestigationsText) return '';
 
+    // Render each dated entry on its own line with the date in bold, instead of
+    // one long justified run-on paragraph.
+    const invRaw = hasRealLabResults ? cleanJSONFromText(labResults.formattedResults) : cleanJSONFromText(investigationsText);
+    const invHtml = invRaw
+      .split('\n')
+      .map((line: string) => line.trim())
+      .filter((line: string) => line)
+      .map((line: string) => {
+        const m = line.match(/^(\d{1,2}\/\d{1,2}\/\d{2,4})\s*:?-?\s*(.*)$/);
+        return m
+          ? `<div class="inv-line"><span class="inv-date">${m[1]}</span> ${m[2]}</div>`
+          : `<div class="inv-line">${line}</div>`;
+      })
+      .join('');
+
     return `
     <div class="section">
       <div class="section-subtitle">INVESTIGATIONS</div>
-      <div class="section-content">${hasRealLabResults ? cleanJSONFromText(labResults.formattedResults).replace(/\n/g, '<br>') : cleanJSONFromText(investigationsText).replace(/\n/g, '<br>')}</div>
+      <div class="section-content">${invHtml}</div>
     </div>`;
   })()}
 
@@ -4159,7 +4267,8 @@ DD/MM/YYYY:-Test Category: Test1:Value1 unit, Test2:Value2 unit`);
         </CardContent>
       </Card>
 
-      {/* Surgery Details - Multiple Surgery Forms */}
+      {/* Surgery Details - Multiple Surgery Forms (hidden for conservative patients) */}
+      {!hideSurgeryUI && (
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center justify-between">
@@ -4319,6 +4428,18 @@ DD/MM/YYYY:-Test Category: Test1:Value1 unit, Test2:Value2 unit`);
                       })
                       .join('\n\n');
 
+                    // Guard: never ask the AI to write operation notes when no real
+                    // surgery is recorded (conservative / medically-managed patients).
+                    // Without this, Gemini invents a procedure, surgeon and findings.
+                    if (!surgeryBlocks.trim()) {
+                      toast({
+                        title: "No surgery recorded",
+                        description: "This patient has no recorded procedure — Operation Notes are for surgical patients only.",
+                        variant: "destructive",
+                      });
+                      return;
+                    }
+
                     const prompt = `You are a medical scribe writing the "Operation Notes — Description" section of a hospital discharge summary. This is a REAL patient medical record.
 
 For EACH surgery below, write ONE professional operative-note-style paragraph (about 6-10 lines) describing how that named procedure is conducted as a STANDARD operation of its type.
@@ -4401,6 +4522,7 @@ STRICT RULES:
           </div>
         </CardContent>
       </Card>
+      )}
 
       {/* OT Notes / Stay Notes */}
       <Card>
@@ -4676,11 +4798,22 @@ STRICT RULES:
                           // structure, sections, headings, tables, formatting and
                           // length of the summary. This baseline only carries the
                           // safety rules that must hold for ANY template.
+                          // isConservativeCase is computed at component level (hoisted).
+                          // IMPORTANT: surgical/HIMS keeps the ORIGINAL prompt below unchanged.
+                          // The extra anti-hallucination rules are appended ONLY for conservative
+                          // cases, so HIMS (surgical) output — including the real surgeon's name —
+                          // is never affected.
+                          const conservativeRules = isConservativeCase
+                            ? `
+- This patient was managed CONSERVATIVELY (medically); NO surgery or procedure was performed. NEVER write any operation notes, procedure, surgery, surgeon or anaesthesia content. Describe only the medical management and the patient's response to it.
+- Never invent or write the name of any doctor, surgeon, consultant or staff member. Include a clinician's name only if it is explicitly present in the input; otherwise omit it.`
+                            : '';
+
                           const systemPrompt = `You are a medical documentation assistant generating a hospital discharge summary. Follow the user's template/instructions below for structure, sections, headings, tables, formatting and length.
 
 The following rules are non-negotiable and OVERRIDE any conflicting instruction in the template:
 - Use ONLY the clinical data provided in the input. Never invent, fabricate or "make up" diagnoses, complaints, examination findings, events, investigations, operation notes or medications. If a detail is not provided, omit it or state it was not recorded — never guess.
-- Do NOT include the patient's name, age or sex.`;
+- Do NOT include the patient's name, age or sex.${conservativeRules}`;
 
                           // Call Google Gemini API
                           const response = await fetch(geminiGenerateContentUrl(import.meta.env.VITE_GEMINI_API_KEY), {
@@ -4695,7 +4828,9 @@ The following rules are non-negotiable and OVERRIDE any conflicting instruction 
                                 }]
                               }],
                               generationConfig: {
-                                temperature: 0.7,
+                                // Conservative: lower temperature to curb invention.
+                                // Surgical/HIMS: keep the original 0.7 — output unchanged.
+                                temperature: isConservativeCase ? 0.2 : 0.7,
                                 maxOutputTokens: 2000
                               }
                             })
