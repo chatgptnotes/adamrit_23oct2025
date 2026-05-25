@@ -2518,7 +2518,7 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
   <div class="header">
     <div class="letterhead">
       <div class="lh-center">
-        <div class="lh-name">HOPE HOSPITAL</div>
+        <div class="lh-name">${hospitalConfig?.name === 'ayushman' ? 'AYUSHMAN HOSPITAL' : 'HOPE HOSPITAL'}</div>
         <div class="lh-sub">Multispeciality Hospital</div>
         <div class="lh-addr">Emergency / Urgent Care available 24 x 7 &nbsp;|&nbsp; Ph: 7030974619, 9373111709</div>
       </div>
@@ -2611,7 +2611,11 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
   ` : ''}
 
   ${(() => {
-    if (!summaryData.ot_notes) return '';
+    // Conservative summaries always show the heading, even when empty.
+    const emptyHistory = isConservativeCase
+      ? '<div class="section"><div class="section-subtitle">CLINICAL HISTORY:</div><div class="section-content"></div></div>'
+      : '';
+    if (!summaryData.ot_notes) return emptyHistory;
     // Extract only CLINICAL HISTORY section from ot_notes
     let clinicalHistory = summaryData.ot_notes;
 
@@ -2630,7 +2634,7 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
       clinicalHistory = clinicalHistory.substring(0, match).trim();
     }
 
-    if (!clinicalHistory) return '';
+    if (!clinicalHistory) return emptyHistory;
     return '<div class="section"><div class="section-subtitle">CLINICAL HISTORY:</div><div class="section-content">' + clinicalHistory.replace(/\n/g, '<br>') + '</div></div>';
   })()}
 
@@ -2733,6 +2737,17 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
       return html;
     }
 
+    // Conservative (no surgery rows): pull the AI-written OPERATION NOTES from ot_notes
+    // and always show the heading.
+    if (isConservativeCase) {
+      let opNotes = '';
+      if (summaryData.ot_notes) {
+        const m = summaryData.ot_notes.match(/OPERATION NOTES:?\s*([\s\S]*?)(?=\nHOSPITAL STAY NOTES|\nINVESTIGATION SUMMARY|\nADVICE\b|\nMEDICATIONS|$)/i);
+        if (m && m[1]?.trim()) opNotes = m[1].trim();
+      }
+      return '<div class="section"><div class="section-subtitle">Operation Notes</div><div class="section-content">' + opNotes.replace(/\n/g, '<br>') + '</div></div>';
+    }
+
     return '';
   })()}
 
@@ -2752,6 +2767,10 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
     if (summaryData.discharge_advice) {
       return '<div class="section"><div class="section-subtitle">ADVICE:</div><div class="section-content">' + summaryData.discharge_advice.replace(/\n/g, '<br>') + '</div></div>';
     }
+    // Conservative summaries always show the heading, even when empty.
+    if (isConservativeCase) {
+      return '<div class="section"><div class="section-subtitle">ADVICE:</div><div class="section-content"></div></div>';
+    }
     return '';
   })()}
 
@@ -2767,6 +2786,10 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
     // Fallback to database field if no AI-generated content
     if (summaryData.hospital_stay_notes) {
       return '<div class="section"><div class="section-subtitle">HOSPITAL STAY NOTES:</div><div class="section-content">' + summaryData.hospital_stay_notes.replace(/\n/g, '<br>') + '</div></div>';
+    }
+    // Conservative summaries always show the heading, even when empty.
+    if (isConservativeCase) {
+      return '<div class="section"><div class="section-subtitle">HOSPITAL STAY NOTES:</div><div class="section-content"></div></div>';
     }
     return '';
   })()}
@@ -2784,7 +2807,12 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
       if (ns && ns[1]?.trim()) invNarrative = ns[1].trim();
     }
 
-    if (!hasRealLabResults && !hasRealInvestigationsText && !invNarrative) return '';
+    if (!hasRealLabResults && !hasRealInvestigationsText && !invNarrative) {
+      // Conservative summaries always show the heading, even when empty.
+      return isConservativeCase
+        ? '<div class="section"><div class="section-subtitle">INVESTIGATIONS</div><div class="section-content"></div></div>'
+        : '';
+    }
 
     // Raw values: each dated entry on its own line with the date in bold.
     let invHtml = '';
@@ -4807,6 +4835,12 @@ STRICT RULES:
                             contentToSend += `\n\nINVESTIGATIONS (summarise these in prose):\n${investigations.trim()}`;
                           }
 
+                          // Conservative: reinforce the required section set/order so every
+                          // heading is emitted and the renderer can extract each section.
+                          if (isConservativeCase) {
+                            contentToSend += `\n\nREQUIRED SECTIONS (use these exact uppercase headings, in this order): CLINICAL HISTORY:, EXAMINATION:, OPERATION NOTES:, HOSPITAL STAY NOTES:, INVESTIGATION SUMMARY:, ADVICE:`;
+                          }
+
                           console.log('🤖 Sending to Gemini:', contentToSend);
 
                           // The OT-notes template the user selects drives the
@@ -4820,7 +4854,8 @@ STRICT RULES:
                           // is never affected.
                           const conservativeRules = isConservativeCase
                             ? `
-- This patient was managed CONSERVATIVELY (medically); NO surgery or procedure was performed. NEVER write any operation notes, procedure, surgery, surgeon or anaesthesia content. Describe only the medical management and the patient's response to it.
+- This patient was managed CONSERVATIVELY (medically). Your output MUST include ALL of these section headings, written in this exact order with these exact uppercase labels: CLINICAL HISTORY:, EXAMINATION:, OPERATION NOTES:, HOSPITAL STAY NOTES:, INVESTIGATION SUMMARY:, ADVICE:
+- In the OPERATION NOTES section, state that no operative intervention was performed and that the patient was managed conservatively/medically; describe the medical management and the patient's response to it. Do not fabricate a procedure.
 - Never invent or write the name of any doctor, surgeon, consultant or staff member. Include a clinician's name only if it is explicitly present in the input; otherwise omit it.`
                             : '';
 
