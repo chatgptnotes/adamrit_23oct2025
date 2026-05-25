@@ -2517,13 +2517,11 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
 <body>
   <div class="header">
     <div class="letterhead">
-      <img class="lh-logo" src="${window.location.origin}/NABH-LOGO.png" alt="NABH" onerror="this.style.display='none'" />
       <div class="lh-center">
         <div class="lh-name">HOPE HOSPITAL</div>
         <div class="lh-sub">Multispeciality Hospital</div>
         <div class="lh-addr">Emergency / Urgent Care available 24 x 7 &nbsp;|&nbsp; Ph: 7030974619, 9373111709</div>
       </div>
-      <img class="lh-logo" src="${window.location.origin}/hope_logo.png" alt="Hope Hospital" onerror="this.style.display='none'" />
     </div>
     <h1>Discharge Summary</h1>
   </div>
