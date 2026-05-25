@@ -321,10 +321,10 @@ const PharmacyDashboard: React.FC = () => {
               <CardContent className="pt-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm font-medium text-muted-foreground">Pending Prescriptions</p>
+                    <p className="text-sm font-medium text-muted-foreground">Sent to Pharmacy</p>
                     <p className="text-2xl font-bold text-orange-600">{pendingPrescriptionsCount}</p>
                     <p className="text-xs text-muted-foreground mt-1">
-                      Awaiting processing
+                      Approved · awaiting dispense
                     </p>
                   </div>
                   <FileText className="h-8 w-8 text-orange-600" />
