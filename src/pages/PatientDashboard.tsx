@@ -116,7 +116,41 @@ const PatientDashboardInner = () => {
           return [];
         }
 
-        return data || [];
+        const patientsData = data || [];
+
+        // The RM is recorded either on the patient record OR on a visit. Build
+        // a patient -> RM-code map from visits so patients whose RM lives on a
+        // visit show the real manager instead of "Direct".
+        const [{ data: visitRms }, { data: rms }] = await Promise.all([
+          supabase
+            .from('visits')
+            .select('patient_id, relationship_manager_id, visit_date, created_at')
+            .not('relationship_manager_id', 'is', null),
+          supabase.from('relationship_managers').select('id, code, name'),
+        ]);
+
+        const rmById = new Map(
+          (rms || []).map((r: any) => [r.id, r.code || r.name])
+        );
+
+        // Earliest visit per patient wins (credit the original referral once).
+        const rmByPatient = new Map<string, string>();
+        const sortedVisits = [...(visitRms || [])].sort(
+          (a: any, b: any) =>
+            (a.visit_date || '').localeCompare(b.visit_date || '') ||
+            (a.created_at || '').localeCompare(b.created_at || '')
+        );
+        for (const v of sortedVisits) {
+          const code = rmById.get((v as any).relationship_manager_id);
+          if (code && !rmByPatient.has((v as any).patient_id)) {
+            rmByPatient.set((v as any).patient_id, code as string);
+          }
+        }
+
+        return patientsData.map((p: any) => ({
+          ...p,
+          relationship_manager: p.relationship_manager || rmByPatient.get(p.id) || null,
+        }));
       } catch (err) {
         console.error('PatientDashboard query failed:', err);
         return [];

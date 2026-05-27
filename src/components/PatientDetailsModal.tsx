@@ -60,6 +60,8 @@ export const PatientDetailsModal: React.FC<PatientDetailsModalProps> = ({
         .select(`
           id,
           visit_id,
+          visit_date,
+          relationship_manager_id,
           admission_date,
           surgery_date,
           discharge_date,
@@ -117,8 +119,29 @@ export const PatientDetailsModal: React.FC<PatientDetailsModalProps> = ({
         throw visitsError;
       }
 
+      // RM may live on the patient record OR on a visit. When the patient
+      // record has none, fall back to the earliest visit's RM code so the
+      // details view matches the dashboard (only "Direct" when truly none).
+      let relationshipManager = patientData.relationship_manager || null;
+      if (!relationshipManager) {
+        const earliestWithRm = [...(visits || [])]
+          .filter((v: any) => v.relationship_manager_id)
+          .sort((a: any, b: any) =>
+            (a.visit_date || '').localeCompare(b.visit_date || '')
+          )[0];
+        if (earliestWithRm) {
+          const { data: rm } = await supabase
+            .from('relationship_managers')
+            .select('code, name')
+            .eq('id', (earliestWithRm as any).relationship_manager_id)
+            .maybeSingle();
+          if (rm) relationshipManager = rm.code || rm.name || null;
+        }
+      }
+
       return {
         ...patientData,
+        relationship_manager: relationshipManager,
         visits: visits || []
       };
     },
