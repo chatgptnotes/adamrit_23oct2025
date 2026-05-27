@@ -2278,6 +2278,11 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
   const generatePrintHTML = (summaryData: any, patientInfo: any, visitIdString: string, labResults?: any, currentSurgeryRows?: any[], currentSurgeryDescription?: string) => {
     const currentDate = format(new Date(), 'dd/MM/yyyy');
 
+    // Letterhead reflects the currently logged-in hospital
+    const isAyushman = hospitalConfig?.name === 'ayushman';
+    const letterheadName = isAyushman ? 'AYUSHMAN HOSPITAL' : 'HOPE HOSPITAL';
+    const letterheadSub = 'Multispeciality Hospital';
+
     console.log('🖨️ Generating print HTML with summaryData:', summaryData);
     console.log('🧪 Lab results data:', labResults);
 
@@ -2518,8 +2523,8 @@ Keep it concise and professional. Do not use tables, bullet points, or extensive
   <div class="header">
     <div class="letterhead">
       <div class="lh-center">
-        <div class="lh-name">HOPE HOSPITAL</div>
-        <div class="lh-sub">Multispeciality Hospital</div>
+        <div class="lh-name">${letterheadName}</div>
+        <div class="lh-sub">${letterheadSub}</div>
         <div class="lh-addr">Emergency / Urgent Care available 24 x 7 &nbsp;|&nbsp; Ph: 7030974619, 9373111709</div>
       </div>
     </div>
