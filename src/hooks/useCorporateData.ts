@@ -24,6 +24,10 @@ export const useCorporateData = (): UseCorporateDataReturn => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Unique channel name per hook instance — a shared name throws
+  // "cannot add postgres_changes callbacks ... after subscribe()" when this
+  // hook mounts in two components at once (e.g. page + bulk-payment dialog).
+  const channelNameRef = useRef(`corporate-changes-${Math.random().toString(36).slice(2)}`);
 
   const fetchCorporateData = async () => {
     try {
@@ -92,7 +96,7 @@ export const useCorporateData = (): UseCorporateDataReturn => {
 
     // Set up real-time subscription for corporate table changes
     const corporateSubscription = supabase
-      .channel('corporate-changes')
+      .channel(channelNameRef.current)
       .on(
         'postgres_changes',
         {
