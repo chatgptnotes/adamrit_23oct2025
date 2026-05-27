@@ -1526,7 +1526,8 @@ const TodaysIpdDashboard = () => {
           ),
           relationship_managers (
             id,
-            name
+            name,
+            code
           ),
           diagnoses!diagnosis_id (
             id,
@@ -3199,8 +3200,8 @@ const TodaysIpdDashboard = () => {
                   {canSeeReferralColumn && (
                     <TableCell className="text-xs">
                       <div>{visit.referees?.name || '-'}</div>
-                      {visit.relationship_managers?.name && (
-                        <div>{visit.relationship_managers.name}</div>
+                      {visit.relationship_managers?.code && (
+                        <div>{visit.relationship_managers.code}</div>
                       )}
                     </TableCell>
                   )}
@@ -3995,8 +3996,8 @@ const TodaysIpdDashboard = () => {
                     <TableCell>{visit.patients?.name || '-'}</TableCell>
                     <TableCell>
                       <div>{visit.referees?.name || '-'}</div>
-                      {visit.relationship_managers?.name && (
-                        <div>{visit.relationship_managers.name}</div>
+                      {visit.relationship_managers?.code && (
+                        <div>{visit.relationship_managers.code}</div>
                       )}
                     </TableCell>
                     <TableCell>
@@ -4067,8 +4068,8 @@ const TodaysIpdDashboard = () => {
                     <TableCell>{visit.patients?.name || '-'}</TableCell>
                     <TableCell>
                       <div>{visit.referees?.name || '-'}</div>
-                      {visit.relationship_managers?.name && (
-                        <div>{visit.relationship_managers.name}</div>
+                      {visit.relationship_managers?.code && (
+                        <div>{visit.relationship_managers.code}</div>
                       )}
                     </TableCell>
                     <TableCell>

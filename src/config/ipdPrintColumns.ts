@@ -244,7 +244,7 @@ export const IPD_PRINT_COLUMNS: ReportColumn[] = [
     align: 'left',
     format: (value, row) => {
       const referee = row?.referees?.name || '-';
-      const rm = row?.relationship_managers?.name || '';
+      const rm = row?.relationship_managers?.code || '';
       return rm ? `${referee} / ${rm}` : referee;
     }
   },

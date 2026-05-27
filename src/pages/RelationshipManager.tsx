@@ -1,10 +1,12 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import * as XLSX from 'xlsx';
+import { jsPDF } from 'jspdf';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Plus, Search, Users, Trash2, Phone, Edit } from 'lucide-react';
+import { Plus, Search, Users, Trash2, Phone, Edit, Upload, FileDown } from 'lucide-react';
 import { AddItemDialog } from '@/components/AddItemDialog';
 import { useToast } from '@/hooks/use-toast';
 import { usePermissions } from '@/hooks/usePermissions';
@@ -12,6 +14,7 @@ import { usePermissions } from '@/hooks/usePermissions';
 interface RelationshipManagerType {
   id: string;
   name: string;
+  code?: string;
   contact_no?: string;
   created_at: string;
   updated_at: string;
@@ -25,6 +28,7 @@ const RelationshipManager = () => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { canEditMasters } = usePermissions();
+  const importInputRef = useRef<HTMLInputElement>(null);
 
   const { data: managers = [], isLoading } = useQuery({
     queryKey: ['relationship-managers'],
@@ -32,7 +36,7 @@ const RelationshipManager = () => {
       const { data, error } = await supabase
         .from('relationship_managers')
         .select('*')
-        .order('name');
+        .order('code');
 
       if (error) {
         console.error('Error fetching relationship managers:', error);
@@ -134,6 +138,7 @@ const RelationshipManager = () => {
 
   const filteredManagers = managers.filter((manager: RelationshipManagerType) =>
     manager.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    manager.code?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     manager.contact_no?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
@@ -157,6 +162,161 @@ const RelationshipManager = () => {
         data: { name: formData.name, contact_no: formData.contact_no }
       });
     }
+  };
+
+  // Bulk import: each row inserts name + contact only. The DB trigger
+  // auto-assigns the sequential numeric code, so we never send `code`.
+  const handleImport = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
+        let records: { name: string; contact_no: string | null }[] = [];
+        const fileName = file.name.toLowerCase();
+
+        if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
+          const data = new Uint8Array(e.target?.result as ArrayBuffer);
+          const workbook = XLSX.read(data, { type: 'array' });
+          const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+          const jsonData = XLSX.utils.sheet_to_json<Record<string, unknown>>(worksheet);
+
+          records = jsonData.map((row) => {
+            const rawContact = row['Contact'] ?? row['Contact No'] ?? row['contact_no'];
+            return {
+              name: String(row['Name'] ?? row['name'] ?? '').trim(),
+              contact_no:
+                rawContact != null && String(rawContact).trim()
+                  ? String(rawContact).trim()
+                  : null,
+            };
+          });
+        } else {
+          const text = e.target?.result as string;
+          const lines = text.split('\n').filter((l) => l.trim());
+          const headers = lines[0]
+            .split(',')
+            .map((h) => h.trim().replace(/"/g, '').toLowerCase());
+          const nameIdx = headers.findIndex((h) => h === 'name');
+          const contactIdx = headers.findIndex(
+            (h) => h === 'contact' || h === 'contact no' || h === 'contact_no'
+          );
+
+          records = lines.slice(1).map((line) => {
+            const values = (line.match(/(".*?"|[^,]+)/g) || []).map((v) =>
+              v.replace(/^"|"$/g, '').trim()
+            );
+            const contact = contactIdx >= 0 ? values[contactIdx] : '';
+            return {
+              name: (nameIdx >= 0 ? values[nameIdx] : values[0]) || '',
+              contact_no: contact ? contact : null,
+            };
+          });
+        }
+
+        records = records.filter((r) => r.name.trim());
+
+        if (records.length === 0) {
+          toast({
+            title: 'Nothing to import',
+            description: 'No rows with a "Name" column were found in the file.',
+            variant: 'destructive',
+          });
+          return;
+        }
+
+        const { error } = await supabase.from('relationship_managers').insert(records);
+        if (error) throw error;
+
+        queryClient.invalidateQueries({ queryKey: ['relationship-managers'] });
+        queryClient.invalidateQueries({ queryKey: ['relationship-managers-count'] });
+        toast({
+          title: 'Import successful',
+          description: `${records.length} relationship manager(s) added. Codes were auto-assigned.`,
+        });
+      } catch (err) {
+        console.error('Relationship manager import error:', err);
+        toast({
+          title: 'Import failed',
+          description: 'Invalid file format or insert error. Expected a "Name" column.',
+          variant: 'destructive',
+        });
+      }
+    };
+
+    if (file.name.toLowerCase().endsWith('.xlsx') || file.name.toLowerCase().endsWith('.xls')) {
+      reader.readAsArrayBuffer(file);
+    } else {
+      reader.readAsText(file);
+    }
+    event.target.value = '';
+  };
+
+  // Generate a PDF reference sheet mapping each code to its name + contact.
+  // This master page is the one place where code ↔ name is allowed to show.
+  const handleExportPdf = () => {
+    const rows = [...managers].sort((a, b) =>
+      (a.code || '').localeCompare(b.code || '', undefined, { numeric: true })
+    );
+
+    if (rows.length === 0) {
+      toast({
+        title: 'Nothing to export',
+        description: 'There are no relationship managers yet.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const doc = new jsPDF();
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const marginX = 14;
+    const colCode = marginX;
+    const colName = marginX + 30;
+    const colContact = marginX + 120;
+    let y = 20;
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(16);
+    doc.text('Relationship Manager Codes', pageWidth / 2, y, { align: 'center' });
+    y += 7;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(10);
+    doc.text(`Generated: ${new Date().toLocaleDateString()}`, pageWidth / 2, y, {
+      align: 'center',
+    });
+    y += 10;
+
+    const drawHeader = () => {
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(11);
+      doc.text('Code', colCode, y);
+      doc.text('Name', colName, y);
+      doc.text('Contact', colContact, y);
+      y += 2;
+      doc.setLineWidth(0.3);
+      doc.line(marginX, y, pageWidth - marginX, y);
+      y += 6;
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(10);
+    };
+    drawHeader();
+
+    rows.forEach((m) => {
+      if (y > pageHeight - 15) {
+        doc.addPage();
+        y = 20;
+        drawHeader();
+      }
+      doc.text(m.code ? `#${m.code}` : '-', colCode, y);
+      doc.text(m.name || '-', colName, y);
+      doc.text(m.contact_no || '-', colContact, y);
+      y += 7;
+    });
+
+    doc.save(`relationship_managers_${new Date().toISOString().split('T')[0]}.pdf`);
   };
 
   if (isLoading) {
@@ -193,16 +353,37 @@ const RelationshipManager = () => {
           <div className="relative flex-1 max-w-sm">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
             <Input
-              placeholder="Search by name or contact..."
+              placeholder="Search by code, name or contact..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-10"
             />
           </div>
-          <Button onClick={() => setIsAddDialogOpen(true)}>
-            <Plus className="h-4 w-4 mr-2" />
-            Add Relationship Manager
-          </Button>
+          <div className="flex flex-wrap gap-2 items-center">
+            <Button variant="outline" onClick={handleExportPdf}>
+              <FileDown className="h-4 w-4 mr-2" />
+              Export PDF
+            </Button>
+            {canEditMasters && (
+              <>
+                <input
+                  ref={importInputRef}
+                  type="file"
+                  accept=".csv,.xlsx,.xls"
+                  onChange={handleImport}
+                  className="hidden"
+                />
+                <Button variant="outline" onClick={() => importInputRef.current?.click()}>
+                  <Upload className="h-4 w-4 mr-2" />
+                  Import
+                </Button>
+              </>
+            )}
+            <Button onClick={() => setIsAddDialogOpen(true)}>
+              <Plus className="h-4 w-4 mr-2" />
+              Add Relationship Manager
+            </Button>
+          </div>
         </div>
 
         <div className="grid gap-4">
@@ -210,7 +391,14 @@ const RelationshipManager = () => {
             <Card key={manager.id} className="hover:shadow-md transition-shadow">
               <CardHeader>
                 <CardTitle className="flex items-center justify-between">
-                  <span className="text-xl">{manager.name}</span>
+                  <span className="flex items-center gap-3">
+                    {manager.code && (
+                      <span className="inline-flex items-center rounded-md bg-primary/10 px-2.5 py-1 text-base font-mono font-semibold text-primary">
+                        #{manager.code}
+                      </span>
+                    )}
+                    <span className="text-xl">{manager.name}</span>
+                  </span>
                   <div className="flex gap-2 items-center">
                     {manager.contact_no && (
                       <div className="flex items-center gap-1 text-sm text-muted-foreground">

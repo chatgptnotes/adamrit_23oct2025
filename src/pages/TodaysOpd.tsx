@@ -123,7 +123,8 @@ const TodaysOpd = () => {
           ),
           relationship_managers (
             id,
-            name
+            name,
+            code
           )
         `)
         .eq('patient_type', 'OPD')
@@ -594,8 +595,8 @@ const TodaysOpd = () => {
                     <TableCell>{patient.patients?.name || '-'}</TableCell>
                     <TableCell>
                       <div>{patient.referees?.name || '-'}</div>
-                      {patient.relationship_managers?.name && (
-                        <div>{patient.relationship_managers.name}</div>
+                      {patient.relationship_managers?.code && (
+                        <div>{patient.relationship_managers.code}</div>
                       )}
                     </TableCell>
                     <TableCell>
@@ -666,8 +667,8 @@ const TodaysOpd = () => {
                     <TableCell>{patient.patients?.name || '-'}</TableCell>
                     <TableCell>
                       <div>{patient.referees?.name || '-'}</div>
-                      {patient.relationship_managers?.name && (
-                        <div>{patient.relationship_managers.name}</div>
+                      {patient.relationship_managers?.code && (
+                        <div>{patient.relationship_managers.code}</div>
                       )}
                     </TableCell>
                     <TableCell>

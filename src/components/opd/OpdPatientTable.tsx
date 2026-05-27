@@ -38,6 +38,11 @@ interface Patient {
     id: string;
     name: string;
   };
+  relationship_managers?: {
+    id?: string;
+    name?: string;
+    code?: string;
+  };
   referee_doa_amt_paid?: number | null;
   referral_payment_status?: string | null;
   visit_type?: string;
@@ -1549,8 +1554,8 @@ Verified by: [To be verified by doctor]`;
               {canSeeReferralColumn && (
                 <TableCell className="print:hidden text-xs">
                   <div>{patient.referees?.name || '-'}</div>
-                  {patient.relationship_managers?.name && (
-                    <div>{patient.relationship_managers.name}</div>
+                  {patient.relationship_managers?.code && (
+                    <div>{patient.relationship_managers.code}</div>
                   )}
                 </TableCell>
               )}

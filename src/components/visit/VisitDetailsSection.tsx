@@ -53,7 +53,7 @@ export const VisitDetailsSection: React.FC<VisitDetailsSectionProps> = ({
   const [isLoadingReferees, setIsLoadingReferees] = useState(true);
 
   // Relationship Managers state
-  const [relationshipManagers, setRelationshipManagers] = useState<Array<{ id: string; name: string; contact_no: string | null }>>([]);
+  const [relationshipManagers, setRelationshipManagers] = useState<Array<{ id: string; name: string; code: string | null; contact_no: string | null }>>([]);
   const [isLoadingRelationshipManagers, setIsLoadingRelationshipManagers] = useState(true);
 
   // Ward and Room Management
@@ -134,8 +134,8 @@ export const VisitDetailsSection: React.FC<VisitDetailsSectionProps> = ({
 
         const { data, error } = await supabase
           .from('relationship_managers')
-          .select('id, name, contact_no')
-          .order('name');
+          .select('id, name, code, contact_no')
+          .order('code');
 
         if (error) {
           console.error('Error fetching relationship managers:', error);
@@ -523,7 +523,7 @@ export const VisitDetailsSection: React.FC<VisitDetailsSectionProps> = ({
               { value: 'none', label: 'None' },
               ...relationshipManagers.map((manager) => ({
                 value: manager.name,
-                label: manager.name
+                label: manager.code ? `${manager.name} (${manager.code})` : manager.name
               }))
             ]}
             value={formData.relationshipManager || ''}

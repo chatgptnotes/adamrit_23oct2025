@@ -785,7 +785,8 @@ const DischargedPatients = () => {
             name
           ),
           relationship_managers(
-            name
+            name,
+            code
           ),
           ipd_discharge_summary!visit_id(
             status
@@ -1932,8 +1933,8 @@ const DischargedPatients = () => {
                       {canSeeReferralColumn && (
                         <TableCell>
                           <div>{visit.referees?.name || '—'}</div>
-                          {visit.relationship_managers?.name && (
-                            <div>{visit.relationship_managers.name}</div>
+                          {visit.relationship_managers?.code && (
+                            <div>{visit.relationship_managers.code}</div>
                           )}
                         </TableCell>
                       )}
@@ -2214,8 +2215,8 @@ const DischargedPatients = () => {
                     <TableCell>{visit.patients?.name || '-'}</TableCell>
                     <TableCell>
                       <div>{visit.referees?.name || '-'}</div>
-                      {visit.relationship_managers?.name && (
-                        <div>{visit.relationship_managers.name}</div>
+                      {visit.relationship_managers?.code && (
+                        <div>{visit.relationship_managers.code}</div>
                       )}
                     </TableCell>
                     <TableCell>
@@ -2286,8 +2287,8 @@ const DischargedPatients = () => {
                     <TableCell>{visit.patients?.name || '-'}</TableCell>
                     <TableCell>
                       <div>{visit.referees?.name || '-'}</div>
-                      {visit.relationship_managers?.name && (
-                        <div>{visit.relationship_managers.name}</div>
+                      {visit.relationship_managers?.code && (
+                        <div>{visit.relationship_managers.code}</div>
                       )}
                     </TableCell>
                     <TableCell>

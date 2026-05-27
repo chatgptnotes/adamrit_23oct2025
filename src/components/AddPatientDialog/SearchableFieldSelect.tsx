@@ -14,7 +14,7 @@ type TableName = 'cghs_surgery' | 'complications' | 'medication' | 'lab' | 'radi
 
 interface SearchableFieldSelectProps {
   // Option 1: Pass options directly (original interface)
-  options?: Array<{ id: string; name: string; description?: string; category?: string }>;
+  options?: Array<{ id: string; name: string; code?: string; description?: string; category?: string }>;
 
   // Option 2: Fetch from database using tableName
   tableName?: TableName;
@@ -86,6 +86,7 @@ export const SearchableFieldSelect: React.FC<SearchableFieldSelectProps> = ({
         return (data || []).map(item => ({
           id: item.id?.toString() || item.name,
           name: item[displayField] || item.name || '',
+          code: item.code || '',
           description: item.specialty || item.description || '',
           category: item.department || item.category || ''
         }));
@@ -219,7 +220,12 @@ export const SearchableFieldSelect: React.FC<SearchableFieldSelectProps> = ({
                     className="pointer-events-none"
                   />
                   <div className="flex-1 min-w-0">
-                    <div className="font-medium truncate">{option.name}</div>
+                    <div className="font-medium truncate">
+                      {option.name}
+                      {option.code && (
+                        <span className="ml-1 font-mono text-xs text-gray-500">({option.code})</span>
+                      )}
+                    </div>
                     {showDescriptions && option.description && (
                       <div className="text-sm text-gray-600 truncate">{option.description}</div>
                     )}
