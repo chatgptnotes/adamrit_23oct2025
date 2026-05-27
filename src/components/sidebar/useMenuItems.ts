@@ -36,14 +36,6 @@ export const useMenuItems = (props: AppSidebarProps): { mainItems: MenuItem[]; m
           return false;
         }
 
-        // Hide Corporate Receipts for non-authorized roles (superadmin & marketing_manager only)
-        if (item.title === "Corporate Receipts") {
-          const role = user?.role;
-          if (role !== 'superadmin' && role !== 'marketing_manager') {
-            return false;
-          }
-        }
-
         // Hide Director Dashboard for non-authorized emails
         if (item.title === "Director Dashboard") {
           const DIRECTOR_EMAILS = ['cmd@hopehospital.com', 'finance@hopehospital.com'];
