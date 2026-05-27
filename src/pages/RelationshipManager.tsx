@@ -310,7 +310,7 @@ const RelationshipManager = () => {
         y = 20;
         drawHeader();
       }
-      doc.text(m.code ? `#${m.code}` : '-', colCode, y);
+      doc.text(m.code ? `RM-${m.code}` : '-', colCode, y);
       doc.text(m.name || '-', colName, y);
       doc.text(m.contact_no || '-', colContact, y);
       y += 7;
@@ -394,7 +394,7 @@ const RelationshipManager = () => {
                   <span className="flex items-center gap-3">
                     {manager.code && (
                       <span className="inline-flex items-center rounded-md bg-primary/10 px-2.5 py-1 text-base font-mono font-semibold text-primary">
-                        #{manager.code}
+                        RM-{manager.code}
                       </span>
                     )}
                     <span className="text-xl">{manager.name}</span>
