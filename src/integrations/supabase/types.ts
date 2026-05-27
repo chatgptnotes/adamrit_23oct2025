@@ -3840,6 +3840,7 @@ export type Database = {
       patients: {
         Row: {
           aadhar_passport: string | null
+          aadhaar_number: string | null
           address: string | null
           age: number | null
           allergies: string | null
@@ -3877,6 +3878,7 @@ export type Database = {
         }
         Insert: {
           aadhar_passport?: string | null
+          aadhaar_number?: string | null
           address?: string | null
           age?: number | null
           allergies?: string | null
@@ -3914,6 +3916,7 @@ export type Database = {
         }
         Update: {
           aadhar_passport?: string | null
+          aadhaar_number?: string | null
           address?: string | null
           age?: number | null
           allergies?: string | null

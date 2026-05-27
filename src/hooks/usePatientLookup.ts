@@ -25,6 +25,7 @@ export function usePatientLookup() {
     mobile: '',
     name: '',
     patientId: '',
+    aadhaar: '',
   });
   const [hasSearched, setHasSearched] = useState(false);
 
@@ -34,10 +35,11 @@ export function usePatientLookup() {
       criteria.mobile,
       criteria.name,
       criteria.patientId,
+      criteria.aadhaar,
       hospitalConfig.name,
     ],
     queryFn: async (): Promise<Patient[]> => {
-      if (!criteria.mobile && !criteria.name && !criteria.patientId) {
+      if (!criteria.mobile && !criteria.name && !criteria.patientId && !criteria.aadhaar) {
         return [];
       }
 
@@ -52,6 +54,14 @@ export function usePatientLookup() {
       }
       if (criteria.patientId) {
         query = query.or(`patients_id.ilike.%${criteria.patientId}%`);
+      }
+      if (criteria.aadhaar) {
+        // Search the dedicated column AND the legacy combined Aadhar/Passport
+        // field so existing patients remain findable by their Aadhaar.
+        const digits = criteria.aadhaar.replace(/\D/g, '');
+        query = query.or(
+          `aadhaar_number.ilike.%${digits}%,aadhar_passport.ilike.%${digits}%`
+        );
       }
 
       const { data, error } = await query.limit(10);
@@ -77,7 +87,7 @@ export function usePatientLookup() {
     refetch();
   }, [refetch]);
 
-  const hasCriteria = !!(criteria.mobile || criteria.name || criteria.patientId);
+  const hasCriteria = !!(criteria.mobile || criteria.name || criteria.patientId || criteria.aadhaar);
   const showNoResults =
     hasSearched && patients.length === 0 && !isLoading && hasCriteria;
 

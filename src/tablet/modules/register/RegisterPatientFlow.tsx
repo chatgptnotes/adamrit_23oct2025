@@ -8,6 +8,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useCorporateData } from "@/hooks/useCorporateData";
 import { generatePatientId } from "@/utils/patientIdGenerator";
 import { generateVisitId } from "@/utils/visitIdGenerator";
+import { normalizeAadhaar, isValidAadhaar } from "@/utils/aadhaar";
 import { cn } from "@/lib/utils";
 import { FlowScaffold } from "@/tablet/components/FlowScaffold";
 import { TabletConfirm } from "@/tablet/components/TabletConfirm";
@@ -51,6 +52,7 @@ interface PatientForm {
   email: string;
   identityType: string;
   aadharPassport: string;
+  aadhaarNumber: string;
   corporate: string;
   insuranceNo: string;
   quarterPlotNo: string;
@@ -92,6 +94,7 @@ const EMPTY_PATIENT: PatientForm = {
   email: "",
   identityType: "",
   aadharPassport: "",
+  aadhaarNumber: "",
   corporate: "",
   insuranceNo: "",
   quarterPlotNo: "",
@@ -253,6 +256,21 @@ export default function RegisterPatientFlow() {
       const hType = hospitalType || "hope";
       const now = new Date();
       const orNull = (s: string) => (s.trim() ? s.trim() : null);
+      const aadhaarNumber = normalizeAadhaar(patient.aadhaarNumber);
+
+      // Dedup pre-check: block a second record for the same Aadhaar in this
+      // hospital. The DB partial unique index is the hard backstop.
+      const { data: existing } = await supabase
+        .from("patients")
+        .select("patients_id, name")
+        .eq("hospital_name", hospitalConfig.name)
+        .eq("aadhaar_number", aadhaarNumber)
+        .maybeSingle();
+      if (existing) {
+        throw new Error(
+          `A patient with this Aadhaar is already registered: ${existing.name} (ID: ${existing.patients_id}).`,
+        );
+      }
 
       // 1) INSERT new patient — full website field set.
       const patientsId = await generatePatientId(hType, now);
@@ -269,6 +287,7 @@ export default function RegisterPatientFlow() {
           email: orNull(patient.email),
           identity_type: orNull(patient.identityType),
           aadhar_passport: orNull(patient.aadharPassport),
+          aadhaar_number: aadhaarNumber,
           corporate: patient.corporate || null,
           insurance_person_no: orNull(patient.insuranceNo),
           quarter_plot_no: orNull(patient.quarterPlotNo),
@@ -293,7 +312,12 @@ export default function RegisterPatientFlow() {
         })
         .select("id, patients_id")
         .single();
-      if (pErr) throw new Error(`Patient could not be saved: ${pErr.message}`);
+      if (pErr) {
+        if (pErr.message.includes("patients_hospital_aadhaar_unique")) {
+          throw new Error("A patient with this Aadhaar number is already registered.");
+        }
+        throw new Error(`Patient could not be saved: ${pErr.message}`);
+      }
 
       // 2) INSERT new visit
       const visitId = await generateVisitId(now);
@@ -363,6 +387,7 @@ export default function RegisterPatientFlow() {
     !!patient.age &&
     !!patient.phone.trim() &&
     !!patient.address.trim() &&
+    isValidAadhaar(patient.aadhaarNumber) &&
     !!patient.corporate &&
     !!patient.emgName.trim() &&
     !!patient.emgMobile.trim() &&
@@ -453,6 +478,7 @@ export default function RegisterPatientFlow() {
     ["Address", patient.address],
     ["Blood group", patient.bloodGroup],
     ["Email", patient.email],
+    ["Aadhaar", patient.aadhaarNumber],
     ["ID", [patient.identityType, patient.aadharPassport].filter(Boolean).join(" · ")],
     ["Billing category", patient.corporate],
     ...(isEsic(patient.corporate)
@@ -577,6 +603,17 @@ export default function RegisterPatientFlow() {
                     </option>
                   ))}
                 </select>
+              </Field>
+              <Field label="Aadhaar number *">
+                <TabletInput
+                  inputMode="numeric"
+                  value={patient.aadhaarNumber}
+                  onChange={(e) =>
+                    setP("aadhaarNumber", e.target.value.replace(/\D/g, "").slice(0, 12))
+                  }
+                  placeholder="12-digit Aadhaar number"
+                  maxLength={12}
+                />
               </Field>
               <Field label="ID number (Aadhar / Passport)">
                 <TabletInput

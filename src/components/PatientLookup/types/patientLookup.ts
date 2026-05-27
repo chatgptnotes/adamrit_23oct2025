@@ -21,4 +21,5 @@ export interface SearchCriteria {
   mobile: string;
   name: string;
   patientId: string;
+  aadhaar: string;
 }

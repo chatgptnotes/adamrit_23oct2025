@@ -242,6 +242,24 @@ export const PatientInfoSection: React.FC<PatientInfoSectionProps> = ({
           />
         </div>
 
+        {/* Aadhaar Number — dedicated, mandatory, 12 digits */}
+        <div className="space-y-2">
+          <Label htmlFor="aadhaarNumber" className="text-sm font-medium">
+            Aadhaar Number <span className="text-red-500">*</span>
+          </Label>
+          <Input
+            id="aadhaarNumber"
+            inputMode="numeric"
+            placeholder="12-digit Aadhaar number"
+            value={formData.aadhaarNumber}
+            onChange={(e) => onInputChange('aadhaarNumber', e.target.value.replace(/\D/g, '').slice(0, 12))}
+            className="w-full"
+            maxLength={12}
+            pattern="[0-9]{12}"
+            required
+          />
+        </div>
+
         {/* Aadhar/Passport */}
         <div className="space-y-2">
           <Label htmlFor="aadharPassport" className="text-sm font-medium">

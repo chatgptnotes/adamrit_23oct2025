@@ -15,6 +15,7 @@ const FIELDS: { id: FieldKey; label: string }[] = [
   { id: "name", label: "Name" },
   { id: "patientId", label: "Patient ID" },
   { id: "mobile", label: "Mobile" },
+  { id: "aadhaar", label: "Aadhaar" },
 ];
 
 /**
@@ -61,7 +62,7 @@ export function TabletPatientPicker({
 
   const updateField = (key: FieldKey, value: string) => {
     setField(key);
-    setCriteria({ mobile: "", name: "", patientId: "", [key]: value });
+    setCriteria({ mobile: "", name: "", patientId: "", aadhaar: "", [key]: value });
   };
 
   return (

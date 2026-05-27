@@ -32,13 +32,17 @@ export const PatientSearchForm: React.FC<PatientSearchFormProps> = ({
     onSearchChange({ ...searchCriteria, patientId: value });
   };
 
+  const handleAadhaarChange = (value: string) => {
+    onSearchChange({ ...searchCriteria, aadhaar: value.replace(/\D/g, '').slice(0, 12) });
+  };
+
   return (
     <Card>
       <CardHeader>
         <CardTitle className="text-lg">Search Criteria</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="space-y-2">
             <Label htmlFor="mobile">Mobile Number</Label>
             <div className="flex items-center gap-2">
@@ -85,6 +89,24 @@ export const PatientSearchForm: React.FC<PatientSearchFormProps> = ({
             </div>
             <p className="text-xs text-muted-foreground">
               If patient remembers their ID
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="aadhaar">Aadhaar Number</Label>
+            <div className="flex items-center gap-2">
+              <FileText className="h-4 w-4 text-muted-foreground" />
+              <Input
+                id="aadhaar"
+                inputMode="numeric"
+                placeholder="Enter Aadhaar number"
+                value={searchCriteria.aadhaar}
+                onChange={(e) => handleAadhaarChange(e.target.value)}
+                maxLength={12}
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Finds new and existing patients
             </p>
           </div>
         </div>
