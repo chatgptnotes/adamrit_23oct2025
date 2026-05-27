@@ -94,10 +94,14 @@ export const VisitRegistrationForm: React.FC<VisitRegistrationFormProps> = ({
     }
   }, [editMode, existingVisit]);
 
-  // Fetch patient's corporate/yojna category to enable billing override
+  // Fetch patient's corporate/yojna category (billing override).
   useEffect(() => {
     const fetchPatientCorporate = async () => {
-      const { data } = await (supabase as any).from('patients').select('corporate').eq('id', patient.id).maybeSingle();
+      const { data } = await (supabase as any)
+        .from('patients')
+        .select('corporate')
+        .eq('id', patient.id)
+        .maybeSingle();
       if (data?.corporate) setPatientCorporate(data.corporate);
     };
     fetchPatientCorporate();

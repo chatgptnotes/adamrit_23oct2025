@@ -8,13 +8,11 @@ import { Patient } from './types/patientLookup';
 interface PatientSearchResultsProps {
   patients: Patient[];
   onPatientSelect: (patient: Patient) => void;
-  generateMockMobile: (patientId: string) => string;
 }
 
 export const PatientSearchResults: React.FC<PatientSearchResultsProps> = ({
   patients,
-  onPatientSelect,
-  generateMockMobile
+  onPatientSelect
 }) => {
   const formatDate = (dateString: string) => {
     if (!dateString) return 'Not set';
@@ -57,10 +55,25 @@ export const PatientSearchResults: React.FC<PatientSearchResultsProps> = ({
                   
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm text-muted-foreground">
                     <div>
-                      <span className="font-medium">Mobile:</span> {generateMockMobile(patient.patients_id || patient.id)}
+                      <span className="font-medium">Mobile:</span> {patient.phone || 'Not set'}
                     </div>
                     <div>
-                      <span className="font-medium">Diagnosis:</span> {patient.primary_diagnosis}
+                      <span className="font-medium">Age:</span> {patient.age ?? 'Not set'}
+                    </div>
+                    <div>
+                      <span className="font-medium">Gender:</span> {patient.gender || 'Not set'}
+                    </div>
+                    <div>
+                      <span className="font-medium">Corporate:</span> {patient.corporate || 'Not set'}
+                    </div>
+                    <div>
+                      <span className="font-medium">Email:</span> {patient.email || 'Not set'}
+                    </div>
+                    <div className="col-span-2 md:col-span-3">
+                      <span className="font-medium">Address:</span> {patient.address || 'Not set'}
+                    </div>
+                    <div>
+                      <span className="font-medium">Diagnosis:</span> {patient.primary_diagnosis || 'Not set'}
                     </div>
                     <div>
                       <span className="font-medium">Registration:</span> {formatDate(patient.created_at)}

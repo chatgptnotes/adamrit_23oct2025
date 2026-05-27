@@ -60,6 +60,8 @@ export const PatientDetailsModal: React.FC<PatientDetailsModalProps> = ({
         .select(`
           id,
           visit_id,
+          visit_date,
+          relationship_manager_id,
           admission_date,
           surgery_date,
           discharge_date,
@@ -117,8 +119,29 @@ export const PatientDetailsModal: React.FC<PatientDetailsModalProps> = ({
         throw visitsError;
       }
 
+      // RM may live on the patient record OR on a visit. When the patient
+      // record has none, fall back to the earliest visit's RM code so the
+      // details view matches the dashboard (only "Direct" when truly none).
+      let relationshipManager = patientData.relationship_manager || null;
+      if (!relationshipManager) {
+        const earliestWithRm = [...(visits || [])]
+          .filter((v: any) => v.relationship_manager_id)
+          .sort((a: any, b: any) =>
+            (a.visit_date || '').localeCompare(b.visit_date || '')
+          )[0];
+        if (earliestWithRm) {
+          const { data: rm } = await supabase
+            .from('relationship_managers')
+            .select('code, name')
+            .eq('id', (earliestWithRm as any).relationship_manager_id)
+            .maybeSingle();
+          if (rm) relationshipManager = rm.code || rm.name || null;
+        }
+      }
+
       return {
         ...patientData,
+        relationship_manager: relationshipManager,
         visits: visits || []
       };
     },
@@ -372,6 +395,10 @@ export const PatientDetailsModal: React.FC<PatientDetailsModalProps> = ({
               <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
                 <h3 className="text-lg font-semibold text-gray-700 mb-3">Basic Information</h3>
                 <div className="grid grid-cols-1 gap-2">
+                  <div className="flex justify-between">
+                    <span className="text-sm font-medium text-gray-600">Relationship Manager:</span>
+                    <span className="text-sm">{patientDetails?.relationship_manager || 'Direct'}</span>
+                  </div>
                   <div className="flex justify-between">
                     <span className="text-sm font-medium text-gray-600">Admission Date:</span>
                     <span className="text-sm">{formatDate(patientDetails?.visits?.[0]?.admission_date)}</span>

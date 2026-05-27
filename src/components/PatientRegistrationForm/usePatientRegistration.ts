@@ -9,7 +9,6 @@ import { format } from 'date-fns';
 import { generatePatientId } from '@/utils/patientIdGenerator';
 import { useAuth } from '@/contexts/AuthContext';
 import { logActivity } from '@/lib/activity-logger';
-import { normalizeAadhaar, isValidAadhaar } from '@/utils/aadhaar';
 
 export const usePatientRegistration = (onClose: () => void) => {
   const [dateOfBirth, setDateOfBirth] = useState<Date>();
@@ -31,7 +30,6 @@ export const usePatientRegistration = (onClose: () => void) => {
     secondEmergencyContactName: '',
     secondEmergencyContactMobile: '',
     aadharPassport: '',
-    aadhaarNumber: '',
     quarterPlotNo: '',
     ward: '',
     panchayat: '',
@@ -104,24 +102,6 @@ export const usePatientRegistration = (onClose: () => void) => {
       return false;
     }
 
-    // Aadhaar is mandatory for new patients and must be exactly 12 digits.
-    if (!formData.aadhaarNumber) {
-      toast({
-        title: "Error",
-        description: "Aadhaar number is required",
-        variant: "destructive"
-      });
-      return false;
-    }
-    if (!isValidAadhaar(formData.aadhaarNumber)) {
-      toast({
-        title: "Error",
-        description: "Aadhaar number must be exactly 12 digits",
-        variant: "destructive"
-      });
-      return false;
-    }
-
     // Check if ESIC is selected but Insurance Person No. is empty
     if (formData.corporate === 'esic' && !formData.insurancePersonNo) {
       toast({
@@ -141,33 +121,6 @@ export const usePatientRegistration = (onClose: () => void) => {
     if (!validateForm()) return;
 
     setIsSubmitting(true);
-
-    const aadhaarNumber = normalizeAadhaar(formData.aadhaarNumber);
-
-    // Dedup pre-check: don't create a second record for the same Aadhaar in
-    // this hospital. The DB partial unique index is the hard backstop; this
-    // gives a friendly message and surfaces the existing patient.
-    try {
-      const { data: existing } = await supabase
-        .from('patients')
-        .select('patients_id, name')
-        .eq('hospital_name', formData.hospitalName)
-        .eq('aadhaar_number', aadhaarNumber)
-        .maybeSingle();
-
-      if (existing) {
-        toast({
-          title: "Patient already registered",
-          description: `This Aadhaar belongs to ${existing.name} (ID: ${existing.patients_id}).`,
-          variant: "destructive"
-        });
-        setIsSubmitting(false);
-        return;
-      }
-    } catch (lookupError) {
-      console.error('Aadhaar dedup check failed:', lookupError);
-      // Fall through — the DB unique index still guarantees correctness.
-    }
 
     const createPatientWithRetry = async (maxRetries = 3): Promise<any> => {
       for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -191,7 +144,6 @@ export const usePatientRegistration = (onClose: () => void) => {
             second_emergency_contact_mobile: formData.secondEmergencyContactMobile || null,
             date_of_birth: dateOfBirth ? format(dateOfBirth, 'yyyy-MM-dd') : null,
             aadhar_passport: formData.aadharPassport || null,
-            aadhaar_number: aadhaarNumber,
             quarter_plot_no: formData.quarterPlotNo || null,
             ward: formData.ward || null,
             panchayat: formData.panchayat || null,
@@ -218,11 +170,6 @@ export const usePatientRegistration = (onClose: () => void) => {
             .single();
 
           if (error) {
-            // Duplicate Aadhaar (race the pre-check missed). Retrying won't
-            // help — surface the message and stop.
-            if (error.code === '23505' && error.message.includes('patients_hospital_aadhaar_unique')) {
-              throw new Error('A patient with this Aadhaar number is already registered.');
-            }
             // Check if it's a duplicate key error
             if (error.code === '23505' && error.message.includes('patients_patients_id_key')) {
               console.warn(`Attempt ${attempt}: Duplicate patient ID ${customPatientId}, retrying...`);
@@ -307,13 +254,9 @@ export const usePatientRegistration = (onClose: () => void) => {
       onClose();
     } catch (error) {
       console.error('Error submitting form:', error);
-      const isAadhaarDup =
-        error instanceof Error && error.message.includes('Aadhaar number is already registered');
       toast({
         title: "Error",
-        description: isAadhaarDup
-          ? error.message
-          : "Failed to register patient. Please try again.",
+        description: "Failed to register patient. Please try again.",
         variant: "destructive"
       });
     } finally {

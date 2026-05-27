@@ -219,17 +219,18 @@ export const PatientInfoSection: React.FC<PatientInfoSectionProps> = ({
           />
         </div>
 
-        {/* Relationship Manager */}
+        {/* Relationship Manager — locked after registration; cannot be changed.
+            Shows the saved value, or "Direct" when none was set. */}
         <div className="space-y-2">
           <Label htmlFor="relationshipManager" className="text-sm font-medium">
             Relationship Manager
           </Label>
           <Input
             id="relationshipManager"
-            placeholder="Relationship Manager"
-            value={formData.relationshipManager}
-            onChange={(e) => onInputChange('relationshipManager', e.target.value)}
-            className="w-full"
+            value={formData.relationshipManager || 'Direct'}
+            readOnly
+            disabled
+            className="w-full bg-gray-100 cursor-not-allowed"
           />
         </div>
 

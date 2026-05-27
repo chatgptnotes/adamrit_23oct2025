@@ -4,16 +4,6 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import type { Patient, SearchCriteria } from '@/components/PatientLookup/types/patientLookup';
 
-/** Deterministic mock mobile derived from a patient id (legacy demo behaviour). */
-export function generateMockMobile(patientId: string): string {
-  const hash = patientId.split('').reduce((a, b) => {
-    a = ((a << 5) - a) + b.charCodeAt(0);
-    return a & a;
-  }, 0);
-  const phoneBase = (Math.abs(hash) % 9000000000) + 1000000000;
-  return phoneBase.toString();
-}
-
 /**
  * Shared patient-search logic. Extracted verbatim from PatientLookupDialog so
  * the desktop dialog and the tablet patient picker run one query path.
@@ -49,6 +39,12 @@ export function usePatientLookup() {
         .eq('hospital_name', hospitalConfig.name)
         .order('created_at', { ascending: false });
 
+      if (criteria.mobile) {
+        // Real phone-number search against the stored `phone` column
+        // (digits only, partial match so a few digits still find the patient).
+        const digits = criteria.mobile.replace(/\D/g, '');
+        query = query.ilike('phone', `%${digits}%`);
+      }
       if (criteria.name) {
         query = query.ilike('name', `%${criteria.name}%`);
       }
@@ -68,13 +64,6 @@ export function usePatientLookup() {
       if (error) {
         console.error('Error searching patients:', error);
         throw error;
-      }
-
-      if (criteria.mobile && data) {
-        return data.filter((patient: any) => {
-          const mockMobile = generateMockMobile(patient.patients_id || patient.id);
-          return mockMobile.includes(criteria.mobile);
-        }) as Patient[];
       }
 
       return (data || []) as Patient[];
