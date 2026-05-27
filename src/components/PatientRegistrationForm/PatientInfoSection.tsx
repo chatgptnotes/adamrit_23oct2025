@@ -8,6 +8,7 @@ import { EnhancedDatePicker } from '@/components/ui/enhanced-date-picker';
 import { Upload, X, Loader2 } from 'lucide-react';
 import { PatientFormData } from './types';
 import { useCorporateData } from '@/hooks/useCorporateData';
+import { supabase } from '@/integrations/supabase/client';
 
 interface PatientInfoSectionProps {
   formData: PatientFormData;
@@ -25,6 +26,36 @@ export const PatientInfoSection: React.FC<PatientInfoSectionProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedFile, setSelectedFile] = React.useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = React.useState<string | null>(null);
+
+  // Relationship Managers for the selectable RM field. Patient can pick a
+  // registered RM or choose "Direct" when they came without a referral.
+  const [relationshipManagers, setRelationshipManagers] = React.useState<
+    Array<{ id: string; name: string; code: string | null }>
+  >([]);
+  const [isLoadingRMs, setIsLoadingRMs] = React.useState(false);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    const fetchRMs = async () => {
+      setIsLoadingRMs(true);
+      const { data, error } = await supabase
+        .from('relationship_managers')
+        .select('id, name, code')
+        .order('code');
+      if (cancelled) return;
+      if (error) {
+        console.error('Error fetching relationship managers:', error);
+        setRelationshipManagers([]);
+      } else {
+        setRelationshipManagers(data || []);
+      }
+      setIsLoadingRMs(false);
+    };
+    fetchRMs();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Fetch corporate options dynamically from database
   const { corporateOptions, loading: corporateLoading, error: corporateError, refetch: refetchCorporate } = useCorporateData();
@@ -242,24 +273,6 @@ export const PatientInfoSection: React.FC<PatientInfoSectionProps> = ({
           />
         </div>
 
-        {/* Aadhaar Number — dedicated, mandatory, 12 digits */}
-        <div className="space-y-2">
-          <Label htmlFor="aadhaarNumber" className="text-sm font-medium">
-            Aadhaar Number <span className="text-red-500">*</span>
-          </Label>
-          <Input
-            id="aadhaarNumber"
-            inputMode="numeric"
-            placeholder="12-digit Aadhaar number"
-            value={formData.aadhaarNumber}
-            onChange={(e) => onInputChange('aadhaarNumber', e.target.value.replace(/\D/g, '').slice(0, 12))}
-            className="w-full"
-            maxLength={12}
-            pattern="[0-9]{12}"
-            required
-          />
-        </div>
-
         {/* Aadhar/Passport */}
         <div className="space-y-2">
           <Label htmlFor="aadharPassport" className="text-sm font-medium">
@@ -316,17 +329,34 @@ export const PatientInfoSection: React.FC<PatientInfoSectionProps> = ({
           />
         </div>
 
-        {/* Relationship Manager */}
+        {/* Relationship Manager — selectable: pick a registered RM or "Direct"
+            when the patient came without a referral. */}
         <div className="space-y-2">
           <Label htmlFor="relationshipManager" className="text-sm font-medium">
             Relationship Manager
           </Label>
-          <Input
-            id="relationshipManager"
-            placeholder="Relationship Manager"
-            value={formData.relationshipManager}
-            onChange={(e) => onInputChange('relationshipManager', e.target.value)}
-            className="w-full"
+          <SearchableSelect
+            options={[
+              { value: 'Direct', label: 'Direct (No RM)' },
+              ...relationshipManagers.map((manager) => ({
+                // Store the RM code (so the saved value is the code, not the
+                // name). Falls back to the name only when no code exists.
+                value: manager.code || manager.name,
+                // List shows "Name (code)" so it's searchable by name, but once
+                // selected the field displays only the code.
+                label: manager.code ? `${manager.name} (${manager.code})` : manager.name,
+                selectedLabel: manager.code || manager.name
+              }))
+            ]}
+            value={formData.relationshipManager || ''}
+            onValueChange={(value) => onInputChange('relationshipManager', value)}
+            placeholder={
+              isLoadingRMs
+                ? 'Loading...'
+                : 'Select Relationship Manager or Direct'
+            }
+            searchPlaceholder="Search managers..."
+            emptyText="No manager found."
           />
         </div>
 

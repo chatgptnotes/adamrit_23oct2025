@@ -8,6 +8,13 @@ export interface Patient {
   created_at: string;
   surgeon?: string;
   consultant?: string;
+  // Contact + demographic details shown in search results.
+  phone?: string;
+  age?: number | string;
+  gender?: string;
+  address?: string;
+  corporate?: string;
+  email?: string;
 }
 
 export interface PatientLookupProps {

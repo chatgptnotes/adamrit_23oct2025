@@ -373,6 +373,10 @@ export const PatientDetailsModal: React.FC<PatientDetailsModalProps> = ({
                 <h3 className="text-lg font-semibold text-gray-700 mb-3">Basic Information</h3>
                 <div className="grid grid-cols-1 gap-2">
                   <div className="flex justify-between">
+                    <span className="text-sm font-medium text-gray-600">Relationship Manager:</span>
+                    <span className="text-sm">{patientDetails?.relationship_manager || 'Direct'}</span>
+                  </div>
+                  <div className="flex justify-between">
                     <span className="text-sm font-medium text-gray-600">Admission Date:</span>
                     <span className="text-sm">{formatDate(patientDetails?.visits?.[0]?.admission_date)}</span>
                   </div>

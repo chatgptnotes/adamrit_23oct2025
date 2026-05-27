@@ -9,7 +9,7 @@ import { PatientSearchResults } from './PatientSearchResults';
 import { NoResultsSection } from './NoResultsSection';
 import { PatientRegistrationForm } from '@/components/PatientRegistrationForm';
 import { PatientLookupProps, Patient } from './types/patientLookup';
-import { usePatientLookup, generateMockMobile } from '@/hooks/usePatientLookup';
+import { usePatientLookup } from '@/hooks/usePatientLookup';
 
 export const PatientLookupDialog: React.FC<PatientLookupProps> = ({
   isOpen,
@@ -109,7 +109,6 @@ export const PatientLookupDialog: React.FC<PatientLookupProps> = ({
           <PatientSearchResults
             patients={patients}
             onPatientSelect={handlePatientSelect}
-            generateMockMobile={generateMockMobile}
           />
 
           {showNoResults && (

@@ -12,7 +12,6 @@ export interface PatientFormData {
   secondEmergencyContactName: string;
   secondEmergencyContactMobile: string;
   aadharPassport: string;
-  aadhaarNumber: string;
   quarterPlotNo: string;
   ward: string;
   panchayat: string;

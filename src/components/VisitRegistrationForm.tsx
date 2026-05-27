@@ -56,56 +56,11 @@ export const VisitRegistrationForm: React.FC<VisitRegistrationFormProps> = ({
 
   const [patientCorporate, setPatientCorporate] = useState('');
 
-  // Returning patient = already has a prior visit. The Relationship Manager field
-  // is hidden for them so an RM cannot be credited again every time the same
-  // patient comes back (repeat-referral scam). RM is only valid on the first visit.
-  const [isReturningPatient, setIsReturningPatient] = useState(false);
-
   // Keep track of selected IDs for foreign keys
   const [selectedIds, setSelectedIds] = useState({
     referringDoctorId: '' as string,
     relationshipManagerId: '' as string
   });
-
-  // Detect whether this patient has already visited the hospital before.
-  useEffect(() => {
-    if (!isOpen || !patient?.id) return;
-    let cancelled = false;
-
-    const checkReturningPatient = async () => {
-      const { data, error } = await supabase
-        .from('visits')
-        .select('id, visit_id, visit_date, created_at')
-        .eq('patient_id', patient.id)
-        .order('visit_date', { ascending: true })
-        .order('created_at', { ascending: true });
-
-      if (cancelled) return;
-
-      if (error || !data) {
-        // Fail safe: if we cannot confirm history, keep RM available (default behaviour).
-        setIsReturningPatient(false);
-        return;
-      }
-
-      if (!editMode) {
-        // Registering a new visit: any existing visit means the patient is returning.
-        setIsReturningPatient(data.length > 0);
-      } else {
-        // Editing an existing visit: RM stays only on the patient's earliest visit.
-        const earliest = data[0];
-        const isEarliest =
-          !!earliest &&
-          (earliest.id === existingVisit?.id || earliest.visit_id === existingVisit?.visit_id);
-        setIsReturningPatient(data.length > 0 && !isEarliest);
-      }
-    };
-
-    checkReturningPatient();
-    return () => {
-      cancelled = true;
-    };
-  }, [isOpen, patient?.id, editMode, existingVisit?.id, existingVisit?.visit_id]);
 
   // Populate form with existing data when in edit mode
   React.useEffect(() => {
@@ -139,10 +94,14 @@ export const VisitRegistrationForm: React.FC<VisitRegistrationFormProps> = ({
     }
   }, [editMode, existingVisit]);
 
-  // Fetch patient's corporate/yojna category to enable billing override
+  // Fetch patient's corporate/yojna category (billing override).
   useEffect(() => {
     const fetchPatientCorporate = async () => {
-      const { data } = await (supabase as any).from('patients').select('corporate').eq('id', patient.id).maybeSingle();
+      const { data } = await (supabase as any)
+        .from('patients')
+        .select('corporate')
+        .eq('id', patient.id)
+        .maybeSingle();
       if (data?.corporate) setPatientCorporate(data.corporate);
     };
     fetchPatientCorporate();
@@ -278,8 +237,7 @@ export const VisitRegistrationForm: React.FC<VisitRegistrationFormProps> = ({
             status: formData.status || 'scheduled',
             patient_type: formData.patientType,
             referring_doctor_id: selectedIds.referringDoctorId || null,
-            // Returning patients never get an RM credited (repeat-referral guard).
-            relationship_manager_id: isReturningPatient ? null : (selectedIds.relationshipManagerId || null),
+            relationship_manager_id: selectedIds.relationshipManagerId || null,
             claim_id: formData.claimId || null,
             card_no: formData.cardNo || null,
             thumb_registration_no: formData.thumbRegistrationNo,
@@ -372,8 +330,7 @@ export const VisitRegistrationForm: React.FC<VisitRegistrationFormProps> = ({
             status: formData.status || 'scheduled',
             patient_type: formData.patientType,
             referring_doctor_id: selectedIds.referringDoctorId || null,
-            // Returning patients never get an RM credited (repeat-referral guard).
-            relationship_manager_id: isReturningPatient ? null : (selectedIds.relationshipManagerId || null),
+            relationship_manager_id: selectedIds.relationshipManagerId || null,
             claim_id: formData.claimId,
           card_no: formData.cardNo || null,
             thumb_registration_no: formData.thumbRegistrationNo,
@@ -620,7 +577,6 @@ export const VisitRegistrationForm: React.FC<VisitRegistrationFormProps> = ({
             handleInputChange={handleInputChange}
             existingVisit={existingVisit}
             patientCorporate={patientCorporate}
-            hideRelationshipManager={isReturningPatient}
           />
 
           <VisitFormActions

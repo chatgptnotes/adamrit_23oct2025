@@ -18,6 +18,13 @@ import {
 export interface SearchableSelectOption {
   value: string
   label: string
+  /**
+   * Optional text shown in the trigger once this option is selected. When
+   * omitted the full `label` is shown. Useful when the dropdown list should be
+   * searchable by a rich label (e.g. "Name (code)") but the chosen value
+   * should display compactly (e.g. just the code).
+   */
+  selectedLabel?: string
 }
 
 interface SearchableSelectProps {
@@ -36,6 +43,8 @@ interface SearchableSelectProps {
    */
   onCreateOption?: (label: string) => void | Promise<void>
   createOptionLabel?: (input: string) => string
+  /** When true the control is read-only and cannot be opened or changed. */
+  disabled?: boolean
 }
 
 export function SearchableSelect({
@@ -48,6 +57,7 @@ export function SearchableSelect({
   className,
   onCreateOption,
   createOptionLabel = (input) => `Add "${input}"`,
+  disabled = false,
 }: SearchableSelectProps) {
   const [open, setOpen] = React.useState(false)
   const [search, setSearch] = React.useState("")
@@ -72,16 +82,17 @@ export function SearchableSelect({
   }, [options, search])
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open && !disabled} onOpenChange={(o) => !disabled && setOpen(o)}>
       <PopoverTrigger asChild>
         <Button
           variant="outline"
           role="combobox"
           aria-expanded={open}
+          disabled={disabled}
           className={cn("w-full justify-between text-left", className)}
         >
           <span className="truncate">
-            {selectedOption ? selectedOption.label : placeholder}
+            {selectedOption ? (selectedOption.selectedLabel ?? selectedOption.label) : placeholder}
           </span>
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
