@@ -32,6 +32,7 @@ interface VisitDetailsSectionProps {
   handleInputChange: (field: string, value: string) => void;
   existingVisit?: any; // Optional existing visit data for edit mode
   patientCorporate?: string; // Patient's original corporate/yojna category
+  hideRelationshipManager?: boolean; // Hide RM for returning patients (anti repeat-referral)
 }
 
 export const VisitDetailsSection: React.FC<VisitDetailsSectionProps> = ({
@@ -40,7 +41,8 @@ export const VisitDetailsSection: React.FC<VisitDetailsSectionProps> = ({
   formData,
   handleInputChange,
   existingVisit,
-  patientCorporate
+  patientCorporate,
+  hideRelationshipManager
 }) => {
   const { hospitalConfig } = useAuth();
   const { diagnoses, isLoading: isLoadingDiagnoses, addDiagnosisAsync } = useDiagnoses();
@@ -513,32 +515,34 @@ export const VisitDetailsSection: React.FC<VisitDetailsSectionProps> = ({
           />
         </div>
 
-        {/* Relationship Manager */}
-        <div className="space-y-2">
-          <Label htmlFor="relationshipManager" className="text-sm font-medium">
-            Relationship Manager
-          </Label>
-          <SearchableSelect
-            options={[
-              { value: 'none', label: 'None' },
-              ...relationshipManagers.map((manager) => ({
-                value: manager.name,
-                label: manager.code ? `${manager.name} (${manager.code})` : manager.name
-              }))
-            ]}
-            value={formData.relationshipManager || ''}
-            onValueChange={(value) => handleInputChange('relationshipManager', value)}
-            placeholder={
-              isLoadingRelationshipManagers
-                ? "Loading..."
-                : relationshipManagers.length === 0
-                ? "No managers available"
-                : "Select Relationship Manager"
-            }
-            searchPlaceholder="Search managers..."
-            emptyText="No manager found."
-          />
-        </div>
+        {/* Relationship Manager — hidden for returning patients to prevent repeat referral credit */}
+        {!hideRelationshipManager && (
+          <div className="space-y-2">
+            <Label htmlFor="relationshipManager" className="text-sm font-medium">
+              Relationship Manager
+            </Label>
+            <SearchableSelect
+              options={[
+                { value: 'none', label: 'None' },
+                ...relationshipManagers.map((manager) => ({
+                  value: manager.name,
+                  label: manager.code ? `${manager.name} (${manager.code})` : manager.name
+                }))
+              ]}
+              value={formData.relationshipManager || ''}
+              onValueChange={(value) => handleInputChange('relationshipManager', value)}
+              placeholder={
+                isLoadingRelationshipManagers
+                  ? "Loading..."
+                  : relationshipManagers.length === 0
+                  ? "No managers available"
+                  : "Select Relationship Manager"
+              }
+              searchPlaceholder="Search managers..."
+              emptyText="No manager found."
+            />
+          </div>
+        )}
 
         {/* Claim Id */}
         <div className="space-y-2">
