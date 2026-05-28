@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
@@ -11,8 +11,17 @@ import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { toast } from 'sonner';
-import { Wallet, Edit2, Trash2, Plus, CheckCircle, AlertTriangle, Calendar, ArrowRight, DollarSign, FileText } from 'lucide-react';
+import { Wallet, Edit2, Trash2, Plus, CheckCircle, AlertTriangle, Calendar, ArrowRight, DollarSign, FileText, Users, Upload, FolderOpen, Eye, FileSpreadsheet, Search, HardDrive } from 'lucide-react';
+import {
+  validateOfficeFile,
+  sanitizeStorageFilename,
+  inferOfficeKindFromName,
+  OFFICE_ACCEPT_ATTR,
+  type OfficeFileKind,
+} from '@/lib/office-upload-validation';
+import { DirectorFilePreviewDialog } from '@/components/DirectorFilePreviewDialog';
 import { DirectorKpiCards } from '@/components/DirectorKpiCards';
+import { DailyRevenueReportSection } from '@/components/DailyRevenueReportSection';
 import { usePaymentDeadlines, type PaymentDeadline } from '@/hooks/usePaymentDeadlines';
 
 const DIRECTOR_EMAILS = ['cmd@hopehospital.com', 'finance@hopehospital.com'];
@@ -30,6 +39,12 @@ interface DeadlineFormData {
   amount: string;
   due_date: string;
   notes: string;
+}
+
+interface DirectorFile {
+  name: string;
+  size: number | null;
+  updatedAt: string | null;
 }
 
 const isOverdue = (dueDate: string, status: 'pending' | 'paid' | 'overdue'): boolean => {
@@ -51,6 +66,18 @@ export default function DirectorDashboard() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
   const initialFormData: DeadlineFormData = { service_name: '', amount: '', due_date: '', notes: '' };
   const [formData, setFormData] = useState<DeadlineFormData>(initialFormData);
+  const [isUploadingActionItems, setIsUploadingActionItems] = useState(false);
+  const actionItemsFileInputRef = useRef<HTMLInputElement>(null);
+  const [isFilesDialogOpen, setIsFilesDialogOpen] = useState(false);
+  const [directorFiles, setDirectorFiles] = useState<DirectorFile[]>([]);
+  const [isLoadingFiles, setIsLoadingFiles] = useState(false);
+  const [fileToDelete, setFileToDelete] = useState<string | null>(null);
+  const [isDeletingFile, setIsDeletingFile] = useState(false);
+  const [pendingUpload, setPendingUpload] = useState<{ file: File; targetName: string } | null>(null);
+  const [previewState, setPreviewState] = useState<{ name: string; signedUrl: string } | null>(null);
+  const [isPreparingPreview, setIsPreparingPreview] = useState(false);
+  const [filesSearch, setFilesSearch] = useState('');
+  const [isDraggingFile, setIsDraggingFile] = useState(false);
 
   // Access guard via effect (not during render)
   useEffect(() => {
@@ -218,20 +245,236 @@ export default function DirectorDashboard() {
     setFormData(initialFormData);
   };
 
-  // Open a preview of the Executive Action Items PDF bundled with the app.
-  // Synchronous window.open inside the click handler so the browser counts
-  // it as a user-initiated popup and doesn't block it.
-  const ACTION_ITEMS_FILE_NAME = 'Executive_Action_Items_Final.pdf';
-  const handleViewActionItems = () => {
-    const fileUrl = new URL(
-      `${import.meta.env.BASE_URL}${ACTION_ITEMS_FILE_NAME}`,
-      window.location.origin,
-    ).href;
-    const opened = window.open(fileUrl, '_blank', 'noopener,noreferrer');
-    if (!opened) {
-      // Popup blocked — navigate in the same tab as a last resort.
-      window.location.href = fileUrl;
+  // Director's Files — private Supabase bucket, directors only.
+  // Bucket SELECT RLS gates reads; uploads go in under the file's original
+  // name and overwrite same-named files. List shows everything in the bucket.
+  const DIRECTOR_FILES_BUCKET = 'director-documents';
+  const DIRECTOR_FILES_SIGNED_URL_TTL_SECONDS = 300;
+  const DIRECTOR_FILES_MAX_BYTES = 25 * 1024 * 1024;
+
+  const loadDirectorFiles = async () => {
+    setIsLoadingFiles(true);
+    try {
+      const { data, error: listError } = await supabase.storage
+        .from(DIRECTOR_FILES_BUCKET)
+        .list('', {
+          limit: 100,
+          sortBy: { column: 'updated_at', order: 'desc' },
+        });
+      if (listError) throw listError;
+      // The bucket contains real files only — Supabase sometimes returns a
+      // placeholder row named '.emptyFolderPlaceholder' which we filter out.
+      const files: DirectorFile[] = (data ?? [])
+        .filter((entry) => entry.name && entry.name !== '.emptyFolderPlaceholder')
+        .map((entry) => ({
+          name: entry.name,
+          size: (entry.metadata as { size?: number } | null)?.size ?? null,
+          updatedAt: entry.updated_at ?? entry.created_at ?? null,
+        }));
+      setDirectorFiles(files);
+    } catch (err) {
+      console.error('Failed to list director files:', getErrorMessage(err));
+      toast.error('Could not load files. You may not have permission.');
+      setDirectorFiles([]);
+    } finally {
+      setIsLoadingFiles(false);
     }
+  };
+
+  const handleOpenFilesDialog = () => {
+    setIsFilesDialogOpen(true);
+    void loadDirectorFiles();
+  };
+
+  const handleViewFile = async (name: string) => {
+    // Open the in-app preview dialog instead of a new browser tab. The
+    // dialog dispatches per file kind (PDF iframe, DOCX via mammoth, XLSX
+    // via SheetJS). This also sidesteps the entire popup-block problem.
+    if (!inferOfficeKindFromName(name)) {
+      toast.error('This file type is not supported for preview. Use Download instead.');
+      return;
+    }
+    setIsPreparingPreview(true);
+    try {
+      const { data, error: signError } = await supabase.storage
+        .from(DIRECTOR_FILES_BUCKET)
+        .createSignedUrl(name, DIRECTOR_FILES_SIGNED_URL_TTL_SECONDS);
+      if (signError || !data?.signedUrl) {
+        throw signError ?? new Error('Could not generate file URL.');
+      }
+      setPreviewState({ name, signedUrl: data.signedUrl });
+    } catch (err) {
+      console.error('Failed to open file:', getErrorMessage(err));
+      toast.error('Could not open the file. Please try again.');
+    } finally {
+      setIsPreparingPreview(false);
+    }
+  };
+
+  // Map a file kind to a small display label shown in the file list row.
+  const labelForKind = (kind: OfficeFileKind | null): string => {
+    switch (kind) {
+      case 'pdf': return 'PDF';
+      case 'docx': return 'Word';
+      case 'xlsx':
+      case 'xls': return 'Excel';
+      default: return 'File';
+    }
+  };
+
+  // Per-kind visual treatment for the file row icon: a coloured tile with
+  // a kind-appropriate Lucide glyph. Makes the list scannable at a glance.
+  const styleForKind = (kind: OfficeFileKind | null) => {
+    switch (kind) {
+      case 'pdf':
+        return { Icon: FileText, tile: 'bg-red-50 ring-red-100', icon: 'text-red-600', badge: 'border-red-200 bg-red-50 text-red-700' };
+      case 'docx':
+        return { Icon: FileText, tile: 'bg-blue-50 ring-blue-100', icon: 'text-blue-600', badge: 'border-blue-200 bg-blue-50 text-blue-700' };
+      case 'xlsx':
+      case 'xls':
+        return { Icon: FileSpreadsheet, tile: 'bg-emerald-50 ring-emerald-100', icon: 'text-emerald-600', badge: 'border-emerald-200 bg-emerald-50 text-emerald-700' };
+      default:
+        return { Icon: FileText, tile: 'bg-gray-100 ring-gray-200', icon: 'text-gray-500', badge: 'border-gray-200 bg-gray-50 text-gray-600' };
+    }
+  };
+
+  // Human-friendly upload timestamp: "Just now", "12 min ago", "Today at
+  // 11:25 AM", "Yesterday at 3:42 PM", or "12 May 2026, 11:25 AM".
+  const formatFriendlyDate = (iso: string | null): string => {
+    if (!iso) return '—';
+    const date = new Date(iso);
+    if (Number.isNaN(date.getTime())) return '—';
+    const now = new Date();
+    const diffMin = Math.floor((now.getTime() - date.getTime()) / 60_000);
+    if (diffMin < 1) return 'Just now';
+    if (diffMin < 60) return `${diffMin} min ago`;
+    const time = date.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', hour12: true });
+    const sameDay = date.toDateString() === now.toDateString();
+    if (sameDay) return `Today at ${time}`;
+    const yesterday = new Date(now.getTime() - 86_400_000);
+    if (date.toDateString() === yesterday.toDateString()) return `Yesterday at ${time}`;
+    const day = date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+    return `${day}, ${time}`;
+  };
+
+  // Filter the file list by the search query (case-insensitive substring).
+  const visibleDirectorFiles = useMemo(() => {
+    const q = filesSearch.trim().toLowerCase();
+    if (!q) return directorFiles;
+    return directorFiles.filter((f) => f.name.toLowerCase().includes(q));
+  }, [directorFiles, filesSearch]);
+
+  // Total bytes across all (unfiltered) files for the footer summary.
+  const totalFilesBytes = useMemo(
+    () => directorFiles.reduce((sum, f) => sum + (f.size ?? 0), 0),
+    [directorFiles],
+  );
+
+  const handleConfirmDeleteFile = async () => {
+    if (!fileToDelete) return;
+    setIsDeletingFile(true);
+    try {
+      const { error: removeError } = await supabase.storage
+        .from(DIRECTOR_FILES_BUCKET)
+        .remove([fileToDelete]);
+      if (removeError) throw removeError;
+      toast.success(`Deleted "${fileToDelete}".`);
+      setFileToDelete(null);
+      await loadDirectorFiles();
+    } catch (err) {
+      console.error('Delete failed:', getErrorMessage(err));
+      toast.error('Could not delete the file. You may not have permission.');
+    } finally {
+      setIsDeletingFile(false);
+    }
+  };
+
+  const handlePickActionItemsFile = () => {
+    actionItemsFileInputRef.current?.click();
+  };
+
+  const performUpload = async (file: File, targetName: string) => {
+    setIsUploadingActionItems(true);
+    try {
+      const { error: uploadError } = await supabase.storage
+        .from(DIRECTOR_FILES_BUCKET)
+        .upload(targetName, file, {
+          upsert: true,
+          contentType: file.type || undefined,
+          cacheControl: '60',
+        });
+      if (uploadError) throw uploadError;
+      toast.success(`Uploaded "${targetName}".`);
+      // Always refresh so the next dialog open shows the new file.
+      await loadDirectorFiles();
+    } catch (err) {
+      console.error('Upload failed:', getErrorMessage(err));
+      toast.error('Upload failed. Please check your permissions and try again.');
+    } finally {
+      setIsUploadingActionItems(false);
+    }
+  };
+
+  // Shared upload pipeline used by both the file picker and drag-and-drop:
+  // validate → sanitize → conflict-check → upload (or queue confirmation).
+  const processFileForUpload = async (file: File) => {
+    const result = await validateOfficeFile(file);
+    if (!result.ok) {
+      toast.error(result.reason);
+      return;
+    }
+    const targetName = sanitizeStorageFilename(file.name);
+    if (!targetName) {
+      toast.error('Filename is not valid after sanitization.');
+      return;
+    }
+    const conflict = directorFiles.some((f) => f.name === targetName);
+    if (conflict) {
+      setPendingUpload({ file, targetName });
+      return;
+    }
+    await performUpload(file, targetName);
+  };
+
+  const handleUploadActionItems = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    // Always clear the input so re-picking the same filename still fires onChange.
+    e.target.value = '';
+    if (!file) return;
+    await processFileForUpload(file);
+  };
+
+  const handleFilesDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    if (!isDraggingFile) setIsDraggingFile(true);
+  };
+
+  const handleFilesDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    // Only clear the highlight when the pointer leaves the dropzone itself,
+    // not when it crosses into a child element.
+    if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+    setIsDraggingFile(false);
+  };
+
+  const handleFilesDrop = async (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDraggingFile(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) await processFileForUpload(file);
+  };
+
+  const handleConfirmReplaceUpload = async () => {
+    if (!pendingUpload) return;
+    const { file, targetName } = pendingUpload;
+    setPendingUpload(null);
+    await performUpload(file, targetName);
+  };
+
+  const formatFileSize = (bytes: number | null): string => {
+    if (bytes == null) return '—';
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
   const getStatusBadge = (deadline: PaymentDeadline) => {
@@ -253,11 +496,29 @@ export default function DirectorDashboard() {
           <Button
             variant="outline"
             className="gap-2"
-            onClick={handleViewActionItems}
+            onClick={() => {
+              const el = document.getElementById('daily-revenue-report');
+              if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }}
           >
-            <FileText className="h-4 w-4 text-blue-600" />
-            Executive Action Items
+            <Users className="h-4 w-4 text-emerald-600" />
+            Daily Revenue Report
           </Button>
+          <Button
+            variant="outline"
+            className="gap-2"
+            onClick={handleOpenFilesDialog}
+          >
+            <FolderOpen className="h-4 w-4 text-blue-600" />
+            Director's Files
+          </Button>
+          <input
+            ref={actionItemsFileInputRef}
+            type="file"
+            accept={OFFICE_ACCEPT_ATTR}
+            className="hidden"
+            onChange={handleUploadActionItems}
+          />
           <p className="text-sm text-gray-600">{user?.email}</p>
         </div>
       </div>
@@ -425,6 +686,9 @@ export default function DirectorDashboard() {
         </CardContent>
       </Card>
 
+      {/* Daily Revenue Report Section */}
+      <DailyRevenueReportSection />
+
       {/* Navigation Cards Section */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Card className="hover:shadow-lg transition-shadow border-l-4 border-l-purple-500">
@@ -457,6 +721,211 @@ export default function DirectorDashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Director's Files Dialog */}
+      <Dialog open={isFilesDialogOpen} onOpenChange={setIsFilesDialogOpen}>
+        <DialogContent
+          className="max-w-3xl"
+          onDragOver={handleFilesDragOver}
+          onDragLeave={handleFilesDragLeave}
+          onDrop={handleFilesDrop}
+        >
+          <DialogHeader>
+            <div className="flex items-start gap-3">
+              <div className="rounded-xl bg-blue-50 ring-1 ring-blue-100 p-2.5">
+                <FolderOpen className="h-5 w-5 text-blue-600" />
+              </div>
+              <div className="flex-1">
+                <DialogTitle className="text-lg">Director's Files</DialogTitle>
+                <p className="text-sm text-gray-500 mt-0.5">
+                  Private documents — PDF, Word, and Excel. Visible only to directors.
+                </p>
+              </div>
+            </div>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            {/* Search + Upload row */}
+            <div className="flex items-center gap-2">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+                <Input
+                  type="search"
+                  placeholder="Search files…"
+                  value={filesSearch}
+                  onChange={(e) => setFilesSearch(e.target.value)}
+                  className="pl-9"
+                  aria-label="Search files by name"
+                />
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                className="gap-2 shrink-0"
+                onClick={handlePickActionItemsFile}
+                disabled={isUploadingActionItems}
+              >
+                <Upload className="h-4 w-4 text-emerald-600" />
+                {isUploadingActionItems ? 'Uploading…' : 'Upload file'}
+              </Button>
+            </div>
+
+            {/* File list / states */}
+            <div
+              className={`relative rounded-lg border transition-colors ${
+                isDraggingFile ? 'border-emerald-400 bg-emerald-50/40 border-dashed border-2' : 'border-gray-200'
+              }`}
+            >
+              {isDraggingFile && (
+                <div className="absolute inset-0 z-10 flex flex-col items-center justify-center pointer-events-none bg-emerald-50/80 rounded-lg">
+                  <Upload className="h-10 w-10 text-emerald-600 mb-2" />
+                  <p className="font-medium text-emerald-800">Drop to upload</p>
+                  <p className="text-xs text-emerald-700/80">PDF, Word, or Excel · up to 25 MB</p>
+                </div>
+              )}
+
+              {isLoadingFiles ? (
+                <div className="flex justify-center py-12">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500" role="status" aria-label="Loading files" />
+                </div>
+              ) : directorFiles.length === 0 ? (
+                <div className="text-center py-12 px-6">
+                  <div className="mx-auto h-14 w-14 rounded-full bg-blue-50 flex items-center justify-center mb-3">
+                    <FolderOpen className="h-7 w-7 text-blue-500" />
+                  </div>
+                  <p className="font-medium text-gray-800">No files yet</p>
+                  <p className="text-sm text-gray-500 mt-1">
+                    Drag a file here, or click <span className="font-medium">Upload file</span> above.
+                  </p>
+                </div>
+              ) : visibleDirectorFiles.length === 0 ? (
+                <div className="text-center py-10 px-6 text-sm text-gray-500">
+                  No files match "<span className="font-medium">{filesSearch}</span>".
+                </div>
+              ) : (
+                <ul className="divide-y divide-gray-100 max-h-[60vh] overflow-y-auto">
+                  {visibleDirectorFiles.map((file) => {
+                    const kind = inferOfficeKindFromName(file.name);
+                    const style = styleForKind(kind);
+                    const Icon = style.Icon;
+                    return (
+                      <li
+                        key={file.name}
+                        className="group flex items-center gap-3 p-3 hover:bg-gray-50 transition-colors"
+                      >
+                        <div className={`shrink-0 rounded-lg ring-1 p-2.5 ${style.tile}`}>
+                          <Icon className={`h-5 w-5 ${style.icon}`} />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <p className="font-medium text-gray-900 truncate" title={file.name}>
+                              {file.name}
+                            </p>
+                            <Badge
+                              variant="outline"
+                              className={`text-[10px] uppercase tracking-wide shrink-0 ${style.badge}`}
+                            >
+                              {labelForKind(kind)}
+                            </Badge>
+                          </div>
+                          <p className="text-xs text-gray-500 mt-0.5">
+                            {formatFileSize(file.size)} · {formatFriendlyDate(file.updatedAt)}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="gap-1.5 text-blue-700 hover:text-blue-800 hover:bg-blue-50"
+                            onClick={() => handleViewFile(file.name)}
+                            disabled={isPreparingPreview}
+                          >
+                            <Eye className="h-4 w-4" />
+                            <span className="hidden sm:inline">Preview</span>
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            aria-label={`Delete ${file.name}`}
+                            className="text-gray-500 hover:text-red-600 hover:bg-red-50"
+                            onClick={() => setFileToDelete(file.name)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+
+            {/* Summary footer */}
+            {directorFiles.length > 0 && (
+              <div className="flex items-center justify-between text-xs text-gray-500 px-1">
+                <span>
+                  {filesSearch
+                    ? `${visibleDirectorFiles.length} of ${directorFiles.length} `
+                    : `${directorFiles.length} `}
+                  {directorFiles.length === 1 ? 'file' : 'files'}
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <HardDrive className="h-3 w-3" />
+                  {formatFileSize(totalFilesBytes)} total
+                </span>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsFilesDialogOpen(false)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* File Preview Dialog (PDF / DOCX / XLSX / XLS) */}
+      <DirectorFilePreviewDialog
+        open={!!previewState}
+        onOpenChange={(open) => !open && setPreviewState(null)}
+        fileName={previewState?.name ?? null}
+        signedUrl={previewState?.signedUrl ?? null}
+      />
+
+      {/* Replace File Confirmation Dialog */}
+      <Dialog open={!!pendingUpload} onOpenChange={(open) => !open && setPendingUpload(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Replace existing file?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-gray-600">
+            A file named <span className="font-medium">{pendingUpload?.targetName}</span> already exists in Director's Files. Uploading will replace the existing copy. This cannot be undone.
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPendingUpload(null)} disabled={isUploadingActionItems}>Cancel</Button>
+            <Button onClick={handleConfirmReplaceUpload} disabled={isUploadingActionItems}>
+              {isUploadingActionItems ? 'Uploading…' : 'Replace'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete File Confirmation Dialog */}
+      <Dialog open={!!fileToDelete} onOpenChange={(open) => !open && setFileToDelete(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete file?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-gray-600">
+            This will permanently delete <span className="font-medium">{fileToDelete}</span> from Supabase. This cannot be undone.
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setFileToDelete(null)} disabled={isDeletingFile}>Cancel</Button>
+            <Button variant="destructive" onClick={handleConfirmDeleteFile} disabled={isDeletingFile}>
+              {isDeletingFile ? 'Deleting…' : 'Delete'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={!!showDeleteConfirm} onOpenChange={(open) => !open && setShowDeleteConfirm(null)}>
