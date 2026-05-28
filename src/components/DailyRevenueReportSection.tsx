@@ -516,6 +516,52 @@ export function DailyRevenueReportSection() {
     onError: (err) => toast.error(getErrorMessage(err)),
   });
 
+  // Apply Default Cut % to every visible non-Direct row — overwrites any
+  // previously-saved cut. Direct rows are skipped (their cut stays 0).
+  const applyDefaultPercentMutation = useMutation({
+    mutationFn: async () => {
+      const targets = rows.filter((r) => !isDirect(r.rm_name) && r.cost > 0);
+      let updated = 0;
+      let inserted = 0;
+      for (const r of targets) {
+        const newCut = Math.round((r.cost * defaultCutPercent) / 100);
+        if (r.overrideId) {
+          const { error } = await supabase
+            .from('daily_revenue_entries' as never)
+            .update({ cut: newCut, updated_at: new Date().toISOString() } as never)
+            .eq('id', r.overrideId);
+          if (error) { console.warn('apply % update failed', error.message); continue; }
+          updated++;
+        } else if (r.visitId) {
+          // No override yet — create one with the new cut so it sticks.
+          const rowHospital = r.hospital || hospitalType || 'hope';
+          const { error } = await supabase
+            .from('daily_revenue_entries' as never)
+            .insert([
+              {
+                entry_date: reportDate,
+                visit_id: r.visitId,
+                patient_name: r.patient_name,
+                department: r.department || null,
+                rm_name: r.rm_name || null,
+                cost: r.cost,
+                cut: newCut,
+                hospital_type: rowHospital,
+              } as never,
+            ]);
+          if (error) { console.warn('apply % insert failed', error.message); continue; }
+          inserted++;
+        }
+      }
+      return { updated, inserted, skipped: rows.length - targets.length };
+    },
+    onSuccess: (res) => {
+      invalidate();
+      toast.success(`Applied ${defaultCutPercent}% — ${res.updated} updated, ${res.inserted} created, ${res.skipped} skipped (Direct/0-cost)`);
+    },
+    onError: (err) => toast.error(getErrorMessage(err)),
+  });
+
   const openInlineEdit = (row: DisplayRow) => {
     setEditingCutId(row.key);
     setDraftCost(String(row.cost));
@@ -723,6 +769,15 @@ export function DailyRevenueReportSection() {
             className="w-20"
             title="Auto-suggested cut as a % of cost for rows that haven't been saved yet"
           />
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => applyDefaultPercentMutation.mutate()}
+            disabled={applyDefaultPercentMutation.isPending || rows.length === 0}
+            title={`Recalculate every visible non-Direct row's cut to ${defaultCutPercent}% of its cost. Overwrites any saved values.`}
+          >
+            {applyDefaultPercentMutation.isPending ? 'Applying...' : 'Apply %'}
+          </Button>
           <Label htmlFor="daily_report_date" className="text-sm">Date</Label>
           <Input
             id="daily_report_date"
