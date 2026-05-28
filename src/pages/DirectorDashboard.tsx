@@ -51,7 +51,6 @@ export default function DirectorDashboard() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
   const initialFormData: DeadlineFormData = { service_name: '', amount: '', due_date: '', notes: '' };
   const [formData, setFormData] = useState<DeadlineFormData>(initialFormData);
-  const [isLoadingActionItems, setIsLoadingActionItems] = useState(false);
 
   // Access guard via effect (not during render)
   useEffect(() => {
@@ -219,45 +218,19 @@ export default function DirectorDashboard() {
     setFormData(initialFormData);
   };
 
-  // Open a preview of the Executive Action Items PDF.
-  // Tries Supabase first (so an updated copy is shown if uploaded there),
-  // then falls back to the copy bundled with the app so it always opens.
+  // Open a preview of the Executive Action Items PDF bundled with the app.
+  // Synchronous window.open inside the click handler so the browser counts
+  // it as a user-initiated popup and doesn't block it.
   const ACTION_ITEMS_FILE_NAME = 'Executive_Action_Items_Final.pdf';
-  const handleViewActionItems = async () => {
-    setIsLoadingActionItems(true);
-    try {
-      // Build an absolute URL for the bundled copy so it resolves correctly
-      // no matter the host or base path.
-      const bundledUrl = new URL(
-        `${import.meta.env.BASE_URL}${ACTION_ITEMS_FILE_NAME}`,
-        window.location.origin,
-      ).href;
-
-      let fileUrl = bundledUrl;
-      try {
-        const { data } = await (supabase as any)
-          .from('file_uploads')
-          .select('file_url')
-          .ilike('file_name', `%${ACTION_ITEMS_FILE_NAME}%`)
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle();
-        if (data?.file_url) fileUrl = data.file_url;
-      } catch {
-        // Ignore lookup failures — fall back to the bundled copy.
-      }
-
-      // Let the browser render the PDF natively in a new tab. Simpler and
-      // avoids about:blank + injected-iframe relative-URL issues.
-      const opened = window.open(fileUrl, '_blank', 'noopener,noreferrer');
-      if (!opened) {
-        toast.error('Popup blocked. Please allow popups for this site.');
-      }
-    } catch (err) {
-      console.error('Failed to load action items:', getErrorMessage(err));
-      toast.error('Failed to load the file. Please try again.');
-    } finally {
-      setIsLoadingActionItems(false);
+  const handleViewActionItems = () => {
+    const fileUrl = new URL(
+      `${import.meta.env.BASE_URL}${ACTION_ITEMS_FILE_NAME}`,
+      window.location.origin,
+    ).href;
+    const opened = window.open(fileUrl, '_blank', 'noopener,noreferrer');
+    if (!opened) {
+      // Popup blocked — navigate in the same tab as a last resort.
+      window.location.href = fileUrl;
     }
   };
 
@@ -281,10 +254,9 @@ export default function DirectorDashboard() {
             variant="outline"
             className="gap-2"
             onClick={handleViewActionItems}
-            disabled={isLoadingActionItems}
           >
             <FileText className="h-4 w-4 text-blue-600" />
-            {isLoadingActionItems ? 'Opening…' : 'Executive Action Items'}
+            Executive Action Items
           </Button>
           <p className="text-sm text-gray-600">{user?.email}</p>
         </div>
