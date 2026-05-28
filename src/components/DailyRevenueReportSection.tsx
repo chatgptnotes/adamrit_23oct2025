@@ -40,6 +40,8 @@ interface OverrideRow {
 
 type CostSource = 'override' | 'advance' | 'final_pay' | 'package' | 'none';
 
+type RowCategory = 'main' | 'direct' | 'manual';
+
 interface DisplayRow {
   key: string;
   visitId: string | null;
@@ -48,12 +50,16 @@ interface DisplayRow {
   department: string;
   rm_name: string;
   hospital: string;
+  patient_type: string; // 'OPD' | 'IPD' | '' (manual entries / unknown)
   cost: number;
   cut: number;
   cutIsSuggested: boolean; // true when cut was computed from default %, not saved
   cost_source: CostSource;
   isManual: boolean;
+  category: RowCategory;
 }
+
+type PatientTypeFilter = 'all' | 'OPD' | 'IPD';
 
 const COST_SOURCE_LABEL: Record<CostSource, string> = {
   override: 'man',
@@ -96,6 +102,15 @@ const toNumber = (v: unknown): number => {
   return isNaN(n) ? 0 : n;
 };
 
+// Treat blank RM as a walk-in "Direct" patient (matches the handwritten lists'
+// "Direct PT" convention). Also covers the master relationship_managers entry
+// literally named DIRECT (code 1012) so the display is consistent.
+const isDirect = (rm: string | null | undefined): boolean => {
+  if (!rm) return true;
+  const s = rm.trim().toLowerCase();
+  return s === '' || s === 'direct';
+};
+
 export function DailyRevenueReportSection() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -103,6 +118,7 @@ export function DailyRevenueReportSection() {
   const [editingCutId, setEditingCutId] = useState<string | null>(null);
   const [draftCut, setDraftCut] = useState<string>('');
   const [draftCost, setDraftCost] = useState<string>('');
+  const [draftRmId, setDraftRmId] = useState<string>(''); // '' means leave unchanged
   const [isManualDialogOpen, setIsManualDialogOpen] = useState(false);
   const [manualEditId, setManualEditId] = useState<string | null>(null);
   const [manualForm, setManualForm] = useState<ManualFormData>(initialManual);
@@ -110,7 +126,8 @@ export function DailyRevenueReportSection() {
 
   // Default cut % applied to rows without a saved cut. Persists in localStorage.
   const [detailsRow, setDetailsRow] = useState<DisplayRow | null>(null);
-  const [onlyWithRm, setOnlyWithRm] = useState<boolean>(false);
+  const [onlyWithRm, setOnlyWithRm] = useState<boolean>(true);
+  const [patientTypeFilter, setPatientTypeFilter] = useState<PatientTypeFilter>('OPD');
 
   const [defaultCutPercent, setDefaultCutPercent] = useState<number>(() => {
     if (typeof window === 'undefined') return 25;
@@ -159,6 +176,20 @@ export function DailyRevenueReportSection() {
     () => (visitsQuery.data ?? []).map((v) => v.visit_id).filter(Boolean),
     [visitsQuery.data],
   );
+
+  // RM master list — used by the inline RM picker on each row.
+  const rmMasterQuery = useQuery({
+    queryKey: ['dailyRevenueRmMaster'],
+    queryFn: async (): Promise<Array<{ id: string; name: string; code: string | null }>> => {
+      const { data, error } = await supabase
+        .from('relationship_managers' as never)
+        .select('id, name, code')
+        .order('name', { ascending: true });
+      if (error) throw error;
+      return (data ?? []) as unknown as Array<{ id: string; name: string; code: string | null }>;
+    },
+    staleTime: 5 * 60 * 1000, // 5 min — master list rarely changes
+  });
 
   const advanceQuery = useQuery({
     queryKey: ['dailyRevenueAdvance', visitIds.join(',')],
@@ -252,53 +283,97 @@ export function DailyRevenueReportSection() {
         cost_source = 'package';
       }
 
+      // Direct patients (no RM) get no auto-suggested cut — there's no
+      // RM to pay a commission to. A saved cut still wins if it's
+      // explicitly set (e.g., one-off spot payment).
+      // RM priority: override wins → visit FK → patient master text.
+      const rmName = (o?.rm_name && o.rm_name.trim())
+        || v.relationship_managers?.name
+        || v.patients?.relationship_manager
+        || '';
+      const rowIsDirect = isDirect(rmName);
       const savedCut = o ? Number(o.cut) : 0;
       const hasSavedCut = Boolean(o) && savedCut > 0;
-      const suggestedCut = Math.round((cost * defaultCutPercent) / 100);
+      const suggestedCut = rowIsDirect ? 0 : Math.round((cost * defaultCutPercent) / 100);
       return {
         key: `visit-${v.id}`,
         visitId: v.id,
         overrideId: o?.id ?? null,
         patient_name: v.patients?.name ?? '—',
         department: v.appointment_with ?? '',
-        rm_name: v.relationship_managers?.name ?? v.patients?.relationship_manager ?? '',
+        rm_name: rmName,
         hospital: v.patients?.hospital_name ?? '',
+        patient_type: (v.patient_type ?? '').toUpperCase(),
         cost,
         cut: hasSavedCut ? savedCut : suggestedCut,
         cutIsSuggested: !hasSavedCut && suggestedCut > 0,
         cost_source,
         isManual: false,
+        category: rowIsDirect ? 'direct' : 'main',
       };
     });
 
     const manualRows: DisplayRow[] = overrides
       .filter((o) => !o.visit_id)
-      .map((o) => ({
-        key: `manual-${o.id}`,
-        visitId: null,
-        overrideId: o.id,
-        patient_name: o.patient_name,
-        department: o.department ?? '',
-        rm_name: o.rm_name ?? '',
-        hospital: o.hospital_type ?? '',
-        cost: Number(o.cost),
-        cut: Number(o.cut),
-        cutIsSuggested: false,
-        cost_source: 'override' as const,
-        isManual: true,
-      }));
+      .map((o) => {
+        const rmName = o.rm_name ?? '';
+        const rowIsDirect = isDirect(rmName);
+        return {
+          key: `manual-${o.id}`,
+          visitId: null,
+          overrideId: o.id,
+          patient_name: o.patient_name,
+          department: o.department ?? '',
+          rm_name: rmName,
+          hospital: o.hospital_type ?? '',
+          patient_type: '',
+          cost: Number(o.cost),
+          cut: Number(o.cut),
+          cutIsSuggested: false,
+          cost_source: 'override' as const,
+          isManual: true,
+          category: rowIsDirect ? 'direct' : 'manual',
+        };
+      });
 
-    const all = [...visitRows, ...manualRows];
-    return onlyWithRm ? all.filter((r) => r.rm_name && r.rm_name.trim() !== '') : all;
-  }, [visitsQuery.data, overridesQuery.data, advanceQuery.data, finalPayQuery.data, defaultCutPercent, onlyWithRm]);
+    let all = [...visitRows, ...manualRows];
+    if (patientTypeFilter !== 'all') {
+      all = all.filter((r) => r.patient_type === patientTypeFilter);
+    }
+    if (onlyWithRm) {
+      all = all.filter((r) => !isDirect(r.rm_name));
+    }
+    return all;
+  }, [visitsQuery.data, overridesQuery.data, advanceQuery.data, finalPayQuery.data, defaultCutPercent, onlyWithRm, patientTypeFilter]);
 
   const totals = useMemo(
     () => rows.reduce((acc, r) => ({ cost: acc.cost + r.cost, cut: acc.cut + r.cut }), { cost: 0, cut: 0 }),
     [rows],
   );
 
+  // Group rows by category to mirror the handwritten ledger sections.
+  // Render order matches the physical sheets: Main → Direct → Manual / Other.
+  const groupedRows = useMemo(() => {
+    const order: ReadonlyArray<{ category: RowCategory; label: string }> = [
+      { category: 'main', label: 'Main' },
+      { category: 'direct', label: 'Direct' },
+      { category: 'manual', label: 'Manual / Other' },
+    ];
+    return order
+      .map(({ category, label }) => {
+        const groupRows = rows.filter((r) => r.category === category);
+        const subtotal = groupRows.reduce(
+          (acc, r) => ({ cost: acc.cost + r.cost, cut: acc.cut + r.cut }),
+          { cost: 0, cut: 0 },
+        );
+        return { category, label, rows: groupRows, subtotal };
+      })
+      .filter((g) => g.rows.length > 0);
+  }, [rows]);
+
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ['dailyRevenueOverrides'] });
+    queryClient.invalidateQueries({ queryKey: ['dailyRevenueVisits'] });
   };
 
   const saveCutMutation = useMutation({
@@ -311,12 +386,19 @@ export function DailyRevenueReportSection() {
       // Override row is tagged with the visit's hospital, not the editor's.
       const rowHospital = row.hospital || hospitalType || 'hope';
 
+      // Resolve the picked RM from the master list (if any).
+      const pickedRm = draftRmId
+        ? (rmMasterQuery.data ?? []).find((m) => m.id === draftRmId) ?? null
+        : null;
+      const finalRmName = pickedRm?.name ?? row.rm_name ?? null;
+
       if (row.overrideId) {
         const { error } = await supabase
           .from('daily_revenue_entries' as never)
           .update({
             cost,
             cut,
+            rm_name: finalRmName,
             updated_at: new Date().toISOString(),
           } as never)
           .eq('id', row.overrideId);
@@ -328,13 +410,26 @@ export function DailyRevenueReportSection() {
             visit_id: row.visitId,
             patient_name: row.patient_name,
             department: row.department || null,
-            rm_name: row.rm_name || null,
+            rm_name: finalRmName,
             cost,
             cut,
             hospital_type: rowHospital,
           } as never,
         ]);
         if (error) throw error;
+      }
+
+      // Propagate the picked RM back to the visit itself, so other pages
+      // (and future days) see it automatically without a manual override.
+      if (pickedRm && row.visitId) {
+        const { error: visitErr } = await supabase
+          .from('visits')
+          .update({ relationship_manager_id: pickedRm.id } as never)
+          .eq('id', row.visitId);
+        if (visitErr) {
+          // Non-fatal: override already saved. Just warn.
+          console.warn('Failed to update visit RM:', visitErr.message);
+        }
       }
     },
     onSuccess: () => {
@@ -425,6 +520,11 @@ export function DailyRevenueReportSection() {
     setEditingCutId(row.key);
     setDraftCost(String(row.cost));
     setDraftCut(String(row.cut));
+    // Pre-select the current RM in the dropdown if one is in the master list.
+    const match = (rmMasterQuery.data ?? []).find(
+      (m) => m.name.toLowerCase() === (row.rm_name ?? '').toLowerCase(),
+    );
+    setDraftRmId(match?.id ?? '');
   };
 
   const openManualAdd = () => {
@@ -452,6 +552,128 @@ export function DailyRevenueReportSection() {
     else addManualMutation.mutate(manualForm);
   };
 
+  // Open a clean printable view in a new window — strips sidebar, filters,
+  // action icons, and renders only the daily revenue list in a ledger-style
+  // layout. Auto-triggers print dialog, then closes the window.
+  const handlePrint = () => {
+    const printWindow = window.open('', '_blank', 'width=900,height=700');
+    if (!printWindow) {
+      toast.error('Pop-up blocked. Allow pop-ups for this site to print.');
+      return;
+    }
+    const esc = (s: unknown): string =>
+      String(s ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    const fmt = (n: number): string => n.toLocaleString('en-IN');
+    const prettyDate = new Date(reportDate).toLocaleDateString('en-IN', {
+      weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+    });
+    let runningIdx = 0;
+    const sectionsHtml = groupedRows.map((group) => {
+      const rowsHtml = group.rows.map((r) => {
+        runningIdx += 1;
+        const rmDisplay = isDirect(r.rm_name)
+          ? '<span class="pill direct">Direct</span>'
+          : esc(r.rm_name);
+        const typeBadge =
+          r.patient_type === 'OPD' ? '<span class="pill opd">OPD</span>' :
+          r.patient_type === 'IPD' ? '<span class="pill ipd">IPD</span>' : '';
+        return `
+          <tr>
+            <td class="num">${runningIdx}</td>
+            <td>${esc(r.patient_name)} ${typeBadge}</td>
+            <td>${esc(r.hospital).toUpperCase()}</td>
+            <td>${esc(r.department || '—')}</td>
+            <td>${rmDisplay}</td>
+            <td class="right">${fmt(r.cost)}</td>
+            <td class="right">${fmt(r.cut)}</td>
+          </tr>`;
+      }).join('');
+      return `
+        <tr class="section">
+          <td colspan="7">${esc(group.label)}</td>
+        </tr>
+        ${rowsHtml}
+        <tr class="subtotal">
+          <td colspan="5" class="right">${esc(group.label)} Sub-total</td>
+          <td class="right">Rs ${fmt(group.subtotal.cost)}</td>
+          <td class="right">Rs ${fmt(group.subtotal.cut)}</td>
+        </tr>`;
+    }).join('');
+
+    const html = `<!doctype html>
+<html><head>
+<meta charset="utf-8" />
+<title>Daily Revenue Report — ${esc(reportDate)}</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; color: #111; margin: 24px; }
+  h1 { font-size: 22px; margin: 0 0 4px; text-align: center; letter-spacing: 0.3px; }
+  .sub { text-align: center; color: #555; font-size: 13px; margin-bottom: 18px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  thead th { background: #f3f4f6; padding: 7px 8px; text-align: left; font-weight: 600; border-bottom: 2px solid #111; font-size: 11px; text-transform: uppercase; letter-spacing: 0.3px; }
+  thead th.right, td.right { text-align: right; }
+  td { padding: 5px 8px; border-bottom: 1px solid #eee; vertical-align: top; }
+  td.num { color: #666; width: 28px; }
+  tr.section td { background: #ecfdf5; color: #047857; font-weight: 700; font-size: 10px; text-transform: uppercase; letter-spacing: 0.4px; padding: 7px 8px; border-bottom: 1px solid #d1fae5; padding-top: 12px; }
+  tr.subtotal td { background: #f9fafb; font-style: italic; font-size: 11px; color: #444; }
+  tr.grand td { background: #111; color: #fff; font-weight: 700; padding: 10px 8px; font-size: 13px; }
+  .pill { display: inline-block; padding: 1px 5px; border-radius: 3px; font-size: 9px; font-weight: 600; letter-spacing: 0.4px; text-transform: uppercase; margin-left: 4px; }
+  .pill.direct { background: #f3f4f6; color: #555; }
+  .pill.opd { background: #d1fae5; color: #065f46; }
+  .pill.ipd { background: #fed7aa; color: #9a3412; }
+  .meta { display: flex; justify-content: space-between; margin: 12px 0 6px; font-size: 11px; color: #666; }
+  .footer { margin-top: 24px; text-align: center; color: #888; font-size: 10px; border-top: 1px solid #ddd; padding-top: 10px; }
+  @page { size: A4; margin: 14mm; }
+  @media print {
+    body { margin: 0; }
+    tr { page-break-inside: avoid; }
+    tr.section { page-break-after: avoid; }
+  }
+</style>
+</head><body>
+  <h1>Daily Revenue Report — Patient List &amp; RM Cuts</h1>
+  <div class="sub">${esc(prettyDate)}</div>
+  <div class="meta">
+    <div>Rows: ${rows.length}${onlyWithRm ? ' · RM-only' : ''}${patientTypeFilter !== 'all' ? ` · ${esc(patientTypeFilter)}` : ''}</div>
+    <div>Default cut %: ${defaultCutPercent}</div>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Patient Name</th>
+        <th>Hospital</th>
+        <th>Department</th>
+        <th>RM Manager</th>
+        <th class="right">Cost (Rs)</th>
+        <th class="right">Cut (Rs)</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${sectionsHtml || '<tr><td colspan="7" style="text-align:center;padding:24px;color:#888;">No entries for this date</td></tr>'}
+      <tr class="grand">
+        <td colspan="5" class="right">Grand Total</td>
+        <td class="right">Rs ${fmt(totals.cost)}</td>
+        <td class="right">Rs ${fmt(totals.cut)}</td>
+      </tr>
+    </tbody>
+  </table>
+  <div class="footer">Generated ${esc(new Date().toLocaleString('en-IN'))}</div>
+</body></html>`;
+
+    printWindow.document.open();
+    printWindow.document.write(html);
+    printWindow.document.close();
+    printWindow.onload = () => {
+      printWindow.focus();
+      printWindow.print();
+    };
+  };
+
   const isLoading = visitsQuery.isLoading || overridesQuery.isLoading;
   const error = visitsQuery.error ?? overridesQuery.error;
 
@@ -463,6 +685,23 @@ export function DailyRevenueReportSection() {
           <CardTitle>Daily Revenue Report — Patient List & RM Cuts</CardTitle>
         </div>
         <div className="flex items-center gap-2">
+          <div className="inline-flex rounded border border-gray-300 overflow-hidden text-xs" role="group" aria-label="Filter by patient type">
+            {(['all', 'OPD', 'IPD'] as const).map((opt) => (
+              <button
+                key={opt}
+                type="button"
+                onClick={() => setPatientTypeFilter(opt)}
+                className={`px-2 py-1 ${
+                  patientTypeFilter === opt
+                    ? 'bg-emerald-600 text-white'
+                    : 'bg-white text-gray-700 hover:bg-gray-50'
+                } ${opt !== 'all' ? 'border-l border-gray-300' : ''}`}
+                aria-pressed={patientTypeFilter === opt}
+              >
+                {opt === 'all' ? 'All' : opt}
+              </button>
+            ))}
+          </div>
           <label className="flex items-center gap-1 text-sm select-none cursor-pointer">
             <input
               type="checkbox"
@@ -492,7 +731,7 @@ export function DailyRevenueReportSection() {
             onChange={(e) => setReportDate(e.target.value)}
             className="w-44"
           />
-          <Button variant="outline" size="sm" className="gap-2" onClick={() => window.print()}>
+          <Button variant="outline" size="sm" className="gap-2" onClick={handlePrint}>
             <Printer className="h-4 w-4" /> Print
           </Button>
           <Button size="sm" variant="outline" className="gap-2" onClick={openManualAdd}>
@@ -532,116 +771,170 @@ export function DailyRevenueReportSection() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {rows.map((r, idx) => {
-                  const editing = editingCutId === r.key;
-                  return (
-                    <TableRow key={r.key} className="hover:bg-gray-50">
-                      <TableCell>{idx + 1}</TableCell>
-                      <TableCell className="font-medium">
-                        {r.patient_name}
-                        {r.isManual && <span className="ml-2 text-xs text-gray-500">(manual)</span>}
-                      </TableCell>
-                      <TableCell>
-                        {r.hospital ? (
-                          <span
-                            className={`inline-block px-2 py-0.5 rounded text-[11px] font-medium uppercase ${
-                              r.hospital.toLowerCase().includes('ayushman')
-                                ? 'bg-purple-100 text-purple-700'
-                                : 'bg-blue-100 text-blue-700'
-                            }`}
-                          >
-                            {r.hospital}
-                          </span>
-                        ) : (
-                          '—'
-                        )}
-                      </TableCell>
-                      <TableCell>{r.department || '—'}</TableCell>
-                      <TableCell>{r.rm_name}</TableCell>
-                      <TableCell className="text-right">
-                        {editing ? (
-                          <Input
-                            type="number"
-                            min="0"
-                            value={draftCost}
-                            onChange={(e) => setDraftCost(e.target.value)}
-                            className="h-8 w-24 ml-auto text-right"
-                          />
-                        ) : (
-                          <span className="inline-flex items-baseline gap-1 justify-end">
-                            <span>Rs {formatINR(r.cost)}</span>
-                            {r.cost_source !== 'none' && (
-                              <span
-                                className="text-[10px] uppercase tracking-wide text-gray-400 print:hidden"
-                                title={`Cost source: ${r.cost_source}`}
-                              >
-                                {COST_SOURCE_LABEL[r.cost_source]}
+                {(() => {
+                  let runningIdx = 0;
+                  return groupedRows.map((group) => (
+                    <React.Fragment key={`group-${group.category}`}>
+                      <TableRow key={`header-${group.category}`}>
+                        <TableCell
+                          colSpan={8}
+                          className="bg-emerald-50 text-emerald-700 text-xs font-semibold uppercase tracking-wide"
+                        >
+                          {group.label}
+                        </TableCell>
+                      </TableRow>
+                      {group.rows.map((r) => {
+                        runningIdx += 1;
+                        const idx = runningIdx;
+                        const editing = editingCutId === r.key;
+                        return (
+                          <TableRow key={r.key} className="hover:bg-gray-50">
+                            <TableCell>{idx}</TableCell>
+                            <TableCell className="font-medium">
+                              <span className="inline-flex items-center gap-1.5">
+                                <span>{r.patient_name}</span>
+                                {r.patient_type === 'OPD' && (
+                                  <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-medium uppercase bg-green-100 text-green-700">OPD</span>
+                                )}
+                                {r.patient_type === 'IPD' && (
+                                  <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-medium uppercase bg-orange-100 text-orange-700">IPD</span>
+                                )}
+                                {r.isManual && <span className="text-xs text-gray-500">(manual)</span>}
                               </span>
-                            )}
-                          </span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {editing ? (
-                          <Input
-                            type="number"
-                            min="0"
-                            value={draftCut}
-                            onChange={(e) => setDraftCut(e.target.value)}
-                            className="h-8 w-24 ml-auto text-right"
-                          />
-                        ) : (
-                          <span
-                            className={r.cutIsSuggested ? 'italic text-gray-500' : ''}
-                            title={r.cutIsSuggested ? `Suggested @ ${defaultCutPercent}% — click edit to save the actual value` : undefined}
-                          >
-                            Rs {formatINR(r.cut)}
-                            {r.cutIsSuggested && (
-                              <span className="ml-1 text-[10px] uppercase tracking-wide text-gray-400 print:hidden">sug</span>
-                            )}
-                          </span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right space-x-1 print:hidden">
-                        {editing ? (
-                          <>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              aria-label="Save"
-                              disabled={saveCutMutation.isPending}
-                              onClick={() => saveCutMutation.mutate(r)}
-                            >
-                              <Save className="h-4 w-4 text-green-600" />
-                            </Button>
-                            <Button variant="ghost" size="sm" aria-label="Cancel" onClick={() => setEditingCutId(null)}>
-                              <span className="text-xs">Cancel</span>
-                            </Button>
-                          </>
-                        ) : (
-                          <>
-                            <Button variant="ghost" size="sm" aria-label="View patient details" onClick={() => setDetailsRow(r)}>
-                              <Eye className="h-4 w-4 text-emerald-600" />
-                            </Button>
-                            <Button variant="ghost" size="sm" aria-label="Edit cost/cut" onClick={() => openInlineEdit(r)}>
-                              <Edit2 className="h-4 w-4 text-blue-600" />
-                            </Button>
-                            {r.isManual && r.overrideId && (
-                              <>
-                                <Button variant="ghost" size="sm" aria-label="Full edit" onClick={() => openManualEdit(r)}>
-                                  <span className="text-xs text-gray-600">Edit</span>
-                                </Button>
-                                <Button variant="ghost" size="sm" aria-label="Delete" onClick={() => setDeleteId(r.overrideId!)}>
-                                  <Trash2 className="h-4 w-4 text-red-600" />
-                                </Button>
-                              </>
-                            )}
-                          </>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
+                            </TableCell>
+                            <TableCell>
+                              {r.hospital ? (
+                                <span
+                                  className={`inline-block px-2 py-0.5 rounded text-[11px] font-medium uppercase ${
+                                    r.hospital.toLowerCase().includes('ayushman')
+                                      ? 'bg-purple-100 text-purple-700'
+                                      : 'bg-blue-100 text-blue-700'
+                                  }`}
+                                >
+                                  {r.hospital}
+                                </span>
+                              ) : (
+                                '—'
+                              )}
+                            </TableCell>
+                            <TableCell>{r.department || '—'}</TableCell>
+                            <TableCell>
+                              {editing ? (
+                                <select
+                                  value={draftRmId}
+                                  onChange={(e) => setDraftRmId(e.target.value)}
+                                  className="h-8 w-40 border border-gray-300 rounded px-1 text-sm bg-white"
+                                >
+                                  <option value="">— Direct —</option>
+                                  {(rmMasterQuery.data ?? []).map((m) => (
+                                    <option key={m.id} value={m.id}>
+                                      {m.name}{m.code ? ` (${m.code})` : ''}
+                                    </option>
+                                  ))}
+                                </select>
+                              ) : isDirect(r.rm_name) ? (
+                                <span className="inline-block px-2 py-0.5 rounded text-[11px] font-medium uppercase bg-gray-100 text-gray-700">
+                                  Direct
+                                </span>
+                              ) : (
+                                r.rm_name
+                              )}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              {editing ? (
+                                <Input
+                                  type="number"
+                                  min="0"
+                                  value={draftCost}
+                                  onChange={(e) => setDraftCost(e.target.value)}
+                                  className="h-8 w-24 ml-auto text-right"
+                                />
+                              ) : (
+                                <span className="inline-flex items-baseline gap-1 justify-end">
+                                  <span>Rs {formatINR(r.cost)}</span>
+                                  {r.cost_source !== 'none' && (
+                                    <span
+                                      className="text-[10px] uppercase tracking-wide text-gray-400 print:hidden"
+                                      title={`Cost source: ${r.cost_source}`}
+                                    >
+                                      {COST_SOURCE_LABEL[r.cost_source]}
+                                    </span>
+                                  )}
+                                </span>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              {editing ? (
+                                <Input
+                                  type="number"
+                                  min="0"
+                                  value={draftCut}
+                                  onChange={(e) => setDraftCut(e.target.value)}
+                                  className="h-8 w-24 ml-auto text-right"
+                                />
+                              ) : (
+                                <span
+                                  className={r.cutIsSuggested ? 'italic text-gray-500' : ''}
+                                  title={r.cutIsSuggested ? `Suggested @ ${defaultCutPercent}% — click edit to save the actual value` : undefined}
+                                >
+                                  Rs {formatINR(r.cut)}
+                                  {r.cutIsSuggested && (
+                                    <span className="ml-1 text-[10px] uppercase tracking-wide text-gray-400 print:hidden">sug</span>
+                                  )}
+                                </span>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-right space-x-1 print:hidden">
+                              {editing ? (
+                                <>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    aria-label="Save"
+                                    disabled={saveCutMutation.isPending}
+                                    onClick={() => saveCutMutation.mutate(r)}
+                                  >
+                                    <Save className="h-4 w-4 text-green-600" />
+                                  </Button>
+                                  <Button variant="ghost" size="sm" aria-label="Cancel" onClick={() => setEditingCutId(null)}>
+                                    <span className="text-xs">Cancel</span>
+                                  </Button>
+                                </>
+                              ) : (
+                                <>
+                                  <Button variant="ghost" size="sm" aria-label="View patient details" onClick={() => setDetailsRow(r)}>
+                                    <Eye className="h-4 w-4 text-emerald-600" />
+                                  </Button>
+                                  <Button variant="ghost" size="sm" aria-label="Edit cost/cut" onClick={() => openInlineEdit(r)}>
+                                    <Edit2 className="h-4 w-4 text-blue-600" />
+                                  </Button>
+                                  {r.isManual && r.overrideId && (
+                                    <>
+                                      <Button variant="ghost" size="sm" aria-label="Full edit" onClick={() => openManualEdit(r)}>
+                                        <span className="text-xs text-gray-600">Edit</span>
+                                      </Button>
+                                      <Button variant="ghost" size="sm" aria-label="Delete" onClick={() => setDeleteId(r.overrideId!)}>
+                                        <Trash2 className="h-4 w-4 text-red-600" />
+                                      </Button>
+                                    </>
+                                  )}
+                                </>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                      <TableRow key={`subtotal-${group.category}`} className="bg-gray-50 italic">
+                        <TableCell colSpan={5} className="text-right">
+                          {group.label} Sub-total
+                        </TableCell>
+                        <TableCell className="text-right">Rs {formatINR(group.subtotal.cost)}</TableCell>
+                        <TableCell className="text-right">Rs {formatINR(group.subtotal.cut)}</TableCell>
+                        <TableCell className="print:hidden" />
+                      </TableRow>
+                    </React.Fragment>
+                  ));
+                })()}
                 <TableRow className="bg-gray-100 font-bold border-t-2">
                   <TableCell colSpan={5} className="text-right">Grand Total</TableCell>
                   <TableCell className="text-right">Rs {formatINR(totals.cost)}</TableCell>
