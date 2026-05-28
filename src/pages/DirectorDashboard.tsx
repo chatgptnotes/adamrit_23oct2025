@@ -11,7 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { toast } from 'sonner';
-import { Wallet, Edit2, Trash2, Plus, CheckCircle, AlertTriangle, Calendar, ArrowRight, DollarSign } from 'lucide-react';
+import { Wallet, Edit2, Trash2, Plus, CheckCircle, AlertTriangle, Calendar, ArrowRight, DollarSign, FileText } from 'lucide-react';
 import { DirectorKpiCards } from '@/components/DirectorKpiCards';
 import { usePaymentDeadlines, type PaymentDeadline } from '@/hooks/usePaymentDeadlines';
 
@@ -51,6 +51,7 @@ export default function DirectorDashboard() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
   const initialFormData: DeadlineFormData = { service_name: '', amount: '', due_date: '', notes: '' };
   const [formData, setFormData] = useState<DeadlineFormData>(initialFormData);
+  const [isLoadingActionItems, setIsLoadingActionItems] = useState(false);
 
   // Access guard via effect (not during render)
   useEffect(() => {
@@ -218,6 +219,50 @@ export default function DirectorDashboard() {
     setFormData(initialFormData);
   };
 
+  // Open a preview of the Executive Action Items PDF.
+  // Tries Supabase first (so an updated copy is shown if uploaded there),
+  // then falls back to the copy bundled with the app so it always opens.
+  const ACTION_ITEMS_FILE_NAME = 'Executive_Action_Items_Final.pdf';
+  const BUNDLED_ACTION_ITEMS_URL = `${import.meta.env.BASE_URL}${ACTION_ITEMS_FILE_NAME}`;
+  const handleViewActionItems = async () => {
+    setIsLoadingActionItems(true);
+    try {
+      let fileUrl = BUNDLED_ACTION_ITEMS_URL;
+      try {
+        const { data } = await (supabase as any)
+          .from('file_uploads')
+          .select('file_url')
+          .ilike('file_name', `%${ACTION_ITEMS_FILE_NAME}%`)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (data?.file_url) fileUrl = data.file_url;
+      } catch {
+        // Ignore lookup failures — fall back to the bundled copy.
+      }
+
+      const previewWindow = window.open('', '_blank');
+      if (!previewWindow) {
+        // Popup blocked — fall back to direct navigation.
+        window.open(fileUrl, '_blank');
+        return;
+      }
+      previewWindow.document.title = ACTION_ITEMS_FILE_NAME;
+      previewWindow.document.body.style.margin = '0';
+      const frame = previewWindow.document.createElement('iframe');
+      frame.src = fileUrl;
+      frame.style.width = '100%';
+      frame.style.height = '100vh';
+      frame.style.border = 'none';
+      previewWindow.document.body.appendChild(frame);
+    } catch (err) {
+      console.error('Failed to load action items:', getErrorMessage(err));
+      toast.error('Failed to load the file. Please try again.');
+    } finally {
+      setIsLoadingActionItems(false);
+    }
+  };
+
   const getStatusBadge = (deadline: PaymentDeadline) => {
     const overdue = isOverdue(deadline.due_date, deadline.status);
     if (deadline.status === 'paid') {
@@ -233,7 +278,18 @@ export default function DirectorDashboard() {
     <div className="space-y-6 p-4">
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold">Director Dashboard</h1>
-        <p className="text-sm text-gray-600">{user?.email}</p>
+        <div className="flex items-center gap-4">
+          <Button
+            variant="outline"
+            className="gap-2"
+            onClick={handleViewActionItems}
+            disabled={isLoadingActionItems}
+          >
+            <FileText className="h-4 w-4 text-blue-600" />
+            {isLoadingActionItems ? 'Opening…' : 'Executive Action Items'}
+          </Button>
+          <p className="text-sm text-gray-600">{user?.email}</p>
+        </div>
       </div>
 
       <DirectorKpiCards />
