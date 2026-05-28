@@ -223,11 +223,17 @@ export default function DirectorDashboard() {
   // Tries Supabase first (so an updated copy is shown if uploaded there),
   // then falls back to the copy bundled with the app so it always opens.
   const ACTION_ITEMS_FILE_NAME = 'Executive_Action_Items_Final.pdf';
-  const BUNDLED_ACTION_ITEMS_URL = `${import.meta.env.BASE_URL}${ACTION_ITEMS_FILE_NAME}`;
   const handleViewActionItems = async () => {
     setIsLoadingActionItems(true);
     try {
-      let fileUrl = BUNDLED_ACTION_ITEMS_URL;
+      // Build an absolute URL for the bundled copy so it resolves correctly
+      // no matter the host or base path.
+      const bundledUrl = new URL(
+        `${import.meta.env.BASE_URL}${ACTION_ITEMS_FILE_NAME}`,
+        window.location.origin,
+      ).href;
+
+      let fileUrl = bundledUrl;
       try {
         const { data } = await (supabase as any)
           .from('file_uploads')
@@ -241,20 +247,12 @@ export default function DirectorDashboard() {
         // Ignore lookup failures — fall back to the bundled copy.
       }
 
-      const previewWindow = window.open('', '_blank');
-      if (!previewWindow) {
-        // Popup blocked — fall back to direct navigation.
-        window.open(fileUrl, '_blank');
-        return;
+      // Let the browser render the PDF natively in a new tab. Simpler and
+      // avoids about:blank + injected-iframe relative-URL issues.
+      const opened = window.open(fileUrl, '_blank', 'noopener,noreferrer');
+      if (!opened) {
+        toast.error('Popup blocked. Please allow popups for this site.');
       }
-      previewWindow.document.title = ACTION_ITEMS_FILE_NAME;
-      previewWindow.document.body.style.margin = '0';
-      const frame = previewWindow.document.createElement('iframe');
-      frame.src = fileUrl;
-      frame.style.width = '100%';
-      frame.style.height = '100vh';
-      frame.style.border = 'none';
-      previewWindow.document.body.appendChild(frame);
     } catch (err) {
       console.error('Failed to load action items:', getErrorMessage(err));
       toast.error('Failed to load the file. Please try again.');
