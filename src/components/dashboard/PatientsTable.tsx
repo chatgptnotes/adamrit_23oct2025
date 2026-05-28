@@ -62,9 +62,28 @@ export const PatientsTable: React.FC<PatientsTableProps> = ({
     staleTime: 5 * 60 * 1000,
   });
 
+  // Lookup: lowercase name → auto-generated code, so a saved
+  // relationship_manager text on patients can be displayed with its code.
+  const codeByName = React.useMemo(() => {
+    const map = new Map<string, string>();
+    for (const m of rmMasterQuery.data ?? []) {
+      if (m.code) map.set(m.name.trim().toLowerCase(), m.code);
+    }
+    return map;
+  }, [rmMasterQuery.data]);
+
+  // Show ONLY the auto-generated code (e.g., "1103") when available.
+  // Falls back to the raw name if a code isn't yet known (e.g., master list
+  // hasn't loaded), and to "Direct" when no RM is assigned at all.
+  const formatRmDisplay = (rmName: string | undefined): string => {
+    if (!rmName) return 'Direct';
+    const code = codeByName.get(rmName.trim().toLowerCase());
+    return code || rmName;
+  };
+
   // Save handler that auto-creates the RM in the master if the typed name
   // doesn't match any existing entry (case-insensitive). Then saves the
-  // resolved canonical name onto the patient.
+  // resolved canonical name onto the patient and returns the assigned code.
   const saveRmSmartMutation = useMutation({
     mutationFn: async ({ patientId, typedName }: { patientId: string; typedName: string }) => {
       const trimmed = typedName.trim();
@@ -75,20 +94,25 @@ export const PatientsTable: React.FC<PatientsTableProps> = ({
           .update({ relationship_manager: null } as never)
           .eq('id', patientId);
         if (error) throw error;
-        return { savedName: '', created: false };
+        return { savedName: '', savedCode: '', created: false };
       }
       // Try case-insensitive match against master.
       const masters = rmMasterQuery.data ?? [];
       const match = masters.find((m) => m.name.trim().toLowerCase() === trimmed.toLowerCase());
       let canonicalName = match?.name;
+      let canonicalCode: string | null = match?.code ?? null;
       let created = false;
       if (!canonicalName) {
-        // Auto-create in master. Code auto-generates via the existing trigger.
-        const { error: insertErr } = await supabase
+        // Auto-create in master. Trigger auto-generates `code`; we read it back.
+        const { data: inserted, error: insertErr } = await supabase
           .from('relationship_managers' as never)
-          .insert([{ name: trimmed } as never]);
+          .insert([{ name: trimmed } as never])
+          .select('name, code')
+          .single();
         if (insertErr) throw insertErr;
-        canonicalName = trimmed;
+        const row = inserted as unknown as { name: string; code: string | null };
+        canonicalName = row.name;
+        canonicalCode = row.code;
         created = true;
       }
       const { error } = await supabase
@@ -96,9 +120,9 @@ export const PatientsTable: React.FC<PatientsTableProps> = ({
         .update({ relationship_manager: canonicalName } as never)
         .eq('id', patientId);
       if (error) throw error;
-      return { savedName: canonicalName, created };
+      return { savedName: canonicalName, savedCode: canonicalCode ?? '', created };
     },
-    onSuccess: ({ savedName, created }) => {
+    onSuccess: ({ savedName, savedCode, created }) => {
       // Refresh every consumer of the RM master + patient lists, including
       // the /relationship-manager admin page so the new entry shows there too.
       queryClient.invalidateQueries({ queryKey: ['patientsTableRmMaster'] });
@@ -107,9 +131,10 @@ export const PatientsTable: React.FC<PatientsTableProps> = ({
       queryClient.invalidateQueries({ queryKey: ['dailyRevenueRmMaster'] });
       queryClient.invalidateQueries({ queryKey: ['patients'] });
       queryClient.invalidateQueries({ queryKey: ['patient-data'] });
+      const codeStr = savedCode ? ` (code ${savedCode})` : '';
       if (!savedName) toast.success('RM cleared (Direct)');
-      else if (created) toast.success(`Added "${savedName}" to Relationship Manager master + assigned to patient`);
-      else toast.success(`RM set to "${savedName}"`);
+      else if (created) toast.success(`Added "${savedName}"${codeStr} to Relationship Manager master + assigned to patient`);
+      else toast.success(`RM set to "${savedName}"${codeStr}`);
       setEditingRmFor(null);
     },
     onError: (err) => {
@@ -167,7 +192,7 @@ export const PatientsTable: React.FC<PatientsTableProps> = ({
           autocomplete suggestions to every row's input simultaneously. */}
       <datalist id="rm-master-datalist">
         {(rmMasterQuery.data ?? []).map((m) => (
-          <option key={m.id} value={m.name}>{m.code ? `code ${m.code}` : ''}</option>
+          <option key={m.id} value={m.name}>{m.code ? `Code ${m.code}` : 'New'}</option>
         ))}
       </datalist>
       <Table>
@@ -254,7 +279,7 @@ export const PatientsTable: React.FC<PatientsTableProps> = ({
                       className="text-left hover:bg-gray-100 px-2 py-0.5 rounded text-sm"
                       title="Click to change RM"
                     >
-                      {patient.relationship_manager || 'Direct'}
+                      {formatRmDisplay(patient.relationship_manager)}
                     </button>
                   )}
                 </TableCell>
