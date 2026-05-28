@@ -638,12 +638,48 @@ export function DailyRevenueReportSection() {
       { category: 'manual', label: 'Manual / Other' },
     ];
 
+    // Each hospital gets its own theme — Hope (blue, ESIC-style) and
+    // Ayushman (saffron/green, PMJAY-style) print with distinct identity
+    // so the director can tell them apart at a glance.
+    interface HospitalTheme {
+      cssClass: string;
+      displayName: string;
+      tagline: string;
+      schemeLine: string;
+    }
+    const themeFor = (name: string): HospitalTheme => {
+      const lower = name.toLowerCase();
+      if (lower.includes('ayushman')) {
+        return {
+          cssClass: 'theme-ayushman',
+          displayName: 'AYUSHMAN HOSPITAL',
+          tagline: 'Pradhan Mantri Jan Arogya Yojana (PM-JAY)',
+          schemeLine: 'PMJAY · Ayushman Bharat Scheme',
+        };
+      }
+      if (lower.includes('hope')) {
+        return {
+          cssClass: 'theme-hope',
+          displayName: 'HOPE HOSPITAL',
+          tagline: 'Employees State Insurance Corporation (ESIC)',
+          schemeLine: 'ESIC · CGHS · Corporate Panel',
+        };
+      }
+      return {
+        cssClass: 'theme-default',
+        displayName: name.toUpperCase(),
+        tagline: '',
+        schemeLine: '',
+      };
+    };
+
     const hospitalSectionsHtml = hospitalOrder.map((hospitalName, hospitalIdx) => {
       const hospitalRows = hospitalBuckets.get(hospitalName) ?? [];
       const hospitalTotals = hospitalRows.reduce(
         (acc, r) => ({ cost: acc.cost + r.cost, cut: acc.cut + r.cut }),
         { cost: 0, cut: 0 },
       );
+      const theme = themeFor(hospitalName);
       let runningIdx = 0;
       const categoriesHtml = categoryOrder
         .map(({ category, label }) => {
@@ -685,10 +721,17 @@ export function DailyRevenueReportSection() {
         .join('');
 
       return `
-        <section class="hospital-page${hospitalIdx > 0 ? ' page-break' : ''}">
-          <div class="hospital-header">
-            <div class="hospital-name">${esc(hospitalName).toUpperCase()}</div>
-            <div class="hospital-meta">Patients: ${hospitalRows.length}</div>
+        <section class="hospital-page ${theme.cssClass}${hospitalIdx > 0 ? ' page-break' : ''}">
+          <div class="hospital-banner">
+            <div class="hospital-banner-left">
+              <div class="hospital-name">${theme.displayName}</div>
+              ${theme.tagline ? `<div class="hospital-tagline">${esc(theme.tagline)}</div>` : ''}
+            </div>
+            <div class="hospital-banner-right">
+              <div class="hospital-date">${esc(prettyDate)}</div>
+              ${theme.schemeLine ? `<div class="hospital-scheme">${esc(theme.schemeLine)}</div>` : ''}
+              <div class="hospital-meta">Patients: ${hospitalRows.length}</div>
+            </div>
           </div>
           <table>
             <thead>
@@ -704,12 +747,16 @@ export function DailyRevenueReportSection() {
             <tbody>
               ${categoriesHtml}
               <tr class="hospital-total">
-                <td colspan="4" class="right">${esc(hospitalName).toUpperCase()} Total</td>
+                <td colspan="4" class="right">${theme.displayName} Total</td>
                 <td class="right">Rs ${fmt(hospitalTotals.cost)}</td>
                 <td class="right">Rs ${fmt(hospitalTotals.cut)}</td>
               </tr>
             </tbody>
           </table>
+          <div class="hospital-footer">
+            <span>${theme.displayName}</span>
+            <span>Daily Revenue Report · ${esc(reportDate)}</span>
+          </div>
         </section>`;
     }).join('');
 
@@ -737,10 +784,35 @@ export function DailyRevenueReportSection() {
   .meta { display: flex; justify-content: space-between; margin: 12px 0 6px; font-size: 11px; color: #666; }
   .footer { margin-top: 24px; text-align: center; color: #888; font-size: 10px; border-top: 1px solid #ddd; padding-top: 10px; }
   .hospital-page { margin-bottom: 32px; }
-  .hospital-header { display: flex; justify-content: space-between; align-items: baseline; padding: 8px 10px; margin-bottom: 8px; background: linear-gradient(90deg, #ecfdf5, #ffffff); border-left: 4px solid #047857; border-radius: 2px; }
-  .hospital-name { font-size: 16px; font-weight: 700; color: #064e3b; letter-spacing: 0.5px; }
-  .hospital-meta { font-size: 11px; color: #555; }
-  tr.hospital-total td { background: #064e3b; color: #fff; font-weight: 700; padding: 9px 8px; font-size: 12px; }
+  .hospital-banner { display: flex; justify-content: space-between; align-items: flex-start; padding: 14px 16px; margin-bottom: 10px; border-radius: 4px; }
+  .hospital-banner-left { display: flex; flex-direction: column; gap: 2px; }
+  .hospital-banner-right { text-align: right; display: flex; flex-direction: column; gap: 2px; }
+  .hospital-name { font-size: 20px; font-weight: 800; letter-spacing: 1px; }
+  .hospital-tagline { font-size: 11px; font-style: italic; opacity: 0.85; }
+  .hospital-date { font-size: 12px; font-weight: 600; }
+  .hospital-scheme { font-size: 10px; text-transform: uppercase; letter-spacing: 0.6px; opacity: 0.85; }
+  .hospital-meta { font-size: 11px; }
+  .hospital-footer { display: flex; justify-content: space-between; font-size: 9px; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 10px; padding-top: 6px; border-top: 1px dashed #999; color: #555; }
+
+  /* Hope Hospital theme — calm clinical blue (ESIC) */
+  .theme-hope .hospital-banner { background: linear-gradient(90deg, #1e3a8a, #3b82f6); color: #fff; border-left: 6px solid #1e3a8a; }
+  .theme-hope thead th { background: #dbeafe; color: #1e3a8a; border-bottom: 2px solid #1e3a8a; }
+  .theme-hope tr.section td { background: #eff6ff; color: #1e3a8a; border-bottom: 1px solid #bfdbfe; }
+  .theme-hope tr.subtotal td { background: #f5f9ff; color: #1e3a8a; }
+  .theme-hope tr.hospital-total td { background: #1e3a8a; color: #fff; font-weight: 700; padding: 10px 8px; font-size: 12px; }
+  .theme-hope .hospital-footer { color: #1e3a8a; border-top-color: #93c5fd; }
+
+  /* Ayushman Hospital theme — saffron / leaf-green (PM-JAY) */
+  .theme-ayushman .hospital-banner { background: linear-gradient(90deg, #c2410c, #f97316); color: #fff; border-left: 6px solid #14532d; }
+  .theme-ayushman thead th { background: #fed7aa; color: #7c2d12; border-bottom: 2px solid #c2410c; }
+  .theme-ayushman tr.section td { background: #fff7ed; color: #7c2d12; border-bottom: 1px solid #fed7aa; }
+  .theme-ayushman tr.subtotal td { background: #fffaf0; color: #7c2d12; }
+  .theme-ayushman tr.hospital-total td { background: #14532d; color: #fff; font-weight: 700; padding: 10px 8px; font-size: 12px; }
+  .theme-ayushman .hospital-footer { color: #14532d; border-top-color: #86efac; }
+
+  /* Default fallback */
+  .theme-default .hospital-banner { background: linear-gradient(90deg, #ecfdf5, #ffffff); color: #064e3b; border-left: 6px solid #047857; }
+  .theme-default tr.hospital-total td { background: #064e3b; color: #fff; font-weight: 700; padding: 9px 8px; font-size: 12px; }
   tr.grand td { background: #111; color: #fff; font-weight: 700; padding: 10px 8px; font-size: 13px; }
   .grand-total { margin-top: 18px; }
   @page { size: A4; margin: 14mm; }
