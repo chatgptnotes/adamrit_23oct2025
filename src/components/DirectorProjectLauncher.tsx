@@ -1,6 +1,5 @@
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import {
   Table,
   TableBody,
@@ -53,19 +52,14 @@ const DIRECTOR_PROJECTS: ReadonlyArray<DirectorProject> = [
 ];
 
 interface DirectorProjectLauncherProps {
-  email?: string | null;
+  email: string | null | undefined;
 }
 
-export function DirectorProjectLauncher(_props: DirectorProjectLauncherProps) {
-  const openProject = (rawUrl: string): void => {
-    try {
-      const url = new URL(rawUrl);
-      url.searchParams.set('login_hint', DIRECTOR_LAUNCHER_EMAIL);
-      window.open(url.toString(), '_blank', 'noopener,noreferrer');
-    } catch {
-      window.open(rawUrl, '_blank', 'noopener,noreferrer');
-    }
-  };
+export function DirectorProjectLauncher({ email }: DirectorProjectLauncherProps) {
+  const normalizedEmail = (email ?? '').toLowerCase();
+  if (normalizedEmail !== DIRECTOR_LAUNCHER_EMAIL) {
+    return null;
+  }
 
   return (
     <Card className="border-l-4 border-l-indigo-500">
@@ -80,34 +74,39 @@ export function DirectorProjectLauncher(_props: DirectorProjectLauncherProps) {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>#</TableHead>
+                <TableHead className="w-12">#</TableHead>
                 <TableHead>Project</TableHead>
                 <TableHead>Description</TableHead>
-                <TableHead>URL</TableHead>
-                <TableHead className="text-right">Action</TableHead>
+                <TableHead>Link</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {DIRECTOR_PROJECTS.map((project, index) => (
                 <TableRow key={project.url}>
                   <TableCell className="font-medium">{index + 1}</TableCell>
-                  <TableCell className="font-medium">{project.name}</TableCell>
+                  <TableCell>
+                    <a
+                      href={project.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-semibold text-indigo-700 hover:text-indigo-900 hover:underline"
+                    >
+                      {project.name}
+                    </a>
+                  </TableCell>
                   <TableCell className="text-sm text-gray-600">
                     {project.description}
                   </TableCell>
-                  <TableCell className="text-sm text-blue-600 break-all">
-                    {project.url}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => openProject(project.url)}
-                      className="inline-flex items-center gap-2"
+                  <TableCell>
+                    <a
+                      href={project.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-sm text-blue-600 break-all hover:text-blue-800 hover:underline"
                     >
-                      Open
-                      <ExternalLink className="h-4 w-4" />
-                    </Button>
+                      {project.url}
+                      <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+                    </a>
                   </TableCell>
                 </TableRow>
               ))}

@@ -53,6 +53,7 @@ import {
 } from '@/hooks/useDailyPaymentAllocation';
 import { usePaymentObligations, usePayeeSearch, useMultiPayeeSearch, useObligationDefaultPayees, useTallyLedgerSearch, useTallyCompanies, useSaveObligationLedgerLinks, useObligationSubCategories, type PaymentObligation, type DefaultPayee, type TallyCompany, type SubCategoryRow } from '@/hooks/usePaymentObligations';
 import { useCompanies } from '@/hooks/useCompanies';
+import { DailyAllocationSheet } from '@/components/DailyAllocationSheet';
 
 const formatINR = (n: number) =>
   new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(n);
@@ -388,7 +389,7 @@ const SortableObligationRow = ({
 
 const DailyPaymentAllocation = () => {
   const { user } = useAuth();
-  const isAdmin = user?.role === 'admin' || user?.role === 'superadmin' || user?.role === 'super_admin';
+  const isSuperAdmin = user?.role === 'superadmin' || user?.role === 'super_admin';
   const { data: companies = [] } = useCompanies();
   const companyNameMap = useMemo(() => {
     const map: Record<string, string> = {};
@@ -824,14 +825,14 @@ table{width:100%;border-collapse:collapse;margin-top:12px}
     }
   };
 
-  if (!isAdmin) {
+  if (!isSuperAdmin) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <Card className="w-96">
           <CardContent className="p-8 text-center">
             <AlertTriangle className="mx-auto h-12 w-12 text-yellow-500 mb-4" />
             <h2 className="text-xl font-semibold mb-2">Access Denied</h2>
-            <p className="text-muted-foreground">Only administrators can access the Payment Allocation dashboard.</p>
+            <p className="text-muted-foreground">Only super admins can access the Payment Allocation dashboard.</p>
           </CardContent>
         </Card>
       </div>
@@ -1537,7 +1538,7 @@ ${sectionsHtml}
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-2 md:grid-cols-4">
+        <TabsList className="grid w-full grid-cols-2 md:grid-cols-5">
           <TabsTrigger value="allocation">
             Today's Allocation
             {schedule.filter(s => s.status === 'pending').length > 0 && (
@@ -1552,6 +1553,7 @@ ${sectionsHtml}
           </TabsTrigger>
           <TabsTrigger value="master">Obligations Master</TabsTrigger>
           <TabsTrigger value="history">Payment History</TabsTrigger>
+          <TabsTrigger value="daily-allocation">Daily Allocation</TabsTrigger>
         </TabsList>
 
         {/* TAB 1: Today's Allocation — drag-and-drop, inline edit, skip */}
@@ -1939,6 +1941,11 @@ ${sectionsHtml}
               </TableBody>
             </Table>
           </Card>
+        </TabsContent>
+
+        {/* TAB 5: Daily Allocation — editable today's expenses sheet (localStorage) */}
+        <TabsContent value="daily-allocation" className="mt-4">
+          <DailyAllocationSheet />
         </TabsContent>
       </Tabs>
 
