@@ -21,6 +21,7 @@ import {
 } from '@/lib/office-upload-validation';
 import { DirectorFilePreviewDialog } from '@/components/DirectorFilePreviewDialog';
 import { DirectorKpiCards } from '@/components/DirectorKpiCards';
+import { DirectorProjectLauncher } from '@/components/DirectorProjectLauncher';
 import { DailyRevenueReportSection } from '@/components/DailyRevenueReportSection';
 import { usePaymentDeadlines, type PaymentDeadline } from '@/hooks/usePaymentDeadlines';
 
@@ -721,6 +722,9 @@ export default function DirectorDashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Director Projects Launcher (visible only to cmd@hopehospital.com) */}
+      <DirectorProjectLauncher email={user?.email} />
 
       {/* Director's Files Dialog */}
       <Dialog open={isFilesDialogOpen} onOpenChange={setIsFilesDialogOpen}>
