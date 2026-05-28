@@ -617,37 +617,100 @@ export function DailyRevenueReportSection() {
     const prettyDate = new Date(reportDate).toLocaleDateString('en-IN', {
       weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
     });
-    let runningIdx = 0;
-    const sectionsHtml = groupedRows.map((group) => {
-      const rowsHtml = group.rows.map((r) => {
-        runningIdx += 1;
-        const rmDisplay = isDirect(r.rm_name)
-          ? '<span class="pill direct">Direct</span>'
-          : esc(r.rm_name);
-        const typeBadge =
-          r.patient_type === 'OPD' ? '<span class="pill opd">OPD</span>' :
-          r.patient_type === 'IPD' ? '<span class="pill ipd">IPD</span>' : '';
-        return `
-          <tr>
-            <td class="num">${runningIdx}</td>
-            <td>${esc(r.patient_name)} ${typeBadge}</td>
-            <td>${esc(r.hospital).toUpperCase()}</td>
-            <td>${esc(r.department || '—')}</td>
-            <td>${rmDisplay}</td>
-            <td class="right">${fmt(r.cost)}</td>
-            <td class="right">${fmt(r.cut)}</td>
-          </tr>`;
-      }).join('');
+    // Bucket rows by hospital so each hospital prints on its own page.
+    // Preserve first-seen hospital order from groupedRows for stable output.
+    const hospitalOrder: string[] = [];
+    const hospitalBuckets = new Map<string, DisplayRow[]>();
+    groupedRows.forEach((group) => {
+      group.rows.forEach((r) => {
+        const key = (r.hospital || 'Unspecified').trim() || 'Unspecified';
+        if (!hospitalBuckets.has(key)) {
+          hospitalBuckets.set(key, []);
+          hospitalOrder.push(key);
+        }
+        hospitalBuckets.get(key)!.push(r);
+      });
+    });
+
+    const categoryOrder: ReadonlyArray<{ category: RowCategory; label: string }> = [
+      { category: 'main', label: 'Main' },
+      { category: 'direct', label: 'Direct' },
+      { category: 'manual', label: 'Manual / Other' },
+    ];
+
+    const hospitalSectionsHtml = hospitalOrder.map((hospitalName, hospitalIdx) => {
+      const hospitalRows = hospitalBuckets.get(hospitalName) ?? [];
+      const hospitalTotals = hospitalRows.reduce(
+        (acc, r) => ({ cost: acc.cost + r.cost, cut: acc.cut + r.cut }),
+        { cost: 0, cut: 0 },
+      );
+      let runningIdx = 0;
+      const categoriesHtml = categoryOrder
+        .map(({ category, label }) => {
+          const catRows = hospitalRows.filter((r) => r.category === category);
+          if (catRows.length === 0) return '';
+          const subtotal = catRows.reduce(
+            (acc, r) => ({ cost: acc.cost + r.cost, cut: acc.cut + r.cut }),
+            { cost: 0, cut: 0 },
+          );
+          const rowsHtml = catRows.map((r) => {
+            runningIdx += 1;
+            const rmDisplay = isDirect(r.rm_name)
+              ? '<span class="pill direct">Direct</span>'
+              : esc(r.rm_name);
+            const typeBadge =
+              r.patient_type === 'OPD' ? '<span class="pill opd">OPD</span>' :
+              r.patient_type === 'IPD' ? '<span class="pill ipd">IPD</span>' : '';
+            return `
+              <tr>
+                <td class="num">${runningIdx}</td>
+                <td>${esc(r.patient_name)} ${typeBadge}</td>
+                <td>${esc(r.department || '—')}</td>
+                <td>${rmDisplay}</td>
+                <td class="right">${fmt(r.cost)}</td>
+                <td class="right">${fmt(r.cut)}</td>
+              </tr>`;
+          }).join('');
+          return `
+            <tr class="section">
+              <td colspan="6">${esc(label)}</td>
+            </tr>
+            ${rowsHtml}
+            <tr class="subtotal">
+              <td colspan="4" class="right">${esc(label)} Sub-total</td>
+              <td class="right">Rs ${fmt(subtotal.cost)}</td>
+              <td class="right">Rs ${fmt(subtotal.cut)}</td>
+            </tr>`;
+        })
+        .join('');
+
       return `
-        <tr class="section">
-          <td colspan="7">${esc(group.label)}</td>
-        </tr>
-        ${rowsHtml}
-        <tr class="subtotal">
-          <td colspan="5" class="right">${esc(group.label)} Sub-total</td>
-          <td class="right">Rs ${fmt(group.subtotal.cost)}</td>
-          <td class="right">Rs ${fmt(group.subtotal.cut)}</td>
-        </tr>`;
+        <section class="hospital-page${hospitalIdx > 0 ? ' page-break' : ''}">
+          <div class="hospital-header">
+            <div class="hospital-name">${esc(hospitalName).toUpperCase()}</div>
+            <div class="hospital-meta">Patients: ${hospitalRows.length}</div>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Patient Name</th>
+                <th>Department</th>
+                <th>RM Manager</th>
+                <th class="right">Cost (Rs)</th>
+                <th class="right">Cut (Rs)</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${categoriesHtml}
+              <tr class="hospital-total">
+                <td colspan="4" class="right">${esc(hospitalName).toUpperCase()} Total</td>
+                <td class="right">Rs ${fmt(hospitalTotals.cost)}</td>
+                <td class="right">Rs ${fmt(hospitalTotals.cut)}</td>
+              </tr>
+            </tbody>
+          </table>
+        </section>`;
     }).join('');
 
     const html = `<!doctype html>
@@ -673,11 +736,21 @@ export function DailyRevenueReportSection() {
   .pill.ipd { background: #fed7aa; color: #9a3412; }
   .meta { display: flex; justify-content: space-between; margin: 12px 0 6px; font-size: 11px; color: #666; }
   .footer { margin-top: 24px; text-align: center; color: #888; font-size: 10px; border-top: 1px solid #ddd; padding-top: 10px; }
+  .hospital-page { margin-bottom: 32px; }
+  .hospital-header { display: flex; justify-content: space-between; align-items: baseline; padding: 8px 10px; margin-bottom: 8px; background: linear-gradient(90deg, #ecfdf5, #ffffff); border-left: 4px solid #047857; border-radius: 2px; }
+  .hospital-name { font-size: 16px; font-weight: 700; color: #064e3b; letter-spacing: 0.5px; }
+  .hospital-meta { font-size: 11px; color: #555; }
+  tr.hospital-total td { background: #064e3b; color: #fff; font-weight: 700; padding: 9px 8px; font-size: 12px; }
+  tr.grand td { background: #111; color: #fff; font-weight: 700; padding: 10px 8px; font-size: 13px; }
+  .grand-total { margin-top: 18px; }
   @page { size: A4; margin: 14mm; }
   @media print {
     body { margin: 0; }
     tr { page-break-inside: avoid; }
     tr.section { page-break-after: avoid; }
+    .hospital-page.page-break { page-break-before: always; break-before: page; }
+    .hospital-page { page-break-inside: avoid; }
+    .grand-total { page-break-before: always; break-before: page; }
   }
 </style>
 </head><body>
@@ -687,27 +760,19 @@ export function DailyRevenueReportSection() {
     <div>Rows: ${rows.length}${onlyWithRm ? ' · RM-only' : ''}${patientTypeFilter !== 'all' ? ` · ${esc(patientTypeFilter)}` : ''}</div>
     <div>Default cut %: ${defaultCutPercent}</div>
   </div>
-  <table>
-    <thead>
-      <tr>
-        <th>#</th>
-        <th>Patient Name</th>
-        <th>Hospital</th>
-        <th>Department</th>
-        <th>RM Manager</th>
-        <th class="right">Cost (Rs)</th>
-        <th class="right">Cut (Rs)</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${sectionsHtml || '<tr><td colspan="7" style="text-align:center;padding:24px;color:#888;">No entries for this date</td></tr>'}
-      <tr class="grand">
-        <td colspan="5" class="right">Grand Total</td>
-        <td class="right">Rs ${fmt(totals.cost)}</td>
-        <td class="right">Rs ${fmt(totals.cut)}</td>
-      </tr>
-    </tbody>
-  </table>
+  ${hospitalSectionsHtml || '<div style="text-align:center;padding:24px;color:#888;">No entries for this date</div>'}
+  ${hospitalOrder.length > 0 ? `
+  <section class="grand-total">
+    <table>
+      <tbody>
+        <tr class="grand">
+          <td colspan="4" class="right" style="width:70%">Grand Total — All Hospitals</td>
+          <td class="right">Rs ${fmt(totals.cost)}</td>
+          <td class="right">Rs ${fmt(totals.cut)}</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>` : ''}
   <div class="footer">Generated ${esc(new Date().toLocaleString('en-IN'))}</div>
 </body></html>`;
 
