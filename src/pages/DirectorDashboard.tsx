@@ -13,6 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { toast } from 'sonner';
 import { Wallet, Edit2, Trash2, Plus, CheckCircle, AlertTriangle, Calendar, ArrowRight, DollarSign, FileText } from 'lucide-react';
 import { DirectorKpiCards } from '@/components/DirectorKpiCards';
+import { DirectorProjectLauncher } from '@/components/DirectorProjectLauncher';
 import { usePaymentDeadlines, type PaymentDeadline } from '@/hooks/usePaymentDeadlines';
 
 const DIRECTOR_EMAILS = ['cmd@hopehospital.com', 'finance@hopehospital.com'];
@@ -457,6 +458,9 @@ export default function DirectorDashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Director Projects Launcher (visible only to cmd@hopehospital.com) */}
+      <DirectorProjectLauncher email={user?.email} />
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={!!showDeleteConfirm} onOpenChange={(open) => !open && setShowDeleteConfirm(null)}>

@@ -157,14 +157,20 @@ const DirectorRoute = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const DIRECTOR_EMAILS = ['cmd@hopehospital.com', 'finance@hopehospital.com'];
+  const DIRECTOR_ROLES = ['superadmin', 'super_admin'];
+
+  const canAccess = !!user && (
+    DIRECTOR_EMAILS.includes(user.email.toLowerCase()) ||
+    DIRECTOR_ROLES.includes(user.role ?? '')
+  );
 
   useEffect(() => {
-    if (!user || !DIRECTOR_EMAILS.includes(user.email.toLowerCase())) {
+    if (!canAccess) {
       navigate('/dashboard', { replace: true });
     }
-  }, [user, navigate]);
+  }, [canAccess, navigate]);
 
-  if (!user || !DIRECTOR_EMAILS.includes(user.email.toLowerCase())) {
+  if (!canAccess) {
     return null;
   }
 
