@@ -36,11 +36,13 @@ export const useMenuItems = (props: AppSidebarProps): { mainItems: MenuItem[]; m
           return false;
         }
 
-        // Hide Director Dashboard for non-authorized emails
+        // Hide Director Dashboard for non-authorized users
         if (item.title === "Director Dashboard") {
           const DIRECTOR_EMAILS = ['cmd@hopehospital.com', 'finance@hopehospital.com'];
+          const DIRECTOR_ROLES = ['superadmin', 'super_admin'];
           const userEmail = user?.email?.toLowerCase() || '';
-          if (!DIRECTOR_EMAILS.includes(userEmail)) {
+          const userRole = user?.role || '';
+          if (!DIRECTOR_EMAILS.includes(userEmail) && !DIRECTOR_ROLES.includes(userRole)) {
             return false;
           }
         }

@@ -1,9 +1,12 @@
 
-import React from 'react';
+import React, { useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Eye, FileText, Trash2, Edit } from 'lucide-react';
+import { Eye, FileText, Trash2, Edit, Save, X } from 'lucide-react';
 import { format } from 'date-fns';
 
 interface Patient {
@@ -29,6 +32,12 @@ interface PatientsTableProps {
   onEditPatient?: (patient: Patient) => void;
 }
 
+interface RmMaster {
+  id: string;
+  name: string;
+  code: string | null;
+}
+
 export const PatientsTable: React.FC<PatientsTableProps> = ({
   patients,
   onViewPatient,
@@ -36,6 +45,116 @@ export const PatientsTable: React.FC<PatientsTableProps> = ({
   onDeletePatient,
   onEditPatient
 }) => {
+  const queryClient = useQueryClient();
+  const [editingRmFor, setEditingRmFor] = useState<string | null>(null);
+  const [draftRm, setDraftRm] = useState<string>('');
+
+  const rmMasterQuery = useQuery({
+    queryKey: ['patientsTableRmMaster'],
+    queryFn: async (): Promise<RmMaster[]> => {
+      const { data, error } = await supabase
+        .from('relationship_managers' as never)
+        .select('id, name, code')
+        .order('name', { ascending: true });
+      if (error) throw error;
+      return (data ?? []) as unknown as RmMaster[];
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // Lookup: lowercase name → auto-generated code, so a saved
+  // relationship_manager text on patients can be displayed with its code.
+  const codeByName = React.useMemo(() => {
+    const map = new Map<string, string>();
+    for (const m of rmMasterQuery.data ?? []) {
+      if (m.code) map.set(m.name.trim().toLowerCase(), m.code);
+    }
+    return map;
+  }, [rmMasterQuery.data]);
+
+  // Show ONLY the auto-generated code (e.g., "1103") when available.
+  // Falls back to the raw name if a code isn't yet known (e.g., master list
+  // hasn't loaded), and to "Direct" when no RM is assigned at all.
+  const formatRmDisplay = (rmName: string | undefined): string => {
+    if (!rmName) return 'Direct';
+    const code = codeByName.get(rmName.trim().toLowerCase());
+    return code || rmName;
+  };
+
+  // Save handler that auto-creates the RM in the master if the typed name
+  // doesn't match any existing entry (case-insensitive). Then saves the
+  // resolved canonical name onto the patient and returns the assigned code.
+  const saveRmSmartMutation = useMutation({
+    mutationFn: async ({ patientId, typedName }: { patientId: string; typedName: string }) => {
+      const trimmed = typedName.trim();
+      // Empty → unset RM (patient becomes Direct).
+      if (!trimmed) {
+        const { error } = await supabase
+          .from('patients')
+          .update({ relationship_manager: null } as never)
+          .eq('id', patientId);
+        if (error) throw error;
+        return { savedName: '', savedCode: '', created: false };
+      }
+      // Try case-insensitive match against master.
+      const masters = rmMasterQuery.data ?? [];
+      const match = masters.find((m) => m.name.trim().toLowerCase() === trimmed.toLowerCase());
+      let canonicalName = match?.name;
+      let canonicalCode: string | null = match?.code ?? null;
+      let created = false;
+      if (!canonicalName) {
+        // Auto-create in master. Trigger auto-generates `code`; we read it back.
+        const { data: inserted, error: insertErr } = await supabase
+          .from('relationship_managers' as never)
+          .insert([{ name: trimmed } as never])
+          .select('name, code')
+          .single();
+        if (insertErr) throw insertErr;
+        const row = inserted as unknown as { name: string; code: string | null };
+        canonicalName = row.name;
+        canonicalCode = row.code;
+        created = true;
+      }
+      const { error } = await supabase
+        .from('patients')
+        .update({ relationship_manager: canonicalName } as never)
+        .eq('id', patientId);
+      if (error) throw error;
+      return { savedName: canonicalName, savedCode: canonicalCode ?? '', created };
+    },
+    onSuccess: ({ savedName, savedCode, created }) => {
+      // Refresh every consumer of the RM master + patient lists, including
+      // the /relationship-manager admin page so the new entry shows there too.
+      queryClient.invalidateQueries({ queryKey: ['patientsTableRmMaster'] });
+      queryClient.invalidateQueries({ queryKey: ['relationship-managers'] });
+      queryClient.invalidateQueries({ queryKey: ['relationship-managers-count'] });
+      queryClient.invalidateQueries({ queryKey: ['dailyRevenueRmMaster'] });
+      queryClient.invalidateQueries({ queryKey: ['patients'] });
+      queryClient.invalidateQueries({ queryKey: ['patient-data'] });
+      const codeStr = savedCode ? ` (code ${savedCode})` : '';
+      if (!savedName) toast.success('RM cleared (Direct)');
+      else if (created) toast.success(`Added "${savedName}"${codeStr} to Relationship Manager master + assigned to patient`);
+      else toast.success(`RM set to "${savedName}"${codeStr}`);
+      setEditingRmFor(null);
+    },
+    onError: (err) => {
+      toast.error(err instanceof Error ? err.message : 'Failed to save RM');
+    },
+  });
+
+  const startEditRm = (patient: Patient) => {
+    setEditingRmFor(patient.id);
+    setDraftRm(patient.relationship_manager ?? '');
+  };
+
+  const cancelEditRm = () => {
+    setEditingRmFor(null);
+    setDraftRm('');
+  };
+
+  const saveEditRm = (patientId: string) => {
+    saveRmSmartMutation.mutate({ patientId, typedName: draftRm });
+  };
   const formatDate = (dateString?: string) => {
     if (!dateString) return '-';
     try {
@@ -69,6 +188,13 @@ export const PatientsTable: React.FC<PatientsTableProps> = ({
 
   return (
     <div className="bg-white rounded-lg shadow overflow-hidden">
+      {/* Shared datalist for the inline RM typeable picker — supplies
+          autocomplete suggestions to every row's input simultaneously. */}
+      <datalist id="rm-master-datalist">
+        {(rmMasterQuery.data ?? []).map((m) => (
+          <option key={m.id} value={m.name}>{m.code ? `Code ${m.code}` : 'New'}</option>
+        ))}
+      </datalist>
       <Table>
         <TableHeader>
           <TableRow className="bg-gray-50">
@@ -87,10 +213,11 @@ export const PatientsTable: React.FC<PatientsTableProps> = ({
         <TableBody>
           {patients.map((patient) => {
             const isNewPatient = isRecentlyCreated(patient.created_at);
-            
+            const isEditing = editingRmFor === patient.id;
+
             return (
-              <TableRow 
-                key={patient.id} 
+              <TableRow
+                key={patient.id}
                 className={`hover:bg-gray-50 ${isNewPatient ? 'bg-green-50 border-l-4 border-l-green-500' : ''}`}
               >
                 <TableCell className="font-medium text-blue-600">
@@ -109,7 +236,53 @@ export const PatientsTable: React.FC<PatientsTableProps> = ({
                 <TableCell>{getAgeGender(patient.age, patient.gender)}</TableCell>
                 <TableCell>{getPhone(patient.phone)}</TableCell>
                 <TableCell>{patient.corporate || '-'}</TableCell>
-                <TableCell>{patient.relationship_manager || 'Direct'}</TableCell>
+                <TableCell>
+                  {isEditing ? (
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="text"
+                        list="rm-master-datalist"
+                        value={draftRm}
+                        onChange={(e) => setDraftRm(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') saveEditRm(patient.id);
+                          else if (e.key === 'Escape') cancelEditRm();
+                        }}
+                        autoFocus
+                        placeholder="Type RM name (auto-creates if new)"
+                        className="h-8 w-48 border border-gray-300 rounded px-2 text-sm bg-white"
+                      />
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 w-7 p-0 text-green-600"
+                        onClick={() => saveEditRm(patient.id)}
+                        disabled={saveRmSmartMutation.isPending}
+                        title="Save (Enter)"
+                      >
+                        <Save className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 w-7 p-0 text-gray-500"
+                        onClick={cancelEditRm}
+                        title="Cancel"
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => startEditRm(patient)}
+                      className="text-left hover:bg-gray-100 px-2 py-0.5 rounded text-sm"
+                      title="Click to change RM"
+                    >
+                      {formatRmDisplay(patient.relationship_manager)}
+                    </button>
+                  )}
+                </TableCell>
                 <TableCell>
                   <span className="px-2 py-1 bg-yellow-100 text-yellow-800 rounded-full text-xs">
                     Pending

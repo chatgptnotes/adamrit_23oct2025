@@ -29,7 +29,11 @@ const TabletApp = lazy(() => import("@/tablet/TabletApp"));
 const DIRECTOR_EMAILS = ['cmd@hopehospital.com', 'finance@hopehospital.com'];
 
 const getRoleDefaultRoute = (role: string, email?: string): string => {
-  if (email && DIRECTOR_EMAILS.includes(email.toLowerCase())) {
+  if (
+    (email && DIRECTOR_EMAILS.includes(email.toLowerCase())) ||
+    role === 'superadmin' ||
+    role === 'super_admin'
+  ) {
     return '/director-dashboard';
   }
   switch (role) {

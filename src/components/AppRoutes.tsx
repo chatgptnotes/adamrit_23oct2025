@@ -159,18 +159,20 @@ const DirectorRoute = () => {
   const DIRECTOR_EMAILS = ['cmd@hopehospital.com', 'finance@hopehospital.com'];
   const DIRECTOR_ROLES = ['superadmin', 'super_admin'];
 
-  const canAccess = !!user && (
-    DIRECTOR_EMAILS.includes(user.email.toLowerCase()) ||
-    DIRECTOR_ROLES.includes(user.role ?? '')
-  );
+  const canAccess = (u: typeof user): boolean => {
+    if (!u) return false;
+    const email = u.email?.toLowerCase() ?? '';
+    const role = (u as { role?: string }).role ?? '';
+    return DIRECTOR_EMAILS.includes(email) || DIRECTOR_ROLES.includes(role);
+  };
 
   useEffect(() => {
-    if (!canAccess) {
+    if (!canAccess(user)) {
       navigate('/dashboard', { replace: true });
     }
-  }, [canAccess, navigate]);
+  }, [user, navigate]);
 
-  if (!canAccess) {
+  if (!canAccess(user)) {
     return null;
   }
 
