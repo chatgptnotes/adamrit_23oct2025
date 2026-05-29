@@ -262,6 +262,13 @@ const OpdAdmissionNotes = () => {
     }
   };
 
+  // Mask the last 4 digits of the phone number for printed copies
+  const maskPhone = (phone?: string) => {
+    if (!phone) return 'N/A';
+    if (phone.length <= 4) return 'XXXX';
+    return phone.slice(0, -4) + 'XXXX';
+  };
+
   return (
     <div className="container mx-auto p-6 max-w-7xl">
       {/* Header with Actions */}
@@ -337,7 +344,10 @@ const OpdAdmissionNotes = () => {
             </div>
             <div>
               <Label className="text-xs font-semibold text-gray-600">Mobile No</Label>
-              <p className="text-sm font-medium mt-1">{patientData.patients?.phone || 'N/A'}</p>
+              <p className="text-sm font-medium mt-1">
+                <span className="print:hidden">{patientData.patients?.phone || 'N/A'}</span>
+                <span className="hidden print:inline">{maskPhone(patientData.patients?.phone)}</span>
+              </p>
             </div>
             <div>
               <Label className="text-xs font-semibold text-gray-600">Reg. No</Label>
