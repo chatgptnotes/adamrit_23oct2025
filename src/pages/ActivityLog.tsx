@@ -71,6 +71,7 @@ const ACTION_TYPES = [
   "user_login",
   "patient_create",
   "patient_edit",
+  "relationship_manager_create",
   "bill_create",
   "patient_discharge",
   "form_submit",

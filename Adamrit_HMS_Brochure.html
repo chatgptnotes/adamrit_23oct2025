@@ -1,0 +1,1070 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Adamrit Hospital Management System — Complete Capability Catalog</title>
+<style>
+  @page { size: A4; margin: 0; }
+
+  :root {
+    --ink:#0f2230; --ink-soft:#3b5567; --muted:#6b8294;
+    --line:#d8e3ea; --line-soft:#e7eef3; --paper:#ffffff; --wash:#f4f8fa;
+    --teal-900:#06343a; --teal-700:#0c6e72; --teal-600:#0e8a8f;
+    --teal-500:#16a3a3; --teal-300:#6fd0cd; --mint:#e7f6f4;
+    --gold:#c98a2b; --gold-soft:#fbf1df; --coral:#e0613e; --green:#2f9e6b;
+    --red:#c0492f;
+    --font-sans:"Segoe UI","Helvetica Neue",Helvetica,Arial,sans-serif;
+    --font-display:"Georgia","Iowan Old Style","Times New Roman",serif;
+    --shadow-sm:0 1px 2px rgba(15,34,48,0.05), 0 4px 12px rgba(15,34,48,0.045);
+    --shadow-md:0 2px 6px rgba(15,34,48,0.07), 0 16px 38px rgba(6,52,58,0.10);
+  }
+  * { box-sizing:border-box; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  html, body {
+    margin:0; padding:0; color:var(--ink); background:#e9eef1;
+    font-family:var(--font-sans);
+    font-size:10pt; line-height:1.48; -webkit-font-smoothing:antialiased;
+  }
+  h1,h2,h3,h4 { margin:0; font-weight:700; letter-spacing:-0.01em; }
+
+  .page {
+    position:relative; width:210mm; min-height:297mm;
+    padding:16mm 15mm 15mm; margin:0 auto 7mm; background:var(--paper);
+    overflow:hidden; page-break-after:always; box-shadow:0 6px 28px rgba(15,34,48,0.14);
+  }
+  .page:last-child { page-break-after:auto; }
+  @media print { html, body { background:var(--paper); } .page { margin:0 auto; box-shadow:none; } }
+
+  .page-footer {
+    position:absolute; bottom:8mm; left:15mm; right:15mm;
+    display:flex; justify-content:space-between; align-items:center;
+    font-size:7.4pt; letter-spacing:0.06em; text-transform:uppercase;
+    color:var(--muted); border-top:1px solid var(--line); padding-top:5px;
+  }
+  .page-footer strong { color:var(--teal-700); }
+
+  /* Cover */
+  .cover { padding:0; color:#eafaf8;
+    background:
+      radial-gradient(120% 90% at 85% 8%, rgba(22,163,163,0.55) 0%, rgba(12,110,114,0) 60%),
+      radial-gradient(90% 70% at 8% 95%, rgba(201,138,43,0.30) 0%, rgba(6,52,58,0) 55%),
+      linear-gradient(155deg,#06343a 0%,#0a4a4f 45%,#0c6e72 100%);
+    display:flex; flex-direction:column; }
+  .cover-grid { position:absolute; inset:0;
+    background-image:linear-gradient(rgba(255,255,255,0.045) 1px,transparent 1px),
+      linear-gradient(90deg,rgba(255,255,255,0.045) 1px,transparent 1px);
+    background-size:26px 26px;
+    mask-image:radial-gradient(circle at 70% 30%,black 0%,transparent 75%); }
+  .cover-inner { position:relative; padding:22mm 18mm; display:flex; flex-direction:column; height:297mm; }
+  .brandmark { display:flex; align-items:center; gap:12px; font-size:12pt;
+    letter-spacing:0.32em; text-transform:uppercase; color:#aef0ea; font-weight:600; }
+  .brandmark .dot { width:30px; height:30px; border-radius:9px;
+    background:linear-gradient(140deg,#6fd0cd,#16a3a3); display:grid; place-items:center;
+    box-shadow:0 6px 20px rgba(22,163,163,0.5); }
+  .brandmark .dot span { display:block; width:13px; height:13px; position:relative; }
+  .brandmark .dot span::before,.brandmark .dot span::after { content:""; position:absolute; background:#06343a; border-radius:2px; }
+  .brandmark .dot span::before { left:5px; top:0; width:3px; height:13px; }
+  .brandmark .dot span::after { top:5px; left:0; width:13px; height:3px; }
+  .cover-spacer { flex:1; }
+  .eyebrow { font-size:9.5pt; letter-spacing:0.42em; text-transform:uppercase; color:var(--teal-300); margin-bottom:20px; font-weight:600; }
+  .cover h1 { font-size:46pt; line-height:1.03; letter-spacing:-0.025em; color:#fff; margin-bottom:10px; }
+  .cover h1 .accent { background:linear-gradient(100deg,#6fd0cd,#aef0ea); -webkit-background-clip:text; background-clip:text; color:transparent; }
+  .cover .sub { font-size:14pt; color:#bfe6e2; max-width:16cm; line-height:1.45; margin-top:14px; }
+  .cover .pill-row { display:flex; gap:9px; flex-wrap:wrap; margin-top:26px; }
+  .cover .pill { font-size:8.6pt; padding:6px 13px; border-radius:999px;
+    border:1px solid rgba(174,240,234,0.4); background:rgba(255,255,255,0.06); color:#d6f4f0; }
+  .cover-stats { display:grid; grid-template-columns:repeat(4,1fr);
+    margin-top:40px; border-top:1px solid rgba(174,240,234,0.25); padding-top:20px; }
+  .cover-stats .s .n { font-family:var(--font-display); font-size:30pt; font-weight:700; color:#fff; line-height:1; letter-spacing:-0.01em; }
+  .cover-stats .s .l { font-size:8.2pt; letter-spacing:0.06em; text-transform:uppercase; color:#8fd0cb; margin-top:7px; }
+  .cover-foot { margin-top:28px; display:flex; justify-content:space-between; align-items:flex-end; font-size:9pt; color:#9fd4cf; }
+  .cover-foot .who { font-size:11pt; color:#eafaf8; font-weight:600; }
+
+  /* Section heads */
+  .sec-head { margin-bottom:16px; }
+  .sec-kicker { display:inline-block; font-size:8.2pt; letter-spacing:0.26em; text-transform:uppercase; color:var(--teal-600); font-weight:700; margin-bottom:7px; }
+  .sec-kicker::before { content:"— "; color:var(--gold); }
+  .sec-title { font-size:21pt; line-height:1.08; color:var(--ink); letter-spacing:-0.02em; }
+  .sec-lead { font-size:10pt; color:var(--ink-soft); max-width:17.5cm; margin-top:8px; line-height:1.5; }
+  .accent-bar { width:50px; height:4px; border-radius:3px; background:linear-gradient(90deg,var(--teal-600),var(--gold)); margin-bottom:13px; }
+
+  /* Modules */
+  .grid { display:grid; gap:11px; }
+  .g2 { grid-template-columns:1fr 1fr; }
+  .g3 { grid-template-columns:repeat(3,1fr); }
+
+  .module { border:1px solid var(--line); border-radius:11px; overflow:hidden; break-inside:avoid; box-shadow:var(--shadow-sm); background:var(--paper); }
+  .module-head { display:flex; align-items:center; gap:10px; padding:9px 13px;
+    background:linear-gradient(120deg,var(--teal-900),#0a565b); color:#eafaf8; }
+  .module-head .mnum { font-size:8pt; font-weight:700; letter-spacing:0.06em;
+    background:rgba(255,255,255,0.14); border-radius:6px; padding:3px 7px; color:#aef0ea; white-space:nowrap; }
+  .module-head h3 { font-size:11pt; color:#fff; }
+  .module-head .tag { margin-left:auto; font-size:7.4pt; letter-spacing:0.08em; text-transform:uppercase; color:#7fc6c1; }
+  .module-body { padding:10px 13px; }
+  .module-intro { font-size:8.5pt; color:var(--muted); margin:0 0 8px; line-height:1.4; }
+  .module-body ul { margin:0; padding:0; list-style:none; column-count:2; column-gap:18px; }
+  .module-body ul.c3 { column-count:3; }
+  .module-body ul.c1 { column-count:1; }
+  .module-body li { font-size:8.7pt; color:var(--ink-soft); padding-left:14px; position:relative; margin-bottom:5px; break-inside:avoid; line-height:1.38; }
+  .module-body li::before { content:""; position:absolute; left:0; top:5px; width:6px; height:6px; border-radius:2px;
+    background:linear-gradient(135deg,var(--teal-500),var(--teal-700)); }
+  .module-body li b { color:var(--ink); font-weight:600; }
+
+  /* cards */
+  .card { border:1px solid var(--line); border-radius:11px; padding:14px; background:var(--paper); box-shadow:var(--shadow-sm); }
+  .card.wash { background:var(--wash); box-shadow:none; }
+  .card.flat { box-shadow:none; }
+  .card .ic { width:32px; height:32px; border-radius:9px; background:var(--mint); color:var(--teal-700);
+    display:grid; place-items:center; font-size:14pt; font-weight:700; margin-bottom:9px; }
+  .card h3 { font-size:11pt; color:var(--ink); margin-bottom:4px; }
+  .card p { font-size:9pt; color:var(--ink-soft); margin:0; line-height:1.45; }
+
+  .strip { background:linear-gradient(120deg,var(--teal-900),var(--teal-700)); border-radius:13px;
+    padding:18px 22px; color:#eafaf8; display:grid; grid-template-columns:repeat(4,1fr); gap:14px; box-shadow:var(--shadow-md); }
+  .strip .s .n { font-family:var(--font-display); font-size:21pt; font-weight:700; color:#fff; line-height:1; }
+  .strip .s .l { font-size:8.4pt; color:#b6e3df; margin-top:5px; line-height:1.35; }
+
+  .lead-quote { border-left:4px solid var(--gold); padding:3px 0 3px 16px; margin:0;
+    font-family:var(--font-display); font-size:13pt; line-height:1.5; color:var(--ink); font-style:italic; }
+
+  .badges { display:flex; flex-wrap:wrap; gap:7px; }
+  .badge { font-size:8.4pt; font-weight:600; padding:5px 12px; border-radius:999px;
+    background:var(--mint); color:var(--teal-700); border:1px solid var(--teal-300); }
+  .badge.gold { background:var(--gold-soft); color:var(--gold); border-color:#e7c489; }
+
+  .mini-list { margin:0; padding:0; list-style:none; }
+  .mini-list li { font-size:9.2pt; color:var(--ink-soft); padding:6px 0 6px 20px; position:relative; border-bottom:1px dashed var(--line); }
+  .mini-list li:last-child { border-bottom:none; }
+  .mini-list li::before { content:"✓"; position:absolute; left:0; top:5px; color:var(--green); font-weight:700; font-size:9.5pt; }
+  .mini-list li b { color:var(--ink); }
+
+  /* TOC / map */
+  .map-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:10px; }
+  .map-card { border:1px solid var(--line); border-left:4px solid var(--teal-600); border-radius:9px; padding:10px 13px; break-inside:avoid; box-shadow:var(--shadow-sm); }
+  .map-card .mc-top { display:flex; align-items:baseline; gap:8px; }
+  .map-card .mc-num { font-family:var(--font-display); font-size:10pt; font-weight:700; color:var(--teal-600); }
+  .map-card h4 { font-size:10.4pt; color:var(--ink); }
+  .map-card p { font-size:8.4pt; color:var(--muted); margin:4px 0 0; line-height:1.4; }
+
+  .benefit { display:flex; gap:13px; padding:8.5px 0; border-bottom:1px solid var(--line); break-inside:avoid; }
+  .benefit:last-child { border-bottom:none; }
+  .benefit .bn { flex:0 0 38px; height:38px; border-radius:10px; background:var(--mint); color:var(--teal-700);
+    display:grid; place-items:center; font-weight:700; font-size:13pt; }
+  .benefit h4 { font-size:11pt; color:var(--ink); margin-bottom:2px; }
+  .benefit p { font-size:9.2pt; color:var(--ink-soft); margin:0; }
+
+  .cta { background:radial-gradient(100% 120% at 90% 0%,rgba(22,163,163,0.5),transparent 60%),
+      linear-gradient(150deg,#06343a,#0c6e72); border-radius:15px; padding:30px; color:#eafaf8; box-shadow:var(--shadow-md); }
+  .cta h2 { font-size:22pt; color:#fff; margin-bottom:9px; letter-spacing:-0.02em; }
+  .cta p { font-size:10.6pt; color:#c5e9e5; max-width:15cm; }
+  .cta-contact { display:flex; gap:28px; margin-top:22px; flex-wrap:wrap; }
+  .cta-contact .ci .l { font-size:7.8pt; letter-spacing:0.16em; text-transform:uppercase; color:#8fd0cb; }
+  .cta-contact .ci .v { font-size:11pt; color:#fff; font-weight:600; margin-top:3px; }
+
+  .two-col { display:grid; grid-template-columns:1.1fr 0.9fr; gap:22px; align-items:start; }
+  .tag-soft { font-size:8.4pt; color:var(--muted); }
+  .note { font-size:8.4pt; color:var(--muted); margin-top:8px; font-style:italic; }
+
+  /* Problem vs solution */
+  .ps-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  .ps-col { border-radius:12px; padding:16px 17px; break-inside:avoid; }
+  .ps-col.prob { background:#fdf3f0; border:1px solid #f1c9bd; }
+  .ps-col.sol { background:var(--mint); border:1px solid var(--teal-300); }
+  .ps-col h3 { font-size:11.5pt; margin-bottom:3px; }
+  .ps-col.prob h3 { color:var(--red); }
+  .ps-col.sol h3 { color:var(--teal-700); }
+  .ps-col .ps-sub { font-size:8.4pt; color:var(--muted); margin:0 0 11px; }
+  .ps-row { display:flex; gap:9px; padding:8px 0; border-bottom:1px dashed rgba(15,34,48,0.12); break-inside:avoid; }
+  .ps-row:last-child { border-bottom:none; }
+  .ps-row .ico { flex:0 0 17px; font-weight:700; font-size:11pt; line-height:1.2; }
+  .ps-col.prob .ico { color:var(--red); }
+  .ps-col.sol .ico { color:var(--green); }
+  .ps-row p { margin:0; font-size:8.9pt; line-height:1.4; color:var(--ink-soft); }
+  .ps-row p b { color:var(--ink); }
+
+  /* Outcome metrics */
+  .metric-row { display:grid; grid-template-columns:repeat(4,1fr); gap:11px; }
+  .metric { border:1px solid var(--line); border-radius:11px; padding:13px 14px; background:var(--paper); box-shadow:var(--shadow-sm); break-inside:avoid; }
+  .metric .mv { font-family:var(--font-display); font-size:20pt; font-weight:700; color:var(--teal-700); line-height:1; }
+  .metric .mv .u { font-size:11pt; }
+  .metric .ml { font-size:8.4pt; color:var(--ink-soft); margin-top:6px; line-height:1.35; }
+
+  /* Editions / pricing */
+  .tier-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; align-items:stretch; }
+  .tier { border:1px solid var(--line); border-radius:13px; overflow:hidden; display:flex; flex-direction:column; box-shadow:var(--shadow-sm); background:var(--paper); break-inside:avoid; }
+  .tier.feat { border:2px solid var(--teal-500); box-shadow:var(--shadow-md); }
+  .tier-top { padding:14px 15px 13px; border-bottom:1px solid var(--line-soft); }
+  .tier.feat .tier-top { background:linear-gradient(140deg,var(--teal-900),var(--teal-700)); color:#eafaf8; border-bottom:none; }
+  .tier .tname { font-size:12pt; font-weight:700; color:var(--ink); }
+  .tier.feat .tname { color:#fff; }
+  .tier .tband { font-size:7.4pt; letter-spacing:0.14em; text-transform:uppercase; color:var(--teal-600); font-weight:700; margin-bottom:5px; }
+  .tier.feat .tband { color:var(--teal-300); }
+  .tier .tfor { font-size:8.4pt; color:var(--muted); margin-top:5px; line-height:1.4; }
+  .tier.feat .tfor { color:#bfe6e2; }
+  .tier .badge-feat { display:inline-block; font-size:7pt; letter-spacing:0.1em; text-transform:uppercase; font-weight:700; background:var(--gold); color:#3a2606; padding:3px 8px; border-radius:999px; margin-bottom:7px; }
+  .tier ul { list-style:none; margin:0; padding:12px 15px; flex:1; }
+  .tier li { font-size:8.5pt; color:var(--ink-soft); padding:5px 0 5px 17px; position:relative; line-height:1.35; }
+  .tier li::before { content:"✓"; position:absolute; left:0; top:4px; color:var(--green); font-weight:700; font-size:9pt; }
+  .tier li.off { color:var(--muted); }
+  .tier li.off::before { content:"—"; color:#c3d2da; }
+
+  /* Timeline */
+  .timeline { display:grid; grid-template-columns:repeat(4,1fr); gap:0; margin-top:4px; }
+  .tl-step { position:relative; padding:0 12px 0 0; break-inside:avoid; }
+  .tl-step .tl-dot { width:26px; height:26px; border-radius:50%; background:var(--teal-600); color:#fff;
+    font-size:9pt; font-weight:700; display:grid; place-items:center; box-shadow:0 4px 12px rgba(14,138,143,0.35); }
+  .tl-step .tl-line { position:absolute; top:13px; left:26px; right:0; height:2px; background:var(--teal-300); }
+  .tl-step:last-child .tl-line { display:none; }
+  .tl-step h4 { font-size:9.6pt; color:var(--ink); margin:9px 0 3px; }
+  .tl-step .tl-when { font-size:7.6pt; letter-spacing:0.1em; text-transform:uppercase; color:var(--gold); font-weight:700; }
+  .tl-step p { font-size:8.3pt; color:var(--ink-soft); margin:3px 0 0; line-height:1.4; }
+
+  /* Testimonial */
+  .quote-card { border:1px solid var(--line); border-radius:12px; padding:16px 18px; background:var(--wash); break-inside:avoid; }
+  .quote-card .qm { font-family:var(--font-display); font-size:26pt; color:var(--teal-300); line-height:0.5; }
+  .quote-card p { font-family:var(--font-display); font-size:10.5pt; font-style:italic; color:var(--ink); line-height:1.5; margin:6px 0 10px; }
+  .quote-card .qa { font-size:8.4pt; color:var(--muted); }
+  .quote-card .qa b { color:var(--teal-700); }
+
+  /* Comparison */
+  .cmp { width:100%; border-collapse:collapse; font-size:9pt; }
+  .cmp th, .cmp td { text-align:left; padding:6.5px 11px; border-bottom:1px solid var(--line); }
+  .cmp thead th { font-size:8pt; letter-spacing:0.08em; text-transform:uppercase; color:var(--muted); border-bottom:2px solid var(--line); }
+  .cmp tbody td:first-child { color:var(--ink); font-weight:600; width:34%; }
+  .cmp .ay { color:var(--green); font-weight:700; }
+  .cmp .ad { color:var(--ink-soft); }
+  .cmp tbody tr:last-child td { border-bottom:none; }
+</style>
+</head>
+<body>
+
+<!-- ============ COVER ============ -->
+<section class="page cover">
+  <div class="cover-grid"></div>
+  <div class="cover-inner">
+    <div class="brandmark"><span class="dot"><span></span></span> ADAMRIT&nbsp;HEALTHCARE&nbsp;SYSTEMS</div>
+    <div class="cover-spacer"></div>
+    <div class="eyebrow">Hospital Management Platform · Complete Catalog</div>
+    <h1>Every Department.<br>Every Patient.<br><span class="accent">One System.</span></h1>
+    <p class="sub">A complete, web-based hospital operating system — covering patient care, diagnostics, pharmacy, billing, full-scale accounting, government schemes, marketing, and management — module by module, feature by feature.</p>
+    <div class="pill-row">
+      <span class="pill">OPD &amp; IPD</span>
+      <span class="pill">Lab · Radiology / PACS</span>
+      <span class="pill">Pharmacy &amp; Supply Chain</span>
+      <span class="pill">Billing &amp; Tally-Grade Accounting</span>
+      <span class="pill">CGHS · PMJAY · ESIC · Ayushman</span>
+      <span class="pill">Marketing &amp; B2B</span>
+    </div>
+    <div class="cover-stats">
+      <div class="s"><div class="n">130+</div><div class="l">Working Screens</div></div>
+      <div class="s"><div class="n">16</div><div class="l">Functional Domains</div></div>
+      <div class="s"><div class="n">300+</div><div class="l">Discrete Features</div></div>
+      <div class="s"><div class="n">100%</div><div class="l">Web-Based</div></div>
+    </div>
+    <div class="cover-foot">
+      <div>
+        <div class="tag-soft" style="color:#8fd0cb; letter-spacing:0.14em; text-transform:uppercase;">Full Product Capability Document</div>
+        <div class="who">Prepared for prospective hospital &amp; clinic partners</div>
+      </div>
+      <div style="text-align:right;">
+        <div class="tag-soft" style="color:#8fd0cb;">Confidential</div>
+        <div style="color:#eafaf8; font-weight:600;">2026 Edition</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ PAGE 2 — OVERVIEW + SOLUTION MAP ============ -->
+<section class="page">
+  <div class="sec-head">
+    <span class="sec-kicker">Executive Overview</span>
+    <div class="accent-bar"></div>
+    <h2 class="sec-title">A single platform that runs the whole hospital</h2>
+  </div>
+
+  <p class="lead-quote">Adamrit replaces the registers, spreadsheets, and disconnected software that hospitals juggle today with one secure system where the front desk, doctors, labs, pharmacy, billing, accounts, and management all work from the same live data.</p>
+
+  <div class="strip" style="margin-top:16px;">
+    <div class="s"><div class="n">Patient → Bill</div><div class="l">The full journey, end to end</div></div>
+    <div class="s"><div class="n">Multi-Hospital</div><div class="l">Many units, one login</div></div>
+    <div class="s"><div class="n">Role-Based</div><div class="l">Each user sees only their work</div></div>
+    <div class="s"><div class="n">Real-Time</div><div class="l">Every screen, always current</div></div>
+  </div>
+
+  <div class="sec-head" style="margin-top:24px; margin-bottom:12px;">
+    <span class="sec-kicker">The Solution Map</span>
+    <h2 class="sec-title" style="font-size:16pt;">16 functional domains, covered in this document</h2>
+  </div>
+
+  <div class="map-grid">
+    <div class="map-card"><div class="mc-top"><span class="mc-num">01</span><h4>Front Office &amp; Patient Access</h4></div><p>Registration, kiosk, appointments, queue &amp; TV displays</p></div>
+    <div class="map-card"><div class="mc-top"><span class="mc-num">02</span><h4>OPD &amp; IPD Operations</h4></div><p>Daily dashboards, admitted patients, journey logs</p></div>
+    <div class="map-card"><div class="mc-top"><span class="mc-num">03</span><h4>Wards, Beds &amp; Accommodation</h4></div><p>Room management, shifting, occupancy</p></div>
+    <div class="map-card"><div class="mc-top"><span class="mc-num">04</span><h4>Clinical &amp; Nursing</h4></div><p>Doctor view, treatment sheets, nursing station</p></div>
+    <div class="map-card"><div class="mc-top"><span class="mc-num">05</span><h4>Operation Theatre &amp; Procedures</h4></div><p>OT, Cath Lab, CT/MRI, complications</p></div>
+    <div class="map-card"><div class="mc-top"><span class="mc-num">06</span><h4>Laboratory (LIS)</h4></div><p>Orders, sample tracking, results, QC, delivery</p></div>
+    <div class="map-card"><div class="mc-top"><span class="mc-num">07</span><h4>Radiology &amp; Imaging (RIS/PACS)</h4></div><p>Modalities, worklist, reporting, image viewer</p></div>
+    <div class="map-card"><div class="mc-top"><span class="mc-num">08</span><h4>Pharmacy &amp; Supply Chain</h4></div><p>Billing, inventory, purchase, GRN, returns</p></div>
+    <div class="map-card"><div class="mc-top"><span class="mc-num">09</span><h4>Billing &amp; Invoicing</h4></div><p>Final bill, advances, discharge, scheme bills</p></div>
+    <div class="map-card"><div class="mc-top"><span class="mc-num">10</span><h4>Accounting &amp; Finance</h4></div><p>Vouchers, ledgers, balance sheet, P&amp;L, GST</p></div>
+    <div class="map-card"><div class="mc-top"><span class="mc-num">11</span><h4>Corporate &amp; TPA</h4></div><p>Submission, approvals, aging, bulk receipts</p></div>
+    <div class="map-card"><div class="mc-top"><span class="mc-num">12</span><h4>Government Schemes</h4></div><p>CGHS, PMJAY/MJPJAY, ESIC, Ayushman panels</p></div>
+    <div class="map-card"><div class="mc-top"><span class="mc-num">13</span><h4>Marketing, Referrals &amp; B2B</h4></div><p>Field tracking, incentives, partner portal</p></div>
+    <div class="map-card"><div class="mc-top"><span class="mc-num">14</span><h4>Master Data &amp; Configuration</h4></div><p>All catalogs, panels, rates &amp; rules</p></div>
+    <div class="map-card"><div class="mc-top"><span class="mc-num">15</span><h4>Administration &amp; Security</h4></div><p>Users, roles, attendance, audit logs</p></div>
+    <div class="map-card"><div class="mc-top"><span class="mc-num">16</span><h4>Dashboards, Reports &amp; Integrations</h4></div><p>Director KPIs, Tally sync, telephony, QR</p></div>
+  </div>
+
+  <div class="page-footer"><span><strong>ADAMRIT</strong> Hospital Management System</span><span>Overview &amp; Solution Map · 02</span></div>
+</section>
+
+<!-- ============ PAGE 3 — PROBLEM / SOLUTION (NEW) ============ -->
+<section class="page">
+  <div class="sec-head">
+    <span class="sec-kicker">Why It Matters</span>
+    <div class="accent-bar"></div>
+    <h2 class="sec-title">The hidden cost of disconnected systems</h2>
+    <p class="sec-lead">Most hospitals don't lose money in one big way — they lose it in a hundred small leaks between departments that never share the same data. Adamrit closes each one.</p>
+  </div>
+
+  <div class="ps-grid">
+    <div class="ps-col prob">
+      <h3>Running on registers &amp; silos</h3>
+      <p class="ps-sub">The everyday reality without a connected system</p>
+      <div class="ps-row"><span class="ico">✕</span><p><b>Revenue leaks</b> — medicines, consumables, and scans get delivered but never reach the bill.</p></div>
+      <div class="ps-row"><span class="ico">✕</span><p><b>Slow discharges</b> — final bills are assembled by hand from scattered slips, holding beds for hours.</p></div>
+      <div class="ps-row"><span class="ico">✕</span><p><b>Claim rejections</b> — CGHS/PMJAY/ESIC packages priced wrong, documents missing, money stuck for months.</p></div>
+      <div class="ps-row"><span class="ico">✕</span><p><b>No live visibility</b> — directors learn the month's numbers weeks after the month has ended.</p></div>
+      <div class="ps-row"><span class="ico">✕</span><p><b>Stock &amp; expiry losses</b> — pharmacy write-offs nobody saw coming.</p></div>
+      <div class="ps-row"><span class="ico">✕</span><p><b>Reconciliation pain</b> — billing, accounts, and Tally never quite agree.</p></div>
+    </div>
+    <div class="ps-col sol">
+      <h3>Running on Adamrit</h3>
+      <p class="ps-sub">One system, one source of truth</p>
+      <div class="ps-row"><span class="ico">✓</span><p><b>Every charge captured</b> — each service posts to the visit bill the moment it's delivered.</p></div>
+      <div class="ps-row"><span class="ico">✓</span><p><b>One-click discharge bills</b> — assembled automatically from real activity, ready in minutes.</p></div>
+      <div class="ps-row"><span class="ico">✓</span><p><b>First-time-right claims</b> — built-in scheme rates, package codes, and auto-generated documents.</p></div>
+      <div class="ps-row"><span class="ico">✓</span><p><b>Live director dashboard</b> — revenue, occupancy, and referrals update as they happen.</p></div>
+      <div class="ps-row"><span class="ico">✓</span><p><b>Batch-level stock control</b> — expiry alerts, low-stock alerts, full movement audit.</p></div>
+      <div class="ps-row"><span class="ico">✓</span><p><b>Books that tie out</b> — billing flows into double-entry accounts and syncs to Tally.</p></div>
+    </div>
+  </div>
+
+  <div class="sec-head" style="margin-top:22px; margin-bottom:12px;">
+    <span class="sec-kicker">Where Hospitals See Impact</span>
+    <h2 class="sec-title" style="font-size:15pt;">The areas Adamrit is built to move</h2>
+  </div>
+  <div class="metric-row">
+    <div class="metric"><div class="mv">↓</div><div class="ml"><b>Revenue leakage</b> — charges captured at the point of service, not reconstructed later</div></div>
+    <div class="metric"><div class="mv">↓</div><div class="ml"><b>Discharge time</b> — bills ready on demand instead of hand-totalled at the counter</div></div>
+    <div class="metric"><div class="mv">↓</div><div class="ml"><b>Claim rejections</b> — scheme rates &amp; documents correct before submission</div></div>
+    <div class="metric"><div class="mv">↑</div><div class="ml"><b>Cash visibility</b> — outstanding, aging &amp; daily revenue, live</div></div>
+  </div>
+  <p class="note">Directional outcomes that depend on each hospital's current process. We size the specific opportunity for your hospital during the demo.</p>
+
+  <div class="page-footer"><span><strong>ADAMRIT</strong> Hospital Management System</span><span>The Problem &amp; The Solution · 03</span></div>
+</section>
+
+<!-- ============ PAGE 4 — DOMAINS 1-3 ============ -->
+<section class="page">
+  <div class="sec-head">
+    <span class="sec-kicker">Capabilities · Patient Access &amp; Operations</span>
+    <div class="accent-bar"></div>
+    <h2 class="sec-title">From the front gate to the ward</h2>
+    <p class="sec-lead">Every patient touchpoint before clinical care begins — registration, scheduling, queueing, and the in-patient accommodation that follows admission.</p>
+  </div>
+
+  <div class="grid" style="gap:11px;">
+    <div class="module">
+      <div class="module-head"><span class="mnum">01</span><h3>Front Office &amp; Patient Access</h3><span class="tag">Reception</span></div>
+      <div class="module-body">
+        <p class="module-intro">The front desk's complete toolkit — register, schedule, and route every patient, with kiosk self-service and live queue displays for the waiting area.</p>
+        <ul>
+        <li><b>OPD &amp; IPD registration</b> with full demographics</li>
+        <li><b>Self check-in kiosk</b> for walk-in patients</li>
+        <li><b>Appointment scheduling</b> &amp; calendar</li>
+        <li><b>Queue management</b> with token allocation</li>
+        <li><b>Queue display / status</b> boards</li>
+        <li><b>Queue TV</b> waiting-area screen</li>
+        <li><b>Bulk patient import</b> from lists/files</li>
+        <li><b>Handwritten-list capture</b> for legacy records</li>
+        <li><b>Patient lookup</b> &amp; duplicate detection</li>
+        <li><b>Patient profile</b> with full history</li>
+        <li><b>Add / edit patient</b> &amp; registration dialogs</li>
+        <li><b>Visit creation</b> &amp; medical-info capture</li>
+      </ul></div>
+    </div>
+
+    <div class="module">
+      <div class="module-head"><span class="mnum">02</span><h3>OPD &amp; IPD Operations</h3><span class="tag">Daily flow</span></div>
+      <div class="module-body">
+        <p class="module-intro">Live operational dashboards that show who is in the hospital right now — and every step of each patient's journey from visit to discharge.</p>
+        <ul>
+        <li><b>Today's OPD</b> dashboard with statistics cards</li>
+        <li><b>Today's IPD</b> dashboard &amp; live census</li>
+        <li><b>Currently-admitted</b> patient board</li>
+        <li><b>OPD summary</b> landing &amp; task selector</li>
+        <li><b>OPD / admission notes</b> per visit</li>
+        <li><b>Patient dashboard</b> &amp; workflow visual</li>
+        <li><b>Patient overview</b> analytics</li>
+        <li><b>Patient journey logs</b> (timeline)</li>
+        <li><b>Activity log</b> across the visit</li>
+        <li><b>External requisition</b> create &amp; track</li>
+        <li><b>Extension-days</b> tracking for stays</li>
+        <li><b>Discharged-patients</b> register</li>
+      </ul></div>
+    </div>
+
+    <div class="module">
+      <div class="module-head"><span class="mnum">03</span><h3>Wards, Beds &amp; Accommodation</h3><span class="tag">In-patient</span></div>
+      <div class="module-body">
+        <p class="module-intro">Manage rooms and beds in real time, shift patients with a full audit trail, and post accommodation charges to the bill automatically.</p>
+        <ul>
+        <li><b>Accommodation management</b> &amp; allocation</li>
+        <li><b>Room management</b> with status &amp; rates</li>
+        <li><b>Bed occupancy</b> visibility</li>
+        <li><b>Ward / room shifting</b> with audit trail</li>
+        <li><b>Conditional ward &amp; room fields</b> by case</li>
+        <li><b>Accommodation charges</b> auto-posted to bill</li>
+      </ul></div>
+    </div>
+  </div>
+
+  <div class="page-footer"><span><strong>ADAMRIT</strong> Hospital Management System</span><span>Patient Access &amp; Operations · 04</span></div>
+</section>
+
+<!-- ============ PAGE 5 — DOMAINS 4-5 ============ -->
+<section class="page">
+  <div class="sec-head">
+    <span class="sec-kicker">Capabilities · Clinical Care</span>
+    <div class="accent-bar"></div>
+    <h2 class="sec-title">Clinical care, nursing &amp; the operating theatre</h2>
+    <p class="sec-lead">The clinical core — where doctors and nurses document care, and every clinical document a hospital issues is generated from live visit data.</p>
+  </div>
+
+  <div class="grid" style="gap:11px;">
+    <div class="module">
+      <div class="module-head"><span class="mnum">04</span><h3>Clinical, Nursing &amp; Discharge</h3><span class="tag">Care team</span></div>
+      <div class="module-body">
+        <p class="module-intro">From the doctor's worklist to discharge — prescriptions, treatment sheets, nursing workflows, and auto-generated discharge documents.</p>
+        <ul>
+        <li><b>Doctor view</b> — patient list &amp; clinical actions</li>
+        <li><b>Treatment sheet</b> create, list &amp; print</li>
+        <li><b>Nursing station</b> workflows</li>
+        <li><b>Prescriptions</b> capture &amp; management</li>
+        <li><b>Medications</b> registry</li>
+        <li><b>Admission notes</b> (IPD &amp; OPD)</li>
+        <li><b>Discharge workflow</b> panel</li>
+        <li><b>IPD discharge summary</b> + edit &amp; print</li>
+        <li><b>Discharge summary</b> templates</li>
+        <li><b>Death certificate</b> generation</li>
+        <li><b>Gate pass</b> issue, print &amp; security check</li>
+        <li><b>P2 / PVI forms</b> per visit</li>
+      </ul></div>
+    </div>
+
+    <div class="module">
+      <div class="module-head"><span class="mnum">05</span><h3>Operation Theatre &amp; Procedures</h3><span class="tag">OT</span></div>
+      <div class="module-body">
+        <p class="module-intro">Schedule theatres, assign surgical teams, track consumables and implants, and capture diagnoses and complications — all linked to costing.</p>
+        <ul>
+        <li><b>Operation theatre</b> scheduling &amp; management</li>
+        <li><b>OT workflows</b> &amp; resource allocation</li>
+        <li><b>OT inventory</b> &amp; consumables</li>
+        <li><b>Cath Lab</b> module</li>
+        <li><b>CT / MRI module</b> &amp; MRI order modal</li>
+        <li><b>Diagnoses registry</b> (ICD-style catalog)</li>
+        <li><b>Complications</b> registry &amp; tracking</li>
+        <li><b>Surgeon / anaesthetist</b> assignment</li>
+        <li><b>Implant usage</b> linked to costing</li>
+      </ul></div>
+    </div>
+  </div>
+
+  <div class="card wash" style="margin-top:14px;">
+    <h3 style="margin-bottom:6px;">Clinical documents generated automatically</h3>
+    <p style="font-size:9pt; color:var(--ink-soft); margin:0 0 9px;">Every clinical document is produced from live visit data — no re-typing, consistent formatting, instant print/PDF.</p>
+    <div class="badges">
+      <span class="badge">Discharge Summary</span>
+      <span class="badge">Treatment Sheet</span>
+      <span class="badge">Admission Notes</span>
+      <span class="badge">Death Certificate</span>
+      <span class="badge">Gate Pass</span>
+      <span class="badge gold">P2 / PVI Forms</span>
+    </div>
+  </div>
+
+  <div class="page-footer"><span><strong>ADAMRIT</strong> Hospital Management System</span><span>Clinical Care · 05</span></div>
+</section>
+
+<!-- ============ PAGE 6 — DOMAIN 6 LAB ============ -->
+<section class="page">
+  <div class="sec-head">
+    <span class="sec-kicker">Capabilities · Diagnostics</span>
+    <div class="accent-bar"></div>
+    <h2 class="sec-title">A full Laboratory Information System</h2>
+    <p class="sec-lead">From order to validated report — sample tracking, configurable test catalogs, formula-driven panels, quality control, and patient delivery, including WhatsApp.</p>
+  </div>
+
+  <div class="grid g2" style="gap:11px;">
+    <div class="module">
+      <div class="module-head"><span class="mnum">06a</span><h3>Orders &amp; Sample Workflow</h3></div>
+      <div class="module-body"><ul class="c1">
+        <li><b>Lab dashboard</b> &amp; daily workload</li>
+        <li><b>Lab order entry</b> tied to patient visit</li>
+        <li><b>Patient search</b> with visit context</li>
+        <li><b>Sample tracking</b> &amp; barcode/sample IDs</li>
+        <li><b>Sample processing</b> stages &amp; status</li>
+        <li><b>Home sample collection</b> requests</li>
+        <li><b>Phlebotomist dashboard</b> for collection</li>
+      </ul></div>
+    </div>
+    <div class="module">
+      <div class="module-head"><span class="mnum">06b</span><h3>Test Configuration</h3></div>
+      <div class="module-body"><ul class="c1">
+        <li><b>Test catalog</b> &amp; sub-specialty grouping</li>
+        <li><b>Lab test config manager</b> (ranges, units)</li>
+        <li><b>Form builder</b> for custom test forms</li>
+        <li><b>Panel manager</b> &amp; nested sub-tests</li>
+        <li><b>Formula-driven</b> calculated results</li>
+        <li><b>Age/gender reference ranges</b></li>
+        <li><b>Lab master</b> (admin-controlled)</li>
+      </ul></div>
+    </div>
+    <div class="module">
+      <div class="module-head"><span class="mnum">06c</span><h3>Results &amp; Reporting</h3></div>
+      <div class="module-body"><ul class="c1">
+        <li><b>Result entry</b> — simple &amp; enhanced forms</li>
+        <li><b>Histopathology / cytology</b> entry</li>
+        <li><b>Serology</b> reporting</li>
+        <li><b>Lab trend charts</b> across visits</li>
+        <li><b>Lab report print formats</b></li>
+        <li><b>Report delivery</b> to patients</li>
+        <li><b>WhatsApp report</b> send button</li>
+      </ul></div>
+    </div>
+    <div class="module">
+      <div class="module-head"><span class="mnum">06d</span><h3>Quality &amp; Control</h3></div>
+      <div class="module-body"><ul class="c1">
+        <li><b>Quality control</b> module</li>
+        <li><b>Database / system status</b> monitoring</li>
+        <li><b>Result validation</b> workflow</li>
+        <li><b>Test data initializer</b> &amp; seeding</li>
+        <li><b>Reorder / re-test</b> handling</li>
+        <li><b>Audit trail</b> on result changes</li>
+      </ul></div>
+    </div>
+  </div>
+
+  <div class="page-footer"><span><strong>ADAMRIT</strong> Hospital Management System</span><span>Laboratory (LIS) · 06</span></div>
+</section>
+
+<!-- ============ PAGE 7 — DOMAIN 7 RADIOLOGY + 8 PHARMACY ============ -->
+<section class="page">
+  <div class="sec-head">
+    <span class="sec-kicker">Capabilities · Imaging &amp; Pharmacy</span>
+    <div class="accent-bar"></div>
+    <h2 class="sec-title">Radiology / PACS and a complete pharmacy supply chain</h2>
+    <p class="sec-lead">A full RIS/PACS imaging workflow alongside a pharmacy that runs from prescription to purchase order — both feeding billing and stock automatically.</p>
+  </div>
+
+  <div class="grid g2" style="gap:11px;">
+    <div class="module">
+      <div class="module-head"><span class="mnum">07</span><h3>Radiology &amp; Imaging (RIS / PACS)</h3></div>
+      <div class="module-body"><ul class="c1">
+        <li><b>Radiology dashboard</b> &amp; management</li>
+        <li><b>Radiology orders</b> (standard &amp; enhanced)</li>
+        <li><b>Radiology worklist</b> for technicians</li>
+        <li><b>Modality management</b> (X-ray, CT, MRI, USG)</li>
+        <li><b>PACS image viewer</b> &amp; PACS integration</li>
+        <li><b>Radiology reporting</b> &amp; result forms</li>
+        <li><b>Appointment scheduling</b> for imaging</li>
+        <li><b>X-ray tracking</b></li>
+        <li><b>Radiation safety</b> records</li>
+        <li><b>Quality assurance</b> &amp; analytics</li>
+        <li><b>Sub-speciality</b> configuration</li>
+        <li><b>Radiology master</b> catalog</li>
+      </ul></div>
+    </div>
+
+    <div class="module">
+      <div class="module-head"><span class="mnum">08</span><h3>Pharmacy &amp; Supply Chain</h3></div>
+      <div class="module-body"><ul class="c1">
+        <li><b>Pharmacy dashboard</b> &amp; KPIs</li>
+        <li><b>Pharmacy billing</b> &amp; direct-sale bills</li>
+        <li><b>Edit / view sale</b> &amp; return sales</li>
+        <li><b>Prescription queue</b> &amp; management</li>
+        <li><b>Prescription notification</b> alerts</li>
+        <li><b>Drug interaction</b> panel</li>
+        <li><b>Medicine inventory</b> &amp; items master</li>
+        <li><b>Batch &amp; expiry</b> inventory tracking</li>
+        <li><b>Low-stock medicines</b> alerts</li>
+        <li><b>Stock management</b> &amp; movement</li>
+        <li><b>Purchase orders</b> add / edit / list</li>
+        <li><b>Goods Received Note (GRN)</b></li>
+        <li><b>Supplier master</b></li>
+        <li><b>Return to vendor</b> &amp; write-off</li>
+        <li><b>Internal transfers</b> &amp; store requisition</li>
+        <li><b>Credit payments</b> &amp; product purchase report</li>
+      </ul></div>
+    </div>
+  </div>
+
+  <div class="card wash" style="margin-top:13px;">
+    <h3 style="margin-bottom:5px;">Imaging &amp; pharmacy feed billing automatically</h3>
+    <p style="font-size:9pt; color:var(--ink-soft); margin:0;">Every scan reported and every medicine dispensed posts to the patient's bill and the stock ledger in real time — closing the gap where revenue and inventory normally leak.</p>
+  </div>
+
+  <div class="page-footer"><span><strong>ADAMRIT</strong> Hospital Management System</span><span>Radiology &amp; Pharmacy · 07</span></div>
+</section>
+
+<!-- ============ PAGE 8 — DOMAIN 9 BILLING + 11 CORPORATE ============ -->
+<section class="page">
+  <div class="sec-head">
+    <span class="sec-kicker">Capabilities · Revenue Cycle</span>
+    <div class="accent-bar"></div>
+    <h2 class="sec-title">Billing, invoicing &amp; corporate/TPA management</h2>
+    <p class="sec-lead">Every bill type a hospital needs — cash, credit, corporate, and scheme — with a structured submission-to-payment workflow.</p>
+  </div>
+
+  <div class="grid g2" style="gap:11px;">
+    <div class="module">
+      <div class="module-head"><span class="mnum">09</span><h3>Billing &amp; Invoicing</h3></div>
+      <div class="module-body"><ul class="c1">
+        <li><b>Final bill</b> with full charge assembly</li>
+        <li><b>Edit final bill</b> &amp; bill management</li>
+        <li><b>Detailed invoice</b> (itemised)</li>
+        <li><b>Discharge invoice</b></li>
+        <li><b>Advance payment</b> capture &amp; receipts</li>
+        <li><b>Yojna (scheme) bill</b></li>
+        <li><b>Physiotherapy bill</b></li>
+        <li><b>Corporate bill</b> &amp; view bill</li>
+        <li><b>Day-wise bills</b> register</li>
+        <li><b>Old bills</b> history &amp; reprint</li>
+        <li><b>No-deduction letter</b></li>
+        <li><b>Financial summary</b> per visit</li>
+      </ul></div>
+    </div>
+
+    <div class="module">
+      <div class="module-head"><span class="mnum">11</span><h3>Corporate &amp; TPA Management</h3></div>
+      <div class="module-body"><ul class="c1">
+        <li><b>Corporate master</b> with areas &amp; detail</li>
+        <li><b>Corporate area mapping</b></li>
+        <li><b>Intimation + bill submission</b></li>
+        <li><b>Bill approval</b> workflow board</li>
+        <li><b>Payment-received</b> dialog &amp; tracking</li>
+        <li><b>Bill aging statement</b></li>
+        <li><b>Expected payment-date report</b></li>
+        <li><b>Corporate bulk receipts</b> / payments</li>
+        <li><b>Advance statement report</b></li>
+        <li><b>Daywise corporate</b> reconciliation</li>
+        <li><b>Outstanding &amp; recovery</b> visibility</li>
+        <li><b>Post-dated &amp; billwise</b> tracking</li>
+      </ul></div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:13px;">
+    <div class="ic">⇄</div>
+    <h3>The bill workflow board</h3>
+    <p>A Kanban-style board moves each corporate/TPA bill through intimation → submission → approval → payment, so the accounts team always knows what is pending, where, and for how long — and aging never surprises anyone.</p>
+  </div>
+
+  <div class="page-footer"><span><strong>ADAMRIT</strong> Hospital Management System</span><span>Revenue Cycle · 08</span></div>
+</section>
+
+<!-- ============ PAGE 9 — DOMAIN 10 ACCOUNTING ============ -->
+<section class="page">
+  <div class="sec-head">
+    <span class="sec-kicker">Capabilities · Finance</span>
+    <div class="accent-bar"></div>
+    <h2 class="sec-title">Tally-grade accounting, built in</h2>
+    <p class="sec-lead">A complete double-entry accounting suite — not just billing. Vouchers, ledgers, statutory statements, bank reconciliation, GST, and a two-way Tally bridge.</p>
+  </div>
+
+  <div class="grid g2" style="gap:11px;">
+    <div class="module">
+      <div class="module-head"><span class="mnum">10a</span><h3>Books &amp; Vouchers</h3></div>
+      <div class="module-body"><ul class="c1">
+        <li><b>Voucher entry</b> &amp; simple voucher creation</li>
+        <li><b>Voucher gap detection</b></li>
+        <li><b>Chart of accounts</b> &amp; ledger creation</li>
+        <li><b>Master creation / alteration</b></li>
+        <li><b>Cash book</b> &amp; day book</li>
+        <li><b>Day book report</b></li>
+        <li><b>Account books</b> &amp; ledger view</li>
+        <li><b>Daily payment allocation</b></li>
+      </ul></div>
+    </div>
+    <div class="module">
+      <div class="module-head"><span class="mnum">10b</span><h3>Statements &amp; Analysis</h3></div>
+      <div class="module-body"><ul class="c1">
+        <li><b>Balance sheet</b></li>
+        <li><b>Profit &amp; loss</b></li>
+        <li><b>Trial balance</b></li>
+        <li><b>Cash flow &amp; funds flow</b></li>
+        <li><b>Ratio analysis</b></li>
+        <li><b>Ledger &amp; patient ledger statements</b></li>
+        <li><b>Billwise details</b> &amp; post-dated summary</li>
+        <li><b>Stock summary</b></li>
+      </ul></div>
+    </div>
+    <div class="module">
+      <div class="module-head"><span class="mnum">10c</span><h3>Banking &amp; Statutory</h3></div>
+      <div class="module-body"><ul class="c1">
+        <li><b>Bank reconciliation</b> (incl. SGST)</li>
+        <li><b>Bankwise register</b> &amp; banking</li>
+        <li><b>Cheque printing</b> &amp; deposit slips</li>
+        <li><b>Daily reconciliation</b></li>
+        <li><b>GST / SGST</b> transactions summary</li>
+        <li><b>IT transaction register</b> + reports</li>
+        <li><b>IT transaction</b> filters &amp; summary</li>
+        <li><b>Purchase A/c ledger</b></li>
+      </ul></div>
+    </div>
+    <div class="module">
+      <div class="module-head"><span class="mnum">10d</span><h3>Tally Integration</h3></div>
+      <div class="module-body"><ul class="c1">
+        <li><b>Tally dashboard</b> &amp; auto-sync</li>
+        <li><b>Bill sync</b> &amp; voucher sync</li>
+        <li><b>Ledger / ledger-view</b> mapping</li>
+        <li><b>Cash book &amp; bank book</b> sync</li>
+        <li><b>GST &amp; stock items</b> sync</li>
+        <li><b>Tally reports</b></li>
+        <li><b>Retry queue</b> for failed syncs</li>
+        <li><b>Field mapping</b> configuration</li>
+      </ul></div>
+    </div>
+  </div>
+
+  <p class="note">Accounting depth equivalent to a standalone finance package — meaning many hospitals can retire a separate accounting tool entirely.</p>
+
+  <div class="page-footer"><span><strong>ADAMRIT</strong> Hospital Management System</span><span>Accounting &amp; Finance · 09</span></div>
+</section>
+
+<!-- ============ PAGE 10 — DOMAIN 12 SCHEMES + 13 MARKETING ============ -->
+<section class="page">
+  <div class="sec-head">
+    <span class="sec-kicker">Capabilities · Schemes &amp; Growth</span>
+    <div class="accent-bar"></div>
+    <h2 class="sec-title">Government schemes, referrals &amp; B2B growth</h2>
+    <p class="sec-lead">India's major healthcare schemes built in at the rate-and-package level, plus a full marketing engine that ties referrals to revenue.</p>
+  </div>
+
+  <div class="grid g2" style="gap:11px;">
+    <div class="module">
+      <div class="module-head"><span class="mnum">12</span><h3>Government Scheme Engine</h3></div>
+      <div class="module-body"><ul class="c1">
+        <li><b>CGHS surgery</b> &amp; CGHS surgery master</li>
+        <li><b>CGHS surgery fields</b> &amp; package codes</li>
+        <li><b>PMJAY / MJPJAY master</b></li>
+        <li><b>Ayushman Bharat</b> surgeons &amp; rates</li>
+        <li><b>Ayushman consultants &amp; anaesthetists</b></li>
+        <li><b>ESIC surgeons</b></li>
+        <li><b>Hope surgeons / consultants / anaesthetists</b></li>
+        <li><b>Hope &amp; Ayushman RMOs</b></li>
+        <li><b>Mandatory service</b> rules</li>
+        <li><b>Clinical services</b> create &amp; manage</li>
+        <li><b>Package-rate</b> auto-application</li>
+        <li><b>Scheme document</b> generation</li>
+      </ul></div>
+    </div>
+
+    <div class="module">
+      <div class="module-head"><span class="mnum">13</span><h3>Marketing, Referrals &amp; B2B</h3></div>
+      <div class="module-body"><ul class="c1">
+        <li><b>Marketing dashboard</b> &amp; performance overview</li>
+        <li><b>Marketing field tracker</b></li>
+        <li><b>Marketing users</b> management</li>
+        <li><b>Marketing doctors</b> &amp; doctor lists</li>
+        <li><b>Doctor visit</b> logging &amp; visits list</li>
+        <li><b>Marketing camps</b> management</li>
+        <li><b>Marketing incentives</b> calculation</li>
+        <li><b>Referees / referral</b> management</li>
+        <li><b>Relationship manager</b> registry</li>
+        <li><b>Referee DOA payment</b> handling</li>
+        <li><b>B2B partner portal</b> + B2B login</li>
+        <li><b>Referral-to-revenue</b> attribution</li>
+      </ul></div>
+    </div>
+  </div>
+
+  <div class="card wash" style="margin-top:13px;">
+    <h3 style="margin-bottom:6px;">Native support for India's major healthcare schemes</h3>
+    <p style="font-size:9pt; color:var(--ink-soft); margin:0 0 9px;">Scheme rates, package codes, and approval documents are built in — so claims are accurate the first time and rejections drop.</p>
+    <div class="badges">
+      <span class="badge">CGHS</span><span class="badge">PMJAY</span><span class="badge">MJPJAY</span>
+      <span class="badge">ESIC</span><span class="badge">Ayushman Bharat</span>
+      <span class="badge gold">Corporate / TPA</span><span class="badge gold">Cash &amp; Credit</span>
+    </div>
+  </div>
+
+  <div class="page-footer"><span><strong>ADAMRIT</strong> Hospital Management System</span><span>Schemes &amp; Growth · 10</span></div>
+</section>
+
+<!-- ============ PAGE 11 — DOMAIN 14,15,16 ============ -->
+<section class="page">
+  <div class="sec-head">
+    <span class="sec-kicker">Capabilities · Platform &amp; Control</span>
+    <div class="accent-bar"></div>
+    <h2 class="sec-title">Master data, administration, reporting &amp; integrations</h2>
+    <p class="sec-lead">The control layer that keeps every module consistent — central catalogs, role-based security, management reporting, and the channels that connect Adamrit to the outside world.</p>
+  </div>
+
+  <div class="grid g2" style="gap:11px;">
+    <div class="module">
+      <div class="module-head"><span class="mnum">14</span><h3>Master Data &amp; Configuration</h3></div>
+      <div class="module-body"><ul class="c1">
+        <li><b>Lab master &amp; radiology master</b></li>
+        <li><b>Surgery (CGHS) master</b> &amp; implant master</li>
+        <li><b>Diagnoses &amp; complications</b> catalogs</li>
+        <li><b>Corporate master</b> &amp; location master</li>
+        <li><b>Clinical &amp; mandatory services</b></li>
+        <li><b>Doctor / consultant / RMO panels</b></li>
+        <li><b>Central master data</b> hub</li>
+      </ul></div>
+    </div>
+    <div class="module">
+      <div class="module-head"><span class="mnum">15</span><h3>Administration &amp; Security</h3></div>
+      <div class="module-body"><ul class="c1">
+        <li><b>User management</b> &amp; user accounts</li>
+        <li><b>Role-based access</b> control</li>
+        <li><b>Granular permissions</b> per feature</li>
+        <li><b>Staff attendance</b></li>
+        <li><b>Activity &amp; audit logs</b></li>
+        <li><b>Security verification</b> screens</li>
+        <li><b>Multi-hospital</b> configuration &amp; theming</li>
+      </ul></div>
+    </div>
+    <div class="module">
+      <div class="module-head"><span class="mnum">16a</span><h3>Dashboards &amp; Reports</h3></div>
+      <div class="module-body"><ul class="c1">
+        <li><b>Director dashboard</b> (revenue &amp; KPIs)</li>
+        <li><b>Daily revenue report &amp; entries</b></li>
+        <li><b>Patient &amp; clinical dashboards</b></li>
+        <li><b>Reports center</b> (multi-report)</li>
+        <li><b>Aging, expected-payment, ledger reports</b></li>
+        <li><b>Operational KPI</b> views</li>
+        <li><b>Export to Excel / PDF</b></li>
+      </ul></div>
+    </div>
+    <div class="module">
+      <div class="module-head"><span class="mnum">16b</span><h3>Integrations &amp; Channels</h3></div>
+      <div class="module-body"><ul class="c1">
+        <li><b>Tally</b> two-way accounting sync</li>
+        <li><b>Payment QR</b> for instant collection</li>
+        <li><b>Telephony dashboard</b> &amp; call logging</li>
+        <li><b>Conference call / tele-consult</b></li>
+        <li><b>WhatsApp</b> report delivery</li>
+        <li><b>Patient portal</b> self-service</li>
+        <li><b>Bulk import</b> &amp; Excel ingestion</li>
+      </ul></div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:13px;">
+    <div class="ic">🔐</div>
+    <h3>Secure &amp; accountable by design</h3>
+    <p>Role-based logins, feature-level permissions, multi-hospital isolation, and complete activity logging mean every action is attributable and sensitive patient and financial data stays with the people authorised to see it.</p>
+  </div>
+
+  <div class="page-footer"><span><strong>ADAMRIT</strong> Hospital Management System</span><span>Platform &amp; Control · 11</span></div>
+</section>
+
+<!-- ============ PAGE 12 — BUSINESS VALUE ============ -->
+<section class="page">
+  <div class="sec-head">
+    <span class="sec-kicker">The Value</span>
+    <div class="accent-bar"></div>
+    <h2 class="sec-title">What all of this means for your hospital</h2>
+    <p class="sec-lead">Software is only worth what it changes. Here is what changes the day Adamrit goes live.</p>
+  </div>
+
+  <div class="two-col">
+    <div>
+      <div class="benefit"><div class="bn">₹</div><div><h4>Stop revenue leakage</h4><p>Every chargeable service — pharmacy, lab, scan, implant, procedure, bed-day — is captured against the visit. Nothing is delivered without reaching the bill.</p></div></div>
+      <div class="benefit"><div class="bn">⏱</div><div><h4>Faster discharges &amp; collections</h4><p>Bills assemble themselves from real activity, so patients leave sooner and payments arrive faster.</p></div></div>
+      <div class="benefit"><div class="bn">✓</div><div><h4>Fewer claim rejections</h4><p>Built-in scheme package rates and documents mean CGHS, PMJAY, ESIC, and TPA claims go out correct the first time.</p></div></div>
+      <div class="benefit"><div class="bn">📊</div><div><h4>Retire separate accounting tools</h4><p>Full double-entry books, statutory statements, GST, and Tally sync are inside the same system.</p></div></div>
+      <div class="benefit"><div class="bn">📈</div><div><h4>Decisions backed by live data</h4><p>Directors see revenue, occupancy, and referral performance the moment it happens — not a month later.</p></div></div>
+    </div>
+    <div>
+      <div class="card wash">
+        <div class="ic">⚡</div>
+        <h3>Before &amp; After</h3>
+        <ul class="mini-list" style="margin-top:6px;">
+          <li>Paper registers → <b>searchable digital records</b></li>
+          <li>Manual bill assembly → <b>automatic charge capture</b></li>
+          <li>Separate lab/pharmacy/accounts apps → <b>one system</b></li>
+          <li>Month-end surprises → <b>live revenue dashboard</b></li>
+          <li>Lost referrals → <b>tracked incentive payouts</b></li>
+          <li>Claim rework → <b>first-time-right submissions</b></li>
+          <li>Stock/expiry losses → <b>batch-level control</b></li>
+        </ul>
+      </div>
+      <div class="card" style="margin-top:11px;">
+        <div class="ic">🧩</div>
+        <h3>Adopt at your pace</h3>
+        <p>Modules switch on as you grow. Start with registration and billing, then add lab, pharmacy, accounting, and schemes — without changing systems.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="sec-head" style="margin-top:14px; margin-bottom:9px;">
+    <span class="sec-kicker">Why Adamrit, Not A Generic HMS</span>
+    <h2 class="sec-title" style="font-size:15pt;">The difference that shows up in the accounts</h2>
+  </div>
+  <div class="card flat" style="padding:4px 16px;">
+    <table class="cmp">
+      <thead><tr><th>Capability</th><th>Typical HMS</th><th>Adamrit</th></tr></thead>
+      <tbody>
+        <tr><td>Double-entry accounting</td><td class="ad">Bolt-on / external Tally only</td><td class="ay">Built in + two-way Tally sync</td></tr>
+        <tr><td>Government scheme rates</td><td class="ad">Manual entry each claim</td><td class="ay">CGHS / PMJAY / ESIC packages pre-loaded</td></tr>
+        <tr><td>Lab &amp; radiology</td><td class="ad">Separate LIS/RIS licences</td><td class="ay">Full LIS + RIS/PACS included</td></tr>
+        <tr><td>Marketing &amp; referrals</td><td class="ad">Spreadsheets</td><td class="ay">Field tracking → incentive → revenue</td></tr>
+        <tr><td>Multi-hospital</td><td class="ad">Separate installs</td><td class="ay">One login, per-unit theming</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="page-footer"><span><strong>ADAMRIT</strong> Hospital Management System</span><span>Business Value · 12</span></div>
+</section>
+
+<!-- ============ PAGE 13 — EDITIONS + IMPLEMENTATION + TRUST (NEW) ============ -->
+<section class="page">
+  <div class="sec-head">
+    <span class="sec-kicker">Packaging &amp; Onboarding</span>
+    <div class="accent-bar"></div>
+    <h2 class="sec-title">Choose your edition, go live in weeks</h2>
+    <p class="sec-lead">Start with what you need today and switch modules on as you grow — on a guided onboarding path that gets your team productive fast.</p>
+  </div>
+
+  <div class="tier-grid">
+    <div class="tier">
+      <div class="tier-top">
+        <div class="tband">Edition 01</div>
+        <div class="tname">Essential</div>
+        <div class="tfor">For clinics &amp; small hospitals getting off paper</div>
+      </div>
+      <ul>
+        <li>Registration, OPD &amp; IPD</li>
+        <li>Wards, beds &amp; accommodation</li>
+        <li>Billing &amp; invoicing</li>
+        <li>Advance &amp; final bills</li>
+        <li>Core reports &amp; document print</li>
+        <li class="off">Lab / Radiology suite</li>
+        <li class="off">Full accounting &amp; Tally</li>
+        <li class="off">Scheme &amp; marketing engines</li>
+      </ul>
+    </div>
+    <div class="tier feat">
+      <div class="tier-top">
+        <span class="badge-feat">Most Popular</span>
+        <div class="tband">Edition 02</div>
+        <div class="tname">Professional</div>
+        <div class="tfor">For multi-department hospitals running the full patient-to-bill cycle</div>
+      </div>
+      <ul>
+        <li>Everything in Essential</li>
+        <li>Full Laboratory (LIS)</li>
+        <li>Radiology &amp; PACS</li>
+        <li>Pharmacy &amp; supply chain</li>
+        <li>Clinical, nursing &amp; OT</li>
+        <li>Corporate / TPA workflow</li>
+        <li>Dashboards &amp; KPI reporting</li>
+        <li class="off">Tally-grade accounting suite</li>
+      </ul>
+    </div>
+    <div class="tier">
+      <div class="tier-top">
+        <div class="tband">Edition 03</div>
+        <div class="tname">Enterprise</div>
+        <div class="tfor">For groups &amp; scheme-heavy hospitals that want one system for everything</div>
+      </div>
+      <ul>
+        <li>Everything in Professional</li>
+        <li>Double-entry accounting + Tally</li>
+        <li>Government scheme engine</li>
+        <li>Marketing, referrals &amp; B2B portal</li>
+        <li>Multi-hospital &amp; theming</li>
+        <li>Telephony &amp; WhatsApp channels</li>
+        <li>Advanced audit &amp; security</li>
+        <li>Priority support &amp; onboarding</li>
+      </ul>
+    </div>
+  </div>
+  <p class="note">Module composition is flexible — editions are a starting point and can be tailored to your hospital's exact requirement.</p>
+
+  <div class="sec-head" style="margin-top:18px; margin-bottom:11px;">
+    <span class="sec-kicker">Implementation</span>
+    <h2 class="sec-title" style="font-size:15pt;">A guided path to go-live</h2>
+  </div>
+  <div class="timeline">
+    <div class="tl-step"><div class="tl-dot">1</div><div class="tl-line"></div><div class="tl-when">Week 1</div><h4>Setup &amp; configuration</h4><p>Hospital profile, users, roles, rate masters and scheme packages configured.</p></div>
+    <div class="tl-step"><div class="tl-dot">2</div><div class="tl-line"></div><div class="tl-when">Week 2</div><h4>Data migration</h4><p>Patients, items, suppliers, and opening balances imported from your existing records.</p></div>
+    <div class="tl-step"><div class="tl-dot">3</div><div class="tl-line"></div><div class="tl-when">Week 3</div><h4>Training</h4><p>Role-based training for reception, clinical, lab, pharmacy, billing &amp; accounts teams.</p></div>
+    <div class="tl-step"><div class="tl-dot">4</div><div class="tl-when">Week 4</div><h4>Go-live &amp; support</h4><p>Supervised go-live with on-call support, then steady-state handover.</p></div>
+  </div>
+
+  <div class="grid g2" style="margin-top:18px; gap:12px;">
+    <div class="quote-card">
+      <div class="qm">&ldquo;</div>
+      <p>Billing that used to take our counter an hour at discharge is now ready the moment the doctor signs off. Beds free up faster and nothing slips through.</p>
+      <div class="qa"><b>[ Hospital Administrator ]</b> · [ Hospital name, city ]</div>
+    </div>
+    <div class="quote-card">
+      <div class="qm">&ldquo;</div>
+      <p>Our scheme claims used to bounce on pricing. With packages built in, submissions go out right the first time and our recovery cycle is shorter.</p>
+      <div class="qa"><b>[ Finance Head ]</b> · [ Hospital name, city ]</div>
+    </div>
+  </div>
+  <p class="note">Quote cards above are placeholders — ready to drop in your real customer references before sharing.</p>
+
+  <div class="page-footer"><span><strong>ADAMRIT</strong> Hospital Management System</span><span>Editions &amp; Onboarding · 13</span></div>
+</section>
+
+<!-- ============ PAGE 14 — TECH + CTA ============ -->
+<section class="page">
+  <div class="sec-head">
+    <span class="sec-kicker">Built To Last</span>
+    <div class="accent-bar"></div>
+    <h2 class="sec-title">Modern, secure, and ready to scale</h2>
+  </div>
+
+  <div class="grid g3" style="gap:11px;">
+    <div class="card"><div class="ic">☁</div><h3>Cloud-Based</h3><p>100% web-based. Any browser, any device, any branch — no servers to babysit.</p></div>
+    <div class="card"><div class="ic">⚙</div><h3>Real-Time</h3><p>Live data sync across departments. What the lab enters, billing sees instantly.</p></div>
+    <div class="card"><div class="ic">🏥</div><h3>Multi-Hospital</h3><p>Configurable per unit, with feature toggles and brand themes for each.</p></div>
+    <div class="card"><div class="ic">🔐</div><h3>Role Security</h3><p>Granular permissions, secure logins, full audit trails on every action.</p></div>
+    <div class="card"><div class="ic">⇄</div><h3>Integrations</h3><p>Tally, payment QR, telephony, WhatsApp, and bulk import built in.</p></div>
+    <div class="card"><div class="ic">📄</div><h3>Documents</h3><p>One-click PDF/print for every bill, report, summary, and certificate.</p></div>
+  </div>
+
+  <div class="card wash" style="margin-top:14px;">
+    <h3 style="margin-bottom:5px;">Engineered on a proven, enterprise-grade stack</h3>
+    <p style="font-size:9pt; color:var(--ink-soft); margin:0;">A responsive React front end, a secure cloud database backend, and built-in document/PDF generation deliver speed, reliability, and a clean experience across desktops, tablets, reception kiosks, and waiting-room TV displays alike.</p>
+  </div>
+
+  <div class="cta" style="margin-top:18px;">
+    <h2>See Adamrit run your hospital</h2>
+    <p>Book a live walkthrough on your own workflows — registration to final bill, scheme claim to director dashboard, purchase order to balance sheet. See exactly how much time, money, and effort your hospital reclaims.</p>
+    <div class="cta-contact">
+      <div class="ci"><div class="l">Book a Demo</div><div class="v">Request a guided walkthrough</div></div>
+      <div class="ci"><div class="l">Email</div><div class="v">chatgptnotes@gmail.com</div></div>
+      <div class="ci"><div class="l">Deployment</div><div class="v">Cloud · Go-live in weeks</div></div>
+    </div>
+  </div>
+
+  <div style="text-align:center; margin-top:16px;">
+    <div class="brandmark" style="justify-content:center; color:var(--teal-700);">
+      <span class="dot" style="box-shadow:none;"><span></span></span> ADAMRIT&nbsp;HEALTHCARE&nbsp;SYSTEMS
+    </div>
+    <p class="tag-soft" style="margin-top:6px;">Complete Hospital Management — Patient Care · Diagnostics · Pharmacy · Revenue · Accounting · Compliance · Growth</p>
+  </div>
+
+  <div class="page-footer"><span><strong>ADAMRIT</strong> Hospital Management System</span><span>Technology &amp; Next Steps · 14</span></div>
+</section>
+
+</body>
+</html>

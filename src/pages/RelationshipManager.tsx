@@ -6,22 +6,25 @@ import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Plus, Search, Users, Trash2, Phone, Edit, Upload, FileDown } from 'lucide-react';
+import { Plus, Search, Users, EyeOff, Eye, Phone, Edit, Upload, FileDown } from 'lucide-react';
 import { AddItemDialog } from '@/components/AddItemDialog';
 import { useToast } from '@/hooks/use-toast';
 import { usePermissions } from '@/hooks/usePermissions';
+import { logActivity, getDeviceInfo } from '@/lib/activity-logger';
 
 interface RelationshipManagerType {
   id: string;
   name: string;
   code?: string;
   contact_no?: string;
+  is_hidden?: boolean;
   created_at: string;
   updated_at: string;
 }
 
 const RelationshipManager = () => {
   const [searchTerm, setSearchTerm] = useState('');
+  const [showHidden, setShowHidden] = useState(false);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [selectedManager, setSelectedManager] = useState<RelationshipManagerType | null>(null);
@@ -31,12 +34,20 @@ const RelationshipManager = () => {
   const importInputRef = useRef<HTMLInputElement>(null);
 
   const { data: managers = [], isLoading } = useQuery({
-    queryKey: ['relationship-managers'],
+    queryKey: ['relationship-managers', showHidden],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from('relationship_managers')
         .select('*')
         .order('code');
+
+      // When "Show hidden" is off, only return visible managers.
+      // When on, return everything so hidden ones can be un-hidden.
+      if (!showHidden) {
+        query = query.eq('is_hidden', false);
+      }
+
+      const { data, error } = await query;
 
       if (error) {
         console.error('Error fetching relationship managers:', error);
@@ -58,7 +69,14 @@ const RelationshipManager = () => {
       if (error) throw error;
       return data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      // Audit: record who/which device added this RM (shows on Activity Log).
+      logActivity('relationship_manager_create', {
+        name: data?.name,
+        code: data?.code ?? null,
+        source: 'rm_master_page',
+        device: getDeviceInfo(),
+      });
       queryClient.invalidateQueries({ queryKey: ['relationship-managers'] });
       queryClient.invalidateQueries({ queryKey: ['relationship-managers-count'] });
       toast({
@@ -77,11 +95,11 @@ const RelationshipManager = () => {
     }
   });
 
-  const deleteMutation = useMutation({
+  const hideMutation = useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase
         .from('relationship_managers')
-        .delete()
+        .update({ is_hidden: true, updated_at: new Date().toISOString() })
         .eq('id', id);
 
       if (error) throw error;
@@ -91,14 +109,41 @@ const RelationshipManager = () => {
       queryClient.invalidateQueries({ queryKey: ['relationship-managers-count'] });
       toast({
         title: "Success",
-        description: "Relationship Manager deleted successfully",
+        description: "Relationship Manager hidden successfully",
       });
     },
     onError: (error) => {
-      console.error('Delete relationship manager error:', error);
+      console.error('Hide relationship manager error:', error);
       toast({
         title: "Error",
-        description: "Failed to delete relationship manager",
+        description: "Failed to hide relationship manager",
+        variant: "destructive"
+      });
+    }
+  });
+
+  const unhideMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase
+        .from('relationship_managers')
+        .update({ is_hidden: false, updated_at: new Date().toISOString() })
+        .eq('id', id);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['relationship-managers'] });
+      queryClient.invalidateQueries({ queryKey: ['relationship-managers-count'] });
+      toast({
+        title: "Success",
+        description: "Relationship Manager is visible again",
+      });
+    },
+    onError: (error) => {
+      console.error('Unhide relationship manager error:', error);
+      toast({
+        title: "Error",
+        description: "Failed to unhide relationship manager",
         variant: "destructive"
       });
     }
@@ -149,10 +194,14 @@ const RelationshipManager = () => {
     });
   };
 
-  const handleDelete = (id: string) => {
-    if (confirm('Are you sure you want to delete this relationship manager?')) {
-      deleteMutation.mutate(id);
+  const handleHide = (id: string) => {
+    if (confirm('Are you sure you want to hide this relationship manager?')) {
+      hideMutation.mutate(id);
     }
+  };
+
+  const handleUnhide = (id: string) => {
+    unhideMutation.mutate(id);
   };
 
   const handleEdit = (formData: Record<string, string>) => {
@@ -229,6 +278,13 @@ const RelationshipManager = () => {
         const { error } = await supabase.from('relationship_managers').insert(records);
         if (error) throw error;
 
+        // Audit: record the bulk import + which device performed it.
+        logActivity('relationship_manager_create', {
+          source: 'rm_master_import',
+          count: records.length,
+          names: records.slice(0, 25).map((r) => r.name),
+          device: getDeviceInfo(),
+        });
         queryClient.invalidateQueries({ queryKey: ['relationship-managers'] });
         queryClient.invalidateQueries({ queryKey: ['relationship-managers-count'] });
         toast({
@@ -364,6 +420,14 @@ const RelationshipManager = () => {
               <FileDown className="h-4 w-4 mr-2" />
               Export PDF
             </Button>
+            <Button
+              variant={showHidden ? 'default' : 'outline'}
+              onClick={() => setShowHidden((prev) => !prev)}
+              title={showHidden ? 'Hide hidden managers from view' : 'Show hidden managers so they can be un-hidden'}
+            >
+              {showHidden ? <Eye className="h-4 w-4 mr-2" /> : <EyeOff className="h-4 w-4 mr-2" />}
+              {showHidden ? 'Showing hidden' : 'Show hidden'}
+            </Button>
             {canEditMasters && (
               <>
                 <input
@@ -398,6 +462,11 @@ const RelationshipManager = () => {
                       </span>
                     )}
                     <span className="text-xl">{manager.name}</span>
+                    {manager.is_hidden && (
+                      <span className="inline-flex items-center rounded-md bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
+                        Hidden
+                      </span>
+                    )}
                   </span>
                   <div className="flex gap-2 items-center">
                     {manager.contact_no && (
@@ -421,15 +490,27 @@ const RelationshipManager = () => {
                       </Button>
                     )}
                     {canEditMasters && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleDelete(manager.id)}
-                        className="text-red-600 hover:text-red-700 ml-2"
-                        title="Delete relationship manager"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                      manager.is_hidden ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleUnhide(manager.id)}
+                          className="text-green-600 hover:text-green-700 ml-2"
+                          title="Unhide relationship manager"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                      ) : (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleHide(manager.id)}
+                          className="text-amber-600 hover:text-amber-700 ml-2"
+                          title="Hide relationship manager"
+                        >
+                          <EyeOff className="h-4 w-4" />
+                        </Button>
+                      )
                     )}
                   </div>
                 </CardTitle>
