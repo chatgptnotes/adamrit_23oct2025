@@ -1945,6 +1945,16 @@ const FinalBill = () => {
   const [radiologySearchTerm, setRadiologySearchTerm] = useState("");
   const [selectedRadiology, setSelectedRadiology] = useState<any[]>([]);
   const [savedRadiology, setSavedRadiology] = useState<{ id: string; name: string; description: string }[]>([]);
+  // External scan centres that can be picked from the Radiology tab's External Requisition dropdown
+  const SCAN_CENTRES = [
+    'Biviji scan',
+    'Helix scan',
+    'Nobel scan',
+    'Orange scan',
+    'Insight scan',
+    'Galaxy Scan',
+  ] as const;
+  const [selectedScanCentre, setSelectedScanCentre] = useState<string>("");
   const [medicationSearchTerm, setMedicationSearchTerm] = useState("");
   const [selectedMedications, setSelectedMedications] = useState<any[]>([]);
   const [savedMedications, setSavedMedications] = useState<{ id: string; name: string; description: string }[]>([]);
@@ -10187,7 +10197,7 @@ INSTRUCTIONS:
 
       // INDIVIDUAL ENTRY: Prepare radiology data for visit_radiology table (each test as separate entry)
       const individualCost = radiologyService.amount || radiologyService.cost || 0;
-      const radiologyToSave = {
+      const radiologyToSave: Record<string, any> = {
         visit_id: visitData.id,
         radiology_id: radiologyService.id,
         status: 'ordered',
@@ -10196,6 +10206,10 @@ INSTRUCTIONS:
         unit_rate: individualCost,  // Same as cost for individual entries
         quantity: 1  // Always 1 for individual entries
       };
+      // Persist the scan centre chosen in the External Requisition dropdown, if any
+      if (selectedScanCentre) {
+        radiologyToSave.external_requisition = selectedScanCentre;
+      }
 
       console.log('📋 Radiology data to save:', radiologyToSave);
 
@@ -10417,7 +10431,8 @@ INSTRUCTIONS:
           cost: finalCost, // Use database cost or calculated fallback
           unit_rate: finalUnitRate, // Ensure unit_rate is preserved/calculated
           status: visitRadiology.status || 'ordered',
-          ordered_date: visitRadiology.ordered_date
+          ordered_date: visitRadiology.ordered_date,
+          external_requisition: visitRadiology.external_requisition || ''
         };
       });
 
@@ -17963,11 +17978,26 @@ Dr. Murali B K
                         value={serviceSearchTerm}
                         onChange={(e) => setServiceSearchTerm(e.target.value)}
                       />
-                      <select className="text-xs h-8 border border-gray-300 rounded px-2">
-                        <option>None</option>
-                        <option>Required</option>
-                        <option>Optional</option>
-                      </select>
+                      {activeServiceTab === "Radiology" ? (
+                        <select
+                          className="text-xs h-8 border border-gray-300 rounded px-2"
+                          value={selectedScanCentre}
+                          onChange={(e) => setSelectedScanCentre(e.target.value)}
+                        >
+                          <option value="">None</option>
+                          {SCAN_CENTRES.map((centre) => (
+                            <option key={centre} value={centre}>
+                              {centre}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <select className="text-xs h-8 border border-gray-300 rounded px-2">
+                          <option>None</option>
+                          <option>Required</option>
+                          <option>Optional</option>
+                        </select>
+                      )}
                       <Input
                         placeholder="Amount"
                         className="text-xs h-8"
@@ -19739,6 +19769,7 @@ Dr. Murali B K
                                       </th>
                                       <th className="border border-gray-300 px-4 py-2 text-left text-sm font-medium text-gray-900">Date/Time</th>
                                       <th className="border border-gray-300 px-4 py-2 text-left text-sm font-medium text-gray-900">Test Name</th>
+                                      <th className="border border-gray-300 px-4 py-2 text-left text-sm font-medium text-gray-900">Scan Centre</th>
                                       <th className="border border-gray-300 px-4 py-2 text-center text-sm font-medium text-gray-900">Amount</th>
                                       <th className="border border-gray-300 px-4 py-2 text-left text-sm font-medium text-gray-900">Action</th>
                                     </tr>
@@ -19764,6 +19795,20 @@ Dr. Murali B K
                                         </td>
                                         <td className="border border-gray-300 px-4 py-2 text-sm text-gray-900 font-medium">
                                           {radiology.radiology_name}
+                                        </td>
+                                        <td className="border border-gray-300 px-4 py-2 text-sm text-gray-700">
+                                          <select
+                                            value={radiology.external_requisition || ''}
+                                            onChange={(e) => updateRadiologyField(radiology.id, 'external_requisition', e.target.value)}
+                                            className="w-full px-2 py-1 text-xs border border-gray-200 rounded focus:outline-none focus:border-blue-500 bg-white"
+                                          >
+                                            <option value="">None</option>
+                                            {SCAN_CENTRES.map((centre) => (
+                                              <option key={centre} value={centre}>
+                                                {centre}
+                                              </option>
+                                            ))}
+                                          </select>
                                         </td>
                                         <td className="border border-gray-300 px-4 py-2 text-center text-sm font-medium text-green-600">
                                           ₹{radiology.cost || 0}
