@@ -437,9 +437,19 @@ export function DailyAllocationSheet() {
   const updateVendor = (id: string, field: keyof Omit<VendorRow, 'id'>, value: string): void => {
     setSheet((prev) => ({
       ...prev,
-      vendors: prev.vendors.map((v) =>
-        v.id === id ? { ...v, [field]: field === 'vendor' ? value : parseNumber(value) } : v,
-      ),
+      vendors: prev.vendors.map((v) => {
+        if (v.id !== id) return v;
+        const next = { ...v, [field]: field === 'vendor' ? value : parseNumber(value) };
+        // When Paid This Month changes, deduct the change from both Balance This
+        // Month and Ledger Balance (what is still outstanding goes down by what
+        // was paid). Only fields that already hold a value are adjusted.
+        if (field === 'paidThisMonth') {
+          const delta = (next.paidThisMonth ?? 0) - (v.paidThisMonth ?? 0);
+          if (v.balanceThisMonth !== null) next.balanceThisMonth = v.balanceThisMonth - delta;
+          if (v.ledgerBalance !== null) next.ledgerBalance = v.ledgerBalance - delta;
+        }
+        return next;
+      }),
     }));
   };
 
@@ -587,6 +597,9 @@ export function DailyAllocationSheet() {
               <Plus className="mr-1 h-4 w-4" /> Add Vendor
             </Button>
           </div>
+          <p className="mb-2 text-xs text-gray-500">
+            All columns are editable. When you enter <strong>Paid This Month</strong>, that amount is deducted from both <strong>Balance This Month</strong> and <strong>Ledger Balance</strong>.
+          </p>
           <p className="mb-2 text-xs text-gray-500">
             Tip: drag the <GripVertical className="inline h-3 w-3" /> handle on the left of any row to move important payments to the top.
           </p>
