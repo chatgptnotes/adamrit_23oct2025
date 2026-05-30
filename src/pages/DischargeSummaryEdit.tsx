@@ -14,6 +14,7 @@ import { useDebounce } from 'use-debounce';
 import DischargeSummary from '@/components/DischargeSummary';
 import { useVisitDiagnosis } from '@/hooks/useVisitDiagnosis';
 import { geminiGenerateContentUrl } from '@/lib/gemini';
+import { downscaleImageForVision } from '@/lib/downscaleImage';
 import { useToast } from '@/hooks/use-toast';
 
 interface Patient {
@@ -2251,9 +2252,9 @@ IMPORTANT: Output plain text only. Be professional and concise. Include ALL prov
     try {
       setIsProcessingOCR(true);
 
-      // Extract base64 data from data URL
-      const base64Data = imageDataUrl.split(',')[1];
-      const mimeType = imageDataUrl.split(';')[0].split(':')[1] || 'image/jpeg';
+      // Downscale before encoding to keep vision token cost in check.
+      const sourceBlob = await (await fetch(imageDataUrl)).blob();
+      const { base64: base64Data, mimeType } = await downscaleImageForVision(sourceBlob);
 
       const patientName = patient?.patients?.name || 'Unknown';
       const patientId = patient?.visit_id || 'Unknown';

@@ -1,4 +1,5 @@
 import { geminiGenerateContentUrl, geminiFetch } from '@/lib/gemini';
+import { downscaleImageForVision } from '@/lib/downscaleImage';
 
 // One medicine read from a handwritten medication chart. Kept all-strings
 // because handwriting OCR is best-effort and every field is reviewed/edited
@@ -46,18 +47,6 @@ Rules:
 - For combination drugs list all molecules joined with + in generic_name.
 - Output must be a single valid JSON object.`;
 
-function blobToBase64(blob: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const result = reader.result as string;
-      resolve(result.split(',')[1]);
-    };
-    reader.onerror = () => reject(new Error('Could not read image file'));
-    reader.readAsDataURL(blob);
-  });
-}
-
 /**
  * Send a photo of a handwritten medication chart to Gemini Vision and return the
  * extracted doctor + medicines. Throws on any failure (missing key, network,
@@ -67,7 +56,7 @@ export async function extractMedicationChart(image: Blob): Promise<ExtractedChar
   const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
   if (!apiKey) throw new Error('Gemini API key is not configured.');
 
-  const base64 = await blobToBase64(image);
+  const { base64, mimeType } = await downscaleImageForVision(image);
   const response = await geminiFetch(geminiGenerateContentUrl(apiKey), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -75,7 +64,7 @@ export async function extractMedicationChart(image: Blob): Promise<ExtractedChar
       contents: [{
         parts: [
           { text: EXTRACT_PROMPT },
-          { inline_data: { mime_type: image.type || 'image/jpeg', data: base64 } },
+          { inline_data: { mime_type: mimeType, data: base64 } },
         ],
       }],
       generationConfig: { temperature: 0.1, maxOutputTokens: 4000 },

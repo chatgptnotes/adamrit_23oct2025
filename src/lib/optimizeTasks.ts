@@ -1,4 +1,4 @@
-import { geminiGenerateContentUrl, geminiFetch } from '@/lib/gemini';
+import { geminiGenerateContentUrl, geminiFetch, GEMINI_MODEL_LITE } from '@/lib/gemini';
 
 // How the AI thinks a task should be handled.
 export type SuggestionType = 'automate' | 'reduce' | 'delegate' | 'keep';
@@ -66,7 +66,8 @@ export async function optimizeTasks(input: OptimizeTasksInput): Promise<TaskSugg
 
   let response: Response;
   try {
-    response = await geminiFetch(geminiGenerateContentUrl(apiKey), {
+    // Low-grade text->JSON task: route to the cheaper lite model.
+    response = await geminiFetch(geminiGenerateContentUrl(apiKey, GEMINI_MODEL_LITE), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

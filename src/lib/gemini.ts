@@ -1,7 +1,13 @@
-// Default Gemini model used across the app. Bump here when a model is retired.
+// Gemini models, tiered by capability/cost. Route each call to the cheapest
+// model that can do the job — this is the single biggest token-cost lever.
+//
+//  - GEMINI_MODEL       (flash):      vision/OCR, clinical, long-form generation
+//  - GEMINI_MODEL_LITE  (flash-lite): plain text -> JSON extraction, low-stakes
+//
 // `gemini-2.0-flash` was retired for new API keys (April 2026), causing 404s
-// at every call site that hardcoded it.
+// at every call site that hardcoded it — bump here when a model is retired.
 export const GEMINI_MODEL = 'gemini-2.5-flash';
+export const GEMINI_MODEL_LITE = 'gemini-2.5-flash-lite';
 
 export const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
 

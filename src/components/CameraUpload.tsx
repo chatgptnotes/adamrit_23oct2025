@@ -35,7 +35,8 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { logActivity } from '@/lib/activity-logger';
 import { useAuth } from '@/contexts/AuthContext';
-import { geminiGenerateContentUrl, geminiFetch } from '@/lib/gemini';
+import { geminiGenerateContentUrl, geminiFetch, GEMINI_MODEL_LITE } from '@/lib/gemini';
+import { downscaleImageForVision } from '@/lib/downscaleImage';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -472,7 +473,8 @@ Category mapping hints:
 
 Extract patient name if mentioned. Extract any ID/UHID if mentioned. Put the document type description in "notes".`;
 
-    const response = await geminiFetch(geminiGenerateContentUrl(geminiApiKey), {
+    // Low-grade text->JSON task: route to the cheaper lite model.
+    const response = await geminiFetch(geminiGenerateContentUrl(geminiApiKey, GEMINI_MODEL_LITE), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -690,17 +692,8 @@ Extract patient name if mentioned. Extract any ID/UHID if mentioned. Put the doc
       return null;
     }
 
-    // Convert blob to base64
-    const base64 = await new Promise<string>((resolve) => {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const result = reader.result as string;
-        resolve(result.split(',')[1]); // Remove data:image/...;base64, prefix
-      };
-      reader.readAsDataURL(imageBlob);
-    });
-
-    const mimeType = imageBlob.type || 'image/jpeg';
+    // Downscale before encoding to keep vision token cost in check.
+    const { base64, mimeType } = await downscaleImageForVision(imageBlob);
 
     const systemPrompt = `You are an expert pharmacist and medical transcription specialist. Analyze this prescription image and extract ALL medicines listed.
 
@@ -797,16 +790,8 @@ Rules:
       return null;
     }
 
-    const base64 = await new Promise<string>((resolve) => {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const result = reader.result as string;
-        resolve(result.split(',')[1]);
-      };
-      reader.readAsDataURL(imageBlob);
-    });
-
-    const mimeType = imageBlob.type || 'image/jpeg';
+    // Downscale before encoding to keep vision token cost in check.
+    const { base64, mimeType } = await downscaleImageForVision(imageBlob);
 
     const systemPrompt = `You are an expert pharmacist analyzing a hospital treatment sheet / medication chart image.
 
@@ -967,16 +952,8 @@ Rules:
       return null;
     }
 
-    const base64 = await new Promise<string>((resolve) => {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const result = reader.result as string;
-        resolve(result.split(',')[1]);
-      };
-      reader.readAsDataURL(imageBlob);
-    });
-
-    const mimeType = imageBlob.type || 'image/jpeg';
+    // Downscale before encoding to keep vision token cost in check.
+    const { base64, mimeType } = await downscaleImageForVision(imageBlob);
 
     const systemPrompt = `You are an expert medical records analyst. Analyze this OPD (Out-Patient Department) consultation summary/slip image and extract ALL patient and consultation information.
 
