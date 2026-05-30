@@ -98,19 +98,49 @@ export function ScanChartModal({
     const nowIso = new Date().toISOString();
     const today = nowIso.slice(0, 10);
     try {
+      // Upload the captured chart so it shows in the prescription's "Photo"
+      // panel. Non-fatal: if the upload fails the prescription is still created.
+      let imageUrl: string | null = null;
+      const imageType = file?.type || "image/jpeg";
+      if (file) {
+        const storagePath = `uploads/${Date.now()}_scan_${visit.visitId || "chart"}.jpg`.replace(/[^a-zA-Z0-9._/-]/g, "_");
+        const { error: upErr } = await db.storage.from("uploads").upload(storagePath, file);
+        if (upErr) {
+          console.warn("Chart image upload failed (continuing without photo):", upErr.message);
+        } else {
+          imageUrl = db.storage.from("uploads").getPublicUrl(storagePath).data?.publicUrl || null;
+        }
+      }
+
       // Prescription Queue — prescriptions + prescription_items (PENDING).
-      const { data: rxData, error: rxError } = await db
+      const rxPayload: Record<string, any> = {
+        prescription_number: "RX-" + Date.now(),
+        patient_id: visit.patientUuid,
+        doctor_name: doctor || "As per records",
+        prescription_date: today,
+        status: "PENDING",
+        notes: `Scanned treatment sheet — ${visit.patientName}`,
+        prescription_image_url: imageUrl,
+        prescription_image_type: imageUrl ? imageType : null,
+      };
+
+      let { data: rxData, error: rxError } = await db
         .from("prescriptions")
-        .insert({
-          prescription_number: "RX-" + Date.now(),
-          patient_id: visit.patientUuid,
-          doctor_name: doctor || "As per records",
-          prescription_date: today,
-          status: "PENDING",
-          notes: `Scanned treatment sheet — ${visit.patientName}`,
-        })
+        .insert(rxPayload)
         .select("id")
         .single();
+
+      // Older DBs without migration 20260516000001 lack the image columns —
+      // retry without them so the prescription still saves.
+      if (rxError && /prescription_image_(url|type)/.test(rxError.message || "")) {
+        delete rxPayload.prescription_image_url;
+        delete rxPayload.prescription_image_type;
+        ({ data: rxData, error: rxError } = await db
+          .from("prescriptions")
+          .insert(rxPayload)
+          .select("id")
+          .single());
+      }
       if (rxError) throw new Error(`Prescription queue: ${rxError.message}`);
 
       if (rxData?.id) {
