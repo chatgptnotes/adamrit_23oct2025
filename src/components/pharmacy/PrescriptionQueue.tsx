@@ -909,17 +909,13 @@ const DetailModal: React.FC<DetailModalProps> = ({ prescription, onClose }) => {
 
     const rows = itemsWithMoney
       .map((it, i) => {
-        const generic = (it.generic_name || it.medicine_name || '').toString().toUpperCase();
-        const brand = it.brand_name
-          ? `<div style="font-size:10px;color:#555;font-weight:400;">(${esc(it.brand_name)})</div>`
-          : '';
-        const dose = [it.dosage_frequency, it.dosage_timing].filter(Boolean).join(' · ');
-        const dur = it.duration_days ? `${it.duration_days} days` : '—';
-        const instr = it.special_instructions ? esc(it.special_instructions) : '';
+        const name = (it.brand_name || it.medicine_name || it.generic_name || '').toString();
+        const dose = [it.dosage_frequency, it.dosage_timing].filter(Boolean).join(' ');
+        const dur = it.duration_days ? `${it.duration_days} days` : '';
         return `<tr>
           <td>${i + 1}</td>
-          <td><strong>${esc(generic)}</strong>${brand}${instr ? `<div style="font-size:10px;color:#666;">${instr}</div>` : ''}</td>
-          <td>${esc(dose) || '—'}</td>
+          <td>${esc(name)}</td>
+          <td>${esc(dose)}</td>
           <td>${esc(dur)}</td>
           <td style="text-align:center;">${esc(it.quantity_prescribed)}</td>
         </tr>`;
@@ -931,46 +927,21 @@ const DetailModal: React.FC<DetailModalProps> = ({ prescription, onClose }) => {
 <style>
   @page { size: A4; margin: 16mm; }
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: Arial, Helvetica, sans-serif; font-size: 12px; color: #111; }
-  .head { text-align: center; border-bottom: 2px solid #111; padding-bottom: 10px; margin-bottom: 14px; }
-  .head h1 { font-size: 22px; text-transform: uppercase; letter-spacing: 1px; }
-  .head .rx { font-size: 13px; letter-spacing: 4px; color: #444; margin-top: 4px; }
-  .meta { display: flex; justify-content: space-between; gap: 16px; border: 1px solid #ccc;
-          border-radius: 4px; padding: 10px 12px; margin-bottom: 14px; background: #fafafa; }
-  .meta div p { margin-bottom: 3px; }
-  .meta .label { color: #666; font-size: 10px; text-transform: uppercase; }
-  table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
-  th { background: #1a1a2e; color: #fff; padding: 8px 6px; font-size: 11px; text-align: left; }
-  td { padding: 7px 6px; border-bottom: 1px solid #ddd; vertical-align: top; }
-  th:first-child, td:first-child { width: 28px; text-align: center; }
-  .sign { display: flex; justify-content: space-between; margin-top: 48px; }
-  .sign div { width: 200px; border-top: 1px solid #111; padding-top: 4px; text-align: center; font-size: 11px; }
-  .foot { margin-top: 24px; font-size: 10px; color: #888; text-align: center; }
+  body { font-family: Arial, Helvetica, sans-serif; font-size: 13px; color: #000; }
+  h1 { font-size: 18px; margin-bottom: 10px; }
+  p { margin-bottom: 4px; }
+  table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+  th, td { border: 1px solid #000; padding: 6px 8px; text-align: left; }
 </style></head>
 <body>
-  <div class="head">
-    <h1>${esc(hospitalName)}</h1>
-    <div class="rx">PRESCRIPTION</div>
-  </div>
-  <div class="meta">
-    <div>
-      <p class="label">Patient</p><p><strong>${esc(prescription.patient_name || 'As per records')}</strong></p>
-      <p class="label" style="margin-top:6px;">Doctor</p><p>${esc(prescription.doctor_name || 'As per records')}</p>
-    </div>
-    <div style="text-align:right;">
-      <p class="label">Rx No.</p><p><strong>${esc(prescription.prescription_number)}</strong></p>
-      <p class="label" style="margin-top:6px;">Date</p><p>${esc(prescription.prescription_date || '')}</p>
-    </div>
-  </div>
+  <h1>${esc(hospitalName)} — Prescription</h1>
+  <p><strong>Patient:</strong> ${esc(prescription.patient_name || '-')}</p>
+  <p><strong>Doctor:</strong> ${esc(prescription.doctor_name || '-')}</p>
+  <p><strong>Rx No.:</strong> ${esc(prescription.prescription_number)} &nbsp;&nbsp; <strong>Date:</strong> ${esc(prescription.prescription_date || '-')}</p>
   <table>
     <thead><tr><th>#</th><th>Medicine</th><th>Frequency</th><th>Duration</th><th>Qty</th></tr></thead>
     <tbody>${rows}</tbody>
   </table>
-  <div class="sign">
-    <div>Pharmacist</div>
-    <div>Doctor's Signature</div>
-  </div>
-  <div class="foot">Generated ${esc(new Date().toLocaleString('en-IN'))} · This is a computer-generated prescription.</div>
   <script>window.onload = function () { window.print(); setTimeout(function(){ window.close(); }, 300); };</script>
 </body></html>`;
 
