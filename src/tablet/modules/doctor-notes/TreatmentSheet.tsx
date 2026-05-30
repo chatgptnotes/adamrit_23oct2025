@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Ban,
+  Camera,
   Check,
   ChevronDown,
   Loader2,
@@ -23,6 +24,7 @@ import type { TabletVisit } from "@/tablet/hooks/useVisitLists";
 import { FlowScaffold } from "@/tablet/components/FlowScaffold";
 import { TabletButton } from "@/tablet/ui/TabletButton";
 import { TabletInput, TabletLabel } from "@/tablet/ui/TabletInput";
+import { ScanChartModal } from "./ScanChartModal";
 
 interface MedRow {
   id: string;
@@ -588,6 +590,7 @@ function AddMedicationSection({ visit }: { visit: TabletVisit }) {
   const qc = useQueryClient();
   const { medicines, isLoading, searchTerm, setSearchTerm } = useMedicineSearch();
   const { addMedications, isAddingMedications } = useMedicalDataMutations();
+  const [showScan, setShowScan] = useState(false);
 
   // Most-prescribed medicines across the system — one-tap quick picks.
   const quickPicks = useQuery({
@@ -754,7 +757,23 @@ function AddMedicationSection({ visit }: { visit: TabletVisit }) {
 
   return (
     <section className="tablet-no-print space-y-4 rounded-2xl border bg-muted/30 p-4">
-      <h4 className="font-semibold">Add medication</h4>
+      <div className="flex items-center justify-between gap-2">
+        <h4 className="font-semibold">Add medication</h4>
+        <TabletButton variant="outline" onClick={() => setShowScan(true)}>
+          <Camera className="h-5 w-5" /> Scan chart
+        </TabletButton>
+      </div>
+
+      <ScanChartModal
+        open={showScan}
+        onOpenChange={setShowScan}
+        visit={visit}
+        onDone={() =>
+          qc.invalidateQueries({
+            queryKey: ["tablet-treatment-sheet", visit.id, visit.visitId],
+          })
+        }
+      />
 
       {/* Quick picks — one-tap frequent medicines (hidden while searching) */}
       {!showResults && picks.length > 0 ? (

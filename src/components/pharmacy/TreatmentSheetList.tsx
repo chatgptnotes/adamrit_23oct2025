@@ -2,11 +2,13 @@ import React, { useState, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
-import { Calendar, FileText, User, Building2, Search } from 'lucide-react';
+import { Calendar, FileText, User, Building2, Search, Camera, Send, Loader2 } from 'lucide-react';
 import TreatmentSheetForm from './TreatmentSheetForm';
+import TreatmentSheetScanModal, { ExtractedMedicine } from './TreatmentSheetScanModal';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { useToast } from '@/hooks/use-toast';
 
 interface TreatmentRow {
   id: string;
@@ -17,10 +19,27 @@ interface TreatmentRow {
   stock: string;
   mrp: string;
   amount: string;
+  // Optional clinical fields, populated when a row comes from a scanned chart.
+  // Carried through to the pharmacy on confirm but not all shown in the grid.
+  frequency?: string;
+  duration?: string;
+  instructions?: string;
+  genericName?: string;
+  brandName?: string;
+}
+
+// Routes offered by the grid's <select>. Scanned routes are normalised to one
+// of these so the dropdown shows the value instead of falling back to blank.
+const ROUTE_OPTIONS = ['Oral', 'IV', 'IM', 'SC', 'Topical', 'Inhalation'];
+
+function normaliseRoute(route: string): string {
+  const match = ROUTE_OPTIONS.find(r => r.toLowerCase() === (route || '').trim().toLowerCase());
+  return match || 'Oral';
 }
 
 const TreatmentSheetList: React.FC = () => {
   const { hospitalConfig } = useAuth();
+  const { toast } = useToast();
   const [selectedPatient, setSelectedPatient] = useState<any>(null);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [showTreatmentSheet, setShowTreatmentSheet] = useState(false);
@@ -29,6 +48,9 @@ const TreatmentSheetList: React.FC = () => {
   const [showDropdown, setShowDropdown] = useState(false);
   const [filterStatus, setFilterStatus] = useState<'All' | 'Admitted' | 'Discharged'>('All');
   const [treatmentRows, setTreatmentRows] = useState<TreatmentRow[]>([]);
+  const [showScanModal, setShowScanModal] = useState(false);
+  const [scanDoctor, setScanDoctor] = useState('');
+  const [sending, setSending] = useState(false);
 
   // Get the logged-in hospital name
   const loggedInHospital = hospitalConfig?.name || 'hope';
@@ -153,7 +175,8 @@ const TreatmentSheetList: React.FC = () => {
             ...patient,
             admissionDate: visit.admission_date,
             dischargeDate: visit.discharge_date,
-            visitId: visit.visit_id
+            visitId: visit.visit_id,
+            visitUuid: visit.id // visits.id (uuid) — needed for visit_medications
           });
           setPatientSearchTerm(patient.name);
           setShowDropdown(false); // Hide dropdown after selection
@@ -189,14 +212,106 @@ const TreatmentSheetList: React.FC = () => {
     ));
   };
 
-  const handleSubmitTreatment = () => {
-    // TODO: Save treatment data to database
-    console.log('Submitting treatment data:', {
-      patient: selectedPatient,
-      date: selectedDate,
-      treatments: treatmentRows
-    });
-    alert('Treatment data saved successfully!');
+  // Scanned chart -> editable rows. Replaces the current grid so the user
+  // reviews exactly what was read before anything is sent to the pharmacy.
+  const handleScanExtracted = (medicines: ExtractedMedicine[], doctor: string) => {
+    const rows: TreatmentRow[] = medicines.map((med, i) => ({
+      id: `${Date.now()}-${i}`,
+      drugName: [med.brand_name || med.name, med.strength].filter(Boolean).join(' ').trim() || med.generic_name,
+      dosage: med.strength || '',
+      route: normaliseRoute(med.route),
+      qty: '1',
+      stock: '',
+      mrp: '',
+      amount: '',
+      frequency: med.frequency || '',
+      duration: med.duration || '',
+      instructions: med.instructions || '',
+      genericName: med.generic_name || '',
+      brandName: med.brand_name || '',
+    }));
+    setScanDoctor(doctor);
+    setTreatmentRows(rows);
+  };
+
+  // Confirm & send: writes to BOTH pharmacy targets —
+  //  1. visit_medications (IPD dispense list), approved so pharmacy sees it.
+  //  2. prescriptions + prescription_items (Prescription Queue), status PENDING.
+  const handleSubmitTreatment = async () => {
+    const rows = treatmentRows.filter(r => r.drugName.trim());
+    if (rows.length === 0) {
+      toast({ title: 'Nothing to send', description: 'Add at least one medicine first.', variant: 'destructive' });
+      return;
+    }
+
+    setSending(true);
+    const nowIso = new Date().toISOString();
+    const today = nowIso.slice(0, 10);
+    try {
+      // 1) IPD dispense list — visit_medications (only when we have a visit uuid)
+      if (selectedPatient?.visitUuid) {
+        const meds = rows.map(r => ({
+          visit_id: selectedPatient.visitUuid,
+          custom_medication_name: r.drugName,
+          dosage: r.dosage || undefined,
+          route: r.route || undefined,
+          frequency: r.frequency || undefined,
+          duration: r.duration || undefined,
+          is_approved: true, // pharmacy dispense queue only shows approved orders
+          approved_at: nowIso,
+          start_date: today,
+          prescribed_date: nowIso,
+        }));
+        const { error: vmError } = await supabase.from('visit_medications').insert(meds);
+        if (vmError) throw new Error(`Dispense list: ${vmError.message}`);
+      }
+
+      // 2) Prescription Queue — prescriptions + prescription_items
+      const prescriptionNumber = 'RX-' + Date.now();
+      const { data: rxData, error: rxError } = await supabase
+        .from('prescriptions')
+        .insert({
+          prescription_number: prescriptionNumber,
+          patient_id: selectedPatient?.id || null,
+          doctor_name: scanDoctor || 'As per records',
+          prescription_date: today,
+          status: 'PENDING',
+          notes: `Treatment sheet for ${selectedDate || today}`,
+        })
+        .select('id')
+        .single();
+      if (rxError) throw new Error(`Prescription queue: ${rxError.message}`);
+
+      if (rxData?.id) {
+        const items = rows.map(r => ({
+          prescription_id: rxData.id,
+          medicine_id: null,
+          medicine_name: r.drugName,
+          generic_name: r.genericName || '',
+          brand_name: r.brandName || '',
+          quantity_prescribed: parseInt(r.qty) || 1,
+          dosage_frequency: r.frequency || '',
+          dosage_timing: r.route || '',
+          duration_days: parseInt(r.duration || '') || 0,
+          special_instructions: [r.instructions, r.dosage].filter(Boolean).join(' | '),
+        }));
+        const { error: itemsError } = await supabase.from('prescription_items').insert(items);
+        if (itemsError) throw new Error(`Prescription items: ${itemsError.message}`);
+      }
+
+      toast({
+        title: 'Sent to pharmacy',
+        description: `${rows.length} medicine(s) sent for ${selectedPatient?.name}.`,
+      });
+      setTreatmentRows([]);
+      setScanDoctor('');
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Could not send to pharmacy';
+      console.error('Send to pharmacy failed:', error);
+      toast({ title: 'Send failed', description: message, variant: 'destructive' });
+    } finally {
+      setSending(false);
+    }
   };
 
   const calculateTotal = () => {
@@ -434,13 +549,22 @@ const TreatmentSheetList: React.FC = () => {
 
                         {/* Add Row and Total */}
                         <div className="mt-4 flex justify-between items-center">
-                          <Button
-                            onClick={addTreatmentRow}
-                            variant="outline"
-                            className="flex items-center gap-2"
-                          >
-                            Add Row
-                          </Button>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              onClick={addTreatmentRow}
+                              variant="outline"
+                              className="flex items-center gap-2"
+                            >
+                              Add Row
+                            </Button>
+                            <Button
+                              onClick={() => setShowScanModal(true)}
+                              variant="outline"
+                              className="flex items-center gap-2 border-blue-300 text-blue-700 hover:bg-blue-50"
+                            >
+                              <Camera className="h-4 w-4" /> Scan Chart
+                            </Button>
+                          </div>
 
                           <div className="flex items-center gap-8">
                             <div className="text-lg font-semibold">
@@ -448,10 +572,14 @@ const TreatmentSheetList: React.FC = () => {
                             </div>
                             <Button
                               onClick={handleSubmitTreatment}
-                              className="bg-blue-600 hover:bg-blue-700 text-white"
-                              disabled={treatmentRows.length === 0}
+                              className="bg-blue-600 hover:bg-blue-700 text-white flex items-center gap-2"
+                              disabled={treatmentRows.length === 0 || sending}
                             >
-                              Submit
+                              {sending ? (
+                                <><Loader2 className="h-4 w-4 animate-spin" /> Sending…</>
+                              ) : (
+                                <><Send className="h-4 w-4" /> Confirm &amp; Send to Pharmacy</>
+                              )}
                             </Button>
                           </div>
                         </div>
@@ -475,6 +603,12 @@ const TreatmentSheetList: React.FC = () => {
           )}
         </CardContent>
       </Card>
+
+      <TreatmentSheetScanModal
+        open={showScanModal}
+        onOpenChange={setShowScanModal}
+        onExtracted={handleScanExtracted}
+      />
     </div>
   );
 };
