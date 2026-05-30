@@ -1,14 +1,14 @@
 import { useRef, useState } from "react";
-import { Camera, Check, Loader2, RefreshCw, Sparkles } from "lucide-react";
+import { Camera, Check, Loader2, Plus, RefreshCw, Sparkles, Trash2 } from "lucide-react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import type { TabletVisit } from "@/tablet/hooks/useVisitLists";
 import { TabletButton } from "@/tablet/ui/TabletButton";
+import { TabletInput, TabletLabel } from "@/tablet/ui/TabletInput";
 import {
   extractMedicationChart,
-  normaliseChartRoute,
   type ExtractedMedicine,
 } from "@/lib/extractMedicationChart";
 
@@ -88,9 +88,9 @@ export function ScanChartModal({
   };
 
   const handleConfirm = async () => {
-    const chosen = (review || []).filter((m) => m.include);
+    const chosen = (review || []).filter((m) => m.include && m.name.trim());
     if (chosen.length === 0) {
-      toast({ title: "Nothing selected", description: "Select at least one medicine.", variant: "destructive" });
+      toast({ title: "Nothing to send", description: "Include at least one medicine with a name.", variant: "destructive" });
       return;
     }
 
@@ -147,12 +147,12 @@ export function ScanChartModal({
         const items = chosen.map((m) => ({
           prescription_id: rxData.id,
           medicine_id: null,
-          medicine_name: m.brand_name || m.name,
+          medicine_name: m.name || m.brand_name,
           generic_name: m.generic_name || "",
           brand_name: m.brand_name || "",
           quantity_prescribed: 1,
           dosage_frequency: m.frequency || "",
-          dosage_timing: normaliseChartRoute(m.route),
+          dosage_timing: m.route || "",
           duration_days: parseInt(m.duration || "") || 0,
           special_instructions: [m.instructions, m.strength].filter(Boolean).join(" | "),
         }));
@@ -174,6 +174,18 @@ export function ScanChartModal({
 
   const toggle = (idx: number) =>
     setReview((rows) => (rows ? rows.map((r, i) => (i === idx ? { ...r, include: !r.include } : r)) : rows));
+
+  const updateField = (idx: number, field: keyof ExtractedMedicine, value: string) =>
+    setReview((rows) => (rows ? rows.map((r, i) => (i === idx ? { ...r, [field]: value } : r)) : rows));
+
+  const removeRow = (idx: number) =>
+    setReview((rows) => (rows ? rows.filter((_, i) => i !== idx) : rows));
+
+  const addRow = () =>
+    setReview((rows) => [
+      ...(rows || []),
+      { name: "", generic_name: "", brand_name: "", strength: "", route: "Oral", frequency: "", duration: "", instructions: "", include: true },
+    ]);
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -224,33 +236,76 @@ export function ScanChartModal({
           ) : (
             <>
               <p className="text-sm text-muted-foreground">
-                {review.length} medicine(s) read{doctor ? ` · Dr ${doctor}` : ""}. Untick anything wrong, then send.
+                {review.length} medicine(s) read{doctor ? ` · Dr ${doctor}` : ""}. Edit anything, untick to skip, then send.
               </p>
-              <div className="space-y-2">
+              <div className="space-y-3">
                 {review.map((m, idx) => (
-                  <button
+                  <div
                     key={idx}
-                    type="button"
-                    onClick={() => toggle(idx)}
                     className={cn(
-                      "flex w-full items-start gap-3 rounded-xl border p-3 text-left transition-colors",
-                      m.include ? "border-primary bg-primary/5" : "opacity-50",
+                      "space-y-2 rounded-xl border p-3 transition-opacity",
+                      m.include ? "border-primary/40" : "opacity-55",
                     )}
                   >
-                    <span className={cn("mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded border", m.include ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground")}>
-                      {m.include ? <Check className="h-3.5 w-3.5" /> : null}
-                    </span>
-                    <span className="min-w-0">
-                      <span className="block font-semibold">{m.brand_name || m.name}{m.strength ? ` ${m.strength}` : ""}</span>
-                      <span className="block text-sm text-muted-foreground">
-                        {[normaliseChartRoute(m.route), m.frequency, m.duration].filter(Boolean).join(" · ") || "—"}
-                        {m.generic_name ? ` · ${m.generic_name}` : ""}
-                      </span>
-                      {m.instructions ? <span className="block text-xs text-muted-foreground">{m.instructions}</span> : null}
-                    </span>
-                  </button>
+                    <div className="flex items-center justify-between">
+                      <button
+                        type="button"
+                        onClick={() => toggle(idx)}
+                        className="flex items-center gap-2 text-sm font-medium"
+                      >
+                        <span className={cn("flex h-5 w-5 items-center justify-center rounded border", m.include ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground")}>
+                          {m.include ? <Check className="h-3.5 w-3.5" /> : null}
+                        </span>
+                        {m.include ? "Included" : "Skipped"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => removeRow(idx)}
+                        className="flex h-8 w-8 items-center justify-center rounded-lg text-rose-600 hover:bg-rose-50"
+                        title="Remove"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+
+                    <div>
+                      <TabletLabel>Medicine</TabletLabel>
+                      <TabletInput
+                        value={m.name}
+                        onChange={(e) => updateField(idx, "name", e.target.value)}
+                        placeholder="Medicine name"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <TabletLabel>Strength</TabletLabel>
+                        <TabletInput value={m.strength} onChange={(e) => updateField(idx, "strength", e.target.value)} placeholder="e.g. 500mg" />
+                      </div>
+                      <div>
+                        <TabletLabel>Route</TabletLabel>
+                        <TabletInput value={m.route} onChange={(e) => updateField(idx, "route", e.target.value)} placeholder="e.g. IV" />
+                      </div>
+                      <div>
+                        <TabletLabel>Frequency</TabletLabel>
+                        <TabletInput value={m.frequency} onChange={(e) => updateField(idx, "frequency", e.target.value)} placeholder="e.g. BD" />
+                      </div>
+                      <div>
+                        <TabletLabel>Duration</TabletLabel>
+                        <TabletInput value={m.duration} onChange={(e) => updateField(idx, "duration", e.target.value)} placeholder="e.g. 5 days" />
+                      </div>
+                    </div>
+                    <div>
+                      <TabletLabel>Instructions</TabletLabel>
+                      <TabletInput value={m.instructions} onChange={(e) => updateField(idx, "instructions", e.target.value)} placeholder="optional" />
+                    </div>
+                  </div>
                 ))}
               </div>
+
+              <TabletButton variant="outline" className="w-full" onClick={addRow} disabled={sending}>
+                <Plus className="h-5 w-5" /> Add medicine
+              </TabletButton>
+
               <div className="flex gap-2 pt-1">
                 <TabletButton variant="outline" className="flex-1" onClick={() => setReview(null)} disabled={sending}>
                   Back
