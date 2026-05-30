@@ -4,7 +4,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { supabase } from "@/integrations/supabase/client"
-import { geminiGenerateContentUrl } from "@/lib/gemini"
+import { geminiGenerateContentUrl, geminiGenerateContent } from "@/lib/gemini"
 import { format, differenceInDays } from "date-fns"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -5430,7 +5430,7 @@ ${allSurgeriesInfo}
 INSTRUCTIONS: Write exactly 3-4 lines. Include procedure name, surgeon name, type of anaesthesia, and post-operative condition. Use formal medical language. No bullet points or numbering. Write as a continuous paragraph.`;
 
 
-      const response = await fetch(geminiGenerateContentUrl(geminiApiKey), {
+      const response = await geminiGenerateContent(geminiGenerateContentUrl(geminiApiKey), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'

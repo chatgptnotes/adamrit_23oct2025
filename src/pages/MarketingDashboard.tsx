@@ -13,7 +13,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useCorporateBulkPayments } from '@/hooks/useCorporateBulkPayments';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { geminiGenerateContentUrl } from '@/lib/gemini';
+import { geminiGenerateContentUrl, geminiGenerateContent } from '@/lib/gemini';
 import { ClinicalKPIs } from '@/components/ClinicalKPIs';
 
 const db = supabase as any;
@@ -538,7 +538,7 @@ Return JSON only:
   "meetingDate": "${todayDate}"
 }`;
 
-      const res = await fetch(geminiGenerateContentUrl(import.meta.env.VITE_GEMINI_API_KEY), {
+      const res = await geminiGenerateContent(geminiGenerateContentUrl(import.meta.env.VITE_GEMINI_API_KEY), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

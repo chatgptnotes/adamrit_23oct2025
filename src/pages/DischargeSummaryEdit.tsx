@@ -13,7 +13,7 @@ import { ArrowLeft, Save, Printer, Sparkles, Download, Eye, Loader2, Edit3, Sett
 import { useDebounce } from 'use-debounce';
 import DischargeSummary from '@/components/DischargeSummary';
 import { useVisitDiagnosis } from '@/hooks/useVisitDiagnosis';
-import { geminiGenerateContentUrl } from '@/lib/gemini';
+import { geminiGenerateContentUrl, geminiGenerateContent } from '@/lib/gemini';
 import { downscaleImageForVision } from '@/lib/downscaleImage';
 import { useToast } from '@/hooks/use-toast';
 
@@ -2305,7 +2305,7 @@ IMPORTANT:
         }
       };
 
-      const response = await fetch(
+      const response = await geminiGenerateContent(
         geminiGenerateContentUrl(import.meta.env.VITE_GEMINI_API_KEY),
         {
           method: 'POST',
@@ -2399,7 +2399,7 @@ IMPORTANT:
       console.log('🔍 Request body:', JSON.stringify(requestBody, null, 2));
 
       // Call Google Gemini API
-      const response = await fetch(geminiGenerateContentUrl(import.meta.env.VITE_GEMINI_API_KEY), {
+      const response = await geminiGenerateContent(geminiGenerateContentUrl(import.meta.env.VITE_GEMINI_API_KEY), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'

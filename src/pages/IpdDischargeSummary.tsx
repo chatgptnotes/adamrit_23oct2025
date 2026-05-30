@@ -13,7 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Calendar, CalendarDays, Loader2 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
-import { geminiGenerateContentUrl, geminiFetch } from "@/lib/gemini";
+import { geminiGenerateContentUrl, geminiFetch, geminiGenerateContent } from "@/lib/gemini";
 import { format } from 'date-fns';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -4819,7 +4819,7 @@ The following rules are non-negotiable and OVERRIDE any conflicting instruction 
 - Do NOT include the patient's name, age or sex.${conservativeRules}`;
 
                           // Call Google Gemini API
-                          const response = await fetch(geminiGenerateContentUrl(import.meta.env.VITE_GEMINI_API_KEY), {
+                          const response = await geminiGenerateContent(geminiGenerateContentUrl(import.meta.env.VITE_GEMINI_API_KEY), {
                             method: 'POST',
                             headers: {
                               'Content-Type': 'application/json'
