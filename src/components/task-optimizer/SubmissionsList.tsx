@@ -1,13 +1,24 @@
 import { useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { Loader2, ChevronDown, ChevronRight, Calendar, User, Sparkles } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
-import { optimizeTasks, type TaskSuggestion } from '@/lib/optimizeTasks';
-import { SuggestionBadge } from './suggestionMeta';
+import { optimizeTasks, ACTION_STATUSES, type TaskSuggestion, type ActionStatus } from '@/lib/optimizeTasks';
+import { fetchTaskActions, upsertTaskAction, type TaskAction } from '@/lib/taskOptimizerActions';
+import { fetchEnabledFlows } from '@/lib/taskOptimizerFlows';
+import { runTaskFlows } from '@/lib/runTaskFlows';
+import { SuggestionBadge, STATUS_META } from './suggestionMeta';
 
 interface TaskLogRow {
   id: string;
@@ -47,13 +58,152 @@ function groupByDate(rows: TaskLogRow[]): Array<{ date: string; entries: TaskLog
   return order.map(date => ({ date, entries: map.get(date)! }));
 }
 
-function SubmissionCard({ entry }: { entry: TaskLogRow }) {
+// Key an action by the submission + task text, matching the DB unique index.
+function actionKey(logId: string, taskText: string): string {
+  return `${logId}|${taskText}`;
+}
+
+// Per-suggestion workflow control: a status dropdown plus, when a suggestion is
+// marked "done", an estimate of minutes/day saved. Updates are persisted via the
+// shared actions mutation and reflected optimistically by query invalidation.
+function SuggestionActionControl({
+  entry,
+  suggestion,
+  action,
+  hospitalType,
+  onSave,
+  saving,
+}: {
+  entry: TaskLogRow;
+  suggestion: TaskSuggestion;
+  action: TaskAction | undefined;
+  hospitalType: string | null;
+  onSave: (input: {
+    logId: string;
+    hospitalType: string | null;
+    taskText: string;
+    suggestionType: TaskSuggestion['type'];
+    status: ActionStatus;
+    timeSavedMins?: number | null;
+  }) => void;
+  saving: boolean;
+}) {
+  const status: ActionStatus = action?.status ?? 'suggested';
+
+  const handleStatusChange = (next: string) => {
+    onSave({
+      logId: entry.id,
+      hospitalType,
+      taskText: suggestion.task,
+      suggestionType: suggestion.type,
+      status: next as ActionStatus,
+      timeSavedMins: action?.time_saved_mins ?? null,
+    });
+  };
+
+  const handleTimeBlur = (value: string) => {
+    const mins = value.trim() === '' ? null : Math.max(0, Math.round(Number(value)));
+    if (mins !== null && Number.isNaN(mins)) return;
+    onSave({
+      logId: entry.id,
+      hospitalType,
+      taskText: suggestion.task,
+      suggestionType: suggestion.type,
+      status,
+      timeSavedMins: mins,
+    });
+  };
+
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-2 border-t pt-2">
+      <span className="text-xs font-medium text-muted-foreground">Status</span>
+      <Select value={status} onValueChange={handleStatusChange} disabled={saving}>
+        <SelectTrigger className="h-7 w-[140px] text-xs">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {ACTION_STATUSES.map(s => (
+            <SelectItem key={s} value={s} className="text-xs">
+              {STATUS_META[s].label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      {status === 'done' && (
+        <span className="flex items-center gap-1 text-xs text-muted-foreground">
+          <Input
+            type="number"
+            min={0}
+            defaultValue={action?.time_saved_mins ?? ''}
+            onBlur={e => handleTimeBlur(e.target.value)}
+            placeholder="0"
+            className="h-7 w-16 text-xs"
+            disabled={saving}
+          />
+          mins/day saved
+        </span>
+      )}
+      {saving && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
+    </div>
+  );
+}
+
+function SubmissionCard({
+  entry,
+  actionMap,
+  hospitalType,
+}: {
+  entry: TaskLogRow;
+  actionMap: Map<string, TaskAction>;
+  hospitalType: string | null;
+}) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
   const [generating, setGenerating] = useState(false);
   const suggestions = entry.ai_suggestions ?? [];
   const hasSuggestions = suggestions.length > 0;
+
+  const actionMutation = useMutation({
+    mutationFn: upsertTaskAction,
+    onSuccess: async (rowId, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['task-optimizer-actions'] });
+      // Run any enabled automations for this status change. Best-effort: a
+      // failure here never affects the saved status.
+      try {
+        const flows = await fetchEnabledFlows(hospitalType);
+        const results = await runTaskFlows(
+          flows,
+          {
+            staffName: entry.staff_name,
+            designation: entry.designation,
+            suggestionType: variables.suggestionType,
+            status: variables.status,
+            timeSavedMins: variables.timeSavedMins ?? null,
+            taskText: variables.taskText,
+          },
+          rowId,
+        );
+        if (results.length > 0) {
+          // tag/set_status actions may have mutated rows — refresh.
+          queryClient.invalidateQueries({ queryKey: ['task-optimizer-actions'] });
+          toast({
+            title: `Automation${results.length > 1 ? 's' : ''} ran`,
+            description: results.map(r => r.message).join(' · ').slice(0, 220),
+          });
+        }
+      } catch {
+        // Automations are best-effort; ignore evaluation/run failures.
+      }
+    },
+    onError: (error: unknown) => {
+      toast({
+        title: 'Could not update status',
+        description: error instanceof Error ? error.message : 'Please try again.',
+        variant: 'destructive',
+      });
+    },
+  });
 
   const handleGenerate = async () => {
     setGenerating(true);
@@ -140,6 +290,17 @@ function SubmissionCard({ entry }: { entry: TaskLogRow }) {
                         <span className="font-medium text-foreground">Tool:</span> {s.tool}
                       </p>
                     )}
+                    {/* "keep" tasks have nothing to action — skip the workflow control. */}
+                    {s.type !== 'keep' && (
+                      <SuggestionActionControl
+                        entry={entry}
+                        suggestion={s}
+                        action={actionMap.get(actionKey(entry.id, s.task))}
+                        hospitalType={hospitalType}
+                        onSave={actionMutation.mutate}
+                        saving={actionMutation.isPending}
+                      />
+                    )}
                   </div>
                 ))}
               </div>
@@ -188,6 +349,18 @@ const SubmissionsList = () => {
     },
   });
 
+  // Workflow actions for these submissions. Missing table just yields no actions
+  // (every suggestion shows as "Suggested"), so the list still renders.
+  const { data: actions } = useQuery({
+    queryKey: ['task-optimizer-actions', hospitalType],
+    queryFn: () => fetchTaskActions(hospitalType ?? null),
+  });
+
+  const actionMap = new Map<string, TaskAction>();
+  for (const a of actions ?? []) {
+    actionMap.set(`${a.log_id}|${a.task_text}`, a);
+  }
+
   if (isLoading) {
     return (
       <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
@@ -223,7 +396,12 @@ const SubmissionsList = () => {
           </h3>
           <div className="grid gap-3">
             {group.entries.map(entry => (
-              <SubmissionCard key={entry.id} entry={entry} />
+              <SubmissionCard
+                key={entry.id}
+                entry={entry}
+                actionMap={actionMap}
+                hospitalType={hospitalType ?? null}
+              />
             ))}
           </div>
         </section>

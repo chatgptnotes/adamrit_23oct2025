@@ -1,7 +1,18 @@
 import { geminiGenerateContentUrl, geminiFetch, GEMINI_MODEL_LITE } from '@/lib/gemini';
+import { ADAMRIT_MODULES } from '@/components/task-optimizer/commonTasks';
 
 // How the AI thinks a task should be handled.
 export type SuggestionType = 'automate' | 'reduce' | 'delegate' | 'keep';
+
+// Where a suggestion sits in the productivity workflow loop.
+export type ActionStatus = 'suggested' | 'in_progress' | 'done' | 'dismissed';
+
+export const ACTION_STATUSES: readonly ActionStatus[] = [
+  'suggested',
+  'in_progress',
+  'done',
+  'dismissed',
+];
 
 // One AI recommendation for a single daily task. Everything is best-effort
 // advice meant for a human to act on, so all fields are plain strings.
@@ -11,6 +22,7 @@ export interface TaskSuggestion {
   suggestion: string; // concrete action to take
   rationale: string; // short reason why
   tool?: string; // optional tool/feature/software that could help
+  existsInAdamrit?: boolean; // true when `tool` is an existing Adamrit feature (instant win)
 }
 
 export interface OptimizeTasksInput {
@@ -23,9 +35,15 @@ const VALID_TYPES: readonly SuggestionType[] = ['automate', 'reduce', 'delegate'
 
 function buildPrompt({ name, designation, tasks }: OptimizeTasksInput): string {
   const taskList = tasks.map((t, i) => `${i + 1}. ${t}`).join('\n');
+  const moduleList = ADAMRIT_MODULES.map(m => `- ${m}`).join('\n');
   return `You are a hospital operations and workflow-automation consultant.
 
 A staff member has listed their daily tasks. For EACH task, decide how they could spend less time on it and recommend a concrete improvement. Consider automation (software, scripts, templates, EMR features), reducing/eliminating low-value work, or delegating to a more appropriate role.
+
+The hospital already runs the "Adamrit" HMS, which includes these modules:
+${moduleList}
+
+When a task can be helped by one of the modules ABOVE, prefer recommending that module (it's an instant win) and set "existsInAdamrit" to true. Otherwise set "existsInAdamrit" to false.
 
 Staff member: ${name}
 Designation / role: ${designation}
@@ -40,7 +58,8 @@ Return ONLY valid JSON (no markdown, no code fences, no commentary) as an array 
     "type": "one of: automate, reduce, delegate, keep",
     "suggestion": "a concrete, specific action they can take",
     "rationale": "one short sentence explaining the benefit",
-    "tool": "a specific tool/software/EMR feature that helps, or empty string"
+    "tool": "a specific tool/software/EMR feature that helps, or empty string",
+    "existsInAdamrit": true or false
   }
 ]
 
@@ -48,6 +67,7 @@ Rules:
 - Output one object per listed task, in the same order.
 - "type" must be exactly one of: automate, reduce, delegate, keep.
 - Use "keep" only when the task genuinely needs the person and cannot be improved.
+- Set "existsInAdamrit" to true ONLY when "tool" refers to one of the Adamrit modules listed above.
 - Keep suggestions practical for a hospital setting.
 - Output must be a single valid JSON array.`;
 }
@@ -124,6 +144,7 @@ export async function optimizeTasks(input: OptimizeTasksInput): Promise<TaskSugg
         suggestion: (item.suggestion || '').toString().trim(),
         rationale: (item.rationale || '').toString().trim(),
         ...(tool ? { tool } : {}),
+        ...(tool && item.existsInAdamrit === true ? { existsInAdamrit: true } : {}),
       };
     })
     .filter((s): s is TaskSuggestion => s !== null);

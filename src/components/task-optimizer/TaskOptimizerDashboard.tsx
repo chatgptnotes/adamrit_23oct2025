@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Sparkles, Loader2, ListChecks } from 'lucide-react';
+import { Sparkles, Loader2, ListChecks, BarChart3, Plus, CheckCircle2, Workflow } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -18,7 +18,10 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { optimizeTasks, type TaskSuggestion } from '@/lib/optimizeTasks';
 import { SuggestionBadge } from './suggestionMeta';
+import { COMMON_TASKS } from './commonTasks';
 import SubmissionsList from './SubmissionsList';
+import InsightsPanel from './InsightsPanel';
+import AutomationsPanel from './AutomationsPanel';
 
 // Selectable department / function categories — broad terms rather than
 // specific job titles. Kept as display strings so the value stored in the DB
@@ -83,7 +86,7 @@ const TaskOptimizerDashboard = () => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const [view, setView] = useState<'entry' | 'submissions'>('entry');
+  const [view, setView] = useState<'entry' | 'submissions' | 'insights' | 'automations'>('entry');
   const [name, setName] = useState('');
   const [designation, setDesignation] = useState(
     () => ROLE_TO_DESIGNATION[user?.role ?? ''] ?? '',
@@ -95,6 +98,19 @@ const TaskOptimizerDashboard = () => {
 
   // When "Other" is chosen, the typed value is what we use everywhere.
   const resolvedDesignation = designation === 'Other' ? customDesignation : designation;
+
+  // Starter tasks for the chosen department, minus any already in the box.
+  const currentTasks = tasksText
+    .split('\n')
+    .map(t => t.trim())
+    .filter(Boolean);
+  const suggestedCommonTasks = (COMMON_TASKS[designation] ?? []).filter(
+    t => !currentTasks.includes(t),
+  );
+
+  const addCommonTask = (task: string) => {
+    setTasksText(prev => (prev.trim() ? `${prev.replace(/\n+$/, '')}\n${task}` : task));
+  };
 
   const handleAnalyze = async () => {
     const tasks = tasksText
@@ -164,7 +180,9 @@ const TaskOptimizerDashboard = () => {
   };
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
+    // The Automations builder needs room for the canvas, so it breaks out of the
+    // narrow reading width used by the other views.
+    <div className={`mx-auto space-y-6 ${view === 'automations' ? 'max-w-[1600px]' : 'max-w-4xl'}`}>
       <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="space-y-1">
           <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight">
@@ -192,11 +210,31 @@ const TaskOptimizerDashboard = () => {
             <ListChecks className="mr-2 h-4 w-4" />
             View Submissions
           </Button>
+          <Button
+            variant={view === 'insights' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setView('insights')}
+          >
+            <BarChart3 className="mr-2 h-4 w-4" />
+            Insights
+          </Button>
+          <Button
+            variant={view === 'automations' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setView('automations')}
+          >
+            <Workflow className="mr-2 h-4 w-4" />
+            Automations
+          </Button>
         </div>
       </header>
 
       {view === 'submissions' ? (
         <SubmissionsList />
+      ) : view === 'insights' ? (
+        <InsightsPanel />
+      ) : view === 'automations' ? (
+        <AutomationsPanel />
       ) : (
         <>
       <Card>
@@ -247,6 +285,26 @@ const TaskOptimizerDashboard = () => {
               placeholder={'Enter patient vitals into the system\nCall patients to confirm appointments\nPrepare daily census report'}
               rows={8}
             />
+            {suggestedCommonTasks.length > 0 && (
+              <div className="space-y-1.5 pt-1">
+                <p className="text-xs text-muted-foreground">
+                  Common tasks for {designation} — click to add:
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {suggestedCommonTasks.map(task => (
+                    <button
+                      key={task}
+                      type="button"
+                      onClick={() => addCommonTask(task)}
+                      className="inline-flex items-center gap-1 rounded-full border border-dashed px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:border-primary hover:text-primary"
+                    >
+                      <Plus className="h-3 w-3" />
+                      {task}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
           <Button onClick={handleAnalyze} disabled={isLoading} className="w-full sm:w-auto">
             {isLoading ? (
@@ -280,8 +338,16 @@ const TaskOptimizerDashboard = () => {
                     <p className="text-sm text-muted-foreground">{s.rationale}</p>
                   )}
                   {s.tool && (
-                    <p className="text-xs text-muted-foreground">
-                      <span className="font-medium text-foreground">Tool:</span> {s.tool}
+                    <p className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                      <span>
+                        <span className="font-medium text-foreground">Tool:</span> {s.tool}
+                      </span>
+                      {s.existsInAdamrit && (
+                        <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-100 px-2 py-0.5 font-semibold text-emerald-700">
+                          <CheckCircle2 className="h-3 w-3" />
+                          Available now
+                        </span>
+                      )}
                     </p>
                   )}
                 </CardContent>

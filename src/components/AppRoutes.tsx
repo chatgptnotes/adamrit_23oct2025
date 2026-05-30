@@ -92,6 +92,7 @@ const FinalBillTest = lazy(() => import("../pages/FinalBillTest"));
 const LabPrintDemo = lazy(() => import("../pages/LabPrintDemo"));
 const StoreRequisition = lazy(() => import("../components/pharmacy/StoreRequisition"));
 const MarketingDashboard = lazy(() => import("../pages/MarketingDashboard"));
+const NephroPlus = lazy(() => import("../pages/NephroPlus"));
 const EditSaleBill = lazy(() => import("../components/pharmacy/EditSaleBill"));
 const DaywiseBills = lazy(() => import("../pages/DaywiseBills"));
 const OldBills = lazy(() => import("../pages/OldBills"));
@@ -316,6 +317,7 @@ export const AppRoutes = () => {
         <Route path="/telephony" element={<Suspense fallback={<PageLoader />}><TelephonyDashboard /></Suspense>} />
         <Route path="/payment-qr" element={<Suspense fallback={<PageLoader />}><PaymentQR /></Suspense>} />
         <Route path="/queue-status" element={<QueueStatus />} />
+        <Route path="/nephroplus" element={<Suspense fallback={<PageLoader />}><NephroPlus /></Suspense>} />
         {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
         <Route path="/master-data" element={<Suspense fallback={<PageLoader />}><MasterData /></Suspense>} />
         <Route path="*" element={<NotFound />} />

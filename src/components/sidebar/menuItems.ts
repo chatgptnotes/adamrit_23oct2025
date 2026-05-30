@@ -47,6 +47,11 @@ export const menuItems: MenuItemDef[] = [
     icon: BarChart3,
   },
   {
+    title: "NephroPlus Dialysis",
+    url: "/nephroplus",
+    icon: Activity,
+  },
+  {
     title: "IPD Dashboard",
     url: "/todays-ipd",
     icon: Calendar,
