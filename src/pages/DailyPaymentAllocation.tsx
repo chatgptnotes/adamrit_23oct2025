@@ -1943,9 +1943,9 @@ ${sectionsHtml}
           </Card>
         </TabsContent>
 
-        {/* TAB 5: Daily Allocation — editable today's expenses sheet (localStorage) */}
+        {/* TAB 5: Daily Allocation — editable today's expenses sheet (database-backed, carries forward) */}
         <TabsContent value="daily-allocation" className="mt-4">
-          <DailyAllocationSheet />
+          <DailyAllocationSheet hospital={selectedHospital} />
         </TabsContent>
       </Tabs>
 

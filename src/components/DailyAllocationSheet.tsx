@@ -30,8 +30,7 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-
-const STORAGE_KEY_PREFIX = 'daily-allocation-sheet:';
+import { supabase } from '@/integrations/supabase/client';
 
 interface VendorRow {
   id: string;
@@ -97,6 +96,46 @@ const makeEmptySheet = (): SheetData => ({
   collections: DEFAULT_COLLECTIONS.map((l) => ({ id: newId(), label: l, amount: null })),
   expenses: DEFAULT_EXPENSES.map((l) => ({ id: newId(), label: l, amount: null })),
   banks: DEFAULT_BANKS.map((l) => ({ id: newId(), label: l, amount: null })),
+});
+
+// Guard data coming back from the database (jsonb) into a well-formed sheet so a
+// partial/legacy row never crashes the table render.
+const normalizeSheet = (raw: unknown): SheetData => {
+  const empty = makeEmptySheet();
+  if (!raw || typeof raw !== 'object') return empty;
+  const r = raw as Partial<SheetData>;
+  const vendors = Array.isArray(r.vendors) ? r.vendors : empty.vendors;
+  return {
+    vendors: vendors.map((v) => ({
+      id: v?.id ?? newId(),
+      vendor: v?.vendor ?? '',
+      paidThisMonth: v?.paidThisMonth ?? null,
+      balanceThisMonth: v?.balanceThisMonth ?? null,
+      ledgerBalance: v?.ledgerBalance ?? null,
+      payableToday: v?.payableToday ?? null,
+    })),
+    collections: Array.isArray(r.collections) ? r.collections : empty.collections,
+    expenses: Array.isArray(r.expenses) ? r.expenses : empty.expenses,
+    banks: Array.isArray(r.banks) ? r.banks : empty.banks,
+  };
+};
+
+// Open a new day from the previous day's closing sheet: keep vendor names plus
+// their outstanding Ledger Balance / Balance This Month and the bank balances;
+// blank out the per-day amounts (Paid This Month, Payable Today, collections,
+// expenses) so the new day starts fresh.
+const carryForwardSheet = (prev: SheetData): SheetData => ({
+  vendors: prev.vendors.map((v) => ({
+    id: newId(),
+    vendor: v.vendor,
+    paidThisMonth: null,
+    balanceThisMonth: v.balanceThisMonth,
+    ledgerBalance: v.ledgerBalance,
+    payableToday: null,
+  })),
+  collections: prev.collections.map((l) => ({ id: newId(), label: l.label, amount: null })),
+  expenses: prev.expenses.map((l) => ({ id: newId(), label: l.label, amount: null })),
+  banks: prev.banks.map((l) => ({ id: newId(), label: l.label, amount: l.amount })),
 });
 
 const todayISO = (): string => new Date().toISOString().slice(0, 10);
@@ -342,51 +381,114 @@ function SortableVendorRow({ vendor, index, onUpdate, onRemove }: SortableVendor
   );
 }
 
-export function DailyAllocationSheet() {
+interface DailyAllocationSheetProps {
+  hospital?: string;
+}
+
+export function DailyAllocationSheet({ hospital = 'hope' }: DailyAllocationSheetProps) {
   const [date, setDate] = useState<string>(todayISO);
   const [sheet, setSheet] = useState<SheetData>(makeEmptySheet);
   const [savedDates, setSavedDates] = useState<ReadonlyArray<string>>([]);
+  const [loading, setLoading] = useState<boolean>(false);
 
-  const refreshSavedDates = useCallback((): void => {
-    const dates: string[] = [];
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (key && key.startsWith(STORAGE_KEY_PREFIX)) {
-        dates.push(key.slice(STORAGE_KEY_PREFIX.length));
-      }
+  const refreshSavedDates = useCallback(async (): Promise<void> => {
+    const { data, error } = await (supabase as any)
+      .from('daily_allocation_sheets')
+      .select('sheet_date')
+      .eq('hospital_type', hospital)
+      .order('sheet_date', { ascending: false });
+    if (error) {
+      console.error('Failed to load saved dates:', error);
+      return;
     }
-    dates.sort((a, b) => b.localeCompare(a));
-    setSavedDates(dates);
-  }, []);
+    setSavedDates((data ?? []).map((r: { sheet_date: string }) => r.sheet_date));
+  }, [hospital]);
 
   useEffect(() => {
     refreshSavedDates();
   }, [refreshSavedDates]);
 
+  // Load the sheet for the selected date from the database. If none exists yet,
+  // carry the previous day's closing balances forward into a fresh sheet.
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(`${STORAGE_KEY_PREFIX}${date}`);
-      setSheet(raw ? (JSON.parse(raw) as SheetData) : makeEmptySheet());
-    } catch {
-      setSheet(makeEmptySheet());
-    }
-  }, [date]);
+    let cancelled = false;
+    const load = async (): Promise<void> => {
+      setLoading(true);
+      try {
+        const { data: exact, error } = await (supabase as any)
+          .from('daily_allocation_sheets')
+          .select('data')
+          .eq('hospital_type', hospital)
+          .eq('sheet_date', date)
+          .maybeSingle();
+        if (error) throw error;
+        if (cancelled) return;
+        if (exact?.data) {
+          setSheet(normalizeSheet(exact.data));
+          return;
+        }
+        const { data: prev, error: prevError } = await (supabase as any)
+          .from('daily_allocation_sheets')
+          .select('data')
+          .eq('hospital_type', hospital)
+          .lt('sheet_date', date)
+          .order('sheet_date', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (prevError) throw prevError;
+        if (cancelled) return;
+        setSheet(prev?.data ? carryForwardSheet(normalizeSheet(prev.data)) : makeEmptySheet());
+      } catch (err) {
+        console.error('Failed to load daily allocation sheet:', err);
+        if (!cancelled) {
+          toast.error('Could not load the sheet from the database');
+          setSheet(makeEmptySheet());
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [date, hospital]);
 
-  const handleSave = (): void => {
-    try {
-      localStorage.setItem(`${STORAGE_KEY_PREFIX}${date}`, JSON.stringify(sheet));
-      toast.success(`Daily allocation saved for ${date}`);
-      refreshSavedDates();
-    } catch {
-      toast.error('Failed to save — localStorage unavailable');
+  const handleSave = async (): Promise<void> => {
+    const { error } = await (supabase as any)
+      .from('daily_allocation_sheets')
+      .upsert(
+        {
+          hospital_type: hospital,
+          sheet_date: date,
+          data: sheet,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'hospital_type,sheet_date' },
+      );
+    if (error) {
+      console.error('Failed to save daily allocation sheet:', error);
+      toast.error('Failed to save — please try again');
+      return;
     }
+    toast.success(`Daily allocation saved for ${date}`);
+    refreshSavedDates();
   };
 
-  const handleReset = (): void => {
-    const ok = window.confirm(`Reset the sheet for ${date}? This clears unsaved AND saved data for this date.`);
+  const handleReset = async (): Promise<void> => {
+    const ok = window.confirm(`Reset the sheet for ${date}? This clears saved data for this date.`);
     if (!ok) return;
+    const { error } = await (supabase as any)
+      .from('daily_allocation_sheets')
+      .delete()
+      .eq('hospital_type', hospital)
+      .eq('sheet_date', date);
+    if (error) {
+      console.error('Failed to reset daily allocation sheet:', error);
+      toast.error('Failed to reset — please try again');
+      return;
+    }
     setSheet(makeEmptySheet());
-    localStorage.removeItem(`${STORAGE_KEY_PREFIX}${date}`);
     refreshSavedDates();
     toast.info('Sheet reset to defaults');
   };
@@ -417,10 +519,19 @@ export function DailyAllocationSheet() {
     }, 250);
   };
 
-  const handleDeleteSavedDate = (d: string): void => {
+  const handleDeleteSavedDate = async (d: string): Promise<void> => {
     const ok = window.confirm(`Delete the saved sheet for ${d}? This cannot be undone.`);
     if (!ok) return;
-    localStorage.removeItem(`${STORAGE_KEY_PREFIX}${d}`);
+    const { error } = await (supabase as any)
+      .from('daily_allocation_sheets')
+      .delete()
+      .eq('hospital_type', hospital)
+      .eq('sheet_date', d);
+    if (error) {
+      console.error('Failed to delete saved sheet:', error);
+      toast.error('Failed to delete — please try again');
+      return;
+    }
     refreshSavedDates();
     if (d === date) {
       setSheet(makeEmptySheet());
@@ -534,6 +645,7 @@ export function DailyAllocationSheet() {
         <div className="flex items-center gap-2">
           <FileSpreadsheet className="h-5 w-5 text-blue-600" />
           <CardTitle>Daily Allocation — Today's Expenses Sheet</CardTitle>
+          {loading && <span className="text-xs text-gray-400">Loading…</span>}
         </div>
         <div className="flex items-center gap-2">
           <Label htmlFor="da-date" className="text-sm">Date</Label>
