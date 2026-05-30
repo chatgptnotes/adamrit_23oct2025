@@ -43,6 +43,7 @@ const LedgerStatement = lazy(() => import("../pages/LedgerStatement"));
 const Pharmacy = lazy(() => import("../pages/Pharmacy"));
 const Shifting = lazy(() => import("../pages/Shifting"));
 const Lab = lazy(() => import("../pages/Lab"));
+const TaskOptimizer = lazy(() => import("../pages/TaskOptimizer"));
 const Radiology = lazy(() => import("../pages/Radiology"));
 const RadiologyMaster = lazy(() => import("../pages/RadiologyMaster"));
 const LabMaster = lazy(() => import("../pages/LabMaster"));
@@ -224,6 +225,7 @@ export const AppRoutes = () => {
         <Route path="/cghs-surgery" element={<Suspense fallback={<PageLoader />}><CghsSurgery /></Suspense>} />
         <Route path="/cghs-surgery-master" element={<Suspense fallback={<PageLoader />}><CghsSurgeryMaster /></Suspense>} />
         <Route path="/lab" element={<Suspense fallback={<PageLoader />}><Lab /></Suspense>} />
+        <Route path="/task-optimizer" element={<Suspense fallback={<PageLoader />}><TaskOptimizer /></Suspense>} />
         <Route path="/radiology" element={<Suspense fallback={<PageLoader />}><Radiology /></Suspense>} />
         <Route path="/radiology-master" element={<Suspense fallback={<PageLoader />}><RadiologyMaster /></Suspense>} />
         <Route path="/lab-master" element={<Suspense fallback={<PageLoader />}><LabMaster /></Suspense>} />

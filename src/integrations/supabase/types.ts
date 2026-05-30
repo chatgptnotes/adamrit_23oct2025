@@ -64,6 +64,42 @@ export type Database = {
           },
         ]
       }
+      task_optimizer_logs: {
+        Row: {
+          ai_suggestions: Json | null
+          created_at: string
+          designation: string
+          hospital_type: string | null
+          id: string
+          log_date: string
+          staff_name: string
+          tasks: Json
+          user_email: string
+        }
+        Insert: {
+          ai_suggestions?: Json | null
+          created_at?: string
+          designation: string
+          hospital_type?: string | null
+          id?: string
+          log_date?: string
+          staff_name: string
+          tasks: Json
+          user_email: string
+        }
+        Update: {
+          ai_suggestions?: Json | null
+          created_at?: string
+          designation?: string
+          hospital_type?: string | null
+          id?: string
+          log_date?: string
+          staff_name?: string
+          tasks?: Json
+          user_email?: string
+        }
+        Relationships: []
+      }
       ai_clinical_recommendations: {
         Row: {
           ai_model: string | null
