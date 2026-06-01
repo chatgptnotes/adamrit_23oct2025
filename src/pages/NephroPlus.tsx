@@ -2,284 +2,242 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Activity, Plus, Pencil, Trash2 } from 'lucide-react';
-import { PAYER_LABELS, type DialysisRateRow } from '@/lib/nephroplus/revenue-share';
-import { SessionDialog } from '@/components/nephroplus/SessionDialog';
-import { SettlementTab } from '@/components/nephroplus/SettlementTab';
-import { RatesTab } from '@/components/nephroplus/RatesTab';
-import { MonthlySettlement } from '@/components/nephroplus/MonthlySettlement';
-import { ImportFromRecords } from '@/components/nephroplus/ImportFromRecords';
-import { ByPatientTab } from '@/components/nephroplus/ByPatientTab';
-import { INR, type DialysisSession, type SessionPrefill } from '@/components/nephroplus/types';
-
-function firstOfMonth(): string {
-  const now = new Date();
-  return new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
-}
-function todayStr(): string {
-  return new Date().toISOString().slice(0, 10);
-}
+import { Activity, CalendarClock, ChevronLeft, ChevronRight, Download, Printer } from 'lucide-react';
+import {
+  fetchDialysisCharges,
+  groupByPatient,
+  addMonths,
+  currentMonthKey,
+  longLabel,
+  shortLabel,
+  ymKey,
+  INR,
+  type DialysisCharge,
+  type PatientRow,
+} from '@/lib/nephroplus/dialysisData';
 
 export default function NephroPlus() {
-  const { user, hospitalConfig } = useAuth();
+  const { hospitalConfig } = useAuth();
   const { toast } = useToast();
   const hospitalName = hospitalConfig?.name ?? 'hope';
-  const createdBy = user?.email ?? null;
 
-  const [rateConfig, setRateConfig] = useState<DialysisRateRow[]>([]);
-  const [sessions, setSessions] = useState<DialysisSession[]>([]);
+  const [charges, setCharges] = useState<DialysisCharge[]>([]);
+  const [percentage, setPercentage] = useState(75);
+  const [payAfterMonths, setPayAfterMonths] = useState(3);
   const [loading, setLoading] = useState(true);
-  const [fromDate, setFromDate] = useState(firstOfMonth());
-  const [toDate, setToDate] = useState(todayStr());
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [editing, setEditing] = useState<DialysisSession | null>(null);
-  const [prefill, setPrefill] = useState<SessionPrefill | null>(null);
-  const [existingVisitIds, setExistingVisitIds] = useState<Set<string>>(new Set());
-  const [reloadKey, setReloadKey] = useState(0);
 
-  const categoryLabels = useMemo(() => {
-    const map: Record<string, string> = {};
-    rateConfig.forEach((r) => { map[r.service_category] = r.label; });
-    return map;
-  }, [rateConfig]);
+  const thisMonth = currentMonthKey();
+  const payableMonth = useMemo(() => addMonths(thisMonth, -payAfterMonths), [thisMonth, payAfterMonths]);
+  const [selectedMonth, setSelectedMonth] = useState(payableMonth);
 
-  const loadRates = useCallback(async () => {
-    const { data, error } = await supabase
-      .from('dialysis_rate_config')
-      .select('*')
-      .eq('hospital_name', hospitalName)
-      .order('sort_order', { ascending: true });
-    if (error) {
-      toast({ title: 'Failed to load rates', description: error.message, variant: 'destructive' });
-      return;
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      setCharges(await fetchDialysisCharges());
+    } catch (err) {
+      toast({
+        title: 'Failed to load dialysis billing',
+        description: err instanceof Error ? err.message : undefined,
+        variant: 'destructive',
+      });
     }
-    setRateConfig((data ?? []) as unknown as DialysisRateRow[]);
+    const { data } = await supabase
+      .from('dialysis_payout_config')
+      .select('percentage, pay_after_months')
+      .eq('hospital_name', hospitalName)
+      .maybeSingle();
+    if (data) {
+      setPercentage(Number(data.percentage) || 0);
+      setPayAfterMonths(Number(data.pay_after_months) || 3);
+    }
+    setLoading(false);
   }, [hospitalName, toast]);
 
-  const loadSessions = useCallback(async () => {
-    setLoading(true);
-    const { data, error } = await supabase
-      .from('dialysis_sessions')
-      .select('*')
-      .eq('hospital_name', hospitalName)
-      .gte('session_date', fromDate)
-      .lte('session_date', toDate)
-      .order('session_date', { ascending: false });
-    setLoading(false);
-    if (error) {
-      toast({ title: 'Failed to load sessions', description: error.message, variant: 'destructive' });
-      return;
-    }
-    setSessions((data ?? []) as unknown as DialysisSession[]);
-  }, [hospitalName, fromDate, toDate, toast]);
+  useEffect(() => { load(); }, [load]);
+  useEffect(() => { setSelectedMonth(payableMonth); }, [payableMonth]);
 
-  const loadExistingVisitIds = useCallback(async () => {
-    const { data } = await supabase
-      .from('dialysis_sessions')
-      .select('visit_id')
-      .eq('hospital_name', hospitalName)
-      .not('visit_id', 'is', null);
-    const ids = new Set<string>();
-    (data ?? []).forEach((r: Record<string, unknown>) => {
-      if (r.visit_id) ids.add(r.visit_id as string);
-    });
-    setExistingVisitIds(ids);
-  }, [hospitalName]);
+  const savePercentage = async (value: number) => {
+    const { error } = await supabase
+      .from('dialysis_payout_config')
+      .upsert(
+        { hospital_name: hospitalName, percentage: value, pay_after_months: payAfterMonths, updated_at: new Date().toISOString() },
+        { onConflict: 'hospital_name' }
+      );
+    if (error) toast({ title: 'Could not save %', description: error.message, variant: 'destructive' });
+  };
 
-  useEffect(() => { loadRates(); }, [loadRates]);
-  useEffect(() => { loadSessions(); }, [loadSessions]);
-  useEffect(() => { loadExistingVisitIds(); }, [loadExistingVisitIds]);
+  const pct = (n: number) => (n * percentage) / 100;
 
-  // Government payers are excluded from the money summary (NephroPlus payable view).
-  const totals = useMemo(
-    () =>
-      sessions
-        .filter((s) => s.payer_type !== 'govt')
-        .reduce(
-          (acc, s) => ({
-            charged: acc.charged + (Number(s.charged_price) || 0),
-            hope: acc.hope + (Number(s.hope_share) || 0),
-            nephroplus: acc.nephroplus + (Number(s.nephroplus_share) || 0),
-          }),
-          { charged: 0, hope: 0, nephroplus: 0 }
-        ),
-    [sessions]
+  const rows = useMemo<PatientRow[]>(
+    () => groupByPatient(charges.filter((c) => c.visitDate.slice(0, 7) === selectedMonth)),
+    [charges, selectedMonth]
   );
 
-  const refresh = useCallback(() => {
-    loadSessions();
-    loadExistingVisitIds();
-    setReloadKey((k) => k + 1);
-  }, [loadSessions, loadExistingVisitIds]);
+  const totals = useMemo(
+    () =>
+      rows.reduce(
+        (acc, r) => ({ price: acc.price + r.price, sessions: acc.sessions + r.sessions, pay: acc.pay + pct(r.price) }),
+        { price: 0, sessions: 0, pay: 0 }
+      ),
+    [rows, percentage]
+  );
 
-  const openAdd = () => { setEditing(null); setPrefill(null); setDialogOpen(true); };
-  const openEdit = (s: DialysisSession) => { setPrefill(null); setEditing(s); setDialogOpen(true); };
-  const openFromRecord = (p: SessionPrefill) => { setEditing(null); setPrefill(p); setDialogOpen(true); };
+  const payableThisMonth = useMemo(
+    () => pct(charges.filter((c) => c.visitDate.slice(0, 7) === payableMonth).reduce((s, c) => s + c.amount, 0)),
+    [charges, payableMonth, percentage]
+  );
 
-  const handleDelete = async (s: DialysisSession) => {
-    if (!window.confirm(`Delete dialysis session for ${s.patient_name}?`)) return;
-    const { error } = await supabase.from('dialysis_sessions').delete().eq('id', s.id);
-    if (error) {
-      toast({ title: 'Delete failed', description: error.message, variant: 'destructive' });
-      return;
-    }
-    toast({ title: 'Session deleted' });
-    refresh();
+  const exportExcel = () => {
+    if (rows.length === 0) { toast({ title: 'Nothing to export for this month' }); return; }
+    const header = ['Date', 'Patient', 'Patient ID', 'Price Paid', 'Sessions', 'Pay to NephroPlus'];
+    const body = rows.map((r) => [r.date, r.patientName, r.patientsId ?? '', r.price.toFixed(2), r.sessions, pct(r.price).toFixed(2)]);
+    const total = ['', 'TOTAL', '', totals.price.toFixed(2), totals.sessions, totals.pay.toFixed(2)];
+    const csv = [header, ...body, total].map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `nephroplus-${selectedMonth}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const printReport = () => {
+    const body = rows
+      .map((r) => `<tr><td>${r.date}</td><td>${r.patientName}${r.patientsId ? ` <span style="color:#777">(${r.patientsId})</span>` : ''}</td><td class="r">${INR.format(r.price)}</td><td class="r">${r.sessions}</td><td class="r np">${INR.format(pct(r.price))}</td></tr>`)
+      .join('');
+    const html = `<!doctype html><html><head><title>NephroPlus — ${longLabel(selectedMonth)}</title>
+      <style>body{font-family:Arial,Helvetica,sans-serif;padding:24px;color:#111}
+        h1{font-size:18px;margin:0 0 4px}.sub{color:#555;font-size:12px;margin:0 0 16px}
+        table{width:100%;border-collapse:collapse;font-size:13px}
+        th,td{border-bottom:1px solid #ddd;padding:7px 9px;text-align:left}.r{text-align:right}
+        tfoot td{font-weight:bold;border-top:2px solid #333}.np{color:#b91c1c;font-weight:600}</style></head><body>
+      <h1>NephroPlus Dialysis — ${longLabel(selectedMonth)}</h1>
+      <p class="sub">Pay NephroPlus ${percentage}% of collected price · Paid ${payAfterMonths} months after visit · Generated ${new Date().toLocaleString('en-IN')}</p>
+      <table><thead><tr><th>Date · Patient</th><th></th><th class="r">Price Paid</th><th class="r">Sessions</th><th class="r">Pay to NephroPlus</th></tr></thead>
+      <tbody>${body}</tbody>
+      <tfoot><tr><td colspan="2">TOTAL</td><td class="r">${INR.format(totals.price)}</td><td class="r">${totals.sessions}</td><td class="r np">${INR.format(totals.pay)}</td></tr></tfoot>
+      </table></body></html>`;
+    const w = window.open('', '_blank', 'width=1000,height=700');
+    if (!w) { toast({ title: 'Allow pop-ups to print', variant: 'destructive' }); return; }
+    w.document.write(html);
+    w.document.close();
+    w.focus();
+    w.print();
   };
 
   return (
     <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div className="flex items-center gap-3">
-          <Activity className="h-7 w-7 text-rose-600" />
-          <div>
-            <h1 className="text-2xl font-bold">NephroPlus Dialysis</h1>
-            <p className="text-sm text-muted-foreground">
-              Hope &harr; NephroPlus revenue share · Supplemental Agreement (eff. 09-Dec-2024)
-            </p>
-          </div>
-        </div>
-        <Button onClick={openAdd}><Plus className="mr-2 h-4 w-4" /> Add session</Button>
-      </div>
-
-      {/* 3-month payable-to-NephroPlus settlement (printable) */}
-      <MonthlySettlement hospitalName={hospitalName} reloadKey={reloadKey} />
-
-      {/* Date filter */}
-      <div className="flex items-end gap-3 flex-wrap">
+      <div className="flex items-center gap-3">
+        <Activity className="h-7 w-7 text-rose-600" />
         <div>
-          <Label>From</Label>
-          <Input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="w-44" />
-        </div>
-        <div>
-          <Label>To</Label>
-          <Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="w-44" />
+          <h1 className="text-2xl font-bold">NephroPlus Dialysis</h1>
+          <p className="text-sm text-muted-foreground">Dialysis patients &amp; what Hope pays NephroPlus</p>
         </div>
       </div>
 
-      {/* Summary cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-        <SummaryCard title="Sessions" value={String(sessions.length)} />
-        <SummaryCard title="Total Charged" value={INR.format(totals.charged)} />
-        <SummaryCard title="Hope Entitlement" value={INR.format(totals.hope)} accent="text-rose-600" />
-        <SummaryCard title="NephroPlus Share" value={INR.format(totals.nephroplus)} accent="text-blue-600" />
-      </div>
-
-      <Tabs defaultValue="patient">
-        <TabsList>
-          <TabsTrigger value="patient">By Patient</TabsTrigger>
-          <TabsTrigger value="sessions">Sessions</TabsTrigger>
-          <TabsTrigger value="records">From Records</TabsTrigger>
-          <TabsTrigger value="settlement">Settlement</TabsTrigger>
-          <TabsTrigger value="rates">Rates</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="patient" className="mt-4">
-          <ByPatientTab hospitalName={hospitalName} onRecord={openFromRecord} refreshKey={reloadKey} />
-        </TabsContent>
-
-        <TabsContent value="sessions" className="mt-4">
-          <div className="rounded-md border overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Patient</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Payer</TableHead>
-                  <TableHead>Service</TableHead>
-                  <TableHead className="text-right">Charged</TableHead>
-                  <TableHead className="text-right">Hope</TableHead>
-                  <TableHead className="text-right">NephroPlus</TableHead>
-                  <TableHead />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {loading ? (
-                  <TableRow><TableCell colSpan={9} className="text-center py-6 text-muted-foreground">Loading…</TableCell></TableRow>
-                ) : sessions.length === 0 ? (
-                  <TableRow><TableCell colSpan={9} className="text-center py-6 text-muted-foreground">No dialysis sessions in this range.</TableCell></TableRow>
-                ) : (
-                  sessions.map((s) => (
-                    <TableRow key={s.id}>
-                      <TableCell>{s.session_date}</TableCell>
-                      <TableCell className="font-medium">{s.patient_name}</TableCell>
-                      <TableCell><Badge variant="outline">{s.encounter_type}</Badge></TableCell>
-                      <TableCell className="text-xs">{PAYER_LABELS[s.payer_type]}</TableCell>
-                      <TableCell className="text-xs">{categoryLabels[s.service_category] ?? s.service_category}</TableCell>
-                      <TableCell className="text-right">{INR.format(Number(s.charged_price) || 0)}</TableCell>
-                      <TableCell className="text-right font-medium">
-                        {INR.format(Number(s.hope_share) || 0)}
-                        {s.rate_pct_applied !== null && <span className="text-xs text-muted-foreground"> ({s.rate_pct_applied}%)</span>}
-                      </TableCell>
-                      <TableCell className="text-right">{INR.format(Number(s.nephroplus_share) || 0)}</TableCell>
-                      <TableCell>
-                        <div className="flex gap-1">
-                          <Button size="icon" variant="ghost" onClick={() => openEdit(s)}><Pencil className="h-4 w-4" /></Button>
-                          <Button size="icon" variant="ghost" onClick={() => handleDelete(s)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </div>
-        </TabsContent>
-
-        <TabsContent value="records" className="mt-4">
-          <ImportFromRecords
-            existingVisitIds={existingVisitIds}
-            onRecord={openFromRecord}
-            refreshKey={reloadKey}
+      {/* Payout % setting */}
+      <Card>
+        <CardContent className="flex flex-wrap items-center gap-x-3 gap-y-2 p-4 text-sm">
+          <span>We pay NephroPlus</span>
+          <Input
+            type="number" min="0" max="100"
+            className="h-9 w-24 text-right"
+            value={percentage}
+            onChange={(e) => setPercentage(Number(e.target.value) || 0)}
+            onBlur={() => savePercentage(percentage)}
           />
-        </TabsContent>
+          <span>% of the price collected, paid</span>
+          <Input
+            type="number" min="0" max="12"
+            className="h-9 w-16 text-right"
+            value={payAfterMonths}
+            onChange={(e) => setPayAfterMonths(Number(e.target.value) || 0)}
+            onBlur={() => savePercentage(percentage)}
+          />
+          <span>months after the patient's visit.</span>
+        </CardContent>
+      </Card>
 
-        <TabsContent value="settlement" className="mt-4">
-          <SettlementTab sessions={sessions} />
-        </TabsContent>
+      {/* Pay-this-month headline */}
+      <Card className="border-rose-200 bg-rose-50/60">
+        <CardContent className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-4">
+            <div className="rounded-full bg-rose-100 p-3"><CalendarClock className="h-6 w-6 text-rose-600" /></div>
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-rose-700">Pay this month ({longLabel(thisMonth)})</p>
+              <p className="text-sm text-muted-foreground">for patients who came in {longLabel(payableMonth)} ({payAfterMonths} months ago)</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-4">
+            <p className="text-3xl font-bold text-rose-600">{loading ? '…' : INR.format(payableThisMonth)}</p>
+            {selectedMonth !== payableMonth && (
+              <Button variant="outline" size="sm" onClick={() => setSelectedMonth(payableMonth)}>View list</Button>
+            )}
+          </div>
+        </CardContent>
+      </Card>
 
-        <TabsContent value="rates" className="mt-4">
-          <RatesTab rateConfig={rateConfig} onChanged={loadRates} />
-        </TabsContent>
-      </Tabs>
+      {/* Month nav + actions */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-1">
+          <Button variant="outline" size="icon" onClick={() => setSelectedMonth((m) => addMonths(m, -1))}><ChevronLeft className="h-4 w-4" /></Button>
+          <span className="min-w-32 text-center font-semibold">{longLabel(selectedMonth)}</span>
+          <Button variant="outline" size="icon" onClick={() => setSelectedMonth((m) => addMonths(m, 1))}><ChevronRight className="h-4 w-4" /></Button>
+          <Button variant="outline" size="sm" onClick={() => setSelectedMonth(ymKey(new Date()))}>This month</Button>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={printReport} disabled={rows.length === 0}><Printer className="mr-2 h-4 w-4" /> Print</Button>
+          <Button size="sm" onClick={exportExcel} disabled={rows.length === 0}><Download className="mr-2 h-4 w-4" /> Excel</Button>
+        </div>
+      </div>
 
-      <SessionDialog
-        open={dialogOpen}
-        onOpenChange={setDialogOpen}
-        rateConfig={rateConfig}
-        hospitalName={hospitalName}
-        createdBy={createdBy}
-        session={editing}
-        prefill={prefill}
-        onSaved={refresh}
-      />
+      {/* Patient table */}
+      <div className="rounded-md border overflow-x-auto">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Date &amp; Patient</TableHead>
+              <TableHead className="text-right">Price Paid</TableHead>
+              <TableHead className="text-right">Sessions</TableHead>
+              <TableHead className="text-right">Pay to NephroPlus</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {loading ? (
+              <TableRow><TableCell colSpan={4} className="py-6 text-center text-muted-foreground">Loading…</TableCell></TableRow>
+            ) : rows.length === 0 ? (
+              <TableRow><TableCell colSpan={4} className="py-6 text-center text-muted-foreground">No dialysis patients in {longLabel(selectedMonth)}. Use ◀ ▶ to find a month.</TableCell></TableRow>
+            ) : (
+              rows.map((r) => (
+                <TableRow key={r.key}>
+                  <TableCell>
+                    <span className="font-medium">{r.patientName}</span>
+                    <span className="block text-xs text-muted-foreground">{r.date}{r.patientsId ? ` · ${r.patientsId}` : ''}</span>
+                  </TableCell>
+                  <TableCell className="text-right">{INR.format(r.price)}</TableCell>
+                  <TableCell className="text-right">{r.sessions}</TableCell>
+                  <TableCell className="text-right font-semibold text-rose-600">{INR.format(pct(r.price))}</TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+          {rows.length > 0 && (
+            <tfoot>
+              <TableRow className="border-t-2 font-bold">
+                <TableCell>TOTAL — {shortLabel(selectedMonth)}</TableCell>
+                <TableCell className="text-right">{INR.format(totals.price)}</TableCell>
+                <TableCell className="text-right">{totals.sessions}</TableCell>
+                <TableCell className="text-right text-rose-600">{INR.format(totals.pay)}</TableCell>
+              </TableRow>
+            </tfoot>
+          )}
+        </Table>
+      </div>
     </div>
-  );
-}
-
-interface SummaryCardProps {
-  title: string;
-  value: string;
-  accent?: string;
-}
-
-function SummaryCard({ title, value, accent }: SummaryCardProps) {
-  return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-sm font-medium text-muted-foreground">{title}</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <p className={`text-2xl font-bold ${accent ?? ''}`}>{value}</p>
-      </CardContent>
-    </Card>
   );
 }

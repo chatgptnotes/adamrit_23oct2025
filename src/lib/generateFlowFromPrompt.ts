@@ -8,10 +8,12 @@ import type {
   ActionConfig,
 } from '@/lib/taskOptimizerFlows';
 
-// Persona-driven, plain-English -> automation graph.
+// Persona-driven, plain-English -> automation graph. When `current` is given,
+// the AI EDITS that existing workflow instead of building a fresh one.
 export interface GenerateFlowInput {
   persona: string;
   instruction: string;
+  current?: { nodes: StoredNode[]; edges: StoredEdge[] };
 }
 
 export interface GeneratedFlow {
@@ -39,12 +41,40 @@ function coerceStatus(value: string | undefined, fallback: ActionStatus): Action
   return ACTION_STATUSES.includes(value as ActionStatus) ? (value as ActionStatus) : fallback;
 }
 
-function buildPrompt({ persona, instruction }: GenerateFlowInput): string {
-  return `You design automations for a hospital "Task Optimizer". An automation runs when a staff task's STATUS CHANGES (statuses: suggested, in_progress, done, dismissed). Tailor it to the person's role.
+// Convert the live canvas nodes back into the JSON spec the AI works with, so
+// it can be shown the current workflow and edit it.
+function summarizeFlow(nodes: StoredNode[]): RawFlow | null {
+  if (!nodes || nodes.length === 0) return null;
+  const triggerNode = nodes.find(n => n.type === 'trigger');
+  const trigger = triggerNode
+    ? { toStatus: (triggerNode.data.config as TriggerConfig).toStatus }
+    : { toStatus: 'done' };
+  const conditions = nodes
+    .filter(n => n.type === 'condition')
+    .map(n => {
+      const c = n.data.config as ConditionConfig;
+      return { field: c.field, op: c.op, value: c.value };
+    });
+  const actions = nodes
+    .filter(n => n.type === 'action')
+    .map(n => {
+      const a = n.data.config as ActionConfig;
+      return { type: a.type, message: a.message, setStatus: a.setStatus };
+    });
+  return { trigger, conditions, actions };
+}
+
+function buildPrompt({ persona, instruction, current }: GenerateFlowInput): string {
+  const currentSpec = current ? summarizeFlow(current.nodes) : null;
+  const editBlock = currentSpec
+    ? `\nThe user is EDITING an existing automation. Here is its current JSON:\n${JSON.stringify(currentSpec)}\n\nApply the requested change to it. KEEP every existing trigger, condition, and action unless the change clearly replaces or removes it. Return the FULL updated automation (not just the change).\n`
+    : '';
+  const verb = currentSpec ? 'edit the' : 'design an';
+  return `You ${verb} automation for a hospital "Task Optimizer". An automation runs when a staff task's STATUS CHANGES (statuses: suggested, in_progress, done, dismissed). Tailor it to the person's role.
 
 Person's role / persona: ${persona}
 What they want: ${instruction}
-
+${editBlock}
 Return ONLY valid JSON (no markdown, no code fences) of exactly this shape:
 {
   "name": "short automation name",

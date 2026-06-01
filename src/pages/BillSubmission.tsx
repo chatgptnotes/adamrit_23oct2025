@@ -24,7 +24,7 @@ import {
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { EnhancedDatePicker } from '@/components/ui/enhanced-date-picker';
+import { IntimationCell } from '@/components/bill-workflow/IntimationCell';
 import BillSubmissionForm, { BillSubmission, PatientData } from '@/components/BillSubmissionForm';
 import {
   useBillSubmissions,
@@ -669,14 +669,12 @@ const BillSubmissionPage: React.FC = () => {
                           </div>
                           <div>
                             <span className="text-gray-500 text-xs">Intimation Date</span>
-                            <p>
-                              <EnhancedDatePicker
+                            <div className="mt-0.5">
+                              <IntimationCell
                                 value={bill.intimation_date ? new Date(bill.intimation_date) : undefined}
                                 onChange={(d) => handleIntimationDateChange(bill.id, d)}
-                                placeholder="Pick date"
-                                isDOB={false}
                               />
-                            </p>
+                            </div>
                           </div>
                           <div>
                             <span className="text-gray-500 text-xs">Submitted By</span>
@@ -777,11 +775,9 @@ const BillSubmissionPage: React.FC = () => {
                           <TableCell>{submission.patient_corporate || '-'}</TableCell>
                           <TableCell>{formatDate(submission.admission_date)}</TableCell>
                           <TableCell>
-                            <EnhancedDatePicker
+                            <IntimationCell
                               value={submission.intimation_date ? new Date(submission.intimation_date) : undefined}
                               onChange={(d) => handleIntimationDateChange(submission.id, d)}
-                              placeholder="Pick date"
-                              isDOB={false}
                             />
                           </TableCell>
                           <TableCell>{formatDate(submission.discharge_date)}</TableCell>

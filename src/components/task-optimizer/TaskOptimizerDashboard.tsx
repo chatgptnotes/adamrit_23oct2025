@@ -211,20 +211,20 @@ const TaskOptimizerDashboard = () => {
             View Submissions
           </Button>
           <Button
-            variant={view === 'insights' ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => setView('insights')}
-          >
-            <BarChart3 className="mr-2 h-4 w-4" />
-            Insights
-          </Button>
-          <Button
             variant={view === 'automations' ? 'default' : 'outline'}
             size="sm"
             onClick={() => setView('automations')}
           >
             <Workflow className="mr-2 h-4 w-4" />
             Automations
+          </Button>
+          <Button
+            variant={view === 'insights' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setView('insights')}
+          >
+            <BarChart3 className="mr-2 h-4 w-4" />
+            Insights
           </Button>
         </div>
       </header>

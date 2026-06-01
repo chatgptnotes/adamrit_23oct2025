@@ -15,8 +15,12 @@ import type { StoredNode, StoredEdge } from '@/lib/taskOptimizerFlows';
 
 export interface FlowChatbotProps {
   personas: string[];
-  onApply: (nodes: StoredNode[], edges: StoredEdge[], name: string) => void;
-  onClose: () => void;
+  // role is the chosen persona, so the generated automation is grouped under it.
+  onApply: (nodes: StoredNode[], edges: StoredEdge[], name: string, role: string) => void;
+  // The workflow currently on the canvas, so the assistant can EDIT it.
+  currentFlow?: { nodes: StoredNode[]; edges: StoredEdge[] };
+  // Optional: when omitted (assistant is always-on), no close button is shown.
+  onClose?: () => void;
 }
 
 interface ChatMessage {
@@ -30,7 +34,7 @@ const EXAMPLES = [
   'When a billing task is done, send a WhatsApp summary',
 ];
 
-export default function FlowChatbot({ personas, onApply, onClose }: FlowChatbotProps) {
+export default function FlowChatbot({ personas, onApply, currentFlow, onClose }: FlowChatbotProps) {
   const [persona, setPersona] = useState(personas[0] ?? '');
   const [customPersona, setCustomPersona] = useState('');
   const [instruction, setInstruction] = useState('');
@@ -38,9 +42,12 @@ export default function FlowChatbot({ personas, onApply, onClose }: FlowChatbotP
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       role: 'assistant',
-      text: 'Tell me what you want to automate and I\'ll build the workflow on the canvas — tailored to your role. For example:',
+      text: 'Tell me what you want to automate and I\'ll build it on the canvas — or describe a change and I\'ll edit the current workflow. For example:',
     },
   ]);
+
+  // If there's already a workflow on the canvas, the next request edits it.
+  const isEditing = (currentFlow?.nodes?.length ?? 0) > 0;
 
   const resolvedPersona = persona === 'Other' ? customPersona.trim() : persona;
 
@@ -51,9 +58,15 @@ export default function FlowChatbot({ personas, onApply, onClose }: FlowChatbotP
     setInstruction('');
     setLoading(true);
     try {
-      const flow = await generateFlowFromPrompt({ persona: resolvedPersona || 'staff member', instruction: text });
-      onApply(flow.nodes, flow.edges, flow.name);
-      const summary = `Built ${flow.nodes.length} node${flow.nodes.length === 1 ? '' : 's'} — applied to the canvas.`;
+      const personaForFlow = resolvedPersona || 'staff member';
+      const flow = await generateFlowFromPrompt({
+        persona: personaForFlow,
+        instruction: text,
+        current: isEditing ? currentFlow : undefined,
+      });
+      onApply(flow.nodes, flow.edges, flow.name, resolvedPersona);
+      const verb = isEditing ? 'Updated' : 'Built';
+      const summary = `${verb} ${flow.nodes.length} node${flow.nodes.length === 1 ? '' : 's'} — applied to the canvas.`;
       setMessages(prev => [
         ...prev,
         { role: 'assistant', text: flow.explanation ? `${flow.explanation}\n\n${summary}` : summary },
@@ -74,9 +87,11 @@ export default function FlowChatbot({ personas, onApply, onClose }: FlowChatbotP
       <div className="flex items-center gap-2 border-b p-3">
         <Bot className="h-4 w-4 text-primary" />
         <p className="flex-1 text-sm font-semibold">AI Workflow Assistant</p>
-        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onClose} title="Close">
-          <X className="h-4 w-4" />
-        </Button>
+        {onClose && (
+          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onClose} title="Close">
+            <X className="h-4 w-4" />
+          </Button>
+        )}
       </div>
 
       {/* Persona */}
@@ -144,13 +159,13 @@ export default function FlowChatbot({ personas, onApply, onClose }: FlowChatbotP
           onKeyDown={e => {
             if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleSend();
           }}
-          placeholder="Describe the automation you want…"
+          placeholder={isEditing ? 'Describe a change to the workflow…' : 'Describe the automation you want…'}
           rows={3}
           className="text-xs"
         />
         <Button size="sm" className="w-full" onClick={handleSend} disabled={loading || !instruction.trim()}>
           {loading ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Send className="mr-1.5 h-4 w-4" />}
-          Generate workflow
+          {isEditing ? 'Update workflow' : 'Generate workflow'}
         </Button>
       </div>
     </div>

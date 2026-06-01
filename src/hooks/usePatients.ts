@@ -106,8 +106,12 @@ export const usePatients = () => {
           )
         `);
 
-      // Apply hospital filtering based on hospital_name column
-      query = query.eq('hospital_name', hospitalFilter).order('name');
+      // Apply hospital filtering based on hospital_name column.
+      // Abort after 8s so a slow/unreachable DB fails fast instead of hanging ~20s+.
+      query = query
+        .eq('hospital_name', hospitalFilter)
+        .order('name')
+        .abortSignal(AbortSignal.timeout(8000));
 
       const { data, error } = await query;
 
@@ -117,7 +121,9 @@ export const usePatients = () => {
       }
 
       return data;
-    }
+    },
+    // Don't retry a failing/timed-out query — retries multiply the wait time.
+    retry: 0,
   });
 
   const {

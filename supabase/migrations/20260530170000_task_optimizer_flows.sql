@@ -6,6 +6,7 @@
 CREATE TABLE IF NOT EXISTS public.task_optimizer_flows (
   id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   hospital_type  text,
+  role           text,                                 -- staff role/persona this is for
   name           text NOT NULL DEFAULT 'Untitled automation',
   enabled        boolean NOT NULL DEFAULT true,
   nodes          jsonb NOT NULL DEFAULT '[]'::jsonb,  -- React Flow nodes

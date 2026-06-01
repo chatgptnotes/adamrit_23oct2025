@@ -56,6 +56,7 @@ export interface StoredEdge {
 export interface TaskFlow {
   id: string;
   hospital_type: string | null;
+  role: string | null; // staff role/persona this automation is for
   name: string;
   enabled: boolean;
   nodes: StoredNode[];
@@ -69,7 +70,7 @@ const TABLE = 'task_optimizer_flows';
 export async function fetchTaskFlows(hospitalType: string | null): Promise<TaskFlow[]> {
   let query = supabase
     .from(TABLE)
-    .select('id, hospital_type, name, enabled, nodes, edges, created_at, updated_at')
+    .select('id, hospital_type, role, name, enabled, nodes, edges, created_at, updated_at')
     .order('updated_at', { ascending: false })
     .limit(200);
   if (hospitalType) query = query.eq('hospital_type', hospitalType);
@@ -87,6 +88,7 @@ export async function fetchEnabledFlows(hospitalType: string | null): Promise<Ta
 export interface SaveFlowInput {
   id?: string;
   hospitalType: string | null;
+  role: string | null;
   name: string;
   enabled: boolean;
   nodes: StoredNode[];
@@ -97,6 +99,7 @@ export async function saveTaskFlow(input: SaveFlowInput): Promise<void> {
   const row = {
     ...(input.id ? { id: input.id } : {}),
     hospital_type: input.hospitalType,
+    role: input.role,
     name: input.name,
     enabled: input.enabled,
     nodes: input.nodes,

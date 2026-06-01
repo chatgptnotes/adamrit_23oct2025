@@ -15,6 +15,7 @@ interface EnhancedDatePickerProps {
   className?: string;
   isDOB?: boolean; // Special handling for Date of Birth
   disabled?: boolean; // Add disabled prop support
+  defaultOpen?: boolean; // Open the calendar immediately on mount
 }
 
 type ViewMode = 'year' | 'month' | 'day';
@@ -26,9 +27,10 @@ export const EnhancedDatePicker: React.FC<EnhancedDatePickerProps> = ({
   label,
   className,
   isDOB = false,
-  disabled = false
+  disabled = false,
+  defaultOpen = false
 }) => {
-  const [isOpen, setIsOpen] = React.useState(false);
+  const [isOpen, setIsOpen] = React.useState(defaultOpen);
   const [viewMode, setViewMode] = React.useState<ViewMode>(isDOB ? 'year' : 'day');
   const [selectedYear, setSelectedYear] = React.useState<number>(value?.getFullYear() || (isDOB ? 1990 : new Date().getFullYear()));
   const [selectedMonth, setSelectedMonth] = React.useState<number>(value?.getMonth() || 0);

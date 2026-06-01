@@ -3,8 +3,10 @@ import {
   ReactFlow,
   ReactFlowProvider,
   Background,
+  BackgroundVariant,
   Controls,
   MiniMap,
+  MarkerType,
   addEdge,
   useNodesState,
   useEdgesState,
@@ -12,13 +14,21 @@ import {
   type Connection,
   type Node,
   type Edge,
+  type DefaultEdgeOptions,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { Zap, Filter, Play, Save, Trash2, ArrowLeft, Bot } from 'lucide-react';
+import { Zap, Filter, Play, Save, Trash2, ArrowLeft, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { flowNodeTypes } from './nodeTypes';
 import FlowInspector from './FlowInspector';
 import FlowChatbot from './FlowChatbot';
@@ -53,39 +63,71 @@ const PALETTE: Array<{ kind: FlowNodeKind; label: string; Icon: typeof Zap; colo
 let idCounter = 1;
 const nextId = (kind: string) => `${kind}-${Date.now()}-${idCounter++}`;
 
+// JotForm-style connectors: smooth rounded steps with an arrowhead.
+const DEFAULT_EDGE_OPTIONS: DefaultEdgeOptions = {
+  type: 'smoothstep',
+  animated: true,
+  style: { strokeWidth: 2, stroke: '#94a3b8' },
+  markerEnd: { type: MarkerType.ArrowClosed, color: '#94a3b8', width: 18, height: 18 },
+};
+
+// Sentinel for "applies to all staff" in the role Select (it can't take '').
+const ALL_STAFF = '__all__';
+
 export interface FlowCanvasProps {
   initialName: string;
   initialEnabled: boolean;
+  initialRole: string | null;
   initialNodes: StoredNode[];
   initialEdges: StoredEdge[];
-  onSave: (data: { name: string; enabled: boolean; nodes: StoredNode[]; edges: StoredEdge[] }) => void;
+  roleOptions: string[];
+  onSave: (data: { name: string; enabled: boolean; role: string | null; nodes: StoredNode[]; edges: StoredEdge[] }) => void;
   onBack: () => void;
   saving: boolean;
 }
 
-function CanvasInner({ initialName, initialEnabled, initialNodes, initialEdges, onSave, onBack, saving }: FlowCanvasProps) {
+function CanvasInner({
+  initialName,
+  initialEnabled,
+  initialRole,
+  initialNodes,
+  initialEdges,
+  roleOptions,
+  onSave,
+  onBack,
+  saving,
+}: FlowCanvasProps) {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const { screenToFlowPosition, fitView } = useReactFlow();
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>(initialNodes as unknown as Node[]);
-  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>(initialEdges as unknown as Edge[]);
+  // Loaded/saved edges are plain {id,source,target}; give them the styled look.
+  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>(
+    (initialEdges as unknown as Edge[]).map(e => ({ ...DEFAULT_EDGE_OPTIONS, ...e })),
+  );
   const [name, setName] = useState(initialName);
   const [enabled, setEnabled] = useState(initialEnabled);
+  const [role, setRole] = useState<string | null>(initialRole);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [showAssistant, setShowAssistant] = useState(false);
 
-  // Replace the canvas graph with an AI-generated one and re-centre.
+  // Replace the canvas graph with an AI-generated one and re-centre. The
+  // assistant's persona becomes this automation's role so it lands in the
+  // right group when saved.
   const applyGeneratedFlow = useCallback(
-    (newNodes: StoredNode[], newEdges: StoredEdge[], generatedName: string) => {
+    (newNodes: StoredNode[], newEdges: StoredEdge[], generatedName: string, generatedRole?: string) => {
       setNodes(newNodes as unknown as Node[]);
-      setEdges(newEdges as unknown as Edge[]);
+      setEdges((newEdges as unknown as Edge[]).map(e => ({ ...DEFAULT_EDGE_OPTIONS, ...e })));
       if (generatedName) setName(generatedName);
+      if (generatedRole) setRole(generatedRole);
       setSelectedId(null);
       setTimeout(() => fitView({ padding: 0.2 }), 50);
     },
     [setNodes, setEdges, fitView],
   );
 
-  const onConnect = useCallback((c: Connection) => setEdges(eds => addEdge(c, eds)), [setEdges]);
+  const onConnect = useCallback(
+    (c: Connection) => setEdges(eds => addEdge({ ...c, ...DEFAULT_EDGE_OPTIONS }, eds)),
+    [setEdges],
+  );
 
   const onDragStart = (e: DragEvent, kind: FlowNodeKind) => {
     e.dataTransfer.setData('application/flow-kind', kind);
@@ -132,6 +174,7 @@ function CanvasInner({ initialName, initialEnabled, initialNodes, initialEdges, 
     onSave({
       name: name.trim() || 'Untitled automation',
       enabled,
+      role,
       nodes: nodes as unknown as StoredNode[],
       edges: edges as unknown as StoredEdge[],
     });
@@ -143,7 +186,19 @@ function CanvasInner({ initialName, initialEnabled, initialNodes, initialEdges, 
         <Button variant="outline" size="sm" onClick={onBack}>
           <ArrowLeft className="mr-1.5 h-4 w-4" /> Back
         </Button>
-        <Input value={name} onChange={e => setName(e.target.value)} className="h-8 max-w-xs text-sm" placeholder="Automation name" />
+        <Input value={name} onChange={e => setName(e.target.value)} className="h-8 max-w-[14rem] text-sm" placeholder="Automation name" />
+        <div className="flex items-center gap-1.5">
+          <Label className="text-xs text-muted-foreground">For</Label>
+          <Select value={role ?? ALL_STAFF} onValueChange={v => setRole(v === ALL_STAFF ? null : v)}>
+            <SelectTrigger className="h-8 w-[150px] text-xs"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ALL_STAFF} className="text-xs">All staff</SelectItem>
+              {roleOptions.map(r => (
+                <SelectItem key={r} value={r} className="text-xs">{r}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
         <div className="flex items-center gap-2">
           <Switch checked={enabled} onCheckedChange={setEnabled} id="flow-enabled" />
           <Label htmlFor="flow-enabled" className="text-xs">Enabled</Label>
@@ -154,20 +209,13 @@ function CanvasInner({ initialName, initialEnabled, initialNodes, initialEdges, 
               <Trash2 className="mr-1.5 h-4 w-4" /> Delete node
             </Button>
           )}
-          <Button
-            variant={showAssistant ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => setShowAssistant(s => !s)}
-          >
-            <Bot className="mr-1.5 h-4 w-4" /> AI Assistant
-          </Button>
           <Button size="sm" onClick={handleSave} disabled={saving}>
             <Save className="mr-1.5 h-4 w-4" /> {saving ? 'Saving…' : 'Save'}
           </Button>
         </div>
       </div>
 
-      <div className="grid gap-3 lg:grid-cols-[170px_1fr_280px]">
+      <div className="grid gap-3 lg:grid-cols-[150px_1fr_300px]">
         {/* Palette */}
         <div className="space-y-2 rounded-lg border p-2">
           <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Drag onto canvas</p>
@@ -184,10 +232,11 @@ function CanvasInner({ initialName, initialEnabled, initialNodes, initialEdges, 
           ))}
         </div>
 
-        {/* Canvas — fills most of the viewport so the flow is easy to build. */}
+        {/* Canvas — fills most of the viewport so the flow is easy to build.
+            The node inspector floats over it as a popup when a node is selected. */}
         <div
           ref={wrapperRef}
-          className="h-[calc(100vh-220px)] min-h-[520px] rounded-lg border"
+          className="relative h-[calc(100vh-220px)] min-h-[520px] rounded-lg border"
           onDrop={onDrop}
           onDragOver={onDragOver}
         >
@@ -198,28 +247,52 @@ function CanvasInner({ initialName, initialEnabled, initialNodes, initialEdges, 
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
             nodeTypes={flowNodeTypes}
+            defaultEdgeOptions={DEFAULT_EDGE_OPTIONS}
             onNodeClick={(_, n) => setSelectedId(n.id)}
             onPaneClick={() => setSelectedId(null)}
             fitView
             proOptions={{ hideAttribution: true }}
+            className="bg-muted/30"
           >
-            <Background />
+            <Background variant={BackgroundVariant.Dots} gap={18} size={1.5} color="#cbd5e1" />
             <Controls showInteractive={false} />
             <MiniMap pannable zoomable className="!hidden sm:!block" />
           </ReactFlow>
+
+          {/* Floating inspector popup — only shown when a node is selected. */}
+          {selectedNode && (
+            <div className="absolute right-3 top-3 z-10 w-[260px] overflow-hidden rounded-lg border bg-card shadow-xl">
+              <div className="flex items-center justify-between border-b px-3 py-1.5">
+                <span className="text-xs font-semibold">Configure step</span>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6"
+                  onClick={() => setSelectedId(null)}
+                  title="Close"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+              <div className="max-h-[60vh] overflow-y-auto">
+                <FlowInspector node={selectedNode} onChange={updateNodeConfig} />
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* Right column: AI assistant when toggled on, otherwise the inspector. */}
-        <div className="h-[calc(100vh-220px)] min-h-[520px] overflow-y-auto rounded-lg border">
-          {showAssistant ? (
-            <FlowChatbot
-              personas={Object.keys(COMMON_TASKS)}
-              onApply={applyGeneratedFlow}
-              onClose={() => setShowAssistant(false)}
-            />
-          ) : (
-            <FlowInspector node={selectedNode} onChange={updateNodeConfig} />
-          )}
+        {/* AI assistant — always visible so a workflow can be generated anytime. */}
+        <div className="h-[calc(100vh-220px)] min-h-[520px]">
+          <FlowChatbot
+            personas={Object.keys(COMMON_TASKS)}
+            currentFlow={{
+              nodes: nodes as unknown as StoredNode[],
+              edges: edges as unknown as StoredEdge[],
+            }}
+            onApply={(genNodes, genEdges, genName, genRole) =>
+              applyGeneratedFlow(genNodes, genEdges, genName, genRole)
+            }
+          />
         </div>
       </div>
     </div>

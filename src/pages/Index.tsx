@@ -43,11 +43,13 @@ const Index = () => {
   const { data: patientDataRecords = [] } = useQuery({
     queryKey: ['patient-data-records', currentHospital],
     queryFn: async () => {
-      // Get patient IDs for this hospital
+      // Get patient IDs for this hospital. Abort after 8s so a slow/unreachable
+      // DB fails fast instead of hanging ~20s+.
       const { data: patientsData, error: patientsError } = await supabase
         .from('patients')
         .select('patients_id')
-        .eq('hospital_name', currentHospital);
+        .eq('hospital_name', currentHospital)
+        .abortSignal(AbortSignal.timeout(8000));
 
       if (patientsError) {
         console.error('Error fetching patients for hospital filtering:', patientsError);
@@ -62,7 +64,8 @@ const Index = () => {
         .from('patient_data')
         .select('*')
         .in('patient_id', patientIds)
-        .order('sr_no', { ascending: false });
+        .order('sr_no', { ascending: false })
+        .abortSignal(AbortSignal.timeout(8000));
 
       if (error) {
         console.error('Error fetching patient_data:', error);
@@ -70,7 +73,8 @@ const Index = () => {
       }
 
       return data || [];
-    }
+    },
+    retry: 0,
   });
 
   // Combine and deduplicate patients from both sources
@@ -417,26 +421,31 @@ const Index = () => {
           )}
         </div>
 
-        <AddPatientDialog
-          isOpen={isAddPatientDialogOpen}
-          onClose={() => {
-            setIsAddPatientDialogOpen(false);
-            setSelectedSurgery(undefined);
-          }}
-          onPatientAdded={(patient) => {
-            if (selectedSurgery) {
-              handleAddPatient(selectedSurgery, patient);
-            }
-          }}
-        />
+        {/* Mounted only when open so their reference-data queries don't fire on dashboard load */}
+        {isAddPatientDialogOpen && (
+          <AddPatientDialog
+            isOpen={isAddPatientDialogOpen}
+            onClose={() => {
+              setIsAddPatientDialogOpen(false);
+              setSelectedSurgery(undefined);
+            }}
+            onPatientAdded={(patient) => {
+              if (selectedSurgery) {
+                handleAddPatient(selectedSurgery, patient);
+              }
+            }}
+          />
+        )}
 
-        <AddDiagnosisDialog
-          isOpen={isAddDiagnosisDialogOpen}
-          onClose={() => setIsAddDiagnosisDialogOpen(false)}
-          onAddDiagnosis={(name: string, description?: string) => 
-            addDiagnosis({ name, description })
-          }
-        />
+        {isAddDiagnosisDialogOpen && (
+          <AddDiagnosisDialog
+            isOpen={isAddDiagnosisDialogOpen}
+            onClose={() => setIsAddDiagnosisDialogOpen(false)}
+            onAddDiagnosis={(name: string, description?: string) =>
+              addDiagnosis({ name, description })
+            }
+          />
+        )}
       </div>
     </div>
   );

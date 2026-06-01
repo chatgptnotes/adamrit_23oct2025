@@ -2,12 +2,13 @@ import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { Zap, Filter, Play } from 'lucide-react';
 import type { FlowNodeData } from '@/lib/taskOptimizerFlows';
 
-// Visual treatment per node kind. Each node is a compact card with the right
-// connection handles: trigger (source only), condition (both), action (target only).
+// JotForm-style step cards: a coloured header bar (icon + type) on top of a
+// white body with the step's label and a one-line summary. Handles are small
+// rounded dots, source on the right, target on the left.
 const KIND_STYLE = {
-  trigger: { ring: 'border-amber-300 bg-amber-50', icon: Zap, iconColor: 'text-amber-600', tag: 'Trigger' },
-  condition: { ring: 'border-violet-300 bg-violet-50', icon: Filter, iconColor: 'text-violet-600', tag: 'Condition' },
-  action: { ring: 'border-emerald-300 bg-emerald-50', icon: Play, iconColor: 'text-emerald-600', tag: 'Action' },
+  trigger: { header: 'bg-amber-500', body: 'border-amber-200', icon: Zap, tag: 'Trigger', handle: '!bg-amber-500' },
+  condition: { header: 'bg-violet-500', body: 'border-violet-200', icon: Filter, tag: 'Condition', handle: '!bg-violet-500' },
+  action: { header: 'bg-emerald-500', body: 'border-emerald-200', icon: Play, tag: 'Action', handle: '!bg-emerald-500' },
 } as const;
 
 function summarize(data: FlowNodeData): string {
@@ -22,24 +23,37 @@ function summarize(data: FlowNodeData): string {
   return '';
 }
 
+const HANDLE_BASE = '!h-2.5 !w-2.5 !border-2 !border-white';
+
 function BaseNode({ data, selected }: NodeProps) {
   const d = data as FlowNodeData;
   const style = KIND_STYLE[d.kind];
   const Icon = style.icon;
   return (
     <div
-      className={`min-w-[160px] rounded-lg border-2 px-3 py-2 shadow-sm transition-shadow ${style.ring} ${
-        selected ? 'ring-2 ring-primary ring-offset-1' : ''
+      className={`w-[200px] overflow-hidden rounded-xl border bg-card shadow-md transition-shadow ${style.body} ${
+        selected ? 'ring-2 ring-primary ring-offset-2' : 'hover:shadow-lg'
       }`}
     >
-      {d.kind !== 'trigger' && <Handle type="target" position={Position.Left} className="!h-2 !w-2" />}
-      <div className="flex items-center gap-1.5">
-        <Icon className={`h-3.5 w-3.5 ${style.iconColor}`} />
-        <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{style.tag}</span>
+      {d.kind !== 'trigger' && (
+        <Handle type="target" position={Position.Left} className={`${HANDLE_BASE} ${style.handle}`} />
+      )}
+
+      {/* Header bar */}
+      <div className={`flex items-center gap-1.5 px-3 py-1.5 ${style.header}`}>
+        <Icon className="h-3.5 w-3.5 text-white" />
+        <span className="text-[10px] font-bold uppercase tracking-wide text-white">{style.tag}</span>
       </div>
-      <p className="mt-0.5 text-sm font-medium leading-tight">{d.label}</p>
-      <p className="mt-0.5 truncate text-xs text-muted-foreground">{summarize(d)}</p>
-      {d.kind !== 'action' && <Handle type="source" position={Position.Right} className="!h-2 !w-2" />}
+
+      {/* Body */}
+      <div className="px-3 py-2">
+        <p className="text-sm font-semibold leading-tight text-foreground">{d.label}</p>
+        <p className="mt-0.5 truncate text-xs text-muted-foreground">{summarize(d)}</p>
+      </div>
+
+      {d.kind !== 'action' && (
+        <Handle type="source" position={Position.Right} className={`${HANDLE_BASE} ${style.handle}`} />
+      )}
     </div>
   );
 }
