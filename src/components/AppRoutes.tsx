@@ -127,6 +127,7 @@ const CorporateAreas = lazy(() => import("../pages/CorporateAreas"));
 const CorporateAreaDetail = lazy(() => import("../pages/CorporateAreaDetail"));
 const BillApprovals = lazy(() => import("../pages/BillApprovals"));
 const DailyPaymentAllocation = lazy(() => import("../pages/DailyPaymentAllocation"));
+const PaymentVoucher = lazy(() => import("../pages/PaymentVoucher"));
 const QueueManagement = lazy(() => import("../pages/QueueManagement"));
 const QueueDisplay = lazy(() => import("../pages/QueueDisplay"));
 const QueueTV = lazy(() => import("../pages/QueueTV"));
@@ -298,6 +299,7 @@ export const AppRoutes = () => {
         <Route path="/location-master" element={<Suspense fallback={<PageLoader />}><LocationMaster /></Suspense>} />
         <Route path="/bill-approvals" element={<Suspense fallback={<PageLoader />}><BillApprovals /></Suspense>} />
         <Route path="/daily-payment-allocation" element={<Suspense fallback={<PageLoader />}><DailyPaymentAllocation /></Suspense>} />
+        <Route path="/payment-voucher" element={<Suspense fallback={<PageLoader />}><PaymentVoucher /></Suspense>} />
         <Route path="/queue-management" element={<Suspense fallback={<PageLoader />}><QueueManagement /></Suspense>} />
         <Route path="/queue-display" element={<QueueDisplay />} />
         <Route path="/queue-tv" element={<QueueTV />} />

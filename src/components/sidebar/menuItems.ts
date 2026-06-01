@@ -137,6 +137,11 @@ export const menuItems: MenuItemDef[] = [
     icon: Wallet,
   },
   {
+    title: "Payment Voucher",
+    url: "/payment-voucher",
+    icon: Receipt,
+  },
+  {
     title: "Ledger Statement",
     url: "/ledger-statement",
     icon: FileText,
