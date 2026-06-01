@@ -6,6 +6,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from "@/hooks/use-toast";
 import { Button } from '@/components/ui/button';
+import { EnhancedDatePicker } from '@/components/ui/enhanced-date-picker';
 import { Input } from '@/components/ui/input';
 import { useDebounce } from 'use-debounce';
 import { Badge } from '@/components/ui/badge';
@@ -1848,22 +1849,81 @@ const TodaysIpdDashboard = () => {
     }
   };
 
-  const renderIntimationStatus = (visit: any) => {
+  // Intimation status dot. Red = not done; click it to pick a date, which saves
+  // to bill_preparation and turns the dot green. Click the green dot to change.
+  const IntimationDateToggle = ({ visit }: { visit: any }) => {
     const visitId = visit.visit_id || '';
     const intimationDate = intimationDates[visitId];
-    if (intimationDate) {
+    const [editing, setEditing] = useState(false);
+    const [saving, setSaving] = useState(false);
+
+    const save = async (date: Date | undefined) => {
+      if (!visitId) return;
+      setSaving(true);
+      const iso = date ? date.toISOString().slice(0, 10) : null;
+      const { error } = await (supabase as any)
+        .from('bill_preparation')
+        .upsert({ visit_id: visitId, intimation_date: iso }, { onConflict: 'visit_id' });
+      setSaving(false);
+      if (error) {
+        toast({ title: 'Failed to save intimation date', description: error.message, variant: 'destructive' });
+        return;
+      }
+      setIntimationDates(prev => ({ ...prev, [visitId]: iso }));
+      setEditing(false);
+    };
+
+    if (editing) {
       return (
-        <div className="flex justify-center" title="Intimation date added">
-          <Circle className="h-4 w-4 text-green-600 fill-green-600" />
+        <div className="flex items-center justify-center gap-1">
+          <EnhancedDatePicker
+            value={intimationDate ? new Date(intimationDate) : undefined}
+            onChange={save}
+            placeholder="Select date"
+            isDOB={false}
+            defaultOpen
+            disabled={saving}
+            className="w-[130px]"
+          />
+          <button
+            type="button"
+            onClick={() => setEditing(false)}
+            title="Cancel"
+            className="text-xs text-muted-foreground hover:text-foreground"
+          >
+            ✕
+          </button>
         </div>
       );
     }
+
+    if (intimationDate) {
+      return (
+        <button
+          type="button"
+          onClick={() => setEditing(true)}
+          title="Intimation done — click to change"
+          className="mx-auto inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700 ring-1 ring-inset ring-emerald-200 transition-colors hover:bg-emerald-100"
+        >
+          <Circle className="h-2.5 w-2.5 text-green-600 fill-green-600" />
+          {new Date(intimationDate).toLocaleDateString('en-IN')}
+        </button>
+      );
+    }
+
     return (
-      <div className="flex justify-center" title="Intimation date not added">
-        <Circle className="h-4 w-4 text-red-600 fill-red-600" />
-      </div>
+      <button
+        type="button"
+        onClick={() => setEditing(true)}
+        title="Intimation date not added — click to add"
+        className="flex w-full justify-center"
+      >
+        <Circle className="h-4 w-4 text-red-600 fill-red-600 transition-transform hover:scale-110" />
+      </button>
     );
   };
+
+  const renderIntimationStatus = (visit: any) => <IntimationDateToggle visit={visit} />;
 
   // Load referral letter status for all visits
   useEffect(() => {
