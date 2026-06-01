@@ -32,6 +32,10 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import { supabase } from '@/integrations/supabase/client';
 
+// Right-aligned numeric input that hides the native up/down spinner steppers.
+const numberInputClass =
+  'h-8 text-right [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none';
+
 interface VendorRow {
   id: string;
   vendor: string;
@@ -47,13 +51,14 @@ interface LineItem {
   amount: number | null;
 }
 
-type LineSection = 'collections' | 'expenses' | 'banks';
+type LineSection = 'collections' | 'expenses' | 'banks' | 'ipdCollection';
 
 interface SheetData {
   vendors: VendorRow[];
   collections: LineItem[];
   expenses: LineItem[];
   banks: LineItem[];
+  ipdCollection: LineItem[];
 }
 
 const DEFAULT_VENDORS = [
@@ -96,6 +101,7 @@ const makeEmptySheet = (): SheetData => ({
   collections: DEFAULT_COLLECTIONS.map((l) => ({ id: newId(), label: l, amount: null })),
   expenses: DEFAULT_EXPENSES.map((l) => ({ id: newId(), label: l, amount: null })),
   banks: DEFAULT_BANKS.map((l) => ({ id: newId(), label: l, amount: null })),
+  ipdCollection: [{ id: newId(), label: '', amount: null }],
 });
 
 // Guard data coming back from the database (jsonb) into a well-formed sheet so a
@@ -117,6 +123,10 @@ const normalizeSheet = (raw: unknown): SheetData => {
     collections: Array.isArray(r.collections) ? r.collections : empty.collections,
     expenses: Array.isArray(r.expenses) ? r.expenses : empty.expenses,
     banks: Array.isArray(r.banks) ? r.banks : empty.banks,
+    ipdCollection:
+      Array.isArray(r.ipdCollection) && r.ipdCollection.length > 0
+        ? r.ipdCollection
+        : empty.ipdCollection,
   };
 };
 
@@ -136,6 +146,7 @@ const carryForwardSheet = (prev: SheetData): SheetData => ({
   collections: prev.collections.map((l) => ({ id: newId(), label: l.label, amount: null })),
   expenses: prev.expenses.map((l) => ({ id: newId(), label: l.label, amount: null })),
   banks: prev.banks.map((l) => ({ id: newId(), label: l.label, amount: l.amount })),
+  ipdCollection: prev.ipdCollection.map((l) => ({ id: newId(), label: l.label, amount: null })),
 });
 
 const todayISO = (): string => new Date().toISOString().slice(0, 10);
@@ -163,6 +174,7 @@ interface PrintTotals {
   collectionsTotal: number;
   netCash: number;
   grandTotal: number;
+  ipdCollectionTotal: number;
 }
 
 const buildPrintHTML = (dateLabel: string, sheet: SheetData, totals: PrintTotals): string => {
@@ -288,6 +300,8 @@ const buildPrintHTML = (dateLabel: string, sheet: SheetData, totals: PrintTotals
       ${renderSection('Expenses', sheet.expenses, 'NET (Collections − Expenses)', totals.netCash)}
       ${spacerRow}
       ${renderSection('Bank Balances', sheet.banks, 'GRAND TOTAL (Banks + Net Cash)', totals.grandTotal)}
+      ${spacerRow}
+      ${renderSection('IPD Collection', sheet.ipdCollection, 'TOTAL IPD COLLECTION', totals.ipdCollectionTotal)}
     </tbody>
   </table>
 </body>
@@ -336,7 +350,7 @@ function SortableVendorRow({ vendor, index, onUpdate, onRemove }: SortableVendor
           inputMode="numeric"
           value={vendor.paidThisMonth ?? ''}
           onChange={(e) => onUpdate(vendor.id, 'paidThisMonth', e.target.value)}
-          className="h-8 text-right"
+          className={numberInputClass}
         />
       </TableCell>
       <TableCell>
@@ -345,7 +359,7 @@ function SortableVendorRow({ vendor, index, onUpdate, onRemove }: SortableVendor
           inputMode="numeric"
           value={vendor.balanceThisMonth ?? ''}
           onChange={(e) => onUpdate(vendor.id, 'balanceThisMonth', e.target.value)}
-          className="h-8 text-right"
+          className={numberInputClass}
         />
       </TableCell>
       <TableCell>
@@ -354,7 +368,7 @@ function SortableVendorRow({ vendor, index, onUpdate, onRemove }: SortableVendor
           inputMode="numeric"
           value={vendor.ledgerBalance ?? ''}
           onChange={(e) => onUpdate(vendor.id, 'ledgerBalance', e.target.value)}
-          className="h-8 text-right"
+          className={numberInputClass}
         />
       </TableCell>
       <TableCell>
@@ -363,7 +377,7 @@ function SortableVendorRow({ vendor, index, onUpdate, onRemove }: SortableVendor
           inputMode="numeric"
           value={vendor.payableToday ?? ''}
           onChange={(e) => onUpdate(vendor.id, 'payableToday', e.target.value)}
-          className="h-8 text-right"
+          className={numberInputClass}
         />
       </TableCell>
       <TableCell>
@@ -505,6 +519,7 @@ export function DailyAllocationSheet({ hospital = 'hope' }: DailyAllocationSheet
       collectionsTotal: totals.collectionsTotal,
       netCash: totals.netCash,
       grandTotal: totals.grandTotal,
+      ipdCollectionTotal: totals.ipdCollectionTotal,
     });
     win.document.open();
     win.document.write(html);
@@ -630,13 +645,15 @@ export function DailyAllocationSheet({ hospital = 'hope' }: DailyAllocationSheet
     const netCash = collectionsTotal - expensesTotal;
     const banksTotal = sum(sheet.banks);
     const grandTotal = banksTotal + netCash;
-    return { vendorsTotal, collectionsTotal, expensesTotal, netCash, banksTotal, grandTotal };
+    const ipdCollectionTotal = sum(sheet.ipdCollection);
+    return { vendorsTotal, collectionsTotal, expensesTotal, netCash, banksTotal, grandTotal, ipdCollectionTotal };
   }, [sheet]);
 
-  const summarySections: ReadonlyArray<{ key: LineSection; title: string; footerLabel: string; footerValue: number }> = [
+  const summarySections: ReadonlyArray<{ key: LineSection; title: string; footerLabel: string; footerValue: number; centerTitle?: boolean }> = [
     { key: 'collections', title: 'Collections', footerLabel: 'TOTAL COLLECTIONS', footerValue: totals.collectionsTotal },
     { key: 'expenses', title: 'Expenses', footerLabel: 'NET (Collections − Expenses)', footerValue: totals.netCash },
     { key: 'banks', title: 'Bank Balances', footerLabel: 'GRAND TOTAL (Banks + Net Cash)', footerValue: totals.grandTotal },
+    { key: 'ipdCollection', title: 'IPD Collection', footerLabel: 'TOTAL IPD COLLECTION', footerValue: totals.ipdCollectionTotal, centerTitle: true },
   ];
 
   return (
@@ -762,8 +779,10 @@ export function DailyAllocationSheet({ hospital = 'hope' }: DailyAllocationSheet
 
         {summarySections.map((section) => (
           <section key={section.key}>
-            <div className="mb-2 flex items-center justify-between">
-              <h3 className="font-semibold">{section.title}</h3>
+            <div className={`mb-2 flex items-center ${section.centerTitle ? 'relative justify-end' : 'justify-between'}`}>
+              <h3 className={`font-semibold ${section.centerTitle ? 'absolute left-1/2 -translate-x-1/2' : ''}`}>
+                {section.title}
+              </h3>
               <Button variant="outline" size="sm" onClick={() => addLineItem(section.key)}>
                 <Plus className="mr-1 h-4 w-4" /> Add Row
               </Button>
@@ -786,7 +805,7 @@ export function DailyAllocationSheet({ hospital = 'hope' }: DailyAllocationSheet
                           inputMode="numeric"
                           value={item.amount ?? ''}
                           onChange={(e) => updateLineItem(section.key, item.id, 'amount', e.target.value)}
-                          className="h-8 text-right"
+                          className={numberInputClass}
                         />
                       </TableCell>
                       <TableCell className="w-12">
